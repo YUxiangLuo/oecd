@@ -42,7 +42,7 @@ test("Step 1 shows a compact automatic integrity status without student action",
   };
   const html = renderToStaticMarkup(createElement(ReleaseIntegrityStatus, { meta: releaseMeta }));
   expect(html).toContain("数据已通过系统完整性检查");
-  expect(html).toContain("无需你另外校验");
+  expect(html).toContain("你不用再检查");
   expect(html).not.toContain("button");
   expect(renderToStaticMarkup(createElement(ReleaseIntegrityStatus, { meta: null }))).toBe("");
 });
@@ -208,12 +208,12 @@ describe("database slice restoration", () => {
 
   test("keeps signed accounts and both complete OUT identities explicit", () => {
     expect(STEP1_ACCOUNT_LEGEND).toContain("负 TLS 表示净补贴，不是缺失");
-    expect(STEP1_ACCOUNT_LEGEND).toContain("负 INVNT 表示有符号的存货减少调整，不是缺失");
+    expect(STEP1_ACCOUNT_LEGEND).toContain("负 INVNT 表示存货减少，不是缺数据");
     expect(STEP1_ACCOUNT_LEGEND).toContain("VA = 增加值");
     expect(STEP1_ACCOUNT_LEGEND).toContain("OUT = 总产出");
     expect(STEP1_OUT_IDENTITY_GUIDE).toContain("按行 OUT = Z 行和 + Y 行和");
     expect(STEP1_OUT_IDENTITY_GUIDE).toContain("按列 OUT = Z 列和 + VA + TLS");
-    expect(STEP1_OUT_IDENTITY_GUIDE).toContain("只是完整和的一部分");
+    expect(STEP1_OUT_IDENTITY_GUIDE).toContain("这里的合计小于 OUT");
   });
 
   test("formats tiny true values without displaying zero or negative zero", () => {
@@ -335,9 +335,11 @@ describe("Step 1 bounded roving cell focus", () => {
 
 test("Step 1 cell tooltips name both industries in two short lines", () => {
   expect(dbCellTooltip("z", "CHN_C10T12", "USA_C10T12", 742.09))
-    .toBe("中国 · C10T12 食品饮料烟草 → 美国 · C10T12 食品饮料烟草\n742.09 百万美元 · 点击记录这个观察值");
+    .toBe("中国 · C10T12 食品饮料烟草 → 美国 · C10T12 食品饮料烟草\n742.09 百万美元 · 点击记录这个单元格");
+  // After the report is submitted a click only selects the cell.
+  expect(dbCellTooltip("z", "CHN_C10T12", "USA_C10T12", 742.09, true)).toMatch(/点击选中这个单元格$/);
   expect(dbCellTooltip("y", "CHN_A01_02", "USA_INVNT", -1.5).split("\n")[0])
-    .toBe("中国 · A01_02 农林牧业 → 美国 · 存货变化（有符号调整）");
+    .toBe("中国 · A01_02 农林牧业 → 美国 · 存货变化");
   expect(dbCellTooltip("accounts", "CHN_A01_02", "VA", 12.5).split("\n")[0])
     .toBe("中国 · A01_02 农林牧业 的 增加值");
 });

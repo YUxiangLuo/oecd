@@ -52,7 +52,7 @@ describe("authentication dependency recovery", () => {
     });
     restorers.push(...[me, meta, steps, session].map((mock) => () => mock.mockRestore()));
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "重试加载课程" }));
+    fireEvent.click(await screen.findByRole("button", { name: "重试加载" }));
     await waitFor(() => expect(screen.getByDisplayValue("服务恢复后保留的研究问题")).toBeTruthy());
     expect(meta).toHaveBeenCalledTimes(2);
     expect(me).toHaveBeenCalledTimes(1);
@@ -86,7 +86,7 @@ describe("authentication dependency recovery", () => {
       });
     restorers.push(...[me, meta, steps, session].map((mock) => () => mock.mockRestore()));
     render(<App />);
-    const retry = await screen.findByRole("button", { name: "重新读取实验记录" });
+    const retry = await screen.findByRole("button", { name: "重试读取" });
     // No editable workspace while the record is unknown: typed text would be silently dropped.
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.getByRole("alert").textContent).not.toContain("Failed to fetch");
@@ -111,8 +111,8 @@ describe("authentication dependency recovery", () => {
     Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
     restorers.push(...[me, meta, steps, session].map((mock) => () => mock.mockRestore()), () => { delete (navigator as { onLine?: boolean }).onLine; });
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "退出" }));
-    expect((await screen.findByText(/当前网络不可用/)).getAttribute("role")).toBe("status");
+    fireEvent.click(await screen.findByRole("button", { name: "退出登录" }));
+    expect((await screen.findByText(/现在没有网络/)).getAttribute("role")).toBe("status");
     expect(screen.getByLabelText("用户名")).toBeTruthy();
     expect(reload).not.toHaveBeenCalled();
     expect(sessionStorage.getItem(AUTH_TOKEN_KEY)).toBeNull();

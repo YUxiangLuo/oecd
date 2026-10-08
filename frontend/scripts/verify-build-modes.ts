@@ -2,17 +2,17 @@ const customDemoPassword = "gvcsim-demo-build-boundary-check-2026";
 const productionForbidden = [
   "gvclab2026",
   customDemoPassword,
-  "开发演示快捷账号",
+  "演示账号快捷登录",
   "学生身份",
   "教师身份",
-  "同一标签页刷新会无重复轮换账号和口令",
+  "已为你预填一个空闲的演示学生账号",
 ];
 const demoRequired = [
   customDemoPassword,
-  "开发演示快捷账号",
+  "演示账号快捷登录",
   "学生身份",
   "教师身份",
-  "同一标签页刷新会无重复轮换账号和口令",
+  "已为你预填一个空闲的演示学生账号",
 ];
 
 async function runBuild(script: "build" | "build:demo", extraEnv: Record<string, string> = {}): Promise<void> {

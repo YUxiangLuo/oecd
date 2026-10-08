@@ -31,7 +31,7 @@ def _limit_login(request: Request, username: str) -> None:
     except RateLimitExceeded as error:
         raise HTTPException(
             status_code=429,
-            detail=f"登录尝试过于频繁，请约 {error.retry_after_header} 秒后重试",
+            detail=f"尝试次数过多，请约 {error.retry_after_header} 秒后再试。",
             headers={"Retry-After": error.retry_after_header},
         ) from error
 
@@ -55,7 +55,7 @@ class PasswordChangeRequest(TextRequest):
     @classmethod
     def nonblank_new_password(cls, value: str) -> str:
         if not value.strip():
-            raise ValueError("口令不能全是空白字符")
+            raise ValueError("新密码不能全是空格")
         return value
 
 
@@ -67,7 +67,8 @@ def login(req: LoginRequest, request: Request):
         if user is not None:
             token, expires_at = auth.issue_token(user)
     except auth.AuthenticationUnavailable as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
+        # Never the internal reason: it is logged where it is raised.
+        raise HTTPException(status_code=503, detail=auth.SERVICE_UNAVAILABLE_MESSAGE) from error
     if user is None:
         raise HTTPException(status_code=401, detail="用户名或密码错误")
     return {
@@ -107,7 +108,7 @@ def demo_student_suggestion(request: Request, keep: str | None = None):
     except RateLimitExceeded as error:
         raise HTTPException(
             status_code=429,
-            detail=f"请求过于频繁，请约 {error.retry_after_header} 秒后重试",
+            detail=f"请求次数过多，请约 {error.retry_after_header} 秒后再试。",
             headers={"Retry-After": error.retry_after_header},
         ) from error
     try:
@@ -137,13 +138,13 @@ def demo_student_suggestion(request: Request, keep: str | None = None):
 @router.get("/me")
 def me(authorization: str | None = Header(default=None)):
     if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="缺少 Bearer 令牌")
+        raise HTTPException(status_code=401, detail="登录已失效，请重新登录。")
     try:
         payload = auth.verify_token(authorization.removeprefix("Bearer "))
     except auth.AuthenticationUnavailable as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
+        raise HTTPException(status_code=503, detail=auth.SERVICE_UNAVAILABLE_MESSAGE) from error
     if payload is None:
-        raise HTTPException(status_code=401, detail="令牌无效或已过期")
+        raise HTTPException(status_code=401, detail="登录已失效，请重新登录。")
     return {
         "username": payload["sub"],
         "name": payload["name"],

@@ -19,6 +19,7 @@ from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 from gvcsim.report_saved_run import _STEP_OUTCOMES, _parse_saved_run
 from gvcsim.request_validation import TextRequest
 from gvcsim.singleflight import AsyncSingleFlightCache
+from gvcsim.steps import STEPS
 
 router = APIRouter(prefix="/api/classroom")
 _REPORT_FLIGHTS: AsyncSingleFlightCache[
@@ -29,7 +30,7 @@ _REPORT_FLIGHTS: AsyncSingleFlightCache[
 def current_user(request: Request) -> dict[str, Any]:
     user = getattr(request.state, "user", None)
     if not user:
-        raise HTTPException(status_code=401, detail="缺少 Bearer 令牌")
+        raise HTTPException(status_code=401, detail="登录已失效，请重新登录。")
     return user
 
 
@@ -98,6 +99,12 @@ class SessionRequest(BaseModel):
     base_updated_at: datetime | None
 
 
+def _run_button(step: int) -> str:
+    """The step's run button as the page names it: "计算" + the title before "：" (e.g. 计算贸易流回归)."""
+    title = next((str(item["title"]) for item in STEPS if item["n"] == step), "")
+    return f"计算{title.split('：')[0] or '回归'}"
+
+
 @router.put("/session")
 def put_session(req: SessionRequest, user: dict = Depends(require_student)):
     try:
@@ -114,7 +121,10 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
             and step10.get("teaching_panel_version") == TEACHING_VERSION
         )
         if not valid_step10:
-            raise HTTPException(status_code=422, detail="步骤 10 教学面板的国家、年份或版本无效")
+            raise HTTPException(
+                status_code=422,
+                detail="步骤 10 记录的例子已过期：请回到步骤 10，等关税数据加载完成后再继续。",
+            )
     # A stale DID or renamed-column snapshot may remain visible to the student,
     # but it must never be silently persisted as completion evidence for v1.
     for step in range(11, 15):
@@ -126,7 +136,7 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
             if raw is not None and _parse_saved_run(raw, _STEP_OUTCOMES[step]) is None:
                 raise HTTPException(
                     status_code=422,
-                    detail=f"步骤 {step} 保存的是旧版或不匹配的模型快照；请明确重新运行 {TEACHING_VERSION}",
+                    detail=f"步骤 {step} 保存的回归结果已过期，请回到步骤 {step} 点“{_run_button(step)}”重新计算。",
                 )
     try:
         saved = db.save_session(user["sub"], payload, req.base_updated_at)
@@ -162,7 +172,7 @@ async def _prepare_report(user: dict) -> tuple[dict[str, Any], teaching_report.T
     if row is None:
         raise HTTPException(
             status_code=409,
-            detail={"message": "报告生成所依据的实验记录已变化，请保存并重试。", "code": "session_changed"},
+            detail={"message": "实验记录刚刚更新，请再点一次生成报告。", "code": "session_changed"},
         )
     return session, generated, row["updated_at"]
 
@@ -243,7 +253,7 @@ def submit_report(user: dict = Depends(require_student)):
             detail={"message": "实验记录已更新，请重新生成报告。", "code": "report_outdated"},
         ) from error
     if report is None:
-        raise HTTPException(status_code=409, detail="请先生成报告")
+        raise HTTPException(status_code=409, detail="请先点“生成并提交报告”。")
     session, _existing, _row = _workspace(user["sub"])
     return {
         "report": report,

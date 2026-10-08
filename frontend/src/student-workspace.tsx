@@ -280,6 +280,12 @@ export function StudentWorkspace({
                     onRecordMaterials={step.n >= 2 && step.n <= 4
                       ? () => { focusStepPrimaryAction(contentRef.current, STEP_MATERIAL_ACTION_ID); }
                       : undefined}
+                    next={nextStep}
+                    onNavigate={(n) => {
+                      // Like the footer: the button leaves with the old step, so focus starts at the new step's top.
+                      onNavigateStep(n);
+                      window.requestAnimationFrame(() => contentRef.current?.focus({ preventScroll: true }));
+                    }}
                   />
                 </div>
               </main>

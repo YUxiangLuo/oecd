@@ -31,28 +31,28 @@ export function NetworkIndicatorStep({ meta, step: _step, state }: { meta: Meta;
       <IndicatorMethodIntro topic="network">
         <details className="method-demo">
           <summary>可选：在一个小网络上看度与介数怎么数</summary>
-          <p className="muted">切换度 / 介数 / 接近，点选节点看每个值是怎么一步步数出来的。这里每条正边的路径长度都相同，只是二值拓扑直觉。</p>
+          <p className="muted">切换度 / 介数 / 接近，点选节点看每个值是怎么一步步数出来的。这里每条连接都算一样长，只帮你建立直觉。</p>
           <NetworkCentralityDemo />
           <section className="network-demo-bridge" aria-labelledby="network-demo-bridge-title">
             <h3 id="network-demo-bridge-title">从小网络示意到当前数据网络</h3>
-            <div><b>小网络的边</b><span>一条手工连接</span><i aria-hidden="true">→</i><b>数据网络的边</b><span>一个国家×行业向另一节点提供的正中间品流</span></div>
-            <div><b>小网络的度</b><span>直接连接条数</span><i aria-hidden="true">→</i><b>加权总度</b><span>入向+出向流量；正自环双计</span></div>
-            <div><b>小网络的介数</b><span>最短路径中介位置</span><i aria-hidden="true">→</i><b>行业节点的介数</b><span>仍按无权路径计算，只作探索性拓扑指标</span></div>
+            <div><b>小网络的边</b><span>一条手工连接</span><i aria-hidden="true">→</i><b>数据网络的边</b><span>一个国家×行业向另一个节点提供的中间品（金额为正）</span></div>
+            <div><b>小网络的度</b><span>直接连接条数</span><i aria-hidden="true">→</i><b>加权总度（买入 + 卖出）</b><span>流入和流出的中间品金额之和；自环（行业卖给自己的部分）在买入和卖出各算一次</span></div>
+            <div><b>小网络的介数</b><span>处在多少条最短路线上</span><i aria-hidden="true">→</i><b>行业节点的介数</b><span>同样只看连接、不看金额，只作参考</span></div>
           </section>
         </details>
       </IndicatorMethodIntro>
 
       <section className="indicator-real-heading" aria-label="当前数据的中心性表">
-        <span className="icio-kicker">02 / 动手查看 · 当前数据网络</span>
+        <span className="icio-kicker">02 / 动手查看 · OECD ICIO 网络</span>
         <h2>行业节点的中心性</h2>
-        <p>选择一个国家，在该国全部行业中切换“加权度降序 / 介数降序”：两种排序一致吗？全球分页视图不做排序，不是全球排名。时间趋势与国家比较在步骤 9。</p>
+        <p>选择一个国家，在该国全部行业中切换“按加权总度从高到低 / 按介数从高到低”：两种排序一致吗？国家选“全部”时只按默认顺序列出，不是全球排名。时间趋势与国家比较在步骤 9。</p>
         <IndicatorTable
           meta={meta} groupKey="network" schema={schema.data} state={state}
           year={controls.year} country={controls.country} page={controls.page} interacted={controls.interacted}
           onYear={controls.setYear} onCountry={controls.setCountry} onPage={controls.setPage}
         />
         <AutoMaterialStatus meta={meta} state={state} schema={schema.data} {...auto} onSecond={controls.setPartner} where="上方表格所选国家"
-          note="国家级加权总度 = 该国对其他国家的出口 + 进口（中间品和最终品都算，不含国内流量，因而没有自环）；上表的行业数值只算中间品流量且含国内流量，两者不能直接比较。" />
+          note="报告记录的是国家整体的加权总度 = 该国对外出口 + 进口（含最终品，不含国内流量），和上表的行业数值算法不同，不要直接比较。" />
       </section>
     </div>
   );

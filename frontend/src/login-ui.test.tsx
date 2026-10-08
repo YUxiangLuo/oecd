@@ -60,7 +60,7 @@ describe("demo-mode login UI source behavior", () => {
       render(<LoginPage onLogin={() => {}} />);
       expect(inputValue("login-user")).toBe("");
       expect(inputValue("login-pass")).toBe("");
-      expect(screen.queryByRole("group", { name: "开发演示快捷账号" })).toBeNull();
+      expect(screen.queryByRole("group", { name: "演示账号快捷登录" })).toBeNull();
     });
   });
 
@@ -80,7 +80,7 @@ describe("demo-mode login UI source behavior", () => {
         expect(initialStudent).toBeDefined();
         expect(inputValue("login-pass")).toBe(initialStudent!.password);
 
-        expect(screen.getByRole("group", { name: "开发演示快捷账号" })).toBeDefined();
+        expect(screen.getByRole("group", { name: "演示账号快捷登录" })).toBeDefined();
         expect(screen.getByRole("button", { name: /学生身份/ })).toBeDefined();
         fireEvent.click(screen.getByRole("button", { name: /教师身份/ }));
         expect(inputValue("login-user")).toBe("teacher");
@@ -127,7 +127,7 @@ describe("demo-mode login UI source behavior", () => {
         render(<LoginPage onLogin={() => {}} />);
         await waitFor(() => expect(inputValue("login-user")).toBe(""));
         expect(inputValue("login-pass")).toBe("");
-        expect(screen.getByText(/暂无空闲演示账号/)).toBeDefined();
+        expect(screen.getByText(/演示账号都在使用中/)).toBeDefined();
         // The teacher shortcut is still offered.
         expect(screen.getByRole("button", { name: /教师身份/ })).toBeDefined();
       });
@@ -144,7 +144,7 @@ describe("demo-mode login UI source behavior", () => {
         expect(submit.disabled).toBe(true);
         expect(submit.textContent).toContain("正在分配空闲账号");
         fail(new Error("Failed to fetch"));
-        await waitFor(() => expect(document.querySelector(".login-hint")?.textContent).toContain("暂时无法确认空闲账号"));
+        await waitFor(() => expect(document.querySelector(".login-hint")?.textContent).toContain("暂时无法分配空闲账号"));
         expect(document.querySelector<HTMLButtonElement>(".login-btn")!.disabled).toBe(false);
       });
     } finally { suggestion.mockRestore(); }
@@ -159,7 +159,7 @@ describe("demo-mode login UI source behavior", () => {
         fireEvent.click(screen.getByRole("button", { name: /学生身份/ }));
         resolve({ username: "student07" });
         await waitFor(() => expect(inputValue("login-user")).toBe("student07"));
-        expect(document.querySelector(".login-hint")?.textContent).toContain("近 1 小时无人使用");
+        expect(document.querySelector(".login-hint")?.textContent).toContain("已为你预填一个空闲的演示学生账号");
       });
     } finally { suggestion.mockRestore(); }
   });
@@ -195,7 +195,7 @@ describe("demo-mode login UI source behavior", () => {
     } finally { suggestion.mockRestore(); }
   });
 
-  test("after 退出 the tab gets back the demo account it used, without asking the server", async () => {
+  test("after 退出登录 the tab gets back the demo account it used, without asking the server", async () => {
     const suggestion = spyOn(api, "demoStudent").mockResolvedValue({ username: "student07" });
     sessionStorage.setItem("gvcsim_signed_in_username", "student12");
     try {
@@ -219,7 +219,7 @@ describe("demo-mode login UI source behavior", () => {
       // An expiry is a warning, not a success.
       expect(screen.getByRole("status").className).toContain("tipbox");
       // No quick-login buttons are offered here, so their (empty) group is not rendered either.
-      expect(screen.queryByRole("group", { name: "开发演示快捷账号" })).toBeNull();
+      expect(screen.queryByRole("group", { name: "演示账号快捷登录" })).toBeNull();
     });
   });
 });

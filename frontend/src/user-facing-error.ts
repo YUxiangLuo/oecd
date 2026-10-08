@@ -11,6 +11,6 @@ export function userFacingRequestError(cause: unknown, context: string): string 
   const raw = rawErrorMessage(cause);
   const detail = NETWORK_FAILURE.test(raw)
     ? "网络连接中断，请检查连接后重试。"
-    : raw || "发生未知错误，请重试。";
+    : raw || "出了点问题，请刷新页面后重试。";
   return `${context}：${detail}`;
 }

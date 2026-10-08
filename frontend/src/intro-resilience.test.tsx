@@ -14,7 +14,7 @@ test("intro uses the self-contained teaching simulation and never requests shock
     fireEvent.click(view.getByRole("button", { name: "介绍页 2" }));
     fireEvent.click(view.getByRole("button", { name: /关税数据/ }));
     expect(view.getByText(/前两年税率为 0，加税国家后三年为 25%/)).toBeTruthy();
-    expect(view.getByText(/暴露强度 X 等于首年销往美国的出口份额乘以税率/)).toBeTruthy();
+    expect(view.getByText(/关税暴露 X 等于首年对美出口份额 w 乘以加征税率 τ/)).toBeTruthy();
     expect(view.getByRole("dialog").textContent).not.toContain("模拟");
     expect(request).not.toHaveBeenCalled();
   } finally { cleanup(); request.mockRestore(); }

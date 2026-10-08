@@ -18,6 +18,9 @@ interface QuizPanelProps {
   materialStatus?: StepMaterialStatus;
   onRecordMaterials?: () => void;
   state: StepStateApi<Record<string, unknown>>;
+  /** The step after this one: once the quiz is done, the panel's main action moves on to it. */
+  next?: Pick<Step, "n" | "title">;
+  onNavigate?: (step: number) => void;
 }
 
 /** 步骤 1–14 的唯一完成条件：答对本步全部固定单选题。 */
@@ -33,6 +36,8 @@ function QuizPanelBody({
   draftStore,
   materialStatus,
   onRecordMaterials,
+  next,
+  onNavigate,
 }: QuizPanelProps & { quiz: NonNullable<Step["quiz"]> }) {
   const data = state.data as (QuizCompletionState & Record<string, unknown>) | undefined;
   const [submitting, setSubmitting] = useState(false);
@@ -119,7 +124,7 @@ function QuizPanelBody({
   let completionMessage = answeredAll ? "提交后立即显示逐题反馈" : "请先回答全部题目";
   if (locallyPassed) completionMessage = "服务器尚未确认完成，请重新提交答案";
   if (locallyPassed && state.syncError) completionMessage = state.syncConflict
-    ? "完成状态尚未保存：另一个页面或另一台设备（同一账号）已更新记录，请先点页面顶部的“载入服务器版本”"
+    ? "完成状态尚未保存：你的账号在别处保存了更新的记录，请先点页面顶部的“载入服务器版本”"
     : "完成状态尚未保存，可在页面顶部重试或重新提交答案";
   if (awaitingSave) completionMessage = "答案正确，正在保存完成状态…";
   if (complete) completionMessage = draftChanged
@@ -134,7 +139,7 @@ function QuizPanelBody({
           <h3 id={`quiz-title-${step.n}`}>答对本步 {quiz.questions.length} 道单选题</h3>
         </div>
         {/* The draft-persistence rule is reference detail, so it lives in the badge's tooltip. */}
-        <span className="quiz-note" title="未提交的选择仅在本次登录的页面内暂存，切换步骤会保留；刷新或退出后不保留。答对并提交后才保存完成状态。">
+        <span className="quiz-note" title="未提交的选择只在本次登录的页面内暂存，切换步骤会保留；刷新或退出登录后不保留。答对并提交后才保存完成状态。">
           不限重试 · 全部答对即完成
         </span>
       </div>
@@ -171,13 +176,19 @@ function QuizPanelBody({
         <button
           ref={submitButtonRef}
           type="button"
-          className="primary"
+          // Once done, re-checking is optional: the next step becomes the one primary action here.
+          className={complete ? "secondary" : "primary"}
           disabled={submitDisabled}
           onClick={submit}
         >
           {submitLabel}
         </button>
         <span className={complete ? "quiz-complete" : "muted"}>{completionMessage}</span>
+        {complete && next && onNavigate && (
+          <button type="button" className="primary quiz-next" onClick={() => onNavigate(next.n)}>
+            下一步：{next.title} →
+          </button>
+        )}
       </div>
       {/* One region, mounted before any result, so screen readers announce each grading (regions created
           together with their text are often skipped). The per-question feedback is read in place. */}

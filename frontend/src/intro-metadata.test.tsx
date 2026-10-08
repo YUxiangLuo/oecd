@@ -47,9 +47,13 @@ test("coverage follows actual ROW membership and available route stages", () => 
     const stepsData: StepsResponse = { stages: { "2": "指标计算" }, steps: [] };
     const view = render(<IntroOverlay user={user} meta={meta} stepsData={stepsData} onDone={onDone} />);
     const stats = () => [...view.getByRole("dialog").querySelectorAll(".intro-stat-v")].map(e => e.textContent);
+    const economyLabel = () => view.getByRole("dialog").querySelector(".intro-stat-l")?.textContent;
     expect(stats()).toEqual(["2", "1", "2020–2020"]);
+    expect(economyLabel()).toBe("经济体");
     view.rerender(<IntroOverlay user={user} meta={{ ...meta, countries: [...meta.countries, "ROW"] }} stepsData={stepsData} onDone={onDone} />);
-    expect(stats()).toEqual(["2 + ROW", "1", "2020–2020"]);
+    // ROW is counted apart from the named economies and named in words, not as a data code.
+    expect(stats()).toEqual(["2", "1", "2020–2020"]);
+    expect(economyLabel()).toBe("经济体 + 世界其他地区");
     fireEvent.click(view.getByRole("button", { name: "介绍页 3" }));
     expect(view.getByRole("button", { name: "2. 指标计算" }).getAttribute("aria-pressed")).toBe("true");
     expect(view.getByText(/了解指标怎样由投入产出表算出/).textContent).toBeTruthy();

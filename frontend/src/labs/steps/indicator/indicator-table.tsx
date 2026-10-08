@@ -44,8 +44,8 @@ export const INDICATOR_IDENTIFIER_COLUMNS = ["country", "industry", "year"] as c
 const TEXT_COLUMNS = new Set<string>(INDICATOR_IDENTIFIER_COLUMNS);
 
 export const NETWORK_TABLE_SORT_OPTIONS: ReadonlyArray<{ value: NetworkTableSortMetric; label: string }> = [
-  { value: "weighted degree", label: "加权度降序（加权总度，入+出）" },
-  { value: "betweenesscentrality", label: "介数降序（全正边二值网络）" },
+  { value: "weighted degree", label: "按加权总度从高到低" },
+  { value: "betweenesscentrality", label: "按介数从高到低" },
 ];
 
 export function indicatorRequestKey(year: number, country: string, page: number): string {
@@ -127,7 +127,7 @@ export function IndicatorRequestBoundary({
   if (empty) {
     return (
       <p className="muted async-empty" role="status">
-        当前国家、年份与页码下没有行业指标数据。请保留或调整筛选条件后继续。
+        当前国家、年份与页码下没有行业指标数据。请换一个国家或年份。
       </p>
     );
   }
@@ -324,7 +324,8 @@ export function IndicatorDataTable({
   country: string;
   page: number;
 }) {
-  const captionLabel = groupLabel === "指标" ? "指标数据" : `${groupLabel}指标数据`;
+  // A group label may already end in “指标” (e.g. “生产网络指标”); do not say it twice.
+  const captionLabel = groupLabel.endsWith("指标") ? `${groupLabel}数据` : `${groupLabel}指标数据`;
   return (
     <table className="data-table">
       <caption className="sr-only">{captionLabel} · {year} 年 · {country ? countryLabel(country) : "全部国家"} · 第 {page} 页</caption>
@@ -349,7 +350,8 @@ export function IndicatorDataTable({
             {columns.map((column, index) => {
               const content = column === "industry"
                 ? row.industry != null ? sectorLabel(String(row.industry)) : "—"
-                : ["year", "country"].includes(column) ? String(row[column] ?? "—")
+                : column === "country" ? row.country != null ? countryLabel(String(row.country)) : "—"
+                : column === "year" ? String(row.year ?? "—")
                   : fmtField(row[column], column, schema);
               const stickyStyle = index === 0
                 ? { position: "sticky" as const, left: 0, zIndex: 2, background: "#fff" }
@@ -444,12 +446,12 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
           )}
         </LabeledControl>
         <span className="muted">{countLabel}</span>
-        {!country && <span className="muted">“全部”含世界其他地区 ROW（会计余项，不能单独选择）。</span>}
+        {!country && <span className="muted">“全部”也包括世界其他地区（ROW，是一个汇总项，不能单独选）。</span>}
       </div>
 
       {groupKey === "network" && (
         <div className="table-priority-tools network-table-sort">
-          <LabeledControl label={country ? "单国行业排序" : "行业排序（仅单国完整结果）"}>
+          <LabeledControl label={country ? "单国行业排序" : "行业排序（先选一个国家）"}>
             {(id) => (
               <select
                 id={id}
@@ -481,8 +483,8 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
           {allMetricCount > defaultMetricCount && (
             <div className="table-priority-tools">
               <span className="muted">{showAllFields
-                ? `已展开全部 ${allMetricCount} 个指标（前 ${defaultMetricCount} 个为本任务要求的核心指标）。`
-                : `默认显示本任务要求的 ${defaultMetricCount} 个核心指标。`}</span>
+                ? `已展开全部 ${allMetricCount} 个指标（前 ${defaultMetricCount} 个为常用指标）。`
+                : `默认显示 ${defaultMetricCount} 个常用指标。`}</span>
               <button type="button" className="secondary" aria-expanded={showAllFields} onClick={toggleAllFields}>
                 {showAllFields ? "收起扩展指标" : `展开 ${allMetricCount - defaultMetricCount} 个扩展指标（全屏查看）`}
               </button>

@@ -38,12 +38,12 @@ describe("step 1 further-reading card", () => {
     const view = render(<DatabaseGuide meta={DB_META} releaseMeta={releaseMeta} />);
     const copy = view.container.textContent;
     expect(copy).toContain("模拟投入产出数据（教学用）");
-    expect(copy).toContain("2 个具名经济体 · 1 行业");
+    expect(copy).toContain("2 个经济体 · 1 行业");
     expect(view.container.querySelector("p.muted")?.textContent).not.toContain("+ ROW");
     expect(copy).not.toContain("本系统使用 OECD ICIO");
     const oecdRow = view.container.querySelector(".db-guide-default")?.textContent;
-    expect(oecdRow).toContain("以所用发行版本为准");
-    expect(oecdRow).not.toContain("2 个具名经济体");
+    expect(oecdRow).toContain("见下方“当前载入”");
+    expect(oecdRow).not.toContain("2 个经济体");
     view.rerender(<DatabaseGuide meta={DB_META} releaseMeta={null} />);
     expect(view.container.textContent).toContain("来源待确认");
   });
@@ -62,7 +62,7 @@ describe("step 1 further-reading card", () => {
 
     render(<DbLab state={state} releaseMeta={null as Meta | null} />);
 
-    const summary = await screen.findByText("进一步理解 ICIO 表结构与账户项");
+    const summary = await screen.findByText("数据来源与其他投入产出数据库");
     const card = summary.closest("details") as HTMLDetailsElement;
     expect(card).toBeTruthy();
     // 早前这里是外层 details 里再套一个折叠 details，学生需点击两次才能看到正文。
@@ -89,7 +89,7 @@ describe("step 1 cell activation", () => {
 
     render(<DbLab state={state} releaseMeta={null as Meta | null} />);
 
-    const cell = await screen.findByTitle(/ → .+ 百万美元 · 点击记录这个观察值$/);
+    const cell = await screen.findByTitle(/ → .+ 百万美元 · 点击记录这个单元格$/);
     expect(screen.queryByRole("dialog")).toBeNull();
     // Without any click, the largest positive cell is recorded by default and marked as such.
     await waitFor(() => expect(saved).toHaveLength(1));
@@ -144,7 +144,7 @@ describe("step 1 cell activation", () => {
     render(<DbLab state={state} releaseMeta={null as Meta | null} />);
     fireEvent.click(await screen.findByRole("button", { name: "账户项" }));
 
-    const cells = await screen.findAllByTitle(/点击记录这个观察值$/);
+    const cells = await screen.findAllByTitle(/点击记录这个单元格$/);
     const cell = cells[0];
     expect(cell.getAttribute("title")).not.toContain("全屏");
 
@@ -190,7 +190,7 @@ describe("step 1 after the report is submitted", () => {
     expect(other.getAttribute("aria-label")).toContain("已选中，尚未改为报告材料");
     expect(screen.getByRole("button", { name: /→ USA 美国·D01T02[^（]*（列·使用方）.*已记录$/ }).className).toContain("selected");
 
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^改为记录这一格/ })); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^改为记录这个单元格/ })); });
     const replaced = saved.find((patch) => (patch as { observation?: unknown }).observation) as { observation: { column: string; value: number } };
     expect(replaced.observation.column).toBe("CHN_D01T02");
     expect(replaced.observation.value).toBe(10);

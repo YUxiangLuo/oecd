@@ -12,7 +12,9 @@ import type { LoginResponse } from "./types";
 import { userFacingRequestError } from "./user-facing-error";
 
 export const LOGIN_FLOW = ["数据接入", "指标计算", "图表比较", "关税回归", "实验报告"];
-export const LOGIN_DATA_LABEL = "数据来源与范围以登录后的课程数据说明为准";
+export const LOGIN_DATA_LABEL = "登录后可查看数据来源与年份";
+/** One product summary, shared by the login page and the intro. */
+export const PRODUCT_SUMMARY = "用投入产出数据计算价值链指标、比较经济体，再用关税数据做回归，最后完成实验报告。";
 
 export const DEMO_STUDENT_COUNT = 50;
 const SEEN_DEMO_STUDENTS_KEY = "gvcsim_seen_demo_students";
@@ -99,7 +101,7 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
   // 又能连同基础口令和整组凭证一起消除。
   const demoPassword = demoMode ? import.meta.env.VITE_DEMO_PASSWORD || "gvclab2026" : "";
   const demoStudents = demoMode ? demoStudentCredentials(demoPassword) : [];
-  // The demo student this tab used last: after 退出, the same person gets the same account back instead of
+  // The demo student this tab used last: after 退出登录, the same person gets the same account back instead of
   // the next one in the rotation (which someone else may be using).
   const [previousDemoStudent] = useState(() => {
     if (!demoMode || returningUsername) return null;
@@ -150,7 +152,7 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
     if (error) submitRef.current?.focus();
   }, [error]);
 
-  // "当前网络不可用" notices and network errors are stale once the connection is back.
+  // "现在没有网络" notices and network errors are stale once the connection is back.
   const [online, setOnline] = useState(true);
   useEffect(() => {
     const back = () => {
@@ -167,9 +169,9 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
   }, []);
   const [noticeCleared, setNoticeCleared] = useState(false);
   useEffect(() => {
-    if (online && notice?.includes("网络不可用") && navigator.onLine) setNoticeCleared(true);
+    if (online && notice?.includes("没有网络") && navigator.onLine) setNoticeCleared(true);
   }, [online, notice]);
-  const shownNotice = notice && !(noticeCleared && notice.includes("网络不可用"))
+  const shownNotice = notice && !(noticeCleared && notice.includes("没有网络"))
     ? notice
     : noticeCleared ? "网络已恢复，可以重新登录。" : null;
 
@@ -230,13 +232,14 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
   // Signing in with the unconfirmed local pick could land on a classmate's account: wait for the server first.
   const awaitingSuggestion = suggestion === "pending" && !edited.current && demoStudent != null && username === demoStudent.username;
 
-  const demoAccounts = demoStudent || noIdleDemoStudent ? [
+  // Built only in the demo build, so the production bundle carries none of the demo labels.
+  const demoAccounts = demoMode && (demoStudent || noIdleDemoStudent) ? [
     ...(demoStudent ? [{
       ...demoStudent,
       label: "学生身份",
       note: suggestion === "confirmed" && (confirmedStudent === null || demoStudent.username === confirmedStudent)
-        ? `${DEMO_STUDENT_COUNT} 个种子学生 · 分配近 1 小时无人使用的账号`
-        : suggestion === "pending" ? "正在分配空闲账号…" : "未能确认空闲账号，可能有同学在用",
+        ? "自动分配一个空闲的演示账号"
+        : suggestion === "pending" ? "正在分配空闲账号…" : "账号可能有同学在用",
     }] : []),
     {
       username: "teacher",
@@ -279,7 +282,7 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
             亲手分析全球价值链变化。
           </h1>
           <p className="login-desc">
-            使用跨国投入产出表，计算价值链指标、比较经济体，再用关税数据练习回归分析，判断结果及其不确定性，最后完成实验报告。
+            {PRODUCT_SUMMARY}
           </p>
           <div className="login-flow">
             {LOGIN_FLOW.map((p, i) => (
@@ -296,12 +299,12 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
 
       <div className="login-panel">
         <form className="login-card" onSubmit={submit}>
-          <h2>进入实验平台</h2>
-          <p className="login-card-sub">使用教师分配的个人账号登录。</p>
+          <h2>登录实验台</h2>
+          <p className="login-card-sub">用老师发给你的账号登录。</p>
           {/* An expired session is a warning, not a success; a password change is confirmed in green. */}
-          {shownNotice && <div className={`${shownNotice.includes("失效") || shownNotice.includes("网络不可用") ? "tipbox" : "success-box"} login-notice`} role="status">{shownNotice}</div>}
+          {shownNotice && <div className={`${shownNotice.includes("失效") || shownNotice.includes("没有网络") ? "tipbox" : "success-box"} login-notice`} role="status">{shownNotice}</div>}
 
-          {demoMode && demoAccounts.length > 0 && <div className="login-roles" role="group" aria-label="开发演示快捷账号">
+          {demoMode && demoAccounts.length > 0 && <div className="login-roles" role="group" aria-label="演示账号快捷登录">
             {demoAccounts.map((a) => (
               <button
                 key={a.username}
@@ -344,17 +347,17 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
           </button>
           <div className="login-hint">
             {demoMode && !returningUsername && (noIdleDemoStudent
-              ? <>{DEMO_STUDENT_COUNT} 个种子学生账号近 1 小时都有人在用，暂无空闲演示账号；请向老师索取账号，或稍后刷新页面。<br /></>
+              ? <>演示账号都在使用中。请稍后刷新页面，或向老师要账号。<br /></>
               : username === "teacher"
                 ? <>当前预填的是教师演示账号，用于学生管理与报告评阅。上方可切换回学生身份。<br /></>
               : suggestion === "failed"
-                ? <>暂时无法确认空闲账号（网络或服务繁忙）：当前预填的是随机挑选的种子学生账号，可能有同学正在使用；断网时网络恢复后会自动重新分配，也可以刷新页面重试或向老师索取账号。<br /></>
+                ? <>暂时无法分配空闲账号，当前预填的账号可能有同学在用。请稍后刷新页面，或向老师要账号。<br /></>
                 : suggestion === "pending"
-                  ? <>正在为你分配一个近 1 小时无人使用的种子学生账号…<br /></>
+                  ? <>正在分配空闲的演示账号…<br /></>
                   : confirmedStudent !== null && username !== confirmedStudent
-                    ? <>当前填写的不是系统分配的空闲账号；点上方“学生身份”可换回分配的账号。<br /></>
-                    : <>当前预填的是一个近 1 小时无人使用的种子学生账号；退出后本标签页回到原账号。上方可一键切换学生 / 教师身份。<br /></>)}
-            登录用于区分每位同学的实验记录。刷新可继续实验；退出只影响当前标签页。
+                    ? <>这不是系统分配的账号。点上方“学生身份”可换回。<br /></>
+                    : <>已为你预填一个空闲的演示学生账号。退出登录后在本页再次登录，仍是这个账号。<br /></>)}
+            登录用于区分每位同学的实验记录。刷新页面不会丢失进度。
           </div>
         </form>
       </div>
