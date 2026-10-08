@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { DistributionStrip, IndicatorPairBars, IndicatorTrendChart, LengthPositionTrajectory } from "./indicator-charts";
+import { DistributionStrip, IndicatorPairBars, IndicatorTrendChart, LengthPositionTrajectory, TrendSummary } from "./indicator-charts";
 import { countryDistribution } from "./indicator-model";
 import type { Row } from "./scaffold";
 
@@ -112,6 +112,18 @@ describe("mark-level hover layers", () => {
     expect(group.getAttribute("data-hovered")).toBeNull();
   });
 
+  test("pair bars name an undefined value and say both kinds of gap are left blank (round 12)", () => {
+    const view = render(
+      <IndicatorPairBars
+        countries={["LUX", "KHM"]}
+        unit="%"
+        groups={[{ key: "O", label: "O 公共管理与国防", values: [0.868, null], reasons: [null, "无法计算"] }]}
+      />,
+    );
+    expect(view.container.textContent).toContain("无法计算");
+    expect(view.container.textContent).toContain("负值画在左边，缺少或无法计算的数据留空。");
+  });
+
   test("trajectory points read both lengths and the ratio; endpoints are focusable", () => {
     const rows: Row[] = [
       { country: "CHN", year: 2016, PLy_GVC: 2, PLv_GVC: 3 },
@@ -150,5 +162,48 @@ describe("trend chart axis and empty state", () => {
     );
     expect(view.getByRole("status").textContent).toContain("没有 GVC 生产");
     expect(view.container.textContent).not.toContain("没有有效读数");
+  });
+});
+
+describe("trend cards name the empty year and say why (round 12)", () => {
+  const readings = [
+    { country: "CHN", year: 2016, value: 0.2 }, { country: "CHN", year: 2020, value: 0.3 },
+    { country: "MLT", year: 2016, value: 0.1 }, { country: "MLT", year: 2020, value: null },
+  ];
+
+  test("step 7 MLT H51: a negative 2020 total is undefined, not missing, and 2020 is named", () => {
+    const view = render(
+      <TrendSummary readings={readings} countries={["CHN", "MLT"]} years={[2016, 2020]} unit="%"
+        reasonFor={(country, year) => (country === "MLT" && year === 2020 ? "该行业总增加值为负，复杂 GVC 生产份额无法计算（不是缺少数据）" : null)} />,
+    );
+    const text = view.getByLabelText("趋势读数").textContent ?? "";
+    expect(text).toContain("期间读数无法计算");
+    expect(text).toContain("2020 年该行业总增加值为负，复杂 GVC 生产份额无法计算（不是缺少数据），暂不比较差距");
+    expect(text).not.toContain("2016 或 2020");
+    expect(text).not.toContain("缺失");
+  });
+
+  test("really missing data still says so, with its year", () => {
+    const view = render(<TrendSummary readings={readings} countries={["CHN", "MLT"]} years={[2016, 2020]} unit="%" />);
+    const text = view.getByLabelText("趋势读数").textContent ?? "";
+    expect(text).toContain("期间读数不完整");
+    expect(text).toContain("2020 年缺少数据（缺少的数据留空），暂不比较差距");
+  });
+
+  test("step 9 离心率 A03: an isolated LUX reads 无法定义, not 没有读数", () => {
+    const isolated = [2016, 2020].flatMap((year) => [{ country: "LUX", year, value: null }, { country: "USA", year, value: 2 }]);
+    const view = render(
+      <TrendSummary readings={isolated} countries={["LUX", "USA"]} years={[2016, 2020]} unit="路径长度"
+        reasonFor={(country) => (country === "LUX" ? "该行业无连接，离心率无法定义（不是 0）" : null)} />,
+    );
+    expect(view.container.textContent).toBe("LUX 卢森堡在所选年份该行业无连接，离心率无法定义（不是 0），暂不能读出期间变化。");
+    cleanup();
+    const comparison = render(
+      <TrendSummary readings={isolated} countries={["USA", "LUX"]} years={[2016, 2020]} unit="路径长度"
+        reasonFor={(country) => (country === "LUX" ? "该行业无连接，离心率无法定义（不是 0）" : null)} />,
+    );
+    const text = comparison.getByLabelText("趋势读数").textContent ?? "";
+    expect(text).toContain("期间读数无法定义");
+    expect(text).toContain("2016、2020 年该行业无连接，离心率无法定义（不是 0），暂不比较差距");
   });
 });

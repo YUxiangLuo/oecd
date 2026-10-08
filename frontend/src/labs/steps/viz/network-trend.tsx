@@ -60,7 +60,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   const [first, setFirst] = useState(defaultFirst);
   const [others, setOthers] = useState<string[]>(defaultOthers);
   const [industry, setIndustry] = useState(meta.sectors.includes(restored[0]?.industry ?? "") ? restored[0].industry! : meta.sectors.includes("C26") ? "C26" : meta.sectors[0] ?? "");
-  const [metric, setMetric] = useState(restored[0]?.metric ?? "weighted degree");
+  const [pickedMetric, setMetric] = useState(restored[0]?.metric ?? "weighted degree");
   // 历年变化 opens first so a first visit records material; saved material reopens on the view that recorded it.
   const [view, setView] = useState<string>(restored[0]?.source === "explicit-network-ranking" ? "ranking" : "trend");
   // Only the two comparison views record material; the extra views are exploration.
@@ -80,6 +80,10 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   // 买入与卖出 has its own length (前 15 个), separate from the ranking's 前 10 个.
   const [flowsLimit, setFlowsLimit] = useState(15);
   const metrics = schema?.groups.find((group) => group.key === "network")?.fields ?? COMMON_METRICS;
+  // A blank or unknown metric (an empty saved value, or a pick the list does not offer) would show the list's first
+  // option while reading nothing: no 指标 in the scope line and "该行业没有数据". It falls back to 加权总度; a saved
+  // metric is checked only against the loaded schema, so it is kept while the schema loads.
+  const metric = pickedMetric && (!schema || metrics.includes(pickedMetric)) ? pickedMetric : "weighted degree";
   const label = schema?.fields[metric]?.label ?? (metric === "weighted degree" ? "加权总度" : metric);
   const unit = metric.startsWith("weighted ") ? "百万美元" : metric === HEAT_EVIDENCE_METRIC ? "未归一化介数" : ["degree", "indegree", "outdegree"].includes(metric) ? "连接数" : metric === "Eccentricity" ? "路径长度" : "无量纲";
   const selected = [first, ...others.filter((country, index, all) => country !== first && all.indexOf(country) === index)].slice(0, MAX_ENTITIES);
@@ -333,6 +337,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       {finite.length ? <IndicatorTrendChart
         rows={(query.data ?? []).filter((row) => row.industry === industry).map((row) => ({ ...row, [metric]: networkValue(row[metric], metric) }))}
         emptyReading={(country, at) => (points.some((point) => point.country === country && point.year === at && point.undefined) ? PATH_UNDEFINED_LABEL : null)}
+        reasonFor={(country, at) => (points.some((point) => point.country === country && point.year === at && point.undefined) ? `该行业无连接，${label}无法定义（不是 0）` : null)}
         countries={selected}
         years={years}
         metric={metric}
@@ -343,6 +348,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         sameIndustry
       /> : <p role="status">{undefinedPoints.length ? `所选国家的该行业${PATH_UNDEFINED_NOTE}，${label}无法定义；请更换行业、指标或国家。` : "该行业没有数据，请更换行业、指标或国家。"}</p>}
       {undefinedNote && <p className="muted">{undefinedNote}</p>}
+      {flatValue === 0 && <p className="muted">所选国家历年的 {sectorLabel(industry)} {label}都是 0：这是真实的 0（该行业没有这类买卖或连接），不是缺少数据。</p>}
       <details className="technical-details"><summary>查看趋势图逐年读数</summary>
         <ScrollableRegion className="table-wrap" label="行业趋势逐年读数"><table className="data-table">
           <thead><tr><th>年份</th>{selected.map((country) => <th key={country}>{countryLabel(country)}</th>)}</tr></thead>
@@ -360,7 +366,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       <h3>报告材料 · {observations.length ? `已${locked ? "" : "自动"}记录（${observations.length} 条读数）` : "尚未记录"}</h3>
       <p role="status">{!canRecord
         ? `当前图表暂不能记录：${!recordable ? "探索视角不记录材料。"
-          : flatValue !== null && query.status === "success" ? `图上${view === "trend" ? `所选国家历年的${label}` : `显示的行业的${label}`}全部${flatValue === 0 ? "为 0（例如没有生产或连接）" : `相同（都是 ${indicatorNumber(flatValue, unit)}）`}，没有可比较的差别，不记录为报告材料；请换一个${view === "trend" ? "行业" : "年份"}或指标。`
+          : flatValue !== null && query.status === "success" ? `图上${view === "trend" ? `所选国家历年的${label}` : `显示的行业的${label}`}全部${flatValue === 0 ? "为 0（真实的 0，例如没有生产或连接，不是缺少数据）" : `相同（都是 ${indicatorNumber(flatValue, unit)}）`}，没有可比较的差别，不记录为报告材料；请换一个${view === "trend" ? "行业" : "年份"}或指标。`
           : view === "trend" ? (undefinedThroughout.length ? `${joinCountries(undefinedThroughout)}的该行业在所选年份都${PATH_UNDEFINED_NOTE}，${label}都无法定义；请换一个行业、指标或国家。`
             : undefinedPoints.length ? `有的年份该行业${PATH_UNDEFINED_NOTE}，${label}无法定义；所选国家至少需要两个共同有效年份，请换一个行业、指标或国家。` : "所选国家至少需要两个共同有效年份。") : "显示的行业里，至少要有一个行业所有所选国家都有数据。"}${observations.length ? "已记录的材料保持不变。" : ""}`
         : locked

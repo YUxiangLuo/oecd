@@ -277,3 +277,27 @@ test("a path metric undefined in every year names the economy instead of saying 
   expect(note.textContent).not.toContain("有的年份");
   expect(note.textContent).not.toContain("至少需要两个共同有效年份");
 });
+
+test("加权总度 of an industry with no flows anywhere (T) reads as real zeros, with its 指标 named (round 12)", async () => {
+  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) =>
+    page([{ country, year, industry: "C26", "weighted degree": 0, Eccentricity: 0 } as unknown as ReturnType<typeof row>]),
+  );
+  mockReference();
+  const schema = {
+    groups: [{ key: "network", label: "生产网络指标", fields: ["weighted degree", "Eccentricity"] }],
+    fields: { "weighted degree": { label: "加权总度", format: "amount" as const, desc: "" }, Eccentricity: { label: "离心率", format: "count" as const, desc: "" } },
+  };
+  const save = mock(() => {});
+  render(<NetworkTrend meta={meta} schema={schema} initialCountry="CHN" onRecord={save} />);
+  const material = screen.getByRole("region", { name: "步骤9报告材料" });
+  await waitFor(() => expect(material.textContent).toContain("全部为 0（真实的 0，例如没有生产或连接，不是缺少数据）"));
+  expect(screen.getByText(/都是 0：这是真实的 0/)).toBeTruthy();
+  expect(screen.queryByText("该行业没有数据，请更换行业、指标或国家。")).toBeNull();
+  expect(material.textContent).not.toContain("至少需要两个共同有效年份");
+  // A pick the list does not offer (the select then reads "") falls back to 加权总度 instead of a blank 指标.
+  fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "不存在的指标" } });
+  const scope = screen.getByRole("group", { name: "当前图表范围" });
+  await waitFor(() => expect(scope.textContent).toContain("指标加权总度"));
+  expect(material.textContent).toContain("全部为 0");
+  expect(save).not.toHaveBeenCalled();
+});

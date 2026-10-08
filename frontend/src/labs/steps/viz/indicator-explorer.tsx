@@ -43,6 +43,7 @@ import {
   LengthPositionTrajectory,
   TrendSummary,
   indicatorNumber,
+  textNumber,
 } from "./indicator-charts";
 import { ScopeCard } from "./scope-card";
 import { AddCountryControl } from "./add-country";
@@ -265,9 +266,32 @@ export function IndicatorExplorer({
         String(a.industry).localeCompare(String(b.industry)),
     )
     .slice(0, limit);
+  // 行业排名 records the industries every selected economy can be read in, as step 9's ranking does. A row where
+  // an economy has no reading (zero exports leave a share undefined; or the data is missing) is still drawn, with
+  // "无法计算" where it is undefined, but it is not recorded, so one such row never blocks the whole chart.
+  const rankValue = (country: string, sector: string) =>
+    rows.find((item) => item.country === country && item.year === year && String(item.industry ?? "") === sector)?.[metric];
+  const rankComplete = ranked.filter((row) => selected.every((country) => finiteValue(rankValue(country, String(row.industry)))));
+  const rankGaps = view === "industry"
+    ? ranked.filter((row) => !rankComplete.includes(row)).map((row) => {
+        const sector = String(row.industry);
+        const empty = selected.filter((country) => !finiteValue(rankValue(country, sector)));
+        return { sector, empty: empty.map((country) => ({ country, reason: undefinedReason(country, metric, year, sector) })) };
+      })
+    : [];
+  const rankGapsUndefined = rankGaps.every((gap) => gap.empty.every((item) => item.reason));
+  // "O 公共管理与国防：KHM 柬埔寨 与 BRN 文莱该行业总出口为 0，国内增加值出口占比无法计算（不是缺少数据）"; a long list
+  // (全部行业) names the first three.
+  const rankGapText = rankGaps.slice(0, 3).map((gap) => {
+    const reasons = [...new Set(gap.empty.map((item) => item.reason))];
+    return `${sectorLabel(gap.sector)}：${reasons.map((reason) => {
+      const countries = joinCountries(gap.empty.filter((item) => item.reason === reason).map((item) => item.country));
+      return reason ? `${countries}${reason}，${label(metric)}无法计算（不是缺少数据）` : `${countries}缺少数据`;
+    }).join("；")}`;
+  }).join("；") + (rankGaps.length > 3 ? `等 ${rankGaps.length} 个行业` : "");
   const pending =
     view === "industry"
-      ? ranked.flatMap((row) =>
+      ? rankComplete.flatMap((row) =>
           indicatorMaterial(
             rows,
             selected,
@@ -293,7 +317,7 @@ export function IndicatorExplorer({
     selected.length *
     chartYears.length *
     metrics.length *
-    (view === "industry" ? ranked.length : 1);
+    (view === "industry" ? rankComplete.length : 1);
   const completeComposition =
     !composition ||
     (pending.length === expectedCount &&
@@ -317,11 +341,29 @@ export function IndicatorExplorer({
   const missingCountries = selected.filter((country) => pending.filter((item) => item.country === country).length < perCountry);
   // Missing readings that are really undefined (zero exports, no GVC production): changing the years will not
   // help. Each clause names its own indicator, since step 8 reads the forward and backward lengths together.
-  const undefinedReasons = [...new Set(missingCountries.flatMap((country) => chartYears.flatMap((at) =>
-    metrics.flatMap((key) => {
-      const reason = undefinedReason(country, key, at);
-      return reason ? [`${reason}，${label(key)}无法计算`] : [];
-    }))))];
+  // Each clause names the economies it applies to and their years ("LUX 卢森堡在所选年份该行业没有 GVC 生产…，前向 GVC
+  // 段长度无法计算；LUX 卢森堡 与 MLT 马耳他在所选年份该行业没有后向 GVC 生产…"), never the whole list for every clause.
+  const undefinedReasons = (() => {
+    const groups = new Map<string, { when: string; clause: string; countries: string[] }>();
+    for (const key of metrics) {
+      for (const country of missingCountries) {
+        const byReason = new Map<string, number[]>();
+        for (const at of chartYears) {
+          if (pending.some((item) => item.country === country && item.year === at && item.metric === key)) continue;
+          const reason = undefinedReason(country, key, at);
+          if (reason) byReason.set(reason, [...(byReason.get(reason) ?? []), at]);
+        }
+        for (const [reason, at] of byReason) {
+          const when = timeView ? (at.length === chartYears.length ? "在所选年份" : ` ${at.join("、")} 年`) : ` ${year} 年`;
+          const clause = `${reason}，${label(key)}无法计算`;
+          const group = groups.get(`${when}|${clause}`) ?? { when, clause, countries: [] };
+          group.countries.push(country);
+          groups.set(`${when}|${clause}`, group);
+        }
+      }
+    }
+    return [...groups.values()].map((group) => `${joinCountries(group.countries)}${group.when}${group.clause}`);
+  })();
   const missingOnlyUndefined = missingCountries.length > 0 && missingCountries.every((country) => chartYears.every((at) =>
     metrics.every((key) => pending.some((item) => item.country === country && item.year === at && item.metric === key) || undefinedReason(country, key, at))));
   // A country with no reading in any loaded year: another year range can only help when some years are not loaded.
@@ -357,8 +399,10 @@ export function IndicatorExplorer({
               ? totalIssues.length
                 ? `${joinCountries([...new Set(totalIssues.map((item) => item.country))])}${industry ? `在 ${sectorLabel(industry)}` : ""}的${label(activeComposition!.total)}${totalIssues.every((item) => item.value === 0) ? "为 0" : totalIssues.every((item) => item.value < 0) ? "为负" : "为 0 或为负"}，构成份额无法计算（不是缺少数据）；请换一个${industry ? "行业或" : ""}国家${timeView ? "，或调整年份范围" : ""}。`
                 : "构成图需要每个分项都有数据，且总量大于 0；请换国家、行业或年份。"
+              : view === "industry" && !rankComplete.length && rankGaps.length
+                ? `${year} 年显示的行业里，没有一个行业所有所选国家都有读数（${rankGapText}）；请换国家${rankGapsUndefined || years.length < 2 ? "" : "或换一个年份"}。`
               : missingCountries.length && missingOnlyUndefined && undefinedReasons.length
-                ? `${joinCountries(missingCountries)}${timeView ? "在所选年份" : ` ${year} 年`}${undefinedReasons.join("；")}（不是缺少数据）；请换一个${industry ? "行业或" : ""}国家。`
+                ? `${undefinedReasons.join("；")}（不是缺少数据）；请换一个${industry ? "行业或" : ""}国家。`
               : missingCountries.length
                 ? `${joinCountries(missingCountries)}在${timeView ? "所选年份范围" : ` ${year} 年`}${industry ? `（${sectorLabel(industry)}）` : ""}缺少数据（缺少的数据留空，不当作 0）；请${missingFix.join("、").replace(/、([^、]+)$/, "或$1")}。`
                 : `所选国家没有同一${timeView ? "组年份" : "年份"}的数据，无法放在一起比较；请${timeView ? "调整年份范围" : "换一个年份"}或换国家。`;
@@ -445,6 +489,12 @@ export function IndicatorExplorer({
   const undefinedNotes = (view === "trend" || view === "comparison" ? [metric] : view === "directions" ? metrics : [])
     .filter((key) => !allUndefined(key))
     .flatMap(notesFor);
+  // Trend readouts and cards: an undefined reading says "无法计算" and why, with its year, not "缺失".
+  const trendEmpty = (key: string) => (country: string, at: number) => (undefinedReason(country, key, at) ? "无法计算" : null);
+  const trendReason = (key: string) => (country: string, at: number) => {
+    const reason = undefinedReason(country, key, at);
+    return reason ? `${reason}，${label(key)}无法计算（不是缺少数据）` : null;
+  };
   const shareReason = (country: string) => {
     const reason = undefinedReason(country, metric, year);
     return reason ? `${reason}，${field(metric)?.denominator ? "无法计算占比" : "无法计算"}（不是缺少数据）` : null;
@@ -542,6 +592,32 @@ export function IndicatorExplorer({
   const structureComposition = topic.composition;
   const structureFocus = structureComposition?.focus ?? structureComposition?.segments.at(-1)?.key ?? "";
   const structureSortKey = field(`${structureFocus}_share`) ? `${structureFocus}_share` : structureFocus;
+  // 行业结构 bars leave out industries whose shares cannot be drawn (the same rule as CompositionBar): say how many
+  // and why, so MLT's H51 (negative value added) or LUX's idle industries do not vanish silently.
+  const structureHiddenNote = (country: string): string | null => {
+    if (!structureComposition) return null;
+    const total = structureComposition.total;
+    const hidden = structureRows(country).filter((row) => !(finiteValue(row[structureSortKey]) && finiteValue(row[total])
+      && (row[total] as number) > 0 && structureComposition.segments.every((segment) => finiteValue(row[segment.key]))));
+    if (!hidden.length) return null;
+    const groups = [
+      { text: `${label(total)}为负`, rows: hidden.filter((row) => finiteValue(row[total]) && (row[total] as number) < 0) },
+      { text: `${label(total)}为 0（没有这类生产活动）`, rows: hidden.filter((row) => row[total] === 0) },
+      { text: "缺少数据", rows: hidden.filter((row) => !finiteValue(row[total]) || (row[total] as number) > 0) },
+    ].filter((group) => group.rows.length);
+    const undefinedOnly = groups.every((group) => group.text !== "缺少数据");
+    return `另有 ${hidden.length} 个行业没有画出：${groups.map((group) => `${group.rows.map((row) => String(row.industry)).join("、")} ${group.text}`).join("；")}${undefinedOnly ? "，份额无法计算（不是缺少数据）" : ""}。`;
+  };
+  // 行业排名 rows: an undefined reading reads "无法计算" (zero exports), not "缺失".
+  const rankGroups = ranked.map((row) => {
+    const sector = String(row.industry);
+    return {
+      key: sector,
+      label: sectorLabel(sector),
+      values: valuesFor(metric, sector),
+      reasons: selected.map((country) => (undefinedReason(country, metric, year, sector) ? "无法计算" : null)),
+    };
+  });
   const nationals = selected.map((country) => {
     const value = rows.find((row) => row.country === country && row.year === year && row.industry == null)?.[metric];
     return finiteValue(value) ? value : null;
@@ -835,6 +911,8 @@ export function IndicatorExplorer({
               distribution={referenceFor(metric)}
               mode="context"
               emptyStatus={emptyStatus(metric)}
+              emptyReading={trendEmpty(metric)}
+              reasonFor={trendReason(metric)}
             />
           )}
           {view === "directions" &&
@@ -858,6 +936,8 @@ export function IndicatorExplorer({
                   distribution={referenceFor(key)}
                   mode="context"
                   emptyStatus={emptyStatus(key)}
+                  emptyReading={trendEmpty(key)}
+                  reasonFor={trendReason(key)}
                 />
               ))}
             </>}
@@ -980,7 +1060,7 @@ export function IndicatorExplorer({
               )}
               {droppedBars.length > 0 && (
                 <p className="muted">
-                  {droppedBars.map((item) => `${countryLabel(item.country)} · ${item.year}：${label(activeComposition.total)}为${item.value === 0 ? " 0" : `负（${indicatorNumber(item.value, "百万美元")} 百万美元）`}`).join("；")}，构成份额无法计算，占比图里不画；切换到“金额”可看各分项。
+                  {droppedBars.map((item) => `${countryLabel(item.country)} · ${item.year}：${label(activeComposition.total)}为${item.value === 0 ? " 0" : `负（${textNumber(item.value, "百万美元")} 百万美元）`}`).join("；")}，构成份额无法计算，占比图里不画；切换到“金额”可看各分项。
                 </p>
               )}
               {view === "composition"
@@ -993,7 +1073,15 @@ export function IndicatorExplorer({
                       const part = row?.[focus];
                       return { country, year: value, value: finiteValue(total) && total > 0 && finiteValue(part) ? part / total : null };
                     }));
-                    return <TrendSummary readings={readings} countries={selected} years={chartYears} unit="%" metricLabel={activeComposition!.focusLabel ?? activeComposition!.segments.find((segment) => segment.key === focus)?.name} />;
+                    const focusLabel = activeComposition!.focusLabel ?? activeComposition!.segments.find((segment) => segment.key === focus)?.name;
+                    // A total of 0 or below leaves the share undefined in that year, not missing.
+                    const totalReason = (country: string, at: number) => {
+                      const total = scoped.find((item) => item.country === country && item.year === at)?.[activeComposition!.total];
+                      return finiteValue(total) && total <= 0
+                        ? `${industry ? "该行业" : "该国"}${label(activeComposition!.total)}${total === 0 ? "为 0" : "为负"}，${focusLabel ?? "构成份额"}无法计算（不是缺少数据）`
+                        : null;
+                    };
+                    return <TrendSummary readings={readings} countries={selected} years={chartYears} unit="%" metricLabel={focusLabel} reasonFor={totalReason} />;
                   })()}
             </>
           )}
@@ -1016,12 +1104,17 @@ export function IndicatorExplorer({
                         label: segment.label,
                         left: valuesFor(segment.forward).at(selected.indexOf(country)) ?? null,
                         right: valuesFor(segment.backward).at(selected.indexOf(country)) ?? null,
+                        leftReason: undefinedReason(country, segment.forward, year) ? "无法计算" : null,
+                        rightReason: undefinedReason(country, segment.backward, year) ? "无法计算" : null,
                       }))}
                     />
                   </section>
                 ))}
               </div>
-              <ReadingCards label="段长度读数" cards={segmentCards({ rows: scoped, countries: selected, year, industry, segments: LENGTH_SEGMENTS })} />
+              <ReadingCards label="段长度读数" cards={segmentCards({ rows: scoped, countries: selected, year, industry, segments: LENGTH_SEGMENTS, reasonFor: (country, key) => {
+                const reason = undefinedReason(country, key, year);
+                return reason ? `${reason}，${label(key)}无法计算（不是缺少数据）` : null;
+              } })} />
             </>
           )}
           {view === "structure" && (
@@ -1035,6 +1128,7 @@ export function IndicatorExplorer({
                 <section key={country} className="comparison-facet">
                   <h4>{countryLabel(country)} · {year} · 行业结构</h4>
                   {topic.key === "production" && structureComposition ? (
+                    <>
                     <CompositionBar
                       dataLabel={`${countryLabel(country)} 行业结构`}
                       rows={structureRows(country)}
@@ -1045,6 +1139,8 @@ export function IndicatorExplorer({
                       sortFormat={unit(structureSortKey) === "%" ? "pct" : "amount"}
                       valueFormat="amount"
                     />
+                    {structureHiddenNote(country) && <p className="muted">{structureHiddenNote(country)}</p>}
+                    </>
                   ) : (
                     <QuadrantScatter
                       dataLabel={`${countryLabel(country)} 行业结构`}
@@ -1076,27 +1172,22 @@ export function IndicatorExplorer({
                     unit={unit(metric)}
                     label={label(metric)}
                     nationals={nationals}
-                    groups={ranked.map((row) => ({
-                      key: String(row.industry),
-                      label: sectorLabel(String(row.industry)),
-                      values: valuesFor(metric, String(row.industry)),
-                    }))}
+                    groups={rankGroups}
                     onPick={pickIndustry}
                   />
                 ) : (
                   <IndicatorPairBars
                     countries={selected}
                     unit={unit(metric)}
-                    groups={ranked.map((row) => ({
-                      key: String(row.industry),
-                      label: sectorLabel(String(row.industry)),
-                      values: valuesFor(metric, String(row.industry)),
-                    }))}
+                    groups={rankGroups}
                     onPick={pickIndustry}
                   />
                 )}
               </ScrollableRegion>
-              <ReadingCards label="行业读数" cards={industryCards({ groups: ranked.map((row) => ({ key: String(row.industry), label: sectorLabel(String(row.industry)), values: valuesFor(metric, String(row.industry)) })), countries: selected, label: label(metric), unit: unit(metric) })} />
+              {rankGaps.length > 0 && rankComplete.length > 0 && (
+                <p className="muted">{rankGapText}。这些行业照常显示，但不记入报告材料：报告材料只记所有所选国家都有读数的 {rankComplete.length} 个行业。</p>
+              )}
+              <ReadingCards label="行业读数" cards={industryCards({ groups: rankGroups, countries: selected, label: label(metric), unit: unit(metric) })} />
             </>
           )}
           {undefinedNotes.length > 0 && <p className="muted">{undefinedNotes.join("；")}（不是缺少数据，图上留空）。</p>}
@@ -1105,7 +1196,9 @@ export function IndicatorExplorer({
           {view !== "positioning" && view !== "structure" && <details className="technical-details">
             <summary>
               {/* Readings that are undefined (zero exports, no GVC production) are not missing data. */}
-              核对当前图表读数 · {pending.length} 条（{missingOnlyUndefined ? "无法计算的读数留空" : "缺失留空"}）
+              核对当前图表读数 · {pending.length} 条（{rankGaps.length
+                ? rankGapsUndefined ? "有国家无法计算的行业不记入" : "有国家缺少或无法计算读数的行业不记入"
+                : missingOnlyUndefined ? "无法计算的读数留空" : "缺失留空"}）
             </summary>
             {table(pending)}
           </details>}
