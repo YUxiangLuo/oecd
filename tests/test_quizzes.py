@@ -59,14 +59,14 @@ def test_step_11_reads_percentage_points_without_claiming_real_causation(answer,
     assert passed is expected
     assert feedback[1]["correct"] is expected
     if expected:
-        assert "平均下降 0.60 个百分点" in feedback[1]["explanation"]
-        assert "不是相对下降 0.60%" in feedback[1]["explanation"]
+        assert "平均下降 1.20 个百分点" in feedback[1]["explanation"]
+        assert "不是相对下降 1.20%" in feedback[1]["explanation"]
         assert "不是平均变化" in feedback[1]["explanation"]
         assert "模拟" not in feedback[1]["explanation"]
     else:
         # A wrong answer gets a hint, not the answer.
         assert feedback[1]["explanation"] == quizzes.HINTS["s11-reading-v9"]
-        assert "平均下降 0.60 个百分点" not in feedback[1]["explanation"]
+        assert "平均下降 1.20 个百分点" not in feedback[1]["explanation"]
     assert len(quizzes.public_quiz(11)["questions"]) == 2
 
 

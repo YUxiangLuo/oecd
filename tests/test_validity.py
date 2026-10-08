@@ -88,7 +88,7 @@ def test_distinguishes_never_treated_entities_from_fully_untreated_clusters():
     assert s.untreated_clusters == 0
     assert s.treated_entities == 5
     assert s.untreated_entities == 5
-    assert any("只使用从未处理或截至比较期尚未处理" in reason for reason in s.reasons)
+    assert any("没有完全不受关税影响的国家可以对照" in reason for reason in s.reasons)
 
 
 def test_too_few_treated_clusters_is_insufficient_regardless_of_total_clusters():

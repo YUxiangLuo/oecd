@@ -27,19 +27,19 @@ def evaluate_step(step: int, session: dict[str, Any], *, report_exists: bool = F
     if lab is None:
         raise ValueError(f"未知步骤:{step}")
     if lab == "rep":
-        missing = [] if report_exists else ["请完成理解检查、关键实验与原创分析门槛后生成实验报告"]
+        missing = [] if report_exists else ["先答对理解题、补齐实验材料、写完你的分析，才能生成报告"]
         return StepCompletion(step, not missing, missing)
     record = session.get("steps", {}).get(str(step))
     data = record.get("data") if isinstance(record, dict) else None
     quiz = data.get("quiz") if isinstance(data, dict) else None
     if not isinstance(quiz, dict):
-        return StepCompletion(step, False, ["请完成本步理解检查并答对全部选择题"])
+        return StepCompletion(step, False, ["请答对本步全部理解题"])
     try:
         passed, normalized, _results = quizzes.grade(step, str(quiz.get("version") or ""), quiz.get("answers"))
     except ValueError as error:
         return StepCompletion(step, False, [str(error)])
     valid = passed and normalized == quiz.get("answers")
-    return StepCompletion(step, valid, [] if valid else ["本步理解检查尚未全部答对"])
+    return StepCompletion(step, valid, [] if valid else ["本步理解题还没有全部答对"])
 
 
 def evaluate(session: dict[str, Any], *, report_exists: bool = False, **unused: Any) -> list[StepCompletion]:

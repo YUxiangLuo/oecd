@@ -87,7 +87,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     priorStep: 5,
     priorLabel: "全球生产网络指标",
     learnThis: "读单位：网络 Y 的单位是“中心性原始单位”，只看方向和区间，不和前三步的数字比大小。",
-    definition: "全球国家×行业图上一个节点的加权入度加出度（自环双计）。",
+    definition: "全球国家×行业图上一个节点的加权入度加出度（买入 + 卖出；自环即行业卖给自己的部分，两侧各算一次）。",
     downMeaning: "加权总度下降：节点买入与卖出的总流量规模变小。",
     upMeaning: "加权总度上升：节点买入与卖出的总流量规模变大。",
     dontClaim: "不要写成连接已经减少或脱钩，也不要拿它当作关税的“总影响”。",
@@ -189,11 +189,11 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     dontClaim: "不要写成卖出已经减少或脱钩，也不要拿它当作关税的“总影响”。",
   },
   betweenesscentrality: {
-    shortMetric: "网络介数",
+    shortMetric: "介数",
     unit: "中心性原始单位（另附标准差换算）",
-    definition: "全球国家×行业图上的最短路径介数（全正边、二值、未归一化）。",
-    downMeaning: "介数下降：在二值拓扑最短路径上的中介位置减弱。",
-    upMeaning: "介数上升：在二值拓扑最短路径上的中介位置增强。",
+    definition: "全球国家×行业图上的最短路径介数（只看连接、不看金额；未归一化）。",
+    downMeaning: "介数下降：在连接网络的最短路径上，处于中转位置的程度减弱。",
+    upMeaning: "介数上升：在连接网络的最短路径上，处于中转位置的程度增强。",
     dontClaim: "不要挑数值最大的结果当作关税的“总影响”，也不要写成已经脱钩。",
   },
   closnesscentrality: {
@@ -208,10 +208,10 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
 
 /**
  * A saved Y label as the pages show it. The server labels are a data contract: "加权总度（入+出）" drops its
- * step 5 detail and "网络介数（全正边二值）" is put in plain words.
+ * step 5 detail and "网络介数（全正边二值）" reads "介数", as on steps 5 and 9.
  */
 export function displayBaselineLabel(label: string | null | undefined): string {
-  return (label ?? "").replace(/（入\+出）$/, "").replace("（全正边二值）", "（只看连接、不看金额）");
+  return (label ?? "").replace(/（入\+出）$/, "").replace(/^网络介数（全正边二值）$/, "介数");
 }
 
 /** The fixed Y of each step (teaching.BASELINES[outcome][0] on the server). */

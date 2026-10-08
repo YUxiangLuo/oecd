@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 
 SUMMARY_TITLE = "四项回归结果汇总"
-SUMMARY_COLUMNS = ("步骤", "指标", "冲击", "比较方式", "估计对象与相对变化", "标称95%近似区间", "证据判断")
+SUMMARY_COLUMNS = ("步骤", "指标", "X每增加1个百分点时Y的变化", "95%区间", "方向")
 
 
 def validate_report_text(text: str) -> None:
@@ -45,7 +45,7 @@ def main() -> None:
         raise SystemExit("PDF 验收需要安装 Poppler 的 pdftotext（Debian/Ubuntu: poppler-utils）") from error
     except (ValueError, subprocess.SubprocessError) as error:
         raise SystemExit(str(error)) from error
-    print("PDF 四类指标对照表全部七列均保留")
+    print("PDF 四类指标对照表全部五列均保留")
 
 
 if __name__ == "__main__":

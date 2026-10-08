@@ -9,7 +9,12 @@ from typing import Any
 from gvcsim import quizzes
 from gvcsim.artifacts import NETWORK_ALGORITHM, ArtifactContractError, dataset_metadata, validate_release_cached
 from gvcsim.config import COURSE_RELEASE, processed_years
-from gvcsim.data.citations import report_source_disclosures, report_source_label
+from gvcsim.data.citations import (
+    is_ci_synthetic_source,
+    report_source_disclosures,
+    report_source_label,
+    validate_data_sources,
+)
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION, X_COLUMN
 from gvcsim.session import SESSION_VERSION
 from gvcsim.report_common import ReportGateError, TeachingReport, _safe
@@ -36,7 +41,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         raise ReportGateError(blocked)
     years = processed_years()
     if not years:
-        raise ReportGateError([{"step": 0, "title": "数据不可用", "missing": ["尚未生成固定数据产物"]}])
+        raise ReportGateError([{"step": 0, "title": "数据不可用", "missing": ["课程数据暂时不可用，请联系老师。"]}])
     runs = _saved_runs(session)
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     # The pages show server-local wall-clock time (PostgreSQL now()); the report says the same.
@@ -47,7 +52,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         metadata = dataset_metadata()
     except (ArtifactContractError, OSError, ValueError, TypeError, RuntimeError) as error:
         raise ReportGateError(
-            [{"step": 0, "title": "数据不可用", "missing": ["数据发布质检 contract 未通过验证"]}]
+            [{"step": 0, "title": "数据不可用", "missing": ["课程数据暂时不可用，请联系老师。"]}]
         ) from error
     raw_data_sources = metadata.get("data_sources")
     data_sources: dict[str, Any] = raw_data_sources if isinstance(raw_data_sources, dict) else {}
@@ -99,17 +104,27 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "publication_policy": metadata.get("publication_policy"),
         "integrity": integrity_metadata,
     }
-    source = report_source_label(data_sources)
+    # The body names the data source only; versions, hashes and the session digest are under "报告溯源".
+    source = (
+        report_source_label(data_sources)
+        if is_ci_synthetic_source(validate_data_sources(data_sources))
+        else "OECD ICIO 2023 版"
+    )
+    disclosures = report_source_disclosures(data_sources)
+    # The regressions use no macro controls; that line is provenance, not method.
+    provenance_disclosures = [line for line in disclosures if line.startswith("- 宏观控制变量")]
+    body_disclosures = [line for line in disclosures if line not in provenance_disclosures]
     lines = [
         "# GVC 指标与关税实验报告",
         "",
         f"学生：{_safe(student)}",
         "",
-        f"> **指标部分（步骤 1–9）**：覆盖 {years[0]}–{years[-1]}，指标来源：{_safe(source)}。",
+        f"> **指标部分（步骤 1–9）**：覆盖 {years[0]}–{years[-1]}，数据来源：{_safe(source)}。",
         "",
-        f"> **关税回归部分（步骤 10–14）**：教学数据版本 `{TEACHING_VERSION}`；X = 固定的冲击前销往加税市场出口份额 × 税率。",
+        "> **关税回归部分（步骤 10–14）**：X = 首年对美出口份额 w × 加征税率 τ（单位：个百分点）。",
         "",
-        "> 步骤 11–14 固定使用同一个模型：国家×行业层面的连续强度双向固定效应（TWFE），不加控制变量和交互项。系数与区间描述 X 与 Y 的关联；四个 Y 量纲不同且必须完整报告。",
+        "> 步骤 11–14 用同一个模型：扣掉每个国家×行业自己的平均水平和每年的共同变化后，看 Y 怎样随 X 变化"
+        "（双向固定效应，TWFE），不加控制变量。估计值和区间描述的是 X 与 Y 的关联；四个 Y 单位不同，数字不能互相比大小。",
         "",
         *_reflection_section(session),
         *_observed_evidence_section(session),
@@ -121,14 +136,17 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "## 数据与方法说明",
         "",
         "- 指标算法：WWZ 16 个明细项归并为五类，另加由 OECD ICIO TLS（产品税减补贴）账户计算的 taxsub 扩展项以匹配 VA+TLS 账户闭合总出口（gross exports）；TLS/taxsub 不等于关税冲击，也不是 WWZ 原文分类。课程 FVA_share 使用 WWZ FVA（不含 FDC）作分子、VA+TLS 总出口作分母，包含 WWZ 分解中不含 FDC 的外国增加值，但不是 OECD 官方 EXGR_FVASH。生产分解与生产长度采用 WWYZ 口径。",
-        "- 网络算法：保留全部有向正流量边与正自环。加权总度=加权入度+加权出度，正自环计两次；它不是去重后的贸易额。路径指标按有向无权网络计算。eigencentrality 精确复现 Gephi 0.10.1 累计入边兼容分数，不等于标准 Perron 特征向量幂迭代。",
-        "- 无权路径口径把微小正边与大额边视为同样长度，因此高介数只表示这套二值拓扑上的最短路径中介位置，不自动等于经济规模、关键瓶颈或不可替代。",
-        "- 网络解释顺序：先以加权度观察经济流量规模，再把无权介数作为拓扑基准并比较排序。当前报告没有边阈值敏感性分析，微小正边是否改变最短路径与排序尚未检验。",
-        f"- 教学数据版本：`{TEACHING_VERSION}`；X=`{X_COLUMN}`，四个 Y 各自独立。模型固定国家×行业和年份效应，不加控制变量和交互项。",
-        "- 多结果与显著性：四项结果必须完整报告；95% 区间为逐项区间，不是四结果族的同时置信带；p 值不是因果结论开关。",
-        "- 不加控制变量的原因：同期的 ICIO 派生指标和宏观变量可能本身受处理影响，放进回归反而会造成偏误。",
-        "- 回归结果来自学生会话中保存的服务端运行，不在报告生成时复算。",
-        f"- 生成时间：{generated_local}；会话摘要：`{fingerprint}`。",
+        "- 网络算法：保留全部有向的正流量连接，包括自环（行业卖给自己的部分）。加权总度（买入 + 卖出）= 加权入度 + 加权出度，"
+        "自环在买入和卖出两侧各算一次，所以它不是去重后的贸易额。路径指标只看连接、不看金额。"
+        "特征向量中心性（软件近似）按 Gephi 软件的算法计算，和教科书的标准算法结果不完全相同。",
+        "- 介数（只看连接、不看金额）把很小的正流量和大额流量当作同样的一条连接，所以高介数只表示在连接网络的最短路径上处于中转位置，"
+        "不自动等于经济规模、关键瓶颈或不可替代。",
+        "- 网络的读法：先用加权总度看流量规模，再用介数看连接结构上的位置并比较排序。本报告没有检验去掉很小的流量后，最短路径和排序会不会改变。",
+        "- 关税回归：X 和四个 Y 各自独立；模型固定扣掉每个国家×行业和每年的平均水平，不加控制变量和交互项。",
+        "- 多个结果：每个 95% 区间只针对它自己那一项；p 值小也不代表因果关系。",
+        "- 不加控制变量的原因：同一时期的其他指标本身也可能受关税影响，放进回归反而会让结果有偏差。",
+        "- 回归结果来自你在步骤 11–14 保存的计算，生成报告时不会重算。",
+        f"- 生成时间：{generated_local}。",
         "",
         "## 方法参考文献",
         "",
@@ -143,7 +161,16 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "9. Wasserstein & Lazar (2016), *The ASA Statement on p-Values*, https://doi.org/10.1080/00031305.2016.1154108",
         "10. Cameron & Miller (2015), *A Practitioner’s Guide to Cluster-Robust Inference*, https://doi.org/10.3368/jhr.50.2.317",
         "",
-        *report_source_disclosures(data_sources),
+        *body_disclosures,
+        "",
+        "## 报告溯源",
+        "",
+        "以下信息供老师核对数据和记录版本，读报告时可以略过。",
+        "",
+        f"- 指标数据版本：`{_safe(metadata.get('release_id') or '—')}`",
+        f"- 关税回归数据版本：`{TEACHING_VERSION}`；X 的列名：`{X_COLUMN}`",
+        f"- 会话摘要：`{fingerprint}`",
+        *provenance_disclosures,
         "",
     ]
     markdown = "\n".join(lines)

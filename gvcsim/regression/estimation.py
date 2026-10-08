@@ -110,14 +110,14 @@ def binned_scatter(x: np.ndarray, y: np.ndarray, slope: float, bins: int = BINSC
     return {"bins": points, "slope": float(slope), "transform": "twoway_demeaned"}
 
 
-_FE_DIMENSION_LABELS = {"entity_id": "国家–行业单元", "country": "国家", "year": "年份"}
+_FE_DIMENSION_LABELS = {"entity_id": "国家×行业", "国家–行业单元": "国家×行业", "country": "国家", "year": "年份"}
 
 
 def two_way_note(entity: str, time: str) -> str:
     """The estimator note shown to students (report and page), in course wording rather than column names."""
     return (
-        f"双向固定效应（{_FE_DIMENSION_LABELS.get(entity, entity)} + {_FE_DIMENSION_LABELS.get(time, time)}），"
-        "组内变换后 OLS"
+        f"双向固定效应（{_FE_DIMENSION_LABELS.get(entity, entity)} + {_FE_DIMENSION_LABELS.get(time, time)}）："
+        "先扣掉各自的平均水平，再做普通最小二乘回归（TWFE）"
     )
 
 
@@ -165,7 +165,8 @@ def within_ols(model: PreparedModel, prepared=None) -> RegressionResult:
     notes = [*model.notes, two_way_note(model.entity, model.time)]
     if effects.components > 1:
         notes.append(
-            f"实体—年份二部图有 {effects.components} 个连通分量；固定效应秩 {effects.rank}，CR1 残差自由度 {df}；政策系数仍为各分量共同斜率。"
+            f"样本分成 {effects.components} 组互不重叠的数据；估计值是这几组共同的斜率"
+            f"（技术细节：固定效应秩 {effects.rank}，残差自由度 {df}）。"
         )
     support = model.support
     total_ss = float(y @ y)

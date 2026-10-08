@@ -65,7 +65,7 @@ def test_report_tiny_nonzero_numbers_and_standardized_effect_preserve_sign():
         {"status": "ok", "depvar_std": 2000},
         {"name": "tariff_shock", "coef": -690.746, "ci_low": -15099, "ci_high": 13718},
     )
-    assert "约 -0.0035 个样本标准差" in effect
+    assert "约 -0.0035 个标准差" in effect
 
 
 @pytest.mark.parametrize(
@@ -646,13 +646,26 @@ def _complete():
     return session
 
 
-def test_production_share_report_copy_forbids_scale_overstatement():
-    copy = teaching_report._OUTCOME_INTERPRETATIONS["production"]
-    assert copy["negative"].startswith("复杂 GVC 生产份额下降")
-    assert copy["positive"].startswith("复杂 GVC 生产份额上升")
-    assert "占比变小" in copy["negative"]
-    assert "模拟" not in copy["negative"] and "真实" not in copy["negative"]
-    assert re.search(r"与.*(?:扩张|收缩)一致", " ".join(copy.values())) is None
+def test_report_statements_are_associations_with_their_number():
+    """A direction supports an association across country×industry records, not a change in Y itself."""
+    falling = {"coef": -0.4, "ci_low": -0.6, "ci_high": -0.2}
+    evidence, copy = teaching_report._evidence_reading("production", falling, False, {})
+    assert evidence == "方向明确：X 越高，Y 越低"
+    assert copy == "关税暴露 X 越高的国家×行业，复杂 GVC 生产份额平均越低（X 每高 1 个百分点，约低 0.40 个百分点）。"
+    assert "模拟" not in copy and "真实" not in copy and "下降" not in copy
+    assert re.search(r"与.*(?:扩张|收缩)一致", copy) is None
+    # A length reads in length units per percentage point of X (the raw coefficient is 100 times larger).
+    _evidence, length = teaching_report._evidence_reading(
+        "length", {"coef": -1.8186, "ci_low": -1.9, "ci_high": -1.7}, False, {}
+    )
+    assert length == "关税暴露 X 越高的国家×行业，前向 GVC 段长度平均越短（X 每高 1 个百分点，约短 0.018 个长度单位）。"
+    _evidence, network = teaching_report._evidence_reading(
+        "network", {"coef": 3969.9979, "ci_low": 3000.0, "ci_high": 4900.0}, False, {}
+    )
+    assert network.endswith("加权总度平均越高（X 每高 1 个百分点，约高 39.70 个中心性原始单位）。")
+    assert teaching_report._evidence_reading("trade", {"coef": -0.1, "ci_low": -0.3, "ci_high": 0.1}, False, {})[0] == (
+        "方向不确定"
+    )
 
 
 def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
@@ -675,16 +688,16 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     assert any(item["step"] == 6 and "对比国家" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 11 and "计算贸易流回归" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 14 and "计算网络回归" in "".join(item["missing"]) for item in blocked)
-    assert any(item["step"] == 15 and "原创" in item["title"] for item in blocked)
+    assert any(item["step"] == 15 and "你的分析" in item["title"] for item in blocked)
     assert len(blocked) == len({item["step"] for item in blocked})
     by_step = {item["step"]: item for item in blocked}
-    assert "理解检查" in "".join(by_step[1]["missing"])
+    assert "理解题" in "".join(by_step[1]["missing"])
     assert "自动记录一个单元格" in "".join(by_step[1]["missing"])
-    assert "理解检查" in "".join(by_step[6]["missing"])
+    assert "理解题" in "".join(by_step[6]["missing"])
     assert "对比国家" in "".join(by_step[6]["missing"])
-    assert "理解检查" in "".join(by_step[12]["missing"])
+    assert "理解题" in "".join(by_step[12]["missing"])
     assert "计算生产回归" in "".join(by_step[12]["missing"])
-    assert "关税面板" in "".join(by_step[10]["missing"])
+    assert "等数据加载完" in "".join(by_step[10]["missing"])
     assert check_gate(_complete()) == []
     missing_one = _complete()
     del missing_one["steps"]["14"]["data"]["run"]
@@ -1203,7 +1216,7 @@ def test_material_gate_requires_complete_current_teaching_panel_snapshot():
 
     assert len(blocked) == 1
     assert blocked[0]["step"] == 10
-    assert "关税面板" in "".join(blocked[0]["missing"])
+    assert "等数据加载完" in "".join(blocked[0]["missing"])
 
 
 def test_material_gate_rejects_legacy_teaching_panel_version():
@@ -1212,7 +1225,7 @@ def test_material_gate_rejects_legacy_teaching_panel_version():
     blocked = next(item for item in check_material_gate(session) if item["step"] == 10)
     message = "".join(blocked["missing"])
     # Reopening the step re-records the current version; the student never sees the version id.
-    assert "关税面板" in message and TEACHING_VERSION not in message
+    assert "等数据加载完" in message and TEACHING_VERSION not in message
 
 
 def test_material_gate_rejects_an_unverifiable_teaching_exposure():
@@ -1230,14 +1243,17 @@ def test_report_prints_automatically_saved_teaching_row(tmp_path, monkeypatch):
 
     markdown = build(_complete(), "同学").markdown
 
-    assert "自动保存的代表行：CHN 中国 · s1 · 2019" in markdown
-    assert "w=20.00%；τ=10%；X=w×τ=2.00 个百分点" in markdown
+    assert "换算用的例子：CHN 中国 · s1 · 2019" in markdown
+    assert "w = 20.00%；τ = 10%；X = w × τ = 2.00 个百分点" in markdown
+    # The section is named after the step; the data version is provenance, not body text.
+    step_ten = markdown.split("### 步骤 10 · 认识关税暴露 X", 1)[1].split("###", 1)[0]
+    assert TEACHING_VERSION not in step_ten
     assert markdown.index("## 真实指标比较") < markdown.index("## 关键证据摘要")
     charts = [json.loads(block.split("\n```", 1)[0]) for block in markdown.split("```gvcsim-chart\n")[1:]]
     assert [chart["type"] for chart in charts].count("coefficient") == 4
     assert len(charts) == 8
     # Each regression step gets the page's coefficient plot: one row, per 1-pp increase in X, with its interval.
-    summary = markdown.split("## 关键证据摘要", 1)[1].split("## 理解检查摘要", 1)[0]
+    summary = markdown.split("## 关键证据摘要", 1)[1].split("## 理解题答题记录", 1)[0]
     assert summary.count('"type":"coefficient"') == 4
     for chart in charts:
         if chart["type"] == "coefficient":
@@ -1273,31 +1289,45 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert report.provenance["course_release"] == config.COURSE_RELEASE
     assert report.provenance["runs"][0]["step"] == 11
     assert report.provenance["runs"][0]["result"]["coefs"][0]["coef"] == 1.2
-    assert "1.2" in report.markdown and "不在报告生成时复算" in report.markdown
+    assert "1.2" in report.markdown and "生成报告时不会重算" in report.markdown
     assert "[0.5721, 1.828]" in report.markdown
     assert "## 关键证据摘要" in report.markdown
     assert X_COLUMN in report.markdown
     assert "+1.20 个百分点" in report.markdown
     assert "## 技术附录：保存的回归结果" in report.markdown
-    assert "| 关税暴露 X | 1.2 | 0.3 | [0.5721, 1.828] | 0.0007662 |" in report.markdown
+    # The raw coefficient states its scale, next to the per-percentage-point reading used in the body.
+    assert (
+        "| 变量 | 系数（X 按份额计） | X 每增加 1 个百分点 | 标准误 | 95% 区间（系数口径） | p 值 |" in report.markdown
+    )
+    assert "| 关税暴露 X | 1.2 | +1.20 个百分点 | 0.3 | [0.5721, 1.828] | 0.0007662 |" in report.markdown
+    # Versions, the session digest and the unused macro controls are listed only under "报告溯源", at the end.
+    body, provenance = report.markdown.split("## 报告溯源", 1)
+    assert "数据来源：OECD ICIO 2023 版" in body
+    for detail in (TEACHING_VERSION, X_COLUMN, "会话摘要", "宏观控制变量", "2" * 32):
+        assert detail not in body
+        assert detail in provenance
+    assert "## " not in provenance
     assert report.provenance["runs"][0]["model_snapshot"] == model_snapshot("trade")
     assert report.provenance["runs"][0]["variable_catalog"] == variable_catalog("trade")
     assert "关税回归部分（步骤 10–14）" in report.markdown
     assert "模拟" not in report.markdown.split("## 关键证据摘要")[0]
     disclosure = report.provenance["simulation_contract"]["source_filter_disclosure"]
-    assert f"{disclosure['source_baseline_rows']} 个候选国家×行业单元" in report.markdown
-    assert f"剔除 {disclosure['excluded_source_baseline_rows']} 个" in report.markdown
-    assert f"保留 {disclosure['published_entities']} 个供四项回归共同使用" in report.markdown
+    assert f"首年共有 {disclosure['source_baseline_rows']} 个国家×行业" in report.markdown
+    assert f"其中 {disclosure['excluded_source_baseline_rows']} 个缺少必要数据被剔除" in report.markdown
+    assert f"剩下 {disclosure['published_entities']} 个用于四项回归" in report.markdown
     assert "预设" not in report.markdown
-    assert "外国增加值项占比上升" in report.markdown
+    assert (
+        "关税暴露 X 越高的国家×行业，外国增加值项占比平均越高（X 每高 1 个百分点，约高 1.20 个百分点）。"
+        in report.markdown
+    )
     assert "本实验没有生成冲击后的投入产出表或网络" not in report.markdown
     assert "不能证明真实关税" not in report.markdown
-    assert "标称 95% 的近似聚类区间" in report.markdown
-    assert "实际覆盖率可能低于 95%" in report.markdown
-    assert "国家数量多也不保证达到标称覆盖率" in report.markdown
+    assert "95% 区间按国家计算（按国家聚类），是近似值" in report.markdown
+    assert "区间可能偏窄" in report.markdown
+    assert "标称" not in report.markdown
     assert "Goodman-Bacon" not in report.markdown
 
-    assert "有向无权网络" in report.markdown
+    assert "路径指标只看连接、不看金额" in report.markdown
     assert report.provenance["network_algorithm"] == "gephi-compatible-directed-unweighted-positive-v1"
     assert report.provenance["indicator_data_source"]["kind"] == "observed-indicator-input"
     assert report.provenance["simulated_macro_controls"]["kind"] == "deterministic-teaching-mock"
@@ -1414,8 +1444,8 @@ def test_qualified_run_on_same_step_still_satisfies_gate_after_insufficient_late
     assert check_gate(session) == []
     report = build(session, "同学")
     assert "四项回归结果汇总" in report.markdown
-    assert "这四步分别估计" in report.markdown
-    assert "统计推断已抑制" in report.markdown or "处理支持度不足" in report.markdown
+    assert "下表列出四步保存的结果" in report.markdown
+    assert "这一项不显示 95% 区间" in report.markdown or "受关税影响的国家太少" in report.markdown
     assert X_COLUMN in report.markdown
 
 
@@ -1464,7 +1494,7 @@ def test_comparison_table_keeps_fixed_shock_and_estimand_label(tmp_path, monkeyp
     markdown = build(session, "同学").markdown
 
     assert X_COLUMN in markdown
-    assert "连续强度双向固定效应（TWFE）" in markdown
+    assert "（双向固定效应，TWFE）" in markdown
 
 
 def test_report_carries_release_qc_disclosures(tmp_path, monkeypatch):
@@ -1472,9 +1502,11 @@ def test_report_carries_release_qc_disclosures(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     report = build(_complete(), "同学")
     assert report.provenance["qc"]["years"]["2020"]["requires_disclosure"] is True
-    assert "## 数据完整性与诊断披露" in report.markdown
-    assert "警告：因子投入与派生指标定义域（VA/TLS）" in report.markdown
-    assert "补充披露：维度一致性与索引对齐（Z/Y/A/L/x/OUT）" in report.markdown
+    assert "## 数据检查" in report.markdown
+    # A lead-in says what the check names are before the names themselves (kept as the QC contract writes them).
+    assert "需要留意的项目（检查名保留系统原文）" in report.markdown
+    assert "提醒：因子投入与派生指标定义域（VA/TLS）" in report.markdown
+    assert "补充说明：维度一致性与索引对齐（Z/Y/A/L/x/OUT）" in report.markdown
 
 
 def test_report_discloses_output_economic_warnings_without_blocking_publication(tmp_path, monkeypatch):
@@ -1501,7 +1533,7 @@ def test_report_discloses_output_economic_warnings_without_blocking_publication(
     assert summary["requires_disclosure"] is True
     assert summary["warning"] == [warning["name"]]
     report = build(_complete(), "同学")
-    assert "警告：panel_share_economic_domains" in report.markdown
+    assert "提醒：panel_share_economic_domains" in report.markdown
     assert report.provenance["output_qc"]["years"]["2020"]["warnings"] == [warning["name"]]
 
 
@@ -1525,7 +1557,7 @@ def test_report_rejects_missing_or_unsupported_qc_contract(tmp_path, monkeypatch
     _rewrite_metadata(tmp_path, metadata)
     with pytest.raises(ReportGateError) as missing:
         build(_complete(), "同学")
-    assert "质检 contract" in "".join(missing.value.missing[0]["missing"])
+    assert "课程数据暂时不可用" in "".join(missing.value.missing[0]["missing"])
 
     _artifacts(tmp_path)
     metadata = artifacts.dataset_metadata(tmp_path)
@@ -1533,7 +1565,7 @@ def test_report_rejects_missing_or_unsupported_qc_contract(tmp_path, monkeypatch
     _rewrite_metadata(tmp_path, metadata)
     with pytest.raises(ReportGateError) as unsupported:
         build(_complete(), "同学")
-    assert "质检 contract" in "".join(unsupported.value.missing[0]["missing"])
+    assert "课程数据暂时不可用" in "".join(unsupported.value.missing[0]["missing"])
 
 
 def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, monkeypatch):
@@ -1593,7 +1625,7 @@ def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, mo
     assert "仅用于探索定位，不限定下游回归样本" in report.markdown
     assert "按所选冲击类型汇总该类型全部已编码事件" in report.markdown
     assert "当前目录无法确认来源状态" in report.markdown
-    assert "不是政策机关发布的权威处理标记" in report.markdown
+    assert "不是政策机关发布的名单" in report.markdown
     assert "## 结论" in report.markdown
     assert "关税冲击是否改变出口中的外国增加值份额" in report.markdown
 
@@ -1728,9 +1760,9 @@ def test_report_marks_suppressed_inference_and_reasons(tmp_path, monkeypatch):
 
     report = build(session, "同学")
 
-    assert "统计推断已抑制" in report.markdown
+    assert "这一项不显示 95% 区间" in report.markdown
     assert "处理聚类不足" in report.markdown
-    assert "| 关税暴露 X | -0.2 | 0.1 | 已抑制 | 已抑制 |" in report.markdown
+    assert "| 关税暴露 X | -0.2 | -0.20 个百分点 | 0.1 | 不显示 | 不显示 |" in report.markdown
 
 
 def test_report_translates_settings_controls_and_rounds_display_values(tmp_path, monkeypatch):
@@ -1773,14 +1805,14 @@ def test_report_translates_settings_controls_and_rounds_display_values(tmp_path,
 
     markdown = build(session, "同学").markdown
 
-    assert "连续强度 TWFE（描述性）" in markdown
+    assert "双向固定效应（TWFE） · 国家×行业 · 不加控制变量" in markdown
     assert "+0.0014 个百分点" in markdown
     assert "[-0.0017, +0.0045] 个百分点" in markdown
-    assert "证据不足，无法判断方向" in markdown
+    assert "方向不确定" in markdown
     assert "关税暴露 X" in markdown
     assert "总增加值规模(log, ICIO GVA proxy)" not in markdown
     assert "0.0013729825631389496" not in markdown
-    assert "国家×行业层面的连续强度双向固定效应（TWFE），不加控制变量和交互项" in markdown
+    assert "看 Y 怎样随 X 变化（双向固定效应，TWFE），不加控制变量" in markdown
     assert "twfe_intensity ×" not in markdown
     assert "icio_derived" not in markdown
 
@@ -1809,7 +1841,7 @@ def test_complete_stopped_diagnosis_satisfies_report_gate_without_hiding_it(
         coefficient.update(p=None, ci_low=None, ci_high=None, stars="")
     assert check_gate(session) == []
     report = build(session, "诊断学习者")
-    assert "统计推断已抑制" in report.markdown
+    assert "这一项不显示 95% 区间" in report.markdown
     assert "实际配对支持不足或处理路径不相容" in report.markdown
     # A forged inferential field cannot turn a stopped result into acceptable evidence.
     data.pop("qualified_run", None)
@@ -2131,9 +2163,9 @@ def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(
     assert [item["outcome"] for item in _saved_runs(session) if item["step"] == 13] == ["length"]
 
     markdown = build(session, "同学").markdown
-    assert "| 研究对象 | GVC 位置指数 |" in markdown
+    assert "| 结果指标 Y | GVC 位置指数 |" in markdown
     assert "个位置指数单位" in markdown
-    assert "相对更靠下游" in markdown
+    assert "GVC 位置指数平均越低（X 每高 1 个百分点，约低 0.0040 个位置指数单位）" in markdown
     charts = [
         json.loads(block)
         for block in re.findall("```gvcsim-chart" + chr(10) + "(.*?)" + chr(10) + "```", markdown, re.S)
@@ -2167,9 +2199,10 @@ def test_technical_appendix_states_the_chosen_y_unit_not_the_family_unit():
         "result": {"status": "ok", "coefs": []},
     }
     lines = _run_sections([run])
-    assert "- 结果量纲：位置指数单位" in lines
+    assert "- 单位：位置指数单位" in lines
+    assert "- 结果指标 Y：GVC 位置指数" in lines
     default = {**run, "design": {"depvar_label": "前向生产长度", "equation": "Y = βX + FE"}}
-    assert "- 结果量纲：长度单位" in _run_sections([default])
+    assert "- 单位：长度单位（1 个长度单位约等于平均多经过 1 个生产环节）" in _run_sections([default])
 
 
 def test_tiny_signed_values_keep_two_significant_figures_like_the_result_card():

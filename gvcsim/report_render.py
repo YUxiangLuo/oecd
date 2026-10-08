@@ -21,6 +21,7 @@ from gvcsim.report_common import (
     _global_inference_suppressed,
     _is_default_baseline,
     _list_values,
+    _model_summary,
     _natural_effect,
     _number,
     _observation_reading,
@@ -28,7 +29,9 @@ from gvcsim.report_common import (
     _safe,
     _setting_value,
     _summary_design_limit,
+    _y_label,
     reading_number,
+    y_display,
 )
 from gvcsim.report_gate import _indicator_material_complete, _step_data, _valid_indicator_observations
 from gvcsim.report_labels import DB_TABLE_NAMES, FINAL_DEMAND_NAMES, country_label, sector_label
@@ -47,7 +50,7 @@ def _entity_label(item: dict[str, Any]) -> str:
 
 def _depvar_display(label: Any) -> str:
     """The saved Y label as the pages show it: "加权总度", not the step 5 detail "加权总度（入+出）"."""
-    return str(label).removesuffix("（入+出）")
+    return y_display(label)
 
 
 def _cjk_punctuation(text: str) -> str:
@@ -196,10 +199,9 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                     if chosen
                     else "- 记录的图表材料（系统按学生最后查看的完整图表自动记录；指标与单位逐行列示）："
                 )
+                # The data release id is listed under "报告溯源"; the body only says how to read the numbers.
                 lines.append(
-                    f"- 数据版本：{_safe(observations[0]['release'])}。"
-                    + ("金额为当年价格；" if has_amounts else "")
-                    + "份额以百分数列示，变化按百分点解释。"
+                    "- " + ("金额为当年价格；" if has_amounts else "") + "份额以百分数列示，变化按百分点解释。"
                 )
             else:
                 lines.append(
@@ -232,7 +234,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
         captured = True
         lines.extend(
             (
-                "### 步骤 10 · 关税数据",
+                f"### 步骤 10 · {_STEP_TITLES.get(10, '')}",
                 "",
                 (
                     f"- 两国趋势示例：{'、'.join(_safe(country_label(str(value))) for value in shock.get('compared', []))} · "
@@ -246,21 +248,20 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                     )
                     + f" · {_safe(shock.get('teaching_year'))}"
                 ),
-                f"- 数据版本：{_safe(shock.get('teaching_panel_version'))}",
-                "- X = 首年销往美国的出口份额 × 税率。",
+                "- X = 首年对美出口份额 w × 加征税率 τ（单位：个百分点）。",
             )
         )
         teaching_observation = shock.get("teaching_observation")
         if isinstance(teaching_observation, dict):
             lines.extend(
                 (
-                    f"- 自动保存的代表行：{_safe(country_label(str(teaching_observation.get('country'))))} · "
+                    f"- 换算用的例子：{_safe(country_label(str(teaching_observation.get('country'))))} · "
                     f"{_safe(sector_label(str(teaching_observation.get('industry'))))} · {_safe(teaching_observation.get('year'))}",
                     # X is read in percentage points throughout steps 10–14, so print it the same way here.
                     # Same precision as step 10's table: w and X to two decimals, the tariff rate as set.
-                    f"- w={float(teaching_observation['teaching_export_share_w']) * 100:.2f}%；"
-                    f"τ={_rate(float(teaching_observation['teaching_tariff_rate_tau']) * 100)}%；"
-                    f"X=w×τ={float(teaching_observation['teaching_tariff_exposure']) * 100:.2f} 个百分点",
+                    f"- w = {float(teaching_observation['teaching_export_share_w']) * 100:.2f}%；"
+                    f"τ = {_rate(float(teaching_observation['teaching_tariff_rate_tau']) * 100)}%；"
+                    f"X = w × τ = {float(teaching_observation['teaching_tariff_exposure']) * 100:.2f} 个百分点",
                 )
             )
         lines.append("")
@@ -289,8 +290,8 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                 lines.append(f"    - 映射边界：{_safe(event.get('source_disclosure', '—'))}")
         lines.extend(
             (
-                "- 下游回归口径：按所选冲击类型汇总该类型全部已编码事件的国家×行业暴露，不把单个事件选择当作回归筛选。",
-                "- 处理组语义：treated 表示本面板所编码政策增量的强度严格大于零；首次正暴露定义 G_i。它不是政策机关发布的权威处理标记。低强度仍是暴露，不能把面板中为零理解为现实中不受任何其他政策或外溢影响。",
+                "- 回归用的 X：按所选冲击类型汇总该类型全部已编码事件的国家×行业暴露；单个事件的选择不影响回归样本。",
+                "- “受影响”只表示这里编码的关税暴露大于零，不是政策机关发布的名单；暴露为零也不代表现实中没受其他政策或外溢影响。",
                 "",
             )
         )
@@ -313,44 +314,37 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
     lines = [
         "### 四项回归结果汇总",
         "",
-        "这四步分别估计贸易流、生产、长度和网络；四项结果必须完整报告，不能只挑区间未跨 0 的结果。"
-        "下表列出各步实际保存的可报告结果；系数因量纲和估计对象不同不能比大小，"
-        "网络 Y 的单位与份额、长度不同，不能与前三步的系数比大小。",
+        "下表列出四步保存的结果（贸易流、生产、长度、网络）。四个 Y 的单位不同，只比较方向和区间是否包含 0，不比数字大小。",
         "",
-        "| 步骤 | 指标 | 比较方式 | 估计对象与相对变化 | 标称 95% 近似区间 | 证据判断 |",
-        "|---|---|---|---|---|---|",
+        "| 步骤 | 指标 | X 每增加 1 个百分点时 Y 的变化 | 95% 区间 | 方向 |",
+        "|---|---|---|---|---|",
     ]
     designs = []
     for step, outcome in sorted(_STEP_OUTCOMES.items()):
         run = qualified.get(step)
         if run is None:
-            lines.append(f"| {step} | {_safe(_STEP_TITLES.get(step, outcome))} | — | — | — | 未保存可报告估计 |")
+            lines.append(f"| {step} | {_safe(_STEP_TITLES.get(step, outcome))} | — | — | 还没有计算 |")
             continue
         design, result = run["design"], run["result"]
         designs.append((design.get("shock_type"), design.get("method"), design.get("granularity")))
         coefficient = _primary_coefficient(design, result)
         if coefficient is None or not isinstance(coefficient.get("coef"), (int, float)):
             lines.append(
-                f"| {step} | {_safe(_depvar_display(design.get('depvar_label', outcome)))} | "
-                f"{_setting_value('method', design.get('method'))} | — | — | 无可估计配对，诊断已记录、不能推断 |"
+                f"| {step} | {_safe(_depvar_display(design.get('depvar_label', outcome)))} | — | — | "
+                "没算出估计值（原因已记录） |"
             )
             continue
-        effect_label, effect, interval = _natural_effect(outcome, design, result, coefficient)
+        _effect_label, effect, interval = _natural_effect(outcome, design, result, coefficient)
         suppressed = _global_inference_suppressed(result)
         evidence, _interpretation = _evidence_reading(outcome, coefficient, suppressed, design)
         lines.append(
-            f"| {step} | {_safe(_depvar_display(design.get('depvar_label', outcome)))} | "
-            f"{_setting_value('method', design.get('method'))} | {_safe(effect_label)}：{effect} | {interval} | {evidence} |"
+            f"| {step} | {_safe(_depvar_display(design.get('depvar_label', outcome)))} | {effect} | {interval} | {evidence} |"
         )
     lines.append("")
-    # The shock is the same in every step; one sentence instead of a column that repeats it.
-    shocks = {design_shock for design_shock, _method, _granularity in designs}
-    if len(shocks) == 1:
-        lines.extend((f"四步的冲击都是{_setting_value('shock_type', next(iter(shocks)))}。", ""))
     if len({item for item in designs}) > 1:
         lines.extend(
             (
-                "- 各行设定不同，不能直接比较系数。",
+                "- 各行的计算设定不同，不能直接比较估计值。",
                 "",
             )
         )
@@ -428,7 +422,7 @@ def _binscatter_chart(
         "version": 1,
         "type": "binscatter",
         "title": f"步骤 {step} · 回归在量什么：X 越大，Y 平均怎样变",
-        "x_label": "关税暴露 X（个百分点，已扣除固定效应）",
+        "x_label": "X 扣掉平均水平后的高低（个百分点）",
         "y_label": f"{label}（{unit}）",
         "points": points,
         # Slope in display units: β per 1 percentage point of X, in the outcome's shown unit.
@@ -441,13 +435,13 @@ def _teaching_sample_lines(source_filter: dict[str, Any] | None) -> list[str]:
     if source_filter is None:
         return []
     return [
-        "### 教学样本的来源",
+        "### 回归用的国家×行业",
         "",
-        f"- 首年排除 ROW 后有 {_count(source_filter.get('source_baseline_rows'))} 个候选国家×行业单元；"
-        f"生成面板时剔除 {_count(source_filter.get('excluded_source_baseline_rows'))} 个，"
-        f"保留 {_count(source_filter.get('published_entities'))} 个供四项回归共同使用。",
-        "- 共同规则：首年四类默认指标及销往美国的出口份额均有效；两类份额和出口份额在 0–1 内，长度大于 0，加权总度不小于 0。",
-        "- 这些单元构成四项回归共用的样本。下列回归记录数以年度行计，与筛选阶段的单元数区分。",
+        f"- 首年共有 {_count(source_filter.get('source_baseline_rows'))} 个国家×行业（不含“世界其他地区”ROW），"
+        f"其中 {_count(source_filter.get('excluded_source_baseline_rows'))} 个缺少必要数据被剔除，"
+        f"剩下 {_count(source_filter.get('published_entities'))} 个用于四项回归。",
+        "- 剔除规则：首年四个默认指标和对美出口份额都要有效；两类份额和出口份额在 0–1 之间，长度大于 0，加权总度不小于 0。",
+        "- 下面的记录数按“每个国家×行业每年一条”计。",
         "",
     ]
 
@@ -456,10 +450,10 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
     lines = [
         "## 关键证据摘要",
         "",
-        "本节用课堂上的读数单位说明估计结果；完整方程和诊断见技术附录。",
+        "本节用课堂上的读数单位说明估计结果；公式和详细数字见技术附录。",
         "",
         *_teaching_sample_lines(source_filter),
-        "区间口径：如提供区间，均为**标称 95% 的近似聚类区间**。" + CLUSTER_INTERVAL_NOTE,
+        "区间说明：" + CLUSTER_INTERVAL_NOTE,
         "",
         *_comparison_table(runs),
     ]
@@ -476,28 +470,24 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
         suppressed = _global_inference_suppressed(result)
         used_in_table = qualified.get(step) is run
         marker = (
-            "（汇总表采用此结果）"
+            "（用于汇总表）"
             if used_in_table
-            else ("（探索结果，未列入汇总表）" if not _result_is_qualified(result, design) else "")
+            else ("（另一次计算，未用于汇总表）" if not _result_is_qualified(result, design) else "")
         )
         coefficient = primary
         lines.extend((f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}{marker}", ""))
         if coefficient is None or not isinstance(coefficient.get("coef"), (int, float)):
             lines.extend(
                 (
-                    "- 当前设定没有可解读的主要政策系数；这是可提交的实验诊断。",
-                    *[f"- 诊断：{_safe(reason)}" for reason in _list_values(support.get("reasons"))],
+                    "- 这次没有算出 X 的估计值；结果仍然保存，可以写进报告。",
+                    *[f"- 原因：{_safe(reason)}" for reason in _list_values(support.get("reasons"))],
                     "",
                 )
             )
             continue
         effect_label, effect, interval = _natural_effect(outcome, design, result, coefficient)
         evidence, interpretation = _evidence_reading(outcome, coefficient, suppressed, design)
-        setting = " · ".join(
-            _setting_value(key, design.get(key))
-            for key in ("shock_type", "method", "granularity", "control_mode", "scenario")
-            if design.get(key) not in (None, "")
-        )
+        setting = _model_summary(design)
         lines.extend(_coefficient_chart(step, outcome, coefficient, suppressed, design))
         if not suppressed:
             lines.extend(_binscatter_chart(step, outcome, result, design))
@@ -505,30 +495,26 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
             (
                 "| 项目 | 结果 |",
                 "|---|---|",
-                f"| 研究对象 | {_safe(_depvar_display(design.get('depvar_label', outcome)))} |",
-                f"| 保存的模型 | {setting or '—'} |",
+                f"| 结果指标 Y | {_safe(_y_label(outcome, design))} |",
+                f"| 模型 | {setting or '—'} |",
                 f"| {effect_label} | **{effect}** |",
-                f"| 标称 95% 的近似聚类区间 | {interval} |",
-                f"| 证据判断 | **{evidence}** |",
-                f"| 设计状态 | {_STATUS_LABELS.get(status, _STATUS_LABELS['unknown'])} |",
+                f"| 95% 区间 | {interval} |",
+                f"| 方向 | **{evidence}** |",
+                f"| 结果能否解读 | {_STATUS_LABELS.get(status, _STATUS_LABELS['unknown'])} |",
                 "",
                 f"- **可以支持的表述**：{interpretation}",
             )
         )
-        lines.append(
-            f"- 使用的年度记录：{_count(result.get('n_obs'))}；"
-            f"国家×行业单元：{_count(result.get('n_entities'))}；国家聚类：{_count(result.get('n_clusters'))}。"
-        )
         flow = result.get("sample_flow")
-        if isinstance(flow, dict):
-            lines.append(
-                f"- 回归阶段：输入 {_count(flow.get('input_rows'))} 行年度记录，"
-                f"另剔除 {_count(flow.get('dropped_rows_total'))} 行。"
-            )
+        dropped = f"；计算前剔除 {_count(flow.get('dropped_rows_total'))} 条" if isinstance(flow, dict) else ""
+        lines.append(
+            f"- 使用 {_count(result.get('n_obs'))} 条年度记录（{_count(result.get('n_entities'))} 个国家×行业"
+            f" × {_count(result.get('n_times'))} 年，来自 {_count(result.get('n_clusters'))} 个国家）{dropped}。"
+        )
         reasons = [*_list_values(result.get("status_reasons")), *_list_values(support.get("reasons"))]
         design_limit = _summary_design_limit(status, support, reasons)
         if design_limit:
-            lines.append(f"- **最重要的设计限制**：{design_limit}")
+            lines.append(f"- **需要写明的限制**：{design_limit}")
         lines.append("")
     return lines
 
@@ -537,24 +523,22 @@ def _technical_support_lines(design: dict[str, Any], result: dict[str, Any], sup
     lines: list[str] = []
     if support:
         support_bits = []
-        for key, label in (
-            ("treated_entities", "处理个体"),
-            ("treated_clusters", "贡献处理聚类"),
-            ("paired_control_clusters", "配对贡献对照聚类"),
-            ("untreated_entities", "估计样本内未暴露个体"),
-            ("untreated_clusters", "估计样本内完全未暴露聚类"),
-            ("reversal_share", "处理撤销行占比"),
-        ):
-            if support.get(key) is not None:
-                value = support[key]
-                rendered = (
-                    f"{float(value) * 100:.2f}%"
-                    if key == "reversal_share" and isinstance(value, (int, float))
-                    else _count(value)
-                )
-                support_bits.append(f"{label}={rendered}")
+        if support.get("treated_entities") is not None:
+            countries = (
+                f"（来自 {_count(support['treated_clusters'])} 个国家）"
+                if support.get("treated_clusters") is not None
+                else ""
+            )
+            support_bits.append(f"受关税影响的国家×行业 {_count(support['treated_entities'])} 个{countries}")
+        if support.get("untreated_entities") is not None:
+            countries = (
+                f"（其中 {_count(support['untreated_clusters'])} 个国家完全没受影响）"
+                if support.get("untreated_clusters") is not None
+                else ""
+            )
+            support_bits.append(f"没受影响的 {_count(support['untreated_entities'])} 个{countries}")
         if support_bits:
-            lines.append(f"- 处理支持：{'；'.join(support_bits)}")
+            lines.append(f"- 受影响情况：{'；'.join(support_bits)}。")
 
     return lines
 
@@ -570,7 +554,7 @@ def _reported_inference_cells(
     suppressed: bool,
 ) -> tuple[str, str]:
     if suppressed:
-        return "已抑制", "已抑制"
+        return "不显示", "不显示"
     interval = f"[{_number(ci_low)}, {_number(ci_high)}]" if ci_low is not None and ci_high is not None else "—"
     return interval, _number(p_raw, p_value=True)
 
@@ -580,8 +564,16 @@ def _technical_estimate_tables(
     result: dict[str, Any],
     *,
     suppressed: bool,
+    outcome: str | None = None,
 ) -> list[str]:
-    lines = ["", "| 变量 | 点估计 | 标准误 | 标称 95% 近似区间 | p 值 |", "|---|---:|---:|---:|---:|"]
+    # The raw coefficient is per 1.00 of X (X is a share); the column after it is the page's reading, per
+    # 1 percentage point of X in Y's unit, so the two can be matched (they differ 100x for lengths and centrality).
+    lines = [
+        "",
+        "| 变量 | 系数（X 按份额计） | X 每增加 1 个百分点 | 标准误 | 95% 区间（系数口径） | p 值 |",
+        "|---|---:|---:|---:|---:|---:|",
+    ]
+    primary = _primary_coefficient(design, result)
     for coefficient in result.get("coefs", []):
         if not isinstance(coefficient, dict):
             continue
@@ -594,9 +586,14 @@ def _technical_estimate_tables(
             coefficient.get("p"),
             suppressed=suppressed,
         )
+        per_point = (
+            _natural_effect(outcome, design, result, coefficient)[1].split("（")[0]
+            if outcome is not None and coefficient is primary and isinstance(coefficient.get("coef"), (int, float))
+            else "—"
+        )
         lines.append(
             f"| {_coefficient_label(coefficient.get('name', '—'), design)} | {_number(coefficient.get('coef'))} | "
-            f"{_number(coefficient.get('se'))} | {interval} | {p_value} |"
+            f"{per_point} | {_number(coefficient.get('se'))} | {interval} | {p_value} |"
         )
 
     return lines
@@ -608,11 +605,11 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
         "",
         # One source line per paragraph: Markdown joins consecutive lines with a space, which would show
         # after each "。".
-        "以下结果来自会话中保存的服务端运行，不在报告生成时重新估计。同一步可能有最近一次探索和一份可报告快照。"
-        "表格数值为便于阅读做了四位有效数字的显示舍入；完整原始值仍保留在报告溯源数据中。"
-        "极小 p 值以 <0.0001 展示，不能读作概率为零。"
-        "表中系数按 X 的原始单位计（X 是份额，0.01 即 1 个百分点）：正文“关税暴露 X 每增加 1 个百分点”的读数 = 系数 × 0.01；"
-        "贸易流和生产两项的 Y 也是份额，再乘 100 换成百分点，所以数值与系数相同。",
+        "以下是你在步骤 11–14 保存的计算结果，生成报告时不会重算；同一步可能有最近一次计算和一份用于汇总表的结果。"
+        "表中数字四舍五入到 4 位有效数字，很小的 p 值显示为 <0.0001，不是说概率为零。"
+        "系数按“X 从 0 增加到 1（100 个百分点）”计（X 存的是份额，0.01 即 1 个百分点），"
+        "所以正文“关税暴露 X 每增加 1 个百分点”的数 = 系数 × 0.01，表中另列一栏；"
+        "贸易流和生产两项的 Y 也是份额，再乘 100 换成百分点，两次换算抵消，数值与系数相同；长度和网络两项相差 100 倍。",
         "",
     ]
     grouped: dict[int, list[dict[str, Any]]] = {step: [] for step in _STEP_OUTCOMES}
@@ -638,50 +635,39 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
                 (
                     heading,
                     "",
-                    f"- 因变量：{_safe(_depvar_display(design.get('depvar_label', run['outcome'])))}",
-                    f"- 结果量纲：{_KIND_DIMENSIONS.get(_depvar_kind(run['outcome'], design), '原始单位')}",
-                    f"- 方程：`{_safe(design.get('equation', '—'))}`",
-                    f"- 设计状态：{_STATUS_LABELS.get(str(status), _STATUS_LABELS['unknown'])}；观测数：{_count(result.get('n_obs'))}",
+                    f"- 结果指标 Y：{_safe(_y_label(run['outcome'], design))}",
+                    f"- 单位：{_KIND_DIMENSIONS.get(_depvar_kind(run['outcome'], design), '原始单位')}",
+                    # The saved equation names data columns; the report shows its symbols, as the step pages do.
+                    "- 公式：Y = β·X + α（每个国家×行业的平均水平）+ λ（每年的共同变化）+ ε（随机波动）",
+                    f"- 结果能否解读：{_STATUS_LABELS.get(str(status), _STATUS_LABELS['unknown'])}；记录数：{_count(result.get('n_obs'))}",
                 )
             )
             setting_bits = [
-                f"{label}={_setting_value(key, design[key])}"
+                f"{label}：{_setting_value(key, design[key])}"
                 for key, label in (
-                    ("granularity", "粒度"),
-                    ("shock_type", "冲击类型"),
-                    ("method", "方法"),
+                    ("method", "模型"),
+                    ("granularity", "观察单位"),
                     ("control_mode", "控制变量"),
-                    ("price_mode", "价格口径"),
-                    ("scenario", "教学场景"),
+                    ("price_mode", "价格"),
                 )
                 if design.get(key) not in (None, "")
             ]
             if setting_bits:
                 lines.append(f"- 保存的设定：{'；'.join(setting_bits)}")
             if reasons:
-                lines.append("- 主要设计限制：")
+                lines.append("- 需要写明的限制：")
                 lines.extend(f"  - {reason}" for reason in reasons)
             lines.extend(_technical_support_lines(design, result, support))
             if suppressed:
-                lines.append(
-                    "- **统计推断已抑制**：下表点估计仅说明计算输出；不得把缺失的 p 值或置信区间解释为无效应，也不得据此形成方向性结论。"
+                lines.append("- **这一项不显示 95% 区间**：数据不够，不能据此判断方向，也不能写成“没有影响”。")
+            lines.extend(_technical_estimate_tables(design, result, suppressed=suppressed, outcome=run["outcome"]))
+            notes = list(
+                dict.fromkeys(
+                    _safe(_cjk_punctuation(_plain_note(str(note)))) for note in _list_values(result.get("notes"))
                 )
-            lines.extend(_technical_estimate_tables(design, result, suppressed=suppressed))
-            # Runs saved before the wording change carry "双向固定效应(entity_id + year),within 变换后 OLS".
-            notes = [
-                _safe(
-                    _cjk_punctuation(
-                        re.sub(
-                            r"^双向固定效应\((\S+) \+ (\S+)\),within 变换后 OLS$",
-                            lambda match: two_way_note(match.group(1), match.group(2)),
-                            str(note),
-                        )
-                    )
-                )
-                for note in _list_values(result.get("notes"))
-            ]
+            )
             if notes:
-                lines.extend(("", "方法与限制："))
+                lines.extend(("", "计算方法与限制："))
                 lines.extend(f"- {note}" for note in notes)
             lines.append("")
     return lines
@@ -728,6 +714,18 @@ def _qc_release_summary(qc: Any) -> dict[str, Any]:
     return summary
 
 
+def _plain_note(note: str) -> str:
+    """Estimator notes saved with a run, in the course's words (older runs carry older wordings)."""
+    # "双向固定效应(entity_id + year),within 变换后 OLS" and "双向固定效应（国家–行业单元 + 年份），组内变换后 OLS".
+    two_way = re.match(r"^双向固定效应[（(](\S+) \+ (\S+)[)）][,，](?:within |组内)变换后 OLS$", note)
+    if two_way:
+        return two_way_note(two_way.group(1), two_way.group(2))
+    components = re.match(r"^实体—年份二部图有 (\d+) 个连通分量", note)
+    if components:
+        return f"样本分成 {components.group(1)} 组互不重叠的数据；估计值是这几组共同的斜率。"
+    return note
+
+
 def _qc_display_name(name: str) -> str:
     """QC check names are stored as written in the QC contract (half-width brackets); print them in report style."""
     return name.replace("(", "（").replace(")", "）")
@@ -736,12 +734,16 @@ def _qc_display_name(name: str) -> str:
 def _qc_disclosure_section(summary: dict[str, Any], integrity: Any) -> list[str]:
     status = integrity.get("status") if isinstance(integrity, dict) else "unknown"
     lines = [
-        "## 数据完整性与诊断披露",
+        "## 数据检查",
         "",
-        f"- 自动完整性验证：{'通过' if status == 'passed' else '状态未知'}。文件、表结构和数据来源都已核对。",
-        "- 检查规则：完整性、逆矩阵或计算恒等式不通过时，数据不会发布；经济账户异常、取值范围和回归设计限制会保留，并在下面列出。",
+        f"- 自动完整性检查：{'通过' if status == 'passed' else '状态未知'}。文件、表结构和数据来源都已核对。",
+        "- 检查规则：完整性、矩阵求逆或计算恒等式检查不通过时，数据不会发布；账户里的异常值、取值范围和回归设定上的限制会保留，并在下面列出。",
     ]
-    for key, label in (("fatal", "非阻断诊断发现"), ("warning", "警告"), ("disclosure", "补充披露")):
+    if any(summary[key] for key in ("fatal", "warning", "disclosure")):
+        lines.append(
+            "- 下面是系统自动检查 OECD 原始数据和计算结果时发现、需要留意的项目（检查名保留系统原文）；它们没有阻止数据发布。"
+        )
+    for key, label in (("fatal", "需要留意"), ("warning", "提醒"), ("disclosure", "补充说明")):
         if summary[key]:
             lines.append(f"- {label}：{'、'.join(_qc_display_name(str(name)) for name in summary[key])}")
     lines.append("")

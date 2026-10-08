@@ -312,7 +312,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
             {
                 "step": 10,
                 "title": _STEP_TITLES.get(10, ""),
-                "missing": ["请打开本步并等待关税面板加载，系统会自动记录所选例子"],
+                "missing": ["请打开步骤 10 等数据加载完，系统会自动记录你选的例子（报告已提交时，请点“改用当前例子”）"],
             }
         )
 
@@ -325,7 +325,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
                 "step": step,
                 "title": _STEP_TITLES.get(step, ""),
                 "missing": [
-                    f"请点击“计算{_STEP_TITLES.get(step, '').split('：')[0] or '回归'}”，结果会自动保存；无法推断时也会保存诊断结果"
+                    f"请点击“计算{_STEP_TITLES.get(step, '').split('：')[0] or '回归'}”，结果会自动保存；没算出方向时结果也会保存"
                 ],
             }
         )
@@ -344,7 +344,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
         if isinstance(value, str) and len(value) > REFLECTION_TEXT_LIMIT:
             reflection_missing.append(f"{label}不能超过 {REFLECTION_TEXT_LIMIT} 字")
     if reflection_missing:
-        blocked.append({"step": 15, "title": "原创分析与反思", "missing": reflection_missing})
+        blocked.append({"step": 15, "title": "你的分析（三个问题）", "missing": reflection_missing})
     return _merge_gate_blocks(blocked)
 
 
