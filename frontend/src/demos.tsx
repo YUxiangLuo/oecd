@@ -51,7 +51,8 @@ type DecompCfg = {
   parts: Part[];
   /** 加权模式的权重分母(如 SVA);设置后各分项按 VA 份额加权 */
   weightTotal?: string;
-  note?: (r: Row, values: number[]) => string;
+  /** `decimals`: the panel's amount precision ({@link panelAmountDecimals}), so a sum line reads like the table. */
+  note?: (r: Row, values: number[], decimals?: number) => string;
   /** What a negative part means here (the table's default names net subsidies, which fits step 2's taxsub). */
   negativeNote?: string;
 };
@@ -70,8 +71,8 @@ const DECOMP: Record<number, DecompCfg> = {
       { key: "FDC", label: "FDC 外国重复计算", color: "#e0982a", desc: "外国增加值在出口统计中被重复计入的部分。" },
       { key: "taxsub", label: "taxsub 产品税减补贴", color: "#98a0b3", desc: "出口中直接和间接包含的产品税减补贴（来自 ICIO 的 TLS 账户）。可为负，表示净补贴。" },
     ],
-    note: (_r, values) =>
-      `出口中的国内增加值合计（EXDVA）= DVAex + DVArt = ${sumText(values[0], values[1])}。` +
+    note: (_r, values, decimals) =>
+      `出口中的国内增加值合计（EXDVA）= DVAex + DVArt = ${sumText(values[0], values[1], decimals)}。` +
       `taxsub 是本系统另加的一项，不属于 WWZ 原方法。`,
   },
   5: {
@@ -86,8 +87,8 @@ const DECOMP: Record<number, DecompCfg> = {
       { key: "3b_VA_GVC_C", label: "3b_VA_GVC_C 复杂 GVC 增加值", short: "复杂 GVC", color: "#f4693b", desc: "增加值至少两次跨越国境。" },
     ],
     negativeNote: "负值表示这部分增加值为负（例如行业亏损），所以其他分项的比重之和可能超过 100%。",
-    note: (_r, values) =>
-      `GVC 合计（3_VA_GVC）= 简单 GVC + 复杂 GVC = ${sumText(values[2], values[3])}。` +
+    note: (_r, values, decimals) =>
+      `GVC 合计（3_VA_GVC）= 简单 GVC + 复杂 GVC = ${sumText(values[2], values[3], decimals)}。` +
       `也可以反过来，从最终产品在哪国完成来拆分（后向分解，代码 FGY），在步骤 7 选带“（后向）”的指标查看。`,
   },
   6: {
@@ -121,7 +122,8 @@ export function negativeFill(color: string): string {
 /** Decimals an amount is read to in steps 2–3 (table rows, the total, the sum line and formulas), so the shown
  * parts add up to the shown total within its last digit: three below 10, two below 1,000 ("15.40", not "15" next to
  * a total of "99.90"), one below 10,000 ("3,829.7") and whole millions from 10,000 up. A real but tiny flow reads
- * "<0.001" rather than "0". Lengths are read to three decimals; an exact zero is "0". */
+ * "<0.001" rather than "0". Lengths are read to three decimals; an exact zero is "0". Beside a share table this is
+ * only where a panel starts: {@link panelAmountDecimals} adds decimals until every row checks by hand. */
 export function amountDecimals(value: number): number {
   const magnitude = Math.abs(value);
   return magnitude < 10 ? 3 : magnitude < 1_000 ? 2 : magnitude < 10_000 ? 1 : 0;
@@ -144,6 +146,64 @@ function shownAmount(text: string, value: number): number {
   return Number.isFinite(shown) ? shown : value;
 }
 
+/** An amount at one panel's fixed number of decimals, so a column reads alike ("0.75549", "0.00015", "0.05979"). A
+ * real amount below half the last digit reads "<0.00001" (never "0", which is an exact zero); rounding noise below
+ * 1e-9 reads 0, as in formatMetric. */
+export function amountAt(value: number, decimals: number): string {
+  if (value === 0 || Math.abs(value) < 1e-9) return "0";
+  const unit = 10 ** -decimals;
+  if (Math.abs(value) < unit / 2) {
+    const text = amountText(unit, decimals);
+    return value > 0 ? `<${text}` : `>-${text}`;
+  }
+  return amountText(value, decimals);
+}
+
+/** "1,234.5" → 1234.5; "<0.001" → NaN. */
+function parsedAmount(text: string): number {
+  return Number(text.replace(/,/g, ""));
+}
+
+/** A shown percentage as a number ("0.000%" and "0%" are both 0). */
+function percentValue(text: string): number {
+  return Number(text.replace("%", ""));
+}
+
+/** Whether a row as shown, divided by the total as shown, gives the row's shown percentage. A row below the last
+ * digit ("<0.00001") cannot be divided by hand; it checks when its percentage reads 0.000%. */
+function rowChecksByHand(value: number, total: number, decimals: number): boolean {
+  const percent = percentValue(percentText((value / total) * 100));
+  const shown = parsedAmount(amountAt(value, decimals));
+  const shownTotal = parsedAmount(amountAt(total, decimals));
+  if (Number.isNaN(shown)) return percent === 0;
+  if (!(shownTotal > 0)) return false;
+  return percentValue(percentText((shown / shownTotal) * 100)) === percent;
+}
+
+/** The significant digits a panel's total may be read to while decimals are added (1.3787566, 99.601800,
+ * 1,260,798.1). Past that a row is left to the rounding note under the table rather than growing the column. */
+const MAX_PANEL_DIGITS = 8;
+
+/** Decimals for one steps 2–3 panel (the total line, every table row, the sum lines and the formula): each row's
+ * shown amount ÷ the shown total gives the row's shown percentage, as the formula line does (BRN C10T12 2020:
+ * "0.75549 / 1.37876 = 54.795%", not "0.755 / 1.379"). It starts at the total's usual precision (three significant
+ * digits for a tiny total) and adds one decimal at a time. `checks` is false when {@link MAX_PANEL_DIGITS} is reached
+ * first (about 0.4% of panels); the table then says so. A total of 0 or below has no shares: null (per-row
+ * {@link fmt}). */
+export function panelAmountDecimals(values: readonly number[], total: number): { decimals: number; checks: boolean } | null {
+  if (!(total > 0) || !Number.isFinite(total)) return null;
+  const magnitude = Math.floor(Math.log10(total));
+  const start = Math.max(amountDecimals(total), 2 - magnitude);
+  const last = Math.max(start, MAX_PANEL_DIGITS - Math.max(1, magnitude + 1));
+  for (let decimals = start; ; decimals += 1) {
+    if (values.every((value) => rowChecksByHand(value, total, decimals))) return { decimals, checks: true };
+    if (decimals >= last) return { decimals, checks: false };
+  }
+}
+
+/** Under a table whose rows cannot all be checked by hand within {@link MAX_PANEL_DIGITS}. */
+export const PANEL_ROUNDING_NOTE = "百分比按未四舍五入的金额计算，按表中显示值手算，末位可能有出入。";
+
 /** An amount written into a formula line: the table's reading ({@link fmt}), except that a value below 0.1 keeps
  * three significant digits ("0.0118", "0.000249") so the substituted arithmetic still checks by hand. `extra`
  * decimals are added where a ratio needs them to reproduce its percentage ({@link ratioOperands}). */
@@ -159,8 +219,23 @@ export function formulaAmount(value: number, extra = 0): string {
 /** A share's substituted formula: the shown numerator divided by the shown denominator gives the shown percentage
  * to its three decimals ("379.27 / 3,829.7 = 9.903%"). The operands start at the table's precision and take one
  * more decimal at a time only where that is not yet enough (a three-decimal percentage needs about six digits). */
-export function ratioOperands(numerator: number, denominator: number): { numerator: string; denominator: string; percent: string } {
+export function ratioOperands(numerator: number, denominator: number, decimals?: number): { numerator: string; denominator: string; percent: string } {
   const percent = percentText((numerator / denominator) * 100);
+  if (decimals != null) {
+    // Beside a decomposition table: the operands read like its rows (the panel's decimals), with more only if needed.
+    // A numerator below the last digit keeps its significant digits instead of "<0.00001".
+    const at = (value: number, places: number) => {
+      const text = amountAt(value, places);
+      return Number.isNaN(parsedAmount(text)) ? formulaAmount(value) : text;
+    };
+    let operands = { numerator: at(numerator, decimals), denominator: at(denominator, decimals) };
+    for (let places = decimals; places <= decimals + 6; places += 1) {
+      operands = { numerator: at(numerator, places), denominator: at(denominator, places) };
+      const shown = (shownAmount(operands.numerator, numerator) / shownAmount(operands.denominator, denominator)) * 100;
+      if (percentText(shown) === percent) break;
+    }
+    return { ...operands, percent };
+  }
   let operands = { numerator: formulaAmount(numerator), denominator: formulaAmount(denominator) };
   for (let extra = 0; extra <= 6; extra += 1) {
     operands = { numerator: formulaAmount(numerator, extra), denominator: formulaAmount(denominator, extra) };
@@ -173,7 +248,21 @@ export function ratioOperands(numerator: number, denominator: number): { numerat
 /** A two-part sum. Unless both parts read as whole millions, the parts are written out at the table's precision,
  * so the line adds up as shown: "= 2.477 + 0.867 = 3.344", "5,298.2 + 0.998 = 5,299.2", never "= 9" for
  * 5.4 + 3.3 nor "0.000" for two tiny non-zero parts. */
-export function sumText(a: number, b: number): string {
+export function sumText(a: number, b: number, decimals?: number): string {
+  if (decimals != null) {
+    // At the panel's decimals, as in the table: "0.75549 + 0.00015 = 0.75564". When the shown parts do not add up
+    // to the shown sum, the line says what they add to; a part below the last digit counts as 0 and is named.
+    const parts = [amountAt(a, decimals), amountAt(b, decimals)];
+    const sum = amountAt(a + b, decimals);
+    const line = `${parts[0]} + ${parts[1]} = ${sum}`;
+    const shownSum = parsedAmount(sum);
+    if (Number.isNaN(shownSum)) return line;
+    const shown = parts.map(parsedAmount);
+    const added = shown.reduce((acc, value) => acc + (Number.isNaN(value) ? 0 : value), 0);
+    const addsUp = Math.abs(added - shownSum) < 10 ** -decimals / 2;
+    if (!addsUp) return `${line}（按显示值相加为 ${amountText(added, decimals)}，差别来自四舍五入）`;
+    return shown.some(Number.isNaN) ? `${line}（不到 ${amountText(10 ** -decimals, decimals)} 的一项按 0 相加）` : line;
+  }
   const whole = (v: number) => v === 0 || amountDecimals(v) === 0;
   if (whole(a) && whole(b)) return fmt(a + b, "amount");
   return `${formulaAmount(a)} + ${formulaAmount(b)} = ${formulaAmount(a + b)}`;
@@ -181,7 +270,15 @@ export function sumText(a: number, b: number): string {
 
 /** When the rows as displayed do not add up to the displayed sum within its last digit (each row is rounded on its
  * own), the sum line says what they add up to, so "✓ N 项相加" never contradicts the table above it. */
-export function displayedSumNote(values: readonly number[], sum: number): string | null {
+export function displayedSumNote(values: readonly number[], sum: number, panelDecimals?: number): string | null {
+  if (panelDecimals != null) {
+    // One precision for the whole panel; a row below the last digit ("<0.00001") adds as 0.
+    const shownRows = values.map((value) => parsedAmount(amountAt(value, panelDecimals)));
+    const added = shownRows.reduce((acc, value) => acc + (Number.isNaN(value) ? 0 : value), 0);
+    const shownSum = parsedAmount(amountAt(sum, panelDecimals));
+    if (Number.isNaN(shownSum) || Math.abs(added - shownSum) <= 10 ** -panelDecimals * (1 + 1e-9)) return null;
+    return `（上表各项按显示值相加为 ${amountText(added, panelDecimals)}，差别来自四舍五入）`;
+  }
   const shown = values.map((value) => shownAmount(fmt(value, "amount"), value));
   const total = shown.reduce((acc, value) => acc + value, 0);
   const shownSum = shownAmount(fmt(sum, "amount"), sum);
@@ -219,14 +316,15 @@ function disclosureRatioGap(numerator: number | null, denominator: number | null
   return denominator < 0 ? "—（总量为负，无法计算比重）" : "—（总量为 0，无法计算比重）";
 }
 
-export function IndicatorCalculationDisclosure({ step, row }: { step: number; row: Row }) {
+/** `decimals`: beside a decomposition table, the panel's amount precision ({@link panelAmountDecimals}). */
+export function IndicatorCalculationDisclosure({ step, row, decimals }: { step: number; row: Row; decimals?: number }) {
   if (step === 4 || step === 5) {
     const numeratorKey = step === 4 ? "FVA" : "3b_VA_GVC_C";
     const denominatorKey = step === 4 ? "gross_exports" : "SVA";
     const numerator = finiteNumber(row[numeratorKey]);
     const denominator = finiteNumber(row[denominatorKey]);
     const ratio = disclosureRatio(numerator, denominator);
-    const operands = ratio != null ? ratioOperands(numerator!, denominator!) : null;
+    const operands = ratio != null ? ratioOperands(numerator!, denominator!, decimals) : null;
     const title = step === 4 ? "外国增加值项占比" : "复杂 GVC 生产份额";
     const denominatorLabel = step === 4 ? "总出口" : "总增加值 SVA";
     return (
@@ -278,6 +376,8 @@ export function DecompositionDetailTable({
   onHover,
   compact = false,
   negativeNote = "负值表示抵减项（例如净补贴），所以其他分项的比重之和可能超过 100%。",
+  decimals,
+  roundingNote = false,
 }: {
   caption: string;
   parts: readonly Part[];
@@ -291,6 +391,10 @@ export function DecompositionDetailTable({
   compact?: boolean;
   /** What a negative part means in this decomposition; only shown beside shares it explains. */
   negativeNote?: string;
+  /** One amount precision for the whole column ({@link panelAmountDecimals}); without it each row uses {@link fmt}. */
+  decimals?: number;
+  /** Some row's shown amount ÷ the shown total does not give its shown percentage: say so under the table. */
+  roundingNote?: boolean;
 }) {
   // The note explains shares summing past 100%; with no shares (e.g. a negative total) the reason line says why.
   const hasNegative = !unavailable
@@ -324,7 +428,7 @@ export function DecompositionDetailTable({
               {part.label}
               {compact && <span className="dt-desc dt-desc--below">{part.desc}</span>}
             </th>
-            <td className="dt-val">{value == null ? "—" : fmt(value, unit)}</td>
+            <td className="dt-val">{value == null ? "—" : decimals != null && unit === "amount" ? amountAt(value, decimals) : fmt(value, unit)}</td>
             <td className="dt-share">{unavailable ? "—" : share == null ? "—（无法计算）" : percentText(share)}</td>
             {!compact && <td className="dt-desc">{part.desc}</td>}
           </tr>
@@ -332,6 +436,7 @@ export function DecompositionDetailTable({
       })}</tbody>
     </table>
     {hasNegative && <p className="decomp-table-note">{negativeNote}</p>}
+    {roundingNote && <p className="decomp-table-note">{PANEL_ROUNDING_NOTE}</p>}
     </>
   );
 }
@@ -692,13 +797,17 @@ export function DecompositionDemo({
       usesLocalRawDomain ? undefined : model.total,
     );
     const sharesAvailable = model.shares != null;
+    // One amount precision for the total line, the table, the sum lines and the formula, so every share in the table
+    // checks by hand from the amounts beside it.
+    const precision = cfg.unit === "amount" ? panelAmountDecimals(model.values, model.total) : null;
+    const amount = (value: number) => (precision ? amountAt(value, precision.decimals) : fmt(value, cfg.unit));
     return (
       <div style={{ minWidth: 0 }}>
         {entityPicker(side)}
         <div className="decomp-total-line">
-          {cfg.totalLabel} = <b>{fmt(model.total, cfg.unit)}</b>{cfg.unit === "amount" && <span className="muted">（百万美元）</span>}
+          {cfg.totalLabel} = <b>{amount(model.total)}</b>{cfg.unit === "amount" && <span className="muted">（百万美元）</span>}
         </div>
-        <IndicatorCalculationDisclosure step={step} row={row} />
+        <IndicatorCalculationDisclosure step={step} row={row} decimals={precision?.decimals} />
         <div className="decomp-bar" style={{ position: "relative", display: "block", overflow: "hidden" }}>
           {panelDomain.negative > 0 && <span aria-hidden style={{ position: "absolute", zIndex: 3, left: `${layout.zeroPct}%`, top: -2, bottom: -2, borderLeft: "2px solid #4b5263" }} />}
           {cfg.parts.map((part, index) => {
@@ -710,13 +819,13 @@ export function DecompositionDemo({
               className={`decomp-seg${hover && hover !== part.key ? " dim" : ""}`}
               style={{ position: "absolute", top: 0, bottom: 0, left: `${segment.leftPct}%`, width: `${segment.widthPct}%`, background: segment.negative ? negativeFill(part.color) : part.color }}
               onMouseEnter={() => setHover(part.key)} onMouseLeave={() => setHover(null)}
-              title={`${part.label} · 当前值 ${fmt(value, cfg.unit)} · ${shareText}${segment.negative ? "（负值，位于零轴左侧）" : ""}`} />;
+              title={`${part.label} · 当前值 ${amount(value)} · ${shareText}${segment.negative ? "（负值，位于零轴左侧）" : ""}`} />;
           })}
         </div>
         {model.closure != null ? (
           <div className={`decomp-identity ${model.closure ? "ok" : "bad"}`}>
-            {model.closure ? "✓" : "✗"} {cfg.parts.length} 项相加 = {fmt(model.sum, cfg.unit)}，{model.closure ? "等于" : "不等于"}{cfg.totalLabel}{model.error < 1e-6 ? "" : `（差 ${model.error.toPrecision(2)}）`}
-            {cfg.unit === "amount" && displayedSumNote(model.values, model.sum)}
+            {model.closure ? "✓" : "✗"} {cfg.parts.length} 项相加 = {amount(model.sum)}，{model.closure ? "等于" : "不等于"}{cfg.totalLabel}{model.error < 1e-6 ? "" : `（差 ${model.error.toPrecision(2)}）`}
+            {cfg.unit === "amount" && displayedSumNote(model.values, model.sum, precision?.decimals)}
           </div>
         ) : negligible && zeroTotalHint ? null : (
           // A zero total is explained once, by the specific hint below.
@@ -738,9 +847,11 @@ export function DecompositionDemo({
           onHover={setHover}
           compact={compare}
           negativeNote={cfg.negativeNote}
+          decimals={precision?.decimals}
+          roundingNote={precision?.checks === false}
         />
         {step === 6 && <MiniBackwardBar row={row} />}
-        {cfg.note && sharesAvailable && <div className="decomp-note">{cfg.note(row, model.values)}</div>}
+        {cfg.note && sharesAvailable && <div className="decomp-note">{cfg.note(row, model.values, precision?.decimals)}</div>}
       </div>
     );
   };

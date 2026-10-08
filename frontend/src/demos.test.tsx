@@ -9,6 +9,8 @@ import {
   DecompositionDetailTable,
   DecompositionRequestMessage,
   IndicatorCalculationDisclosure,
+  PANEL_ROUNDING_NOTE,
+  amountAt,
   NetworkCentralityDemo,
   betweennessExamplePair,
   betweennessExampleSentence,
@@ -19,6 +21,7 @@ import {
   networkDemoKeyTransition,
   networkDemoNodeAccessibleName,
   nextNetworkDemoNode,
+  panelAmountDecimals,
   ratioOperands,
   sumText,
   teachingBetweennessPairs,
@@ -707,9 +710,10 @@ describe("small amounts read with the precision of the table rows (round 10)", (
         <DecompositionDemo step={4} meta={{ years: [2020], countries: ["BRN"], sectors: ["C10T12"], dataset: null }}
           primaryYear={2020} primaryCountry="BRN" />,
       );
-      await waitFor(() => expect(view.container.textContent).toContain("总出口 = 1.378"));
+      // Round 13: the panel reads one precision throughout (four decimals here, so every row's share checks by hand).
+      await waitFor(() => expect(view.container.textContent).toContain("总出口 = 1.3783（"));
       const text = view.container.textContent ?? "";
-      expect(text).toContain("6 项相加 = 1.378");
+      expect(text).toContain("6 项相加 = 1.3783，");
       expect(text).toContain("= 0.5598 / 1.3783 = 40.615%");
       expect(text).not.toContain("总出口 = 1（");
     } finally {
@@ -764,5 +768,101 @@ describe("steps 2–3: the shown numbers check by hand (round 12)", () => {
     expect(displayedSumNote(values, sum)).toBe("（上表各项按显示值相加为 1,260,796.6，差别来自四舍五入）");
     // Rows at two decimals beside a total of the same size add up within its last digit: no note.
     expect(displayedSumNote([60.123, 15.3999, 23.247, 1.136], 99.9059)).toBeNull();
+  });
+});
+
+describe("steps 2–3: every table row checks by hand, not only the formula (round 13)", () => {
+  /** Render one country-level panel and read back the total, each row's amount and share, and the notes. */
+  const renderPanel = async (step: 4 | 5, row: Record<string, number | string>) => {
+    const countryRequest = spyOn(api, "countryIndicatorsForCountry").mockResolvedValue([{ ...row, industry: null }]);
+    const industryRequest = spyOn(api, "industryIndicatorsAll").mockResolvedValue({ total: 1, page: 1, page_size: 200, rows: [row] });
+    try {
+      const view = render(
+        <DecompositionDemo step={step} meta={{ years: [2020], countries: [String(row.country)], sectors: ["A"], dataset: null }}
+          primaryYear={2020} primaryCountry={String(row.country)} />,
+      );
+      await waitFor(() => expect(view.container.querySelector(".decomp-table tbody td.dt-val")).toBeTruthy());
+      const total = view.container.querySelector(".decomp-total-line b")!.textContent!;
+      const cells = [...view.container.querySelectorAll(".decomp-table tbody tr")].map((tr) => ({
+        amount: tr.querySelector(".dt-val")!.textContent!,
+        share: tr.querySelector(".dt-share")!.textContent!,
+      }));
+      return { view, total, cells, text: view.container.textContent ?? "" };
+    } finally {
+      countryRequest.mockRestore();
+      industryRequest.mockRestore();
+    }
+  };
+  const shown = (text: string) => Number(text.replace(/,/g, ""));
+  const byHand = (amount: string, total: string) => `${((shown(amount) / shown(total)) * 100).toFixed(3)}%`;
+
+  test("BRN C10T12 2020 (step 2): rows, total, formula and the EXDVA line read one precision and check by hand", async () => {
+    // Was "DVAex 0.755 54.795%" beside "0.5600 / 1.3788" (0.755 / 1.3788 = 54.758%), and "DVArt <0.001" beside
+    // "EXDVA = 0.755 + 0.000151 = 0.756".
+    const row = {
+      country: "BRN", year: 2020,
+      DVAex: 0.7554879510593011, DVArt: 0.00015061881428423774, DDC: 6.823455392098712e-05,
+      FVA: 0.559987327375692, FDC: 0.05979233776682533, taxsub: 0.0032764752712730375,
+    };
+    const { total, cells, text } = await renderPanel(4, {
+      ...row, gross_exports: row.DVAex + row.DVArt + row.DDC + row.FVA + row.FDC + row.taxsub,
+    });
+    expect(total).toBe("1.37876");
+    expect(cells.map((cell) => `${cell.amount} ${cell.share}`)).toEqual([
+      "0.75549 54.795%", "0.00015 0.011%", "0.00007 0.005%", "0.55999 40.615%", "0.05979 4.337%", "0.00328 0.238%",
+    ]);
+    for (const cell of cells) expect(byHand(cell.amount, total)).toBe(cell.share);
+    expect(text).toContain("= 0.55999 / 1.37876 = 40.615%");
+    expect(text).toContain("6 项相加 = 1.37876，");
+    expect(text).toContain("EXDVA）= DVAex + DVArt = 0.75549 + 0.00015 = 0.75564。");
+    expect(text).not.toContain("<0.001");
+    expect(text).not.toContain("末位可能有出入");
+  });
+
+  test("MLT H51 2016 (step 3): 50.976 / 99.602 = 51.180%, as the table shows", async () => {
+    const { total, cells, text } = await renderPanel(5, {
+      country: "MLT", year: 2020, SVA: 99.60180000000042,
+      "1_VA_D": 2.136177408891449, "2_VA_RT": 50.97644689781885, "3a_VA_GVC_S": 31.135543981055907, "3b_VA_GVC_C": 15.353631712234272,
+    });
+    expect(total).toBe("99.602");
+    expect(cells.map((cell) => `${cell.amount} ${cell.share}`)).toEqual(["2.136 2.145%", "50.976 51.180%", "31.136 31.260%", "15.354 15.415%"]);
+    for (const cell of cells) expect(byHand(cell.amount, total)).toBe(cell.share);
+    expect(text).toContain("= 15.354 / 99.602 = 15.415%");
+    // The GVC line keeps the table's digits; its shown parts add to 46.490, and it says so.
+    expect(text).toContain("简单 GVC + 复杂 GVC = 31.136 + 15.354 = 46.489（按显示值相加为 46.490，差别来自四舍五入）");
+  });
+
+  test("a panel the digit cap cannot settle keeps its rows and says so under the table (ARG C26 2016)", async () => {
+    const values = [120.72636476838437, 0.20395515237101824, 0.024104663925528947, 42.01000152258354, 5.738001185075063, 9.826121124970308];
+    const sum = values.reduce((a, b) => a + b, 0);
+    expect(panelAmountDecimals(values, sum)).toEqual({ decimals: 5, checks: false });
+    const { text } = await renderPanel(4, {
+      country: "ARG", year: 2020, gross_exports: sum,
+      DVAex: values[0], DVArt: values[1], DDC: values[2], FVA: values[3], FDC: values[4], taxsub: values[5],
+    });
+    expect(text).toContain("总出口 = 178.52855（");
+    expect(text).toContain(PANEL_ROUNDING_NOTE);
+    expect(PANEL_ROUNDING_NOTE).toBe("百分比按未四舍五入的金额计算，按表中显示值手算，末位可能有出入。");
+  });
+
+  test("one panel precision: a whole-million total stays whole; a row below the last digit reads <unit", () => {
+    // CAN-sized totals already check by hand at whole millions or one decimal.
+    expect(panelAmountDecimals([300_000, 100_000, 26_596.9], 426_596.9)?.checks).toBe(true);
+    expect(amountAt(0.000004, 5)).toBe("<0.00001");
+    expect(amountAt(-0.000004, 5)).toBe(">-0.00001");
+    expect(amountAt(0.4, 0)).toBe("<1");
+    expect(amountAt(1_260_798.12, 1)).toBe("1,260,798.1");
+    // Shares of a total of 0 or below are undefined: no panel precision, the rows keep their own reading.
+    expect(panelAmountDecimals([1, -2], -1)).toBeNull();
+  });
+
+  test("a sum line at the panel's precision adds up as shown, or says what the shown parts add to", () => {
+    expect(sumText(0.7554879510593011, 0.00015061881428423774, 5)).toBe("0.75549 + 0.00015 = 0.75564");
+    expect(sumText(31.135543981055907, 15.353631712234272, 3)).toBe("31.136 + 15.354 = 46.489（按显示值相加为 46.490，差别来自四舍五入）");
+    expect(sumText(2.5, 0.000004, 5)).toBe("2.50000 + <0.00001 = 2.50000（不到 0.00001 的一项按 0 相加）");
+    expect(displayedSumNote([0.75549, 0.00015], 0.75564, 5)).toBeNull();
+    // Within one last digit the six-part line needs no note; four rows each rounded down by 0.0004 add 0.002 short.
+    expect(displayedSumNote([31.1355, 15.3536], 46.4891, 3)).toBeNull();
+    expect(displayedSumNote([1.0004, 1.0004, 1.0004, 1.0004], 4.0016, 3)).toBe("（上表各项按显示值相加为 4.000，差别来自四舍五入）");
   });
 });
