@@ -36,3 +36,11 @@ export function cjkSpace(head: string, tail: string): string {
   const latinThenCjk = /[A-Za-z0-9)]$/.test(head) && /^[⺀-鿿]/.test(tail);
   return cjkThenLatin || latinThenCjk ? `${head} ${tail}` : `${head}${tail}`;
 }
+
+/** A share (0.2330) in percentage points to two decimals ("23.30"); a positive value too small to show reads
+ * "不到 0.01" rather than "0.00", and the same for shares in percent ("w"). */
+export function percentagePoints(share: number): string {
+  const points = share * 100;
+  if (points > 0 && points < 0.005) return "不到 0.01";
+  return stripNegativeZero(points.toFixed(2));
+}

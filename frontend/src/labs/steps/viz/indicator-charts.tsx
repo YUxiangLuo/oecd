@@ -22,19 +22,19 @@ export const indicatorTick = (value: number | null, unit: string) => {
 
 /** Readings in labels, tables and tooltips keep fixed decimals, so values side by side line up
  * ("11.730%" next to "15.613%", not "11.73%"); an exact zero reads "0". */
-export const indicatorNumber = (value: number | null, unit: string) =>
-  value === 0 ? `0${unit === "%" ? "%" : ""}` : fixedIndicatorNumber(value, unit);
+export const indicatorNumber = (value: number | null, unit: string, digits?: number) =>
+  value === 0 ? `0${unit === "%" ? "%" : ""}` : fixedIndicatorNumber(value, unit, digits);
 
 /** Card readings keep the same decimals on both ends ("11.556% → 11.730%"); hover readouts stay trimmed. */
-export const fixedIndicatorNumber = (value: number | null, unit: string) =>
+export const fixedIndicatorNumber = (value: number | null, unit: string, digits?: number) =>
   value === null
     ? "缺失"
     // A tiny negative that rounds to zero reads "0.000", not "-0.000".
-    : stripNegativeZero(`${(unit === "%" ? value * 100 : value).toLocaleString("zh-CN", { minimumFractionDigits: readingDigits(value, unit), maximumFractionDigits: readingDigits(value, unit) })}${unit === "%" ? "%" : ""}`);
+    : stripNegativeZero(`${(unit === "%" ? value * 100 : value).toLocaleString("zh-CN", { minimumFractionDigits: digits ?? readingDigits(value, unit), maximumFractionDigits: digits ?? readingDigits(value, unit) })}${unit === "%" ? "%" : ""}`);
 
 /** Size of a gap or its change as displayed, or null when it rounds to zero (so it never reads “差距扩大 0”). */
-const magnitudeReading = (value: number, unit: string) => {
-  const reading = changeReading(0, Math.abs(value), unit).replace("+", "");
+const magnitudeReading = (value: number, unit: string, digits?: number) => {
+  const reading = changeReading(0, Math.abs(value), unit, digits).replace("+", "");
   return /^0(\.0+)?( |$)/.test(reading) ? null : reading;
 };
 
@@ -58,11 +58,14 @@ export function TrendSummary({
   unit,
   distribution = [],
   sameIndustry = false,
+  digits,
 }: {
   readings: ComparisonReading[];
   countries: string[];
   years: number[];
   unit: string;
+  /** Overrides the shared reading precision (step 10: X to two decimals of a percentage point). */
+  digits?: number;
   distribution?: YearDistribution[];
   /** Step 9: the reference is the same industry in every economy. */
   sameIndustry?: boolean;
@@ -95,8 +98,8 @@ export function TrendSummary({
     const startGap = start - value(second, firstYear)!;
     const endGap = end - value(second, lastYear)!;
     const gapChange = Math.abs(endGap) - Math.abs(startGap);
-    const gapMagnitude = magnitudeReading(gapChange, unit);
-    const endMagnitude = magnitudeReading(endGap, unit);
+    const gapMagnitude = magnitudeReading(gapChange, unit, digits);
+    const endMagnitude = magnitudeReading(endGap, unit, digits);
     const reversed = startGap !== 0 && endGap !== 0 && Math.sign(startGap) !== Math.sign(endGap);
     const gapStory = reversed
       ? "领先方反转"
@@ -117,8 +120,8 @@ export function TrendSummary({
     <div className="comparison-summary" role="group" aria-label="趋势读数">
       <div>
         <span>{countryLabel(first)} · {firstYear}→{lastYear}</span>
-        <b>{changeReading(start, end, unit)}</b>
-        <small>{fixedIndicatorNumber(start, unit)} → {fixedIndicatorNumber(end, unit)}</small>
+        <b>{changeReading(start, end, unit, digits)}</b>
+        <small>{fixedIndicatorNumber(start, unit, digits)} → {fixedIndicatorNumber(end, unit, digits)}</small>
       </div>
       {startRank != null && endRank != null && startRef && endRef && (() => {
         const from = rankText(startRank, startRef.ties?.[first], startRef.n);
@@ -233,6 +236,7 @@ export function IndicatorTrendChart({
   sameIndustry = false,
   markYear,
   gapNote,
+  digits,
 }: {
   rows: Row[];
   countries: string[];
@@ -251,6 +255,8 @@ export function IndicatorTrendChart({
   markYear?: { year: number; label: string };
   /** Pair mode only: caption under the gap card. */
   gapNote?: string;
+  /** Overrides the shared reading precision for readouts and cards (step 10: X to two decimals). */
+  digits?: number;
 }) {
   const context = mode === "context";
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
@@ -321,7 +327,7 @@ export function IndicatorTrendChart({
       ["", `${year} 年`],
       ...countries.map((country, index): TipLine => [
         index && context ? `${countryLabel(country)}（对比）` : countryLabel(country),
-        indicatorNumber(series[index].find((point) => point.year === year)?.value ?? null, unit),
+        indicatorNumber(series[index].find((point) => point.year === year)?.value ?? null, unit, digits),
         CAT[index],
       ]),
       ...(reference ? [[referenceLabel, indicatorNumber(reference.median, unit), REFERENCE_LINE] as TipLine] : []),
@@ -481,7 +487,7 @@ export function IndicatorTrendChart({
       {Tip}
       </div>
       {context
-        ? <TrendSummary readings={readings} countries={countries} years={years} unit={unit} distribution={band} sameIndustry={sameIndustry} />
+        ? <TrendSummary readings={readings} countries={countries} years={years} unit={unit} distribution={band} sameIndustry={sameIndustry} digits={digits} />
         : <ComparisonSummary
           readings={readings}
           countries={countries}

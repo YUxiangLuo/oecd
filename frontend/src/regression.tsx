@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ScrollableRegion } from "./a11y";
 import { api, ApiError } from "./api";
+import { percentagePoints } from "./format";
 import { useAsync } from "./labs";
 import { ReadingCards } from "./labs/steps/viz/reading-cards";
 import { baselineKeyOf, lessonFor, lessonQuestion, VIZ_STEPS } from "./regression-lessons";
@@ -174,7 +175,11 @@ export function RegressionResultCard({ outcome, response, examples = [], example
           <li className="reg-example-effect">{exampleSaved ? "换算到你在步骤 10 选的例子" : "换算到默认例子（步骤 10 还没有保存你的例子）"}：{examples.map((example, index) => {
             const coef = verdict.coefficient!.coef;
             const text = example.x > 0
-              ? <>{example.label}（X = {(example.x * 100).toFixed(2)} 个百分点）Y 约{coef * example.x < 0 ? "下降" : "上升"} <b>{exampleEffect(outcome, coef, example.x, response.design)}</b></>
+              ? (() => {
+                const effect = exampleEffect(outcome, coef, example.x, response.design);
+                // "下降 12.83" keeps a space before the number; "下降不到 0.01" does not.
+                return <>{example.label}（X = {percentagePoints(example.x)} 个百分点）Y 约{coef * example.x < 0 ? "下降" : "上升"}{effect.startsWith("不到") ? "" : " "}<b>{effect}</b></>;
+              })()
               : (example.tau ?? 0) > 0
                 ? <>{example.label}被加税但首年不向美国出口（w = 0，X = 0），按估计不变</>
                 : <>{example.label}未被加税（X = 0），按估计不变</>;

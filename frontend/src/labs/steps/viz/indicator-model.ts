@@ -256,9 +256,11 @@ export function changeReading(
   start: number,
   end: number,
   unit: string,
+  /** A page-specific precision (step 10 reads X in percentage points to two decimals). */
+  fixedDigits?: number,
 ): string {
   const difference = (end - start) * (unit === "%" ? 100 : 1);
-  const digits = readingDigits(difference, unit);
+  const digits = fixedDigits ?? readingDigits(difference, unit);
   return `${difference > 0 ? "+" : ""}${difference.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits })}${unit === "%" ? " 个百分点" : unit === "无量纲" ? "" : ` ${unit}`}`;
 }
 
