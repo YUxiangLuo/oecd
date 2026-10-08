@@ -3,6 +3,7 @@ import { CLUSTER_INTERVAL_LABEL, formatPValue } from "../../regression-statistic
 import type { DepvarKind, RegressionStatus, TreatmentSupport } from "../../types";
 import { cardStyle, useTip } from "../shared";
 import { niceDomain } from "../nice-ticks";
+import { TAXED, UNTAXED } from "./palette";
 
 /** Approximate SVG text width (generous, so a clamped label never reaches a neighbour): CJK 1 em, Latin 0.62 em. */
 export function svgTextWidth(text: string, size: number): number {
@@ -304,8 +305,6 @@ export function BinScatterChart({ bins, slope, slopeUnit, slopeWords, kind, xLab
   );
 }
 
-const TAXED = "#d6731f";
-const UNTAXED = "#6b7487";
 
 /**
  * Two lines: taxed vs untaxed countries, each group's mean Y minus its own pre-policy mean.
