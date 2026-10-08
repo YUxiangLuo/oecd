@@ -524,68 +524,40 @@ describe("single-entity decomposition scope", () => {
   });
 });
 
-describe("object B country", () => {
-  test("B may take A's country only at country–industry level, without changing the recorded comparison", async () => {
+describe("one country only", () => {
+  test("decomposes the selected country, with 国家整体／单个行业 and no second country or side-by-side option", async () => {
     const row = (country: string, industry = "") => ({ country, industry, year: 2020, SVA: 10, "1_VA_D": 4, "2_VA_RT": 2, "3_VA_GVC": 4, "3a_VA_GVC_S": 1, "3b_VA_GVC_C": 3 });
     const countryRequest = spyOn(api, "countryIndicatorsForCountry").mockImplementation(async (_year, country) => [row(country)]);
     const industryRequest = spyOn(api, "industryIndicatorsAll").mockImplementation(async (_year, country) => ({
       total: 2, page: 1, page_size: 200, rows: [row(country as string, "C26"), row(country as string, "C29")],
     }));
-    const partners: string[] = [];
+    const changes: Array<[number, string]> = [];
     try {
       const view = render(
         <DecompositionDemo step={5} meta={{ years: [2020], countries: ["CHN", "USA"], sectors: ["C26", "C29"], dataset: null }}
-          primaryYear={2020} primaryCountry="CHN" secondaryCountry="USA" onSecondaryChange={(value) => partners.push(value)} />,
+          primaryYear={2020} primaryCountry="CHN" onPrimaryChange={(year, country) => changes.push([year, country])} />,
       );
-      fireEvent.click(view.getByLabelText(/并排比较另一个国家或行业/));
-      const countryOptions = () => [...view.getAllByLabelText("国家")[1].querySelectorAll("option")].map((option) => option.getAttribute("value"));
-      expect(countryOptions()).toEqual(["USA"]);
-      fireEvent.click(view.getByRole("button", { name: "单个行业" }));
-      expect(countryOptions()).toEqual(["CHN", "USA"]);
-      fireEvent.change(view.getAllByLabelText("国家")[1], { target: { value: "CHN" } });
-      expect((view.getAllByLabelText("国家")[1] as HTMLSelectElement).value).toBe("CHN");
-      expect(partners).toEqual([]);
-      // Changing A afterwards leaves B on the country the student chose, rather than following A.
-      view.rerender(
-        <DecompositionDemo step={5} meta={{ years: [2020], countries: ["CHN", "USA"], sectors: ["C26", "C29"], dataset: null }}
-          primaryYear={2020} primaryCountry="USA" secondaryCountry="CHN" onSecondaryChange={(value) => partners.push(value)} />,
-      );
-      expect((view.getAllByLabelText("国家")[0] as HTMLSelectElement).value).toBe("USA");
-      expect((view.getAllByLabelText("国家")[1] as HTMLSelectElement).value).toBe("CHN");
-    } finally {
-      countryRequest.mockRestore();
-      industryRequest.mockRestore();
-    }
-  });
+      await waitFor(() => expect(view.getAllByRole("table")).toHaveLength(1));
+      expect(view.queryByText(/并排比较/)).toBeNull();
+      expect(view.queryByRole("checkbox")).toBeNull();
+      expect(view.getAllByLabelText("国家")).toHaveLength(1);
+      expect(view.container.textContent).not.toMatch(/左栏|右栏|对比国家/);
+      // Every country is offered; the choice goes to the page, which records it as the report material.
+      const countrySelect = view.getByLabelText("国家") as HTMLSelectElement;
+      expect([...countrySelect.querySelectorAll("option")].map((option) => option.getAttribute("value"))).toEqual(["CHN", "USA"]);
+      fireEvent.change(countrySelect, { target: { value: "USA" } });
+      expect(changes).toEqual([[2020, "USA"]]);
 
-  test("within one country B cannot show A's own industry, and moves on when A takes B's", async () => {
-    const row = (country: string, industry = "") => ({ country, industry, year: 2020, SVA: 10, "1_VA_D": 4, "2_VA_RT": 2, "3_VA_GVC": 4, "3a_VA_GVC_S": 1, "3b_VA_GVC_C": 3 });
-    const countryRequest = spyOn(api, "countryIndicatorsForCountry").mockImplementation(async (_year, country) => [row(country)]);
-    const industryRequest = spyOn(api, "industryIndicatorsAll").mockImplementation(async (_year, country) => ({
-      total: 3, page: 1, page_size: 200, rows: ["C26", "C29", "H51"].map((code) => row(country as string, code)),
-    }));
-    try {
-      const view = render(
-        <DecompositionDemo step={5} meta={{ years: [2020], countries: ["CHN", "USA"], sectors: ["C26", "C29", "H51"], dataset: null }}
-          primaryYear={2020} primaryCountry="CHN" secondaryCountry="USA" />,
-      );
-      fireEvent.click(view.getByLabelText(/并排比较另一个国家或行业/));
       fireEvent.click(view.getByRole("button", { name: "单个行业" }));
-      await waitFor(() => expect(view.getAllByLabelText("行业")).toHaveLength(2));
-      const sectorA = () => view.getAllByLabelText("行业")[0] as HTMLSelectElement;
-      const sectorB = () => view.getAllByLabelText("行业")[1] as HTMLSelectElement;
-      const optionsB = () => [...sectorB().querySelectorAll("option")].map((option) => option.getAttribute("value"));
-      // Another country: every industry, including A's.
-      expect(optionsB()).toEqual(["C26", "C29", "H51"]);
-      fireEvent.change(view.getAllByLabelText("国家")[1], { target: { value: "CHN" } });
-      await waitFor(() => expect(optionsB()).toEqual(["C29", "H51"]));
-      expect(sectorA().value).toBe("C26");
-      expect(sectorB().value).toBe("C29");
-      fireEvent.change(sectorA(), { target: { value: "C29" } });
-      expect(sectorA().value).toBe("C29");
-      expect(optionsB()).toEqual(["C26", "H51"]);
-      expect(sectorB().value).not.toBe("C29");
+      await waitFor(() => expect(view.getAllByLabelText("行业")).toHaveLength(1));
+      const sector = view.getByLabelText("行业") as HTMLSelectElement;
+      expect(sector.value).toBe("C26");
+      fireEvent.change(sector, { target: { value: "C29" } });
+      expect((view.getByLabelText("行业") as HTMLSelectElement).value).toBe("C29");
+      expect(view.getAllByRole("table")).toHaveLength(1);
+      expect(industryRequest.mock.calls.every(([, country]) => country === "CHN")).toBe(true);
     } finally {
+      cleanup();
       countryRequest.mockRestore();
       industryRequest.mockRestore();
     }

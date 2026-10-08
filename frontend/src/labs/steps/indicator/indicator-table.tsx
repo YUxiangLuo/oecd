@@ -2,7 +2,7 @@
  * 指标数据表（步骤 5 中心性表）：国家/年份筛选、分页与排序。
  *
  * 受控组件:year/country/page 由外层持有,并与实验快照恢复保持同步。
- * 两国同年报告材料由 auto-comparison 按所选国家自动记录，本表不再提供保存按钮。
+ * 报告材料（所选国家的国家整体读数）由 auto-comparison 自动记录，本表不提供保存按钮。
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
@@ -156,7 +156,7 @@ export interface IndicatorObservation {
   unit: string;
   release: string;
   scope: "country";
-  /** Steps 2–4 record automatically; step 5 still saves explicitly. */
+  /** Steps 2–5 record automatically; the explicit source only appears in records saved by an earlier version. */
   source: "explicit-indicator-table-comparison" | "auto-indicator-comparison";
 }
 
@@ -167,7 +167,7 @@ const CORE_METRIC: Record<IndicatorGroupKey, string> = {
   network: "betweenesscentrality",
 };
 
-/** 换国家对比时用国家级指标；国家完全图的介数恒为 0，网络步改用加权度。 */
+/** 报告材料记录的国家级指标；国家完全图的介数恒为 0，网络步改用加权度。 */
 export const COUNTRY_METRIC: Record<IndicatorGroupKey, string> = {
   trade: "FVA_share",
   production: "3b_VA_GVC_C_share",
@@ -209,28 +209,19 @@ export function countryObservation(
   };
 }
 
-/** One explicit action captures a complete same-year, two-country comparison. */
-export function indicatorComparisonPatch(
+/** Steps 2–5 report material: the selected country's country-level reading for one year, recorded automatically. */
+export function indicatorMaterialPatch(
   rows: Array<Record<string, unknown>>,
-  countries: string[],
+  country: string,
   year: number,
   metric: string,
   unit: string,
   release: string,
-  source: IndicatorObservation["source"] = "explicit-indicator-table-comparison",
 ): Pick<IndicatorStepState, "year" | "country" | "compared" | "metric" | "observations"> | null {
-  if (countries.length !== 2 || new Set(countries).size !== 2 || !release) return null;
-  const observations = countries.map((country) =>
-    countryObservation(rows, country, year, metric, unit, release, source),
-  );
-  if (observations.some((item) => item === null)) return null;
-  return {
-    year,
-    country: countries[0],
-    compared: countries,
-    metric,
-    observations: observations as IndicatorObservation[],
-  };
+  if (!country || !release) return null;
+  const observation = countryObservation(rows, country, year, metric, unit, release, "auto-indicator-comparison");
+  if (!observation) return null;
+  return { year, country, compared: [country], metric, observations: [observation] };
 }
 
 export function restoreIndicatorSelection(meta: Meta, saved?: IndicatorStepState) {
@@ -248,18 +239,11 @@ export function restoreIndicatorSelection(meta: Meta, saved?: IndicatorStepState
   };
 }
 
-/** The comparison country recorded last time (second entry of `compared`), if still in the data. */
-export function restoreComparisonPartner(meta: Meta, saved?: IndicatorStepState): string {
-  const partner = saved?.compared?.[1];
-  return typeof partner === "string" && meta.countries.includes(partner) ? partner : "";
-}
-
 /** 指标表与分解演示共享一套选择，并只把学生真实交互后的变化写回会话。 */
 export function useIndicatorControls(meta: Meta, state: StepStateApi<IndicatorStepState>) {
   const initial = restoreIndicatorSelection(meta, state.data);
   const [year, setYearValue] = useState(initial.year);
   const [country, setCountryValue] = useState(initial.country);
-  const [partner, setPartnerValue] = useState(() => restoreComparisonPartner(meta, state.data));
   const [page, setPageValue] = useState(1);
   const [interacted, setInteracted] = useState(false);
   const restored = useRef(state.data !== undefined);
@@ -269,7 +253,6 @@ export function useIndicatorControls(meta: Meta, state: StepStateApi<IndicatorSt
     const next = restoreIndicatorSelection(meta, state.data);
     setYearValue(next.year);
     setCountryValue(next.country);
-    setPartnerValue(restoreComparisonPartner(meta, state.data));
     setPageValue(1);
     restored.current = true;
   }, [interacted, meta, state.data]);
@@ -295,12 +278,7 @@ export function useIndicatorControls(meta: Meta, state: StepStateApi<IndicatorSt
     setPageValue(1);
   };
 
-  const setPartner = (next: string) => {
-    setInteracted(true);
-    setPartnerValue(next);
-  };
-
-  return { year, country, partner, page, interacted, setYear, setCountry, setPartner, setPage, setPrimary };
+  return { year, country, page, interacted, setYear, setCountry, setPage, setPrimary };
 }
 
 export function indicatorRowHeaderLabel(row: Record<string, string | number | null>): string {
