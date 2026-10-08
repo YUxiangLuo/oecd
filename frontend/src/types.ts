@@ -26,8 +26,8 @@ export interface Step {
   status: "done" | "demo";
   title: string;
   goal: string;
-  /** Three concrete student actions rendered in the shared first-screen task card. */
-  tasks: [string, string, string];
+  /** Concrete student actions rendered in the shared first-screen task card (three; two on steps 11–14). */
+  tasks: [string, string, string] | [string, string];
   concept: string;
   tip: string;
   deps: string[];

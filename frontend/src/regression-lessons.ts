@@ -19,8 +19,6 @@ interface RegressionLesson {
   unit: string;
   priorStep: number;
   priorLabel: string;
-  /** 本步要学会的一件事，用于老师开场。 */
-  learnThis: string;
   definition: string;
   downMeaning: string;
   upMeaning: string;
@@ -47,7 +45,6 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "百分点",
     priorStep: 2,
     priorLabel: "GVC 总贸易流分解指标",
-    learnThis: "读数：用一句话说出 X 每高 1 个百分点的国家×行业，Y 平均高或低多少个百分点。",
     definition: "WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 总出口的比重。",
     downMeaning: "外国增加值项占比下降：出口价值中来自国外投入的部分变小。",
     upMeaning: "外国增加值项占比上升：出口价值中来自国外投入的部分变大。",
@@ -62,7 +59,6 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "百分点",
     priorStep: 3,
     priorLabel: "GVC 生产分解指标",
-    learnThis: "读区间：只看估计值的正负还不够，还要看 95% 区间是否包含 0。把 Y 换成“后向复杂 GVC 生产份额”，就能看到区间包含 0、方向不确定的情形。",
     definition: "增加值经过多次跨境生产后被最终吸收的比例。",
     downMeaning: "复杂 GVC 生产份额下降：SVA 中经多次跨境生产的部分占比变小。",
     upMeaning: "复杂 GVC 生产份额上升：SVA 中经多次跨境生产的部分占比变大。",
@@ -77,7 +73,6 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "长度单位",
     priorStep: 4,
     priorLabel: "GVC 长度分解指标",
-    learnThis: "读单位：长度单位不是百分点（1 个长度单位约等于平均多经过 1 个生产环节），不能和前两步的数字比大小。",
     definition: "GVC 活动诱发的累计总产出除以关联增加值。",
     downMeaning: "前向 GVC 段长度缩短：增加值到最终吸收经过的生产环节减少。",
     upMeaning: "前向 GVC 段长度延长：增加值到最终吸收经过的生产环节增加。",
@@ -92,7 +87,6 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "中心性原始单位（另附标准差换算）",
     priorStep: 5,
     priorLabel: "全球生产网络指标",
-    learnThis: "读单位：网络 Y 的单位是“中心性原始单位”，只看方向和区间，不和前三步的数字比大小。",
     definition: "全球国家×行业图上一个节点的加权入度加出度（买入 + 卖出；自环即行业卖给自己的部分，两侧各算一次）。",
     downMeaning: "加权总度下降：节点买入与卖出的总流量规模变小。",
     upMeaning: "加权总度上升：节点买入与卖出的总流量规模变大。",
@@ -104,8 +98,6 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
 export interface BaselineLesson {
   shortMetric: string;
   unit: string;
-  /** Overrides the family focus line when the alternative reads differently (e.g. a position index). */
-  learnThis?: string;
   definition: string;
   downMeaning: string;
   upMeaning: string;
@@ -179,7 +171,6 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
   },
   GVCPs: {
     shortMetric: "GVC 位置指数",
-    learnThis: "读单位：位置指数不是百分点，也不是长度；上升表示相对更偏上游。不要和长度或份额的结果比大小。",
     unit: "位置指数单位",
     definition: "前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界：大于 1 表示相对更上游。",
     downMeaning: "位置指数下降：相对更靠下游。",
@@ -235,14 +226,6 @@ export const DEFAULT_BASELINES: Record<RegressionOutcome, string> = {
   length: "PLv_GVC",
   network: "weighted_degree",
 };
-
-/** The visualization step whose recorded indicator each regression step follows. */
-export const VIZ_STEPS: Record<RegressionOutcome, number> = { trade: 6, production: 7, length: 8, network: 9 };
-
-/** A step 6-9 metric key as a generation-baseline key (network metrics carry spaces). */
-export function baselineKeyOf(metric: string | null | undefined): string | null {
-  return metric ? metric.replace(/ /g, "_") : null;
-}
 
 export function lessonFor(outcome: RegressionOutcome, baseline?: string | null, label?: string | null): RegressionLesson {
   const base = REGRESSION_LESSONS[outcome];

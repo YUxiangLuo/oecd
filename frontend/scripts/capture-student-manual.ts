@@ -189,7 +189,7 @@ try {
   await scrollTo(page, `window.__find("先看一个例子")`, 8);
   await save("10-shocks.png", await page.screenshot(), student.username, "Step 10 followed example (Canada vs Mexico, motor vehicles).");
 
-  await open(page, 11, `document.querySelector(".verdict-card .coef-plot svg") && document.querySelector(".reg-example-effect")`);
+  await open(page, 11, `document.querySelector(".diverging-bars svg") && document.querySelector(".reg-example-effect")`);
   await scrollTo(page, `document.querySelector(".verdict-card")`, 12);
   await save("11-regression-result.png", await page.screenshot(), student.username, "Step 11 binned scatter, coefficient plot and reading.");
   if (onlyReg) {

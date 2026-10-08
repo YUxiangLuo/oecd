@@ -110,6 +110,82 @@ export function standardizedDigits(point: number | null, bounds: [number, number
   return 4;
 }
 
+/** A Y's estimate as a bar is drawn from it: a saved run's coefficient or a teaching-overview row. */
+export interface BarEstimate {
+  /** Per unit of X (a fraction), as /api/regression/run returns it. */
+  coef: number | null;
+  ci_low: number | null;
+  ci_high: number | null;
+  /** The global suppression rule (globalInferenceIsSuppressed): no interval is read or drawn. */
+  suppressed: boolean;
+  depvar_std: number | null;
+}
+
+/** One bar of a step 11–15 chart, in the axis unit, with its end label and tooltip interval. */
+export interface BarFigures {
+  value: number;
+  low: number | null;
+  high: number | null;
+  /** The 95% interval includes 0, is missing, or is suppressed: drawn grey, "方向不确定". */
+  uncertain: boolean;
+  valueLabel: string;
+  intervalLabel: string;
+}
+
+/** Bars of one chart are in 个百分点 only when every Y is a share; otherwise in 个标准差 (step 13, 14, 15). */
+export type BarUnit = "points" | "sd";
+
+export const BAR_UNIT_TITLES: Record<BarUnit, string> = {
+  points: "X 每高 1 个百分点，Y 平均相差（个百分点）",
+  sd: "X 每高 1 个百分点，Y 平均相差（个标准差）",
+};
+
+export function barUnitFor(kinds: readonly string[]): BarUnit {
+  return kinds.length > 0 && kinds.every((kind) => kind === "share") ? "points" : "sd";
+}
+
+/** β per 1 percentage point of X in standard deviations of Y: (β × 0.01) / sd(Y); the same for every kind. */
+export function standardizedEffect(coef: number, depvarStd: number | null | undefined): number | null {
+  return typeof depvarStd === "number" && Number.isFinite(depvarStd) && depvarStd > 0 ? (coef * 0.01) / depvarStd : null;
+}
+
+/**
+ * The bar of one estimate. In 个百分点 (shares) the label is the headline's signed number ("-0.55"); in 个标准差
+ * the bar is the standardized size and the label the native value with the size, as the step 14 headline gives
+ * it ("-40.11（0.047 个标准差）"; with `withUnit`, "-0.55 个百分点（0.12 个标准差）" for charts that mix units).
+ */
+export function barFigures(estimate: BarEstimate, kind: DepvarKind, unit: BarUnit, withUnit = false): BarFigures {
+  const { coef } = estimate;
+  if (coef == null || !Number.isFinite(coef)) {
+    return { value: 0, low: null, high: null, uncertain: true, valueLabel: "没算出估计值", intervalLabel: "—" };
+  }
+  const low = estimate.suppressed ? null : estimate.ci_low;
+  const high = estimate.suppressed ? null : estimate.ci_high;
+  const hasCi = low != null && high != null && Number.isFinite(low) && Number.isFinite(high);
+  const uncertain = estimate.suppressed || !hasCi || (low! <= 0 && high! >= 0);
+  // The value per 1 percentage point of X in the Y's own display unit (shares ×1 in points, others ×0.01).
+  const native = coef * (kind === "share" ? 1 : 0.01);
+  const nativeText = `${signedEffect(native, kind)}${withUnit ? ` ${countUnit(kind)}` : ""}`;
+  if (unit === "points") {
+    const digits = shareDigits(coef);
+    return {
+      value: coef, low: hasCi ? low : null, high: hasCi ? high : null, uncertain,
+      valueLabel: nativeText,
+      intervalLabel: hasCi ? `[${signed(low!, digits)}, ${signed(high!, digits)}] 个百分点` : "—",
+    };
+  }
+  const sd = standardizedEffect(coef, estimate.depvar_std);
+  if (sd == null) return { value: 0, low: null, high: null, uncertain: true, valueLabel: `${nativeText}（没有标准差）`, intervalLabel: "—" };
+  const bounds: [number, number] | null = hasCi ? [standardizedEffect(low!, estimate.depvar_std)!, standardizedEffect(high!, estimate.depvar_std)!] : null;
+  const digits = standardizedDigits(sd, bounds);
+  return {
+    value: sd, low: bounds?.[0] ?? null, high: bounds?.[1] ?? null, uncertain,
+    // Unsigned, as in the headline ("幅度约 0.047 个标准差"): the native number before it carries the sign.
+    valueLabel: `${nativeText}（${signed(sd, digits).replace(/^[+−-]/, "")} 个标准差）`,
+    intervalLabel: bounds ? `[${signed(bounds[0], digits)}, ${signed(bounds[1], digits)}] 个标准差` : "—",
+  };
+}
+
 function naturalScale(
   outcome: RegressionOutcome,
   coefficient: CoefStat,
