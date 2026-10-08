@@ -99,8 +99,14 @@ describe("indicator table semantics", () => {
     expect(html.match(/scope="row"/g)).toHaveLength(1);
     expect(html).toContain('aria-label="国家 CHN 中国；行业 A');
     expect(html).toMatch(/<th[^>]*scope="row"[^>]*style="position:sticky;left:0;z-index:2;background:#fff"[^>]*>CHN 中国<\/th>/);
+    // 行业 stays in view too, right after the (measured) country column, with the edge of the sticky block.
+    expect(html).toMatch(/<td[^>]*style="position:sticky;left:0;z-index:2;background:#fff;box-shadow:inset -1px 0 #e8eaf0"[^>]*>A[^<]*<\/td>/);
     expect(html).toContain("-13");
-    expect(html).toContain("外国增加值 ⓘ");
+    // The definition is a focusable ⓘ described by its text, not a hover-only title.
+    expect(html).toMatch(/外国增加值<button type="button" class="column-info" aria-label="外国增加值的说明" aria-describedby="(column-info-[^"]+)"/);
+    const tipId = html.match(/aria-describedby="(column-info-[^"]+)"/)![1];
+    expect(html).toContain(`<span id="${tipId}" role="tooltip" class="sr-only">`);
+    expect(html).not.toMatch(/<th[^>]*title="[^"]*外国增加值/);
   });
 });
 

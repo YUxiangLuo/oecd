@@ -196,3 +196,79 @@ describe("step 1 after the report is submitted", () => {
     expect(replaced.observation.value).toBe(10);
   });
 });
+
+describe("step 1 round 10 fixes", () => {
+  const idleState = (data?: unknown) => ({
+    data: data as never,
+    save: () => {},
+    complete: false,
+    syncing: false,
+    syncError: null,
+    syncNow: () => {},
+  });
+
+  test("Tab reaches 年份 and the table tabs before 全屏查看, which ends the first control row", async () => {
+    spyOn(api, "dbMeta").mockResolvedValue(DB_META);
+    spyOn(api, "dbSlice").mockResolvedValue(SLICE);
+    render(<DbLab state={idleState()} releaseMeta={null as Meta | null} />);
+    const year = await screen.findByLabelText("年份");
+    const accounts = screen.getByRole("button", { name: "账户项" });
+    const trigger = screen.getByRole("button", { name: /^全屏查看：/ });
+    expect(year.compareDocumentPosition(trigger) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(accounts.compareDocumentPosition(trigger) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(trigger.closest(".controls")).toBe(year.closest(".controls"));
+    // Expanding and leaving again still works from the moved button.
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^退出.*全屏工作区$/ }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("button", { name: /^全屏查看：/ })).toBeTruthy();
+  });
+
+  test("a recorded 0 cell is kept but says that it records no flow", async () => {
+    spyOn(api, "dbMeta").mockResolvedValue(DB_META);
+    spyOn(api, "dbSlice").mockResolvedValue(SLICE);
+    const observation = {
+      row: "CHN_T", column: "USA_C26", value: 0, year: 2020, table: "z",
+      row_country: "CHN", col_country: "USA", row_sector: "", col_sector: "",
+    };
+    render(<DbLab state={idleState({ observation })} releaseMeta={null as Meta | null} />);
+    const strip = (await screen.findByText("已记录的单元格")).closest(".observation-strip")!;
+    expect(strip.textContent).toContain("= 0 百万美元");
+    expect(strip.textContent).toContain("所选单元格为 0（这两个国家×行业之间没有中间投入流量）");
+  });
+
+  test("account definitions are focusable ⓘ buttons; the column band label is sticky", async () => {
+    spyOn(api, "dbMeta").mockResolvedValue(DB_META);
+    spyOn(api, "dbSlice").mockImplementation(async () => ({
+      year: 2020, table: "accounts", total: 1, page: 1, page_size: 25,
+      columns: ["TLS", "VA", "OUT"],
+      rows: [{ row: "CHN_D01T02", TLS: -1, VA: 12.5, OUT: 30 }],
+      row_summaries: [],
+    }) as DbSlice);
+    const view = render(<DbLab state={idleState()} releaseMeta={null as Meta | null} />);
+    fireEvent.click(await screen.findByRole("button", { name: "账户项" }));
+    const info = await screen.findByRole("button", { name: "TLS 的说明" });
+    const tipOf = () => document.getElementById(info.getAttribute("aria-describedby")!)!;
+    expect(tipOf().textContent).toContain("产品税减补贴");
+    expect(info.closest("th")?.getAttribute("title")).toBeNull();
+    // Focus shows the text as a visible box; leaving hides it again.
+    act(() => { info.focus(); });
+    expect(tipOf().className).toBe("column-info-tip");
+    act(() => { info.blur(); });
+    expect(tipOf().className).toBe("sr-only");
+    const band = view.container.querySelector("th.db-axis-cols > span") as HTMLElement;
+    expect(band.textContent).toBe("账户项（列）");
+    expect(band.style.position).toBe("sticky");
+  });
+
+  test("Z columns keep their code name and hover hint without a tab stop per column", async () => {
+    spyOn(api, "dbMeta").mockResolvedValue(DB_META);
+    spyOn(api, "dbSlice").mockResolvedValue(SLICE);
+    const view = render(<DbLab state={idleState()} releaseMeta={null as Meta | null} />);
+    await screen.findByTitle(/点击记录这个单元格$/);
+    const header = view.container.querySelector('th[scope="col"][aria-label^="USA"]')!;
+    expect(header.getAttribute("title")).toContain("USA");
+    expect(header.querySelector("button")).toBeNull();
+  });
+});

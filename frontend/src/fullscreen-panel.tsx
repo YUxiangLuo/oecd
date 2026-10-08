@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useDialogFocus } from "./a11y";
 import { FullscreenSyncProblem } from "./sync-problem";
 
@@ -80,6 +80,18 @@ function FullscreenDialogBehavior({
   return null;
 }
 
+const FullscreenTriggerContext = createContext<ReactNode>(null);
+
+/**
+ * Where a collapsed panel's entry button sits when the panel is given `triggerInContent`: render it at the end of
+ * the first control row, so Tab reaches it in the order the row reads (年份 … 全屏查看) rather than first.
+ * Renders nothing while the panel is expanded (the bar then carries 退出全屏) or when the entry is disabled.
+ */
+export function FullscreenTriggerSlot() {
+  const trigger = useContext(FullscreenTriggerContext);
+  return trigger ? <span className="fullscreen-trigger-slot" style={{ marginLeft: "auto" }}>{trigger}</span> : null;
+}
+
 /**
  * 把同一块交互内容切换到覆盖视口的模态工作区。
  *
@@ -95,6 +107,7 @@ export function FullscreenPanel({
   variant = "workbench",
   className = "",
   autoExpandSignal,
+  triggerInContent = false,
 }: {
   title: string;
   children: ReactNode;
@@ -107,6 +120,8 @@ export function FullscreenPanel({
    * 会话恢复不会自动打开，用户手动退出后也不会因同一个信号再次进入。
    */
   autoExpandSignal?: number;
+  /** The children place the collapsed entry button themselves with {@link FullscreenTriggerSlot}. */
+  triggerInContent?: boolean;
 }) {
   const titleId = useId();
   const descriptionId = useId();
@@ -131,6 +146,20 @@ export function FullscreenPanel({
     setExpanded(true);
   }, [autoExpandSignal, enabled, expanded]);
 
+  const trigger = (
+    <button
+      ref={triggerRef}
+      type="button"
+      className="fullscreen-panel-trigger secondary"
+      onClick={open}
+      aria-label={`${buttonLabel}：${title}`}
+    >
+      <span aria-hidden="true">↗</span>
+      {buttonLabel}
+    </button>
+  );
+  const slotted = triggerInContent && !expanded;
+
   const panel = (
     <section
       ref={panelRef}
@@ -142,31 +171,31 @@ export function FullscreenPanel({
       tabIndex={expanded || !enabled ? -1 : undefined}
     >
       <div className="fullscreen-panel-surface">
-        {(expanded || enabled) && (
+        {expanded ? (
           <div className="fullscreen-panel-bar">
-            {expanded && <strong id={titleId}>{title}</strong>}
-            {expanded && (
-              <span id={descriptionId} className="sr-only">
-                已进入全屏工作区。可继续操作当前内容，或使用“退出全屏”返回步骤页面。
-              </span>
-            )}
+            <strong id={titleId}>{title}</strong>
+            <span id={descriptionId} className="sr-only">
+              已进入全屏工作区。可继续操作当前内容，或使用“退出全屏”返回步骤页面。
+            </span>
             <button
-              ref={expanded ? exitRef : triggerRef}
+              ref={exitRef}
               type="button"
-              className={expanded ? "fullscreen-panel-exit" : "fullscreen-panel-trigger secondary"}
-              onClick={expanded ? close : open}
-              aria-label={expanded ? `退出${title}全屏工作区` : `${buttonLabel}：${title}`}
+              className="fullscreen-panel-exit"
+              onClick={close}
+              aria-label={`退出${title}全屏工作区`}
             >
-              <span aria-hidden="true">{expanded ? "↙" : "↗"}</span>
-              {expanded ? "退出全屏" : buttonLabel}
+              <span aria-hidden="true">↙</span>
+              退出全屏
             </button>
           </div>
-        )}
+        ) : enabled && !slotted && <div className="fullscreen-panel-bar">{trigger}</div>}
         {/* Focus stays where it was when the panel expands in place, so the dialog itself is not announced;
             a status line says the view changed. */}
         <span className="sr-only" role="status">{expanded ? `已进入${title}全屏工作区，按 Esc 退出。` : ""}</span>
         {expanded && <FullscreenSyncProblem />}
-        <div className="fullscreen-panel-content">{children}</div>
+        <div className="fullscreen-panel-content">
+          <FullscreenTriggerContext.Provider value={slotted && enabled ? trigger : null}>{children}</FullscreenTriggerContext.Provider>
+        </div>
       </div>
     </section>
   );

@@ -169,7 +169,13 @@ export function useDialogFocus({
         const target = explicitTarget?.isConnected ? explicitTarget : fallbackTarget;
         // React Strict Mode immediately runs setup again after its development-only
         // cleanup. Do not let that stale cleanup pull focus back behind the dialog.
-        if (focusCycleRef.current === focusCycle && target?.isConnected) target.focus();
+        if (focusCycleRef.current === focusCycle && target?.isConnected) {
+          target.focus();
+          // An in-place dialog can close with focus already on the target (e.g. the 年份 select of a panel that
+          // was fullscreen): focus() is then a no-op and does not scroll, and the page scroller keeps its old
+          // position, so the focused control can sit off-screen. Bring it into view explicitly.
+          target.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+        }
       });
     };
   }, [containerRef, initialFocusRef, keepFocusInside, returnFocusRef]);

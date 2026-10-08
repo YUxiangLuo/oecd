@@ -4,7 +4,8 @@ import { MATERIAL_LOCKED_NOTE } from "../../step-task-card";
 import { LabeledControl, ScrollableRegion } from "../../a11y";
 import { api } from "../../api";
 import { icioDatasetName } from "../../dataset-label";
-import { FullscreenPanel } from "../../fullscreen-panel";
+import { FullscreenPanel, FullscreenTriggerSlot } from "../../fullscreen-panel";
+import { ColumnInfo, useMeasuredWidth } from "../../table-aids";
 import type { DbMeta, DbSlice, DbTableKind, Meta, QuizCompletionState, StepStateApi } from "../../types";
 import { userFacingRequestError } from "../../user-facing-error";
 import { countryLabel, sectorLabel } from "../../viz";
@@ -342,6 +343,13 @@ export function moveDbCell(
   return (up ? candidates.at(-1) : candidates[0]) || current;
 }
 
+/** A recorded 0 is allowed as report material, but the student should know it records "no flow". */
+export function zeroCellNote(table: DbTableKind): string {
+  if (table === "accounts") return "所选单元格为 0（这个国家×行业的该账户项为 0）";
+  if (table === "y") return "所选单元格为 0（这个国家×行业的产品没有被该需求类别最终使用）";
+  return "所选单元格为 0（这两个国家×行业之间没有中间投入流量）";
+}
+
 export function dbCellAccessibleName(
   table: DbTableKind,
   cell: Pick<DbCellCoordinate, "row" | "column" | "value">,
@@ -475,6 +483,7 @@ export function DbSliceTable({
   ]));
   const showSummaries = table !== "accounts" && Boolean(slice?.row_summaries?.length);
   const activeTable = DB_TABLES.find((item) => item.key === table)!;
+  const [measureCorner, cornerWidth] = useMeasuredWidth<HTMLTableCellElement>();
 
   const focusCell = (cell: DbCellCoordinate) => {
     setRoving({ scope: focusScopeKey, key: cell.key });
@@ -500,6 +509,7 @@ export function DbSliceTable({
         <thead>
           <tr className="db-axis-row">
             <th
+              ref={measureCorner}
               rowSpan={2}
               className="db-axis-corner"
               title={ROW_HEADER[table].title}
@@ -510,7 +520,11 @@ export function DbSliceTable({
               <span className="db-axis-corner-row">{AXIS_CORNER[table].row}</span>
             </th>
             <th scope="colgroup" colSpan={Math.max(dataColumns.length, 1)} className="db-axis-cols">
-              {columnAxisBand(table, selection.colCountry)}
+              {/* The label slides along with horizontal scrolling, just right of the sticky corner, so the
+                  column axis stays named however far the table is scrolled. */}
+              <span style={{ position: "sticky", left: cornerWidth + 10, display: "inline-block" }}>
+                {columnAxisBand(table, selection.colCountry)}
+              </span>
             </th>
             {showSummaries && (
               <th colSpan={2} className="db-axis-cols" scope="colgroup" title="本行在当前所选列上的合计，以及该行业的总产出（OUT）">
@@ -519,19 +533,26 @@ export function DbSliceTable({
             )}
           </tr>
           <tr>
-            {dataColumns.map((column) => (
-              <th
-                key={column}
-                scope="col"
-                title={columnHeaderHelp(column)}
-                aria-label={table === "y" ? formatYColumnHeader(column) : (rowColumnCodeHelp(column) ?? (codePlainName(column) ? `${column} ${codePlainName(column)}` : column))}
-              >
-                {`${table === "y" ? formatYColumnHeader(column) : column}${columnHeaderHelp(column) ? " ⓘ" : ""}`}
-                {table !== "y" && codePlainName(column) && <small className="db-code-name">{codePlainName(column)}</small>}
-              </th>
-            ))}
+            {dataColumns.map((column) => {
+              const name = table === "y" ? formatYColumnHeader(column) : column;
+              // A definition the header does not already show (final demand categories, account items) gets a
+              // focusable ⓘ; a Z column's country and industry are already in the band and the code name.
+              const info = columnHelp(column);
+              return (
+                <th
+                  key={column}
+                  scope="col"
+                  title={info ? undefined : columnHeaderHelp(column)}
+                  aria-label={table === "y" ? formatYColumnHeader(column) : (rowColumnCodeHelp(column) ?? (codePlainName(column) ? `${column} ${codePlainName(column)}` : column))}
+                >
+                  {name}
+                  {info && <ColumnInfo label={name} text={info} />}
+                  {table !== "y" && codePlainName(column) && <small className="db-code-name">{codePlainName(column)}</small>}
+                </th>
+              );
+            })}
             {showSummaries && <th scope="col" title="本行在当前所选列上的合计">所选列之和</th>}
-            {showSummaries && <th scope="col" title={ACCOUNT_HELP.OUT}>该行总产出 OUT ⓘ</th>}
+            {showSummaries && <th scope="col">该行总产出 OUT<ColumnInfo label="该行总产出 OUT" text={ACCOUNT_HELP.OUT} /></th>}
           </tr>
         </thead>
         <tbody>
@@ -795,6 +816,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
         buttonLabel="全屏查看"
         enabled={table !== "accounts"}
         autoExpandSignal={cellExpandSignal}
+        triggerInContent
       >
       <div className="controls">
         <LabeledControl label="年份">
@@ -825,6 +847,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
             </button>
           ))}
         </div>
+        <FullscreenTriggerSlot />
       </div>
 
       <div className="controls">
@@ -882,6 +905,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
             {/* 观察值跨表页签保留；读法必须用记录时的表类型,不能用当前页签的。 */}
             {dbObservationSentence((selectedObservation.table as DbTableKind | undefined) ?? table, selectedObservation.row, selectedObservation.column)} = {fmtDb(selectedObservation.value)} 百万美元
             {observationSource ? `（${observationSource}）` : ""}
+            {selectedObservation.value === 0 ? `。${zeroCellNote((selectedObservation.table as DbTableKind | undefined) ?? table)}` : ""}
             {selectedObservation.auto && !state.materialLocked ? "。系统已先记录这个单元格，点击其他数值即可替换。" : ""}
           </span>
         ) : <span className="empty">尚未记录</span>}
