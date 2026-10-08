@@ -454,7 +454,7 @@ export function IndicatorExplorer({
       aria-label={`步骤 ${step.n} 图表比较区`}
     >
       <h3>{topic.question}</h3>
-      <div className="controls" role="group" aria-label="比较对象">
+      <div className="controls" role="group" aria-label="所选国家">
         <LabeledControl label="国家 A">
           {(id) => (
             <select
@@ -696,10 +696,10 @@ export function IndicatorExplorer({
       <ScopeCard
         ref={scopeRef}
         items={[
-          { label: "比较对象", value: joinCountries(selected), onJump: jump(entityRef) },
+          { label: "所选国家", value: joinCountries(selected), onJump: jump(entityRef) },
           {
             label: "范围",
-            value: view === "industry" ? "行业排名" : view === "structure" ? "所选国家全部行业" : industry ? sectorLabel(industry) : "国家整体",
+            value: view === "industry" ? "所选国家各行业" : view === "structure" ? "所选国家全部行业" : industry ? sectorLabel(industry) : "国家整体",
             onJump: view === "industry" || view === "structure" ? undefined : jump(rangeRef),
           },
           { label: "年份", value: timeView && start !== end ? `${start}–${end}` : String(timeView ? start : year), onJump: jump(yearRef) },
@@ -951,7 +951,7 @@ export function IndicatorExplorer({
               <p>
                 行业按国家 A 的{label(metric)}从高到低排列，对比国家的同一行业放在同一行。点击行业名，可看它的历年变化。
               </p>
-              <ScrollableRegion className="bounded-data-table" label="行业排名">
+              <ScrollableRegion className="bounded-data-table industry-ranking-box" label="行业排名">
                 {topic.key === "trade" && unit(metric) !== "百万美元" ? (
                   <IndustryDotPlot
                     countries={selected}

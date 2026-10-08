@@ -1005,13 +1005,13 @@ export function IndicatorPairBars({
               key={countries[i]}
               style={{
                 display: "grid",
-                gridTemplateColumns: "50px minmax(80px, 1fr) 130px",
+                gridTemplateColumns: "84px minmax(80px, 1fr) 130px",
                 gap: 10,
                 alignItems: "center",
                 paddingTop: 7,
               }}
             >
-              <span>{countries[i]}</span>
+              <span>{countryLabel(countries[i])}</span>
               <div
                 style={{
                   position: "relative",

@@ -529,8 +529,9 @@ export function ReportLab({
       {report && <section className="submit-card" id="report-status-card" ref={statusCardRef} tabIndex={-1} aria-label="报告状态"><ReportStatus report={report} /></section>}
       <section className="report-submit-panel" aria-label="提交报告">
         <h3>{report && report.state !== "draft" ? (reportOutdated ? "报告需更新后重新提交" : "报告已交给老师") : "核对完毕后，完成提交"}</h3>
-        <p>提交前会先保存文字并检查材料；导出 PDF 仅供个人留存，不能代替提交。
-          {report?.state === "graded" && "重新生成并提交会替换已评阅报告并清除原评分。"}</p>
+        <p>提交前会先保存文字并检查材料；导出 PDF 仅供个人留存，不能代替提交。</p>
+        {/* Same amber callout as the re-run warning on steps 11–14: this action clears the teacher's grade. */}
+        {report?.state === "graded" && <p className="reg-rerun-warning" role="note"><b>注意</b>重新生成并提交会替换已评阅报告，并清除原评分和评语。</p>}
         {/* One action group per state: the primary action first, never two buttons doing the same thing. */}
         <div className="report-actions">
           {(!report || reportOutdated) && <button type="button" className="primary" disabled={busy} aria-disabled={gated || undefined} aria-describedby={gated ? "report-gated-reason" : undefined} onClick={() => generateOrShowGate(true)}>

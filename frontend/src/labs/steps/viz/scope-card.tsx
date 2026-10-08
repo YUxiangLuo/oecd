@@ -1,7 +1,7 @@
 import { forwardRef, type ReactNode } from "react";
 
 export interface ScopeItem {
-  /** Small caption above the value, e.g. 比较对象 / 范围 / 年份 / 指标. */
+  /** Small caption above the value, e.g. 所选国家 / 范围 / 年份 / 指标. */
   label: string;
   value: ReactNode;
   /** Focus the control that changes this part of the scope (chips without it are plain text). */

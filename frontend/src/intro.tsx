@@ -22,7 +22,7 @@ const STAGE_OUTPUTS: Record<number, string> = {
   2: "了解指标怎样由投入产出表算出，并拆解两国读数。",
   3: "看指标的历年变化和在全部经济体中的位置，再与对比国家比较，形成图表证据。",
   4: "认识关税暴露 X，用全部样本对四个结果指标 Y 运行回归。",
-  5: "整合材料，完成原创分析与报告。",
+  5: "整合材料，写出你的分析并提交报告。",
 };
 
 /** 数据卡左上角的小图标(内联 SVG,替代 emoji) */
@@ -332,7 +332,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       </div>
       <h2 className="intro-h2">实验台已就绪</h2>
       <p className="intro-lede">
-        当前身份：<b>{roleName}</b>。按实验台中的任务提示操作并回答理解题，报告材料由系统自动记录，最后由你完成原创分析。
+        当前身份：<b>{roleName}</b>。按实验台中的任务提示操作并回答理解题，报告材料由系统自动记录，最后由你写出自己的分析。
       </p>
       {/* 进入前讲清完成规则，避免把浏览位置误认为学习进度。 */}
       <div className="intro-ready-rules">

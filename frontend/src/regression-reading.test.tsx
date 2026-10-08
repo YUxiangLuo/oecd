@@ -23,7 +23,7 @@ describe("fixed teaching regression reading", () => {
     const dom = new DOMParser().parseFromString(html, "text/html");
     expect(html).toContain("回归结果");
     // The headline answers the question with the number; the direction reading is the sub-line.
-    expect(dom.querySelector(".reg-plain-verdict")?.textContent).toBe("关税暴露 X 每增加 1 个百分点 → 外国增加值项占比平均上升 2.00 个百分点95% 区间：[+1.00, +3.00] 个百分点");
+    expect(dom.querySelector(".reg-plain-verdict")?.textContent).toBe("关税暴露 X 每增加 1 个百分点 → 外国增加值项占比平均上升 2.00 个百分点95% 区间（估计值可能落在的范围）：[+1.00, +3.00] 个百分点");
     expect(dom.querySelector(".reg-verdict-direction")?.textContent).toBe("方向明确：X 越高，Y 越高");
     expect(html).not.toContain("模拟");
     // One coefficient plot: zero line plus one dot (one colour, no bar) with its interval.

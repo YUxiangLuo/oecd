@@ -1297,7 +1297,7 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert "## 技术附录：保存的回归结果" in report.markdown
     # The raw coefficient states its scale, next to the per-percentage-point reading used in the body.
     assert (
-        "| 变量 | 系数（X 按份额计） | X 每增加 1 个百分点 | 标准误 | 95% 区间（系数口径） | p 值 |" in report.markdown
+        "| 变量 | 系数（X 按份额计） | X 每增加 1 个百分点 | 标准误 | 95% 区间（按系数计） | p 值 |" in report.markdown
     )
     assert "| 关税暴露 X | 1.2 | +1.20 个百分点 | 0.3 | [0.5721, 1.828] | 0.0007662 |" in report.markdown
     # Versions, the session digest and the unused macro controls are listed only under "报告溯源", at the end.

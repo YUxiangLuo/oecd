@@ -511,9 +511,9 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
     if (source == "explicit-network-ranking" or by_industry) and single_metric and countries:
         name = f"{scope}{metric_label}行业排名（按 {country_label(countries[0])} 降序）"
     elif single_metric:
-        name = f"{scope}{metric_label}同口径国家比较"
+        name = f"{scope}{metric_label}国家比较"
     else:
-        name = f"{scope}同口径国家比较"
+        name = f"{scope}国家比较"
     return {"version": 1, "type": "bar", "title": f"{title}：{name}", "y_label": y_label, "items": items}
 
 
@@ -548,7 +548,7 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
     lines = [
         "## 真实指标比较",
         "",
-        "> 图表使用步骤 6–9 保存的同口径读数；国家整体的图表另画出全部经济体的中位数，步骤 9 的行业图表另画出全部经济体同一行业的中位数，用于定位。完整数值见“保存的实验快照”。",
+        "> 图表使用步骤 6–9 保存的读数（各国按同一方法计算）；国家整体的图表另画出全部经济体的中位数，步骤 9 的行业图表另画出全部经济体同一行业的中位数，用于定位。完整数值见“保存的实验快照”。",
         "",
     ]
     for step in range(6, 10):
@@ -572,7 +572,7 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
                 )
             else:
                 scope = "前后向指标" if view == "directions" else "已保存指标"
-                lines.extend((f"> {scope}按指标拆成多张同口径趋势图，保留每项读数与变化。", ""))
+                lines.extend((f"> {scope}按指标拆成多张趋势图，保留每项读数与变化。", ""))
         countries_saved = [str(item) for item in _list_values(data.get("compared"))]
         for chart in charts:
             unit = _chart_unit(chart)
@@ -624,7 +624,7 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
                 ranks = _rank_reading(context, countries_saved)
                 lines.append(
                     f"- 自动读图：{year} 年 {readings}；全球中位数 {_reading(median, unit)}。"
-                    f"{ranks + '。' if ranks else ''}排名只表示相对高低，这是同口径描述性比较。"
+                    f"{ranks + '。' if ranks else ''}排名只表示相对高低，这是描述性比较。"
                 )
             else:
                 # Extremes are read among the saved countries; global-median bars are reference only.
@@ -642,7 +642,7 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
                 )
                 lines.append(
                     f"- 自动读图：{scope}最高为 {largest_labels}（{_reading(largest['value'], unit)}），"
-                    f"最低为 {smallest_labels}（{_reading(smallest['value'], unit)}）。这是同口径描述性比较。"
+                    f"最低为 {smallest_labels}（{_reading(smallest['value'], unit)}）。这是描述性比较。"
                 )
             lines.append("")
     return lines

@@ -85,10 +85,15 @@ describe("indicator table semantics", () => {
         year={2020}
         country="CHN"
         page={2}
+        totalPages={3}
       />,
     );
 
     expect(html).toContain('<caption class="sr-only">贸易分解指标数据 · 2020 年 · CHN 中国 · 第 2 页</caption>');
+    // A single-page table does not name a page the pager no longer shows.
+    expect(renderToStaticMarkup(
+      <IndicatorDataTable groupLabel="贸易分解" schema={schema} columns={["country"]} rows={[]} year={2020} country="CHN" page={1} />,
+    )).toContain('<caption class="sr-only">贸易分解指标数据 · 2020 年 · CHN 中国</caption>');
     expect(html).toContain("<thead>");
     expect(html.match(/scope="col"/g)).toHaveLength(4);
     expect(html.match(/scope="row"/g)).toHaveLength(1);

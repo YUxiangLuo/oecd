@@ -315,6 +315,7 @@ export function IndicatorDataTable({
   year,
   country,
   page,
+  totalPages = 1,
 }: {
   groupLabel: string;
   schema: IndicatorSchema | null | undefined;
@@ -323,12 +324,14 @@ export function IndicatorDataTable({
   year: number;
   country: string;
   page: number;
+  /** Only a multi-page table names its page. */
+  totalPages?: number;
 }) {
   // A group label may already end in “指标” (e.g. “生产网络指标”); do not say it twice.
   const captionLabel = groupLabel.endsWith("指标") ? `${groupLabel}数据` : `${groupLabel}指标数据`;
   return (
     <table className="data-table">
-      <caption className="sr-only">{captionLabel} · {year} 年 · {country ? countryLabel(country) : "全部国家"} · 第 {page} 页</caption>
+      <caption className="sr-only">{captionLabel} · {year} 年 · {country ? countryLabel(country) : "全部国家"}{totalPages > 1 ? ` · 第 ${page} 页` : ""}</caption>
       <thead>
         <tr>
           {columns.map((column, index) => (
@@ -502,6 +505,7 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
               year={year}
               country={country}
               page={page}
+              totalPages={pages}
             />
           </ScrollableRegion>
       </IndicatorRequestBoundary>

@@ -169,7 +169,7 @@ export function RegressionResultCard({ outcome, response, examples = [], example
         {verdict.coefficient
           ? <>
             <span className="reg-headline-main">关税暴露 X 每增加 1 个百分点 → {lesson.shortMetric}{metricGap}<b>{plainResult}</b></span>
-            <span className="reg-headline-interval">{suppressed ? "这次不显示 95% 区间" : `95% 区间：${verdict.intervalShort}`}</span>
+            <span className="reg-headline-interval">{suppressed ? "这次不显示 95% 区间" : `95% 区间（估计值可能落在的范围）：${verdict.intervalShort}`}</span>
           </>
           : "没算出 X 的估计值"}
       </h3>
@@ -244,7 +244,7 @@ export function RegressionCoefficientTable({ response }: { response: RegressionR
           <th>变量</th>
           <th>X 每增加 1 个百分点（{display.unit}）</th>
           <th>系数（X 按份额计）</th>
-          <th>95% 区间（系数口径）</th>
+          <th>95% 区间（按系数计）</th>
           <th>标准误（按国家计算）</th>
           <th>t 值</th>
           <th>p 值</th>

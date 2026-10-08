@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { cjkJoin } from "../../../format";
 import { countryLabel, sectorLabel } from "../../../viz";
 import { finiteValue, NO_RANK, NO_RANK_NOTE, rankText, type CompositionSpec, type YearDistribution } from "./indicator-model";
 import { fixedIndicatorNumber, indicatorNumber } from "./indicator-charts";
@@ -118,7 +119,7 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
     {
       eyebrow: `${countryLabel(first)} · ${focusName}`,
       big: indicatorNumber(ownFocus, "%"),
-      small: `${focusName}占${totalLabel}的比重`,
+      small: `${cjkJoin(focusName, "占")}${totalLabel}的比重`,
     },
   ];
   for (const other of others) {

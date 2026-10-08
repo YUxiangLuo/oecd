@@ -570,7 +570,7 @@ def _technical_estimate_tables(
     # 1 percentage point of X in Y's unit, so the two can be matched (they differ 100x for lengths and centrality).
     lines = [
         "",
-        "| 变量 | 系数（X 按份额计） | X 每增加 1 个百分点 | 标准误 | 95% 区间（系数口径） | p 值 |",
+        "| 变量 | 系数（X 按份额计） | X 每增加 1 个百分点 | 标准误 | 95% 区间（按系数计） | p 值 |",
         "|---|---:|---:|---:|---:|---:|",
     ]
     primary = _primary_coefficient(design, result)

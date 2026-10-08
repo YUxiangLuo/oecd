@@ -461,3 +461,5 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 /* Add-a-comparison-country control: the select stages a choice, the button commits it. */
 .add-country { display: inline-flex; align-items: center; gap: 6px; }
 .add-country button[aria-disabled="true"] { opacity: .5; cursor: default; }
+/* Ranked industry rows bleed 8px into their row padding; keep them inside the bordered box. */
+.industry-ranking-box { padding: 4px 12px; }
