@@ -79,6 +79,17 @@ test("the sidebar and the task card share one status vocabulary", () => {
   expect(container.querySelector(".sidebar-sub")!.textContent).toBe("完成进度 1/15");
 });
 
+test("the sidebar names step 15's status after the analysis answers it counts", () => {
+  const withReport = { ...stepsData, steps: stepsData.steps.map((step) => step.n === 15 ? { ...step, lab: "rep" as const } : step) };
+  const { container } = render(<CourseSidebar stepsData={withReport} current={2}
+    completion={{ steps: [], completed: [1], completed_count: 1, total: 15 }}
+    materialGate={[{ step: 15 }] as never} onNavigate={() => {}} />);
+  const status = (n: number) => container.querySelector(`[aria-label^="步骤 ${n}："] .step-row-status`)!.textContent;
+  expect(status(15)).toContain("你的分析未完成");
+  expect(status(15)).not.toContain("报告材料");
+  expect(status(3)).toBe("理解题未完成 · 报告材料已齐全");
+});
+
 test("header and footer name steps as 步骤 n, and every footer dot has a visible label", () => {
   const steps = stepsData.steps;
   const { container } = render(<>

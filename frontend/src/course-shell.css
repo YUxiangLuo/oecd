@@ -68,6 +68,11 @@
 .step-task-list li + li::before { margin-left: 0; }
 /* No arrows between items: the numbers give the order, and an arrow left at a line end pointed at nothing. */
 .step-task-list { column-gap: 18px; }
+/* After submission the task lines still describe automatic recording: this note sits above them. */
+.step-task-locked {
+  max-width: 900px; margin: 10px 0 0; padding: 6px 10px; border-radius: 8px;
+  background: #fff4d8; color: #765000; font-size: 12px; font-weight: 600; line-height: 1.6;
+}
 .step-task-tip { max-width: 900px; margin: 8px 0 0; color: #765000; font-size: 11.5px; line-height: 1.7; }
 
 /* ---------- 底部页脚(流程位置 + 圆点分页) ---------- */

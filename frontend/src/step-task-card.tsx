@@ -17,6 +17,18 @@ export const MATERIAL_STATUS_LABELS: Record<StepMaterialStatus, string> = {
   checking: "检查中", saving: "保存中", unsynced: "未保存", ready: "已齐全", missing: "未齐全",
 };
 
+/** Step 15 has no report material of its own: its status counts the student's three analysis answers. */
+export const ANALYSIS_STATUS_LABELS: Record<StepMaterialStatus, string> = {
+  ...MATERIAL_STATUS_LABELS, ready: "已完成", missing: "未完成",
+};
+
+/** The second status of a step, named after what it counts: 报告材料 (steps 1–14) or 你的分析 (step 15). */
+export function stepMaterialStatusText(step: Pick<Step, "lab">, status: StepMaterialStatus): { name: string; value: string } {
+  return step.lab === "rep"
+    ? { name: "你的分析", value: ANALYSIS_STATUS_LABELS[status] }
+    : { name: "报告材料", value: MATERIAL_STATUS_LABELS[status] };
+}
+
 export function materialStatusForStep(
   step: number,
   materialGate: Array<{ step: number }> | null,
@@ -29,8 +41,9 @@ export function materialStatusForStep(
   return materialGate.some((item) => item.step === step) ? "missing" : "ready";
 }
 
-/** Step 15's chip covers everything the report needs (steps 1–14 material and quizzes plus the analysis),
- * the same list as the gate card below it, so the two never disagree. */
+/** Step 15's chip ("你的分析") counts only step 15's own items, the three analysis answers: steps 1–14 have
+ * their own chips and the gate card lists them. Counting them here made the chip read 未齐全 next to a card
+ * saying the material was complete. The sidebar counts the same step-15 items. */
 export function reportMaterialStatus(
   reportGate: Array<{ step: number }> | null,
   saving = false,
@@ -39,7 +52,7 @@ export function reportMaterialStatus(
   if (saveFailed) return "unsynced";
   if (reportGate === null) return "checking";
   if (saving) return "saving";
-  return reportGate.length ? "missing" : "ready";
+  return reportGate.some((item) => item.step >= 15) ? "missing" : "ready";
 }
 
 export function focusStepPrimaryAction(content: HTMLElement | null, targetId = STEP_PRIMARY_ACTION_ID): boolean {
@@ -58,6 +71,13 @@ export function focusStepPrimaryAction(content: HTMLElement | null, targetId = S
 
 /** Shown on material cards once the report is submitted (steps that record automatically). */
 export const MATERIAL_LOCKED_NOTE = "报告已提交：浏览不再自动改动报告材料。";
+/** The same fact at the top of the task card, whose task lines still describe automatic recording. */
+export const TASK_LOCKED_NOTE = "报告已提交，自动记录已暂停：报告材料保持提交时的内容。要更换，请在本页报告材料处确认。";
+/** Steps whose report material is recorded automatically while browsing (step 1 a cell, 2–5 the selected
+ * countries, 6–9 the last chart, 10 the example). Steps 11–14 record a run and say so themselves. */
+export function stepRecordsAutomatically(step: number): boolean {
+  return step >= 1 && step <= 10;
+}
 export const MATERIAL_LOCKED_ACTION = "改用当前图表作为报告材料（之后需在步骤 15 更新报告）";
 
 type ReportState = "draft" | "pending" | "graded";
@@ -90,7 +110,8 @@ export function StepTaskCard({
   reportState?: ReportState | null;
 }) {
   const done = stepShowsDone(step, complete, reportState);
-  const materialLabel = MATERIAL_STATUS_LABELS[materialStatus];
+  const material = stepMaterialStatusText(step, materialStatus);
+  const materialLocked = (reportState === "pending" || reportState === "graded") && stepRecordsAutomatically(step.n);
   const completionLabel = step.lab === "rep" ? "报告" : "理解题";
   const compact = step.n >= 11 && step.n <= 14 && Boolean(step.regression_outcome);
   return (
@@ -103,10 +124,11 @@ export function StepTaskCard({
         <div className="step-task-statuses" role="group" aria-label="本步状态">
           <span className={done ? "done" : "todo"}>{completionLabel}：{step.lab === "rep" ? reportStatusLabel(complete, reportExists, reportState) : (complete ? "已完成" : "未完成")}</span>
           <span className={materialStatus === "ready" ? "done" : materialStatus === "missing" || materialStatus === "unsynced" ? "todo" : materialStatus}>
-            报告材料：{materialLabel}
+            {material.name}：{material.value}
           </span>
         </div>
       </div>
+      {materialLocked && <p className="step-task-locked" role="note">{TASK_LOCKED_NOTE}</p>}
       {!compact && <>
       {/* Tasks read as one light flow line. The step's reading caveat (step.tip) is deliberately not
           shown: it distracted students. The concept is taught on the page itself. */}
