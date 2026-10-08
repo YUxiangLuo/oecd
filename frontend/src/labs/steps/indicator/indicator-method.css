@@ -38,7 +38,7 @@
 .indicator-real-heading summary { cursor: pointer; font-weight: 600; padding: 12px 0; font-size: 14px; }
 .indicator-real-controls { display: flex; flex-wrap: wrap; gap: 14px; margin: 16px 0; }
 .indicator-real-controls label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-/* 步骤 2–4 的报告材料按动手拆解所选国家自动记录，只留一行状态。 */
+/* 步骤 2–5 的报告材料按所选国家自动记录，只留一行状态。 */
 .auto-material {
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 14px 0 0; padding: 10px 14px;
   border: 1px solid #cfe9dc; border-radius: 9px; background: #f2fbf6; color: #2f5b48; font-size: 12.5px;
@@ -48,11 +48,6 @@
 .auto-material.auto-material--failed { background: #fff7e6; border-color: #f0c98a; }
 .auto-material.auto-material--failed b { color: #8a5a00; }
 .auto-material small { flex-basis: 100%; color: #5b7468; font-size: 11.5px; }
-.auto-material-partner { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: #2f5b48; }
-.auto-material-partner select {
-  padding: 6px 10px; border-radius: 8px; border: 1px solid #cfdcd5;
-  background: #fff; font-size: 12.5px; font-family: inherit;
-}
 /* 步骤 5：小网络演示是可选折叠，放在计算方法与文档之间。 */
 .method-demo { margin: 0 0 14px; padding: 2px 14px; border: 1px solid #e2e5ef; border-radius: 10px; background: #fafbfd; }
 .method-demo > summary { cursor: pointer; padding: 10px 0; color: #4b47e0; font-size: 13px; font-weight: 600; }

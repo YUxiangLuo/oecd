@@ -4,7 +4,7 @@ import {
   INDICATOR_TABLE_DISPLAY,
   countryObservation,
   countryRowsForYear,
-  indicatorComparisonPatch,
+  indicatorMaterialPatch,
   indicatorMetricColumns,
   indicatorRequestKey,
   indicatorTableColumns,
@@ -83,13 +83,13 @@ describe("indicator selection restoration", () => {
     ]);
   });
 
-  test("records exactly two countries from one shared year with complete provenance", () => {
-    expect(indicatorComparisonPatch(
+  test("records the selected country alone for one year with complete provenance", () => {
+    expect(indicatorMaterialPatch(
       [
         { country: "CHN", FVA_share: 0.22 },
         { country: "USA", FVA_share: 0.14 },
       ],
-      ["CHN", "USA"],
+      "CHN",
       2020,
       "FVA_share",
       "比例",
@@ -98,31 +98,23 @@ describe("indicator selection restoration", () => {
       year: 2020,
       country: "CHN",
       metric: "FVA_share",
-      compared: ["CHN", "USA"],
+      compared: ["CHN"],
       observations: [
         {
           entity: "CHN", country: "CHN", industry: "", year: 2020, value: 0.22,
           metric: "FVA_share", unit: "比例", release: "release-1", scope: "country",
-          source: "explicit-indicator-table-comparison",
-        },
-        {
-          entity: "USA", country: "USA", industry: "", year: 2020, value: 0.14,
-          metric: "FVA_share", unit: "比例", release: "release-1", scope: "country",
-          source: "explicit-indicator-table-comparison",
+          source: "auto-indicator-comparison",
         },
       ],
     });
   });
 
-  test("refuses a partial pair instead of silently saving one country", () => {
-    expect(indicatorComparisonPatch(
-      [{ country: "CHN", FVA_share: 0.22 }],
-      ["CHN", "USA"],
-      2019,
-      "FVA_share",
-      "比例",
-      "release-1",
-    )).toBeNull();
+  test("records nothing without a country, a release or a finite reading", () => {
+    const rows = [{ country: "CHN", FVA_share: 0.22 }, { country: "USA", FVA_share: null }];
+    expect(indicatorMaterialPatch(rows, "USA", 2019, "FVA_share", "比例", "release-1")).toBeNull();
+    expect(indicatorMaterialPatch(rows, "JPN", 2019, "FVA_share", "比例", "release-1")).toBeNull();
+    expect(indicatorMaterialPatch(rows, "", 2019, "FVA_share", "比例", "release-1")).toBeNull();
+    expect(indicatorMaterialPatch(rows, "CHN", 2019, "FVA_share", "比例", "")).toBeNull();
   });
 });
 

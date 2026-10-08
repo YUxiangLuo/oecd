@@ -100,6 +100,19 @@ def _unit_reading_note(observations: list[dict[str, Any]]) -> str:
     return ("；".join(notes) or "数值按所列单位解释") + "。"
 
 
+def _country_reading(item: dict[str, Any]) -> str:
+    """A steps 2–5 reading as one phrase, e.g. “2020 年 CHN 中国 外国增加值项占比 11.730%”."""
+    metric = _STUDENT_METRIC_LABELS.get(str(item.get("metric")), _safe(item.get("metric", "—")))
+    value = item.get("value")
+    unit = str(item.get("unit") or "")
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+        number = reading_number(float(value) * (100 if unit == "%" else 1), unit)
+        shown = f"{number}%" if unit == "%" else f"{number} {_safe(unit)}" if unit == "百万美元" else number
+    else:
+        shown = _safe(value if value not in (None, "") else "—")
+    return f"{_safe(item.get('year', '—'))} 年 {_safe(country_label(str(item.get('country', ''))))} {metric} {shown}"
+
+
 def _experiment_sections(session: dict[str, Any]) -> list[str]:
     """Render only snapshots produced by explicit student interactions."""
     lines = [
@@ -181,23 +194,19 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
         lines.extend((f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}", ""))
         # Set when the student recorded this material explicitly after submitting the report.
         chosen = data.get("material_chosen") is True
+        # Steps 2–5 record one country's reading automatically; a record saved before that change may hold two
+        # countries and is listed as recorded.
+        automatic = bool(observations) and all(
+            item.get("source") == "auto-indicator-comparison" for item in observations
+        )
         if compared:
-            automatic = bool(observations) and all(
-                item.get("source") == "auto-indicator-comparison" for item in observations
-            )
             # One saved economy is read against the global reference; two or more are a comparison.
-            # Steps 2-5 record the viewed country with a comparison country defaulting to USA (CHN for USA);
-            # a partner the student changed is their choice even though the page recorded it automatically.
-            default_partner = "CHN" if compared and compared[0] == "USA" else "USA"
-            partner_changed = automatic and len(compared) == 2 and compared[1] != default_partner
-            if len(compared) == 1:
-                compared_label = "学生选定的国家" if chosen else "系统自动记录的国家" if automatic else "所看国家"
-            elif chosen:
-                compared_label = "学生选定的比较"
-            elif partner_changed:
-                compared_label = "学生选定的比较（页面自动记录）"
+            if step in (2, 3, 4, 5):
+                compared_label = "学生选定的国家" if chosen else "系统自动记录的国家" if automatic else "记录的国家"
+            elif len(compared) == 1:
+                compared_label = "学生选定的国家" if chosen else "所看国家"
             else:
-                compared_label = "系统自动记录的比较（默认对比国家）" if automatic else "比较对象"
+                compared_label = "学生选定的比较" if chosen else "比较对象"
             lines.append(f"- {compared_label}：{'、'.join(_safe(country_label(str(item))) for item in compared)}")
         if observations:
             has_amounts = any(item.get("unit") == "百万美元" for item in observations)
@@ -238,10 +247,8 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                 )
                 # The data release id is listed under "报告溯源"; the body only says how to read the numbers.
                 lines.append(f"- {_unit_reading_note(observations)}")
-            else:
-                lines.append(
-                    f"- 记录的代表指标：{_STUDENT_METRIC_LABELS.get(str(metric_label), _safe(metric_label or '—'))}"
-                )
+            elif step in (2, 3, 4, 5):
+                lines.append(f"- 记录的读数：{'；'.join(_country_reading(item) for item in observations)}")
                 if step in (2, 3, 4) and automatic:
                     lines.append("- 数值为国家级代表指标：页面可按国家×行业浏览，报告材料统一按国家级记录。")
                 if step == 5 and metric_label == "weighted degree":
@@ -249,6 +256,10 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                         "- 国家级加权总度：该国全部出口 + 进口，中间品和最终品都算在内（不含国内流量）；"
                         "行业级数值只算中间品流量，两者不能直接比较。"
                     )
+            else:
+                lines.append(
+                    f"- 记录的代表指标：{_STUDENT_METRIC_LABELS.get(str(metric_label), _safe(metric_label or '—'))}"
+                )
             entity_header = "国家×行业" if any(item.get("industry") for item in observations) else "国家"
             lines.extend(("", f"| {entity_header} | 年份 | 指标 | 单位 | 数值 |", "|---|---:|---|---|---:|"))
             for item in observations:
@@ -263,7 +274,8 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                     f"{reading_number(float(observation_value), str(item.get('unit') or '')) if isinstance(observation_value, (int, float)) and not isinstance(observation_value, bool) else _safe(observation_value)} |"
                 )
         elif compared:
-            lines.append("- 本步仅保存比较对象，未记录代表指标数值。")
+            # Only steps 2–5 reach this: steps 6–9 skip a section without complete readings.
+            lines.append("- 本步只记录了国家，没有记录代表指标数值。")
         lines.append("")
 
     shock = _step_data(session, 10)

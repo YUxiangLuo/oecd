@@ -3,7 +3,7 @@ import { DecompositionDemo } from "../../../demos";
 import { explicitDemoCountry } from "../../../decomposition-model";
 import type { Meta, Step, StepStateApi } from "../../../types";
 import { useAsync } from "../../shared";
-import { AutoMaterialStatus, useAutoComparison } from "./auto-comparison";
+import { AutoMaterialStatus, useAutoMaterial } from "./auto-comparison";
 import { IndicatorMethodIntro } from "./indicator-method-intro";
 import { type IndicatorStepState, useIndicatorControls } from "./indicator-table";
 import "./indicator-method.css";
@@ -20,10 +20,9 @@ export function CalculationStep({ topic, meta, state }: CalculationStepProps & {
   const schema = useAsync(() => api.indicatorSchema(), []);
   const cfg = content[topic];
   const year = controls.year;
-  const auto = useAutoComparison({
+  const auto = useAutoMaterial({
     topic, meta, state, year, schema,
     country: explicitDemoCountry(meta.countries, controls.country) ?? "",
-    partner: controls.partner,
   });
   return <div>
     <IndicatorMethodIntro topic={topic} />
@@ -31,9 +30,8 @@ export function CalculationStep({ topic, meta, state }: CalculationStepProps & {
       <span className="icio-kicker">02 / 动手拆解 · OECD ICIO 数据</span>
       <h2>{cfg.title}</h2><p>{cfg.hint} 时间趋势与国家比较在步骤 {topic === "trade" ? 6 : topic === "production" ? 7 : 8}。</p>
       <DecompositionDemo step={cfg.demo} meta={meta} primaryYear={year}
-        primaryCountry={auto.first} onPrimaryChange={controls.setPrimary}
-        secondaryCountry={auto.second} onSecondaryChange={controls.setPartner} />
-      <AutoMaterialStatus meta={meta} state={state} schema={schema.data} {...auto} onSecond={controls.setPartner} where="上方所选国家" />
+        primaryCountry={auto.country} onPrimaryChange={controls.setPrimary} />
+      <AutoMaterialStatus state={state} schema={schema.data} {...auto} where="上方所选国家" />
     </section>
   </div>;
 }

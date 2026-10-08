@@ -137,12 +137,21 @@ EXPLICIT_COMPARISON_SOURCE = "explicit-indicator-table-comparison"
 
 
 def _table_comparison_complete(data: dict[str, Any], *, allow_auto: bool = False) -> bool:
-    """Steps 2–5 require one finite, same-year reading for each of two countries."""
+    """Steps 2–5 require one finite, country-level reading of the selected country.
+
+    Records saved before steps 2–5 became single-country hold two countries read in the same year; they stay
+    complete so those students are not blocked.
+    """
     sources = {EXPLICIT_COMPARISON_SOURCE, AUTO_COMPARISON_SOURCE} if allow_auto else {EXPLICIT_COMPARISON_SOURCE}
     compared = [str(item) for item in _list_values(data.get("compared")) if str(item).strip()]
     observations = [item for item in _list_values(data.get("observations")) if isinstance(item, dict)]
-    # ROW is the rest-of-world accounting remainder, not an economy to compare.
-    if len(compared) != 2 or len(set(compared)) != 2 or "ROW" in compared or len(observations) != 2:
+    # ROW is the rest-of-world accounting remainder, not an economy.
+    if (
+        len(compared) not in (1, 2)
+        or len(set(compared)) != len(compared)
+        or "ROW" in compared
+        or len(observations) != len(compared)
+    ):
         return False
     required = ("entity", "country", "year", "value", "metric", "unit", "release", "scope", "source")
     if any(any(item.get(key) in (None, "") for key in required) for item in observations):
@@ -242,9 +251,9 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
                         "step": step,
                         "title": _STEP_TITLES.get(step, ""),
                         "missing": [
-                            "请打开本步“动手拆解”并等待数据加载，系统会自动记录两国同年的代表指标"
+                            "请打开本步“动手拆解”并等待数据加载，系统会自动记录所选国家的代表指标"
                             if step != 5
-                            else "请打开本步中心性表并等待数据加载，系统会自动记录两国同年的加权总度"
+                            else "请打开本步中心性表并等待数据加载，系统会自动记录所选国家的加权总度（国家整体）"
                         ],
                     }
                 )

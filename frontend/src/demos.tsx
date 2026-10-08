@@ -386,7 +386,6 @@ export function DecompositionDetailTable({
   unavailable = false,
   hover = null,
   onHover,
-  compact = false,
   negativeNote = "负值表示抵减项（例如净补贴），所以其他分项的比重之和可能超过 100%。",
   decimals,
   roundingNote = false,
@@ -399,8 +398,6 @@ export function DecompositionDetailTable({
   unavailable?: boolean;
   hover?: string | null;
   onHover?: (key: string | null) => void;
-  /** Side by side: the meaning goes under the name instead of a squeezed fourth column. */
-  compact?: boolean;
   /** What a negative part means in this decomposition; only shown beside shares it explains. */
   negativeNote?: string;
   /** One amount precision for the whole column ({@link panelAmountDecimals}); without it each row uses {@link fmt}. */
@@ -414,7 +411,7 @@ export function DecompositionDetailTable({
     && values.some((value) => value != null && value < 0);
   return (
     <>
-    <table className={`decomp-table${compact ? " decomp-table--compact" : ""}`}>
+    <table className="decomp-table">
       <caption className="sr-only">{caption}</caption>
       {/* Visible column names: a value and a share side by side are otherwise unlabelled. */}
       <thead className="decomp-table-head">
@@ -422,7 +419,7 @@ export function DecompositionDetailTable({
           <th scope="col">分项</th>
           <th scope="col">数值</th>
           <th scope="col">占总量比重</th>
-          {!compact && <th scope="col">含义</th>}
+          <th scope="col">含义</th>
         </tr>
       </thead>
       <tbody>{parts.map((part, index) => {
@@ -438,11 +435,10 @@ export function DecompositionDetailTable({
             <th scope="row" className="dt-name">
               <span className="dt-swatch" style={{ background: value != null && value < 0 ? negativeFill(part.color) : part.color }} />
               {part.label}
-              {compact && <span className="dt-desc dt-desc--below">{part.desc}</span>}
             </th>
             <td className="dt-val">{value == null ? "—" : decimals != null && unit === "amount" ? amountAt(value, decimals) : fmt(value, unit)}</td>
             <td className="dt-share">{unavailable ? "—" : share == null ? "—（无法计算）" : percentText(share)}</td>
-            {!compact && <td className="dt-desc">{part.desc}</td>}
+            <td className="dt-desc">{part.desc}</td>
           </tr>
         );
       })}</tbody>
@@ -610,8 +606,6 @@ export function DecompositionDemo({
   primaryYear,
   primaryCountry,
   onPrimaryChange,
-  secondaryCountry,
-  onSecondaryChange,
 }: {
   step: number;
   meta: Meta;
@@ -619,136 +613,76 @@ export function DecompositionDemo({
   primaryYear: number;
   primaryCountry: string | null;
   onPrimaryChange?: (year: number, country: string) => void;
-  /** Object B when comparing; pass it to keep B in step with the report-material comparison country. */
-  secondaryCountry?: string;
-  onSecondaryChange?: (country: string) => void;
 }) {
   const cfg = DECOMP[step];
-  const defaultA = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
-  const defaultB = meta.countries.includes("USA") ? "USA" : meta.countries[1] ?? defaultA;
   // Country level first: the same figures the report material records; industries are one click away.
   const [gran, setGran] = useState<"country" | "sector">("country");
   const year = meta.years.includes(primaryYear) ? primaryYear : meta.years.at(-1)!;
-  const [compare, setCompare] = useState(false);
-  const countryA = explicitDemoCountry(meta.countries, primaryCountry) ?? "";
-  const [localB, setLocalB] = useState(defaultB);
-  // At country–industry level B may be A's own country, to compare two of its industries. That choice stays
-  // in this view: the report material's comparison country (secondaryCountry) must differ from A. The chosen
-  // country is stored itself, so changing A afterwards leaves B where the student put it.
-  const [viewOnlyB, setViewOnlyB] = useState<string | null>(null);
-  const countryB = viewOnlyB && gran === "sector" ? viewOnlyB : secondaryCountry ?? localB;
-  const setCountryB = (value: string) => {
-    if (value === countryA) {
-      setViewOnlyB(value);
-      return;
-    }
-    setViewOnlyB(null);
-    (onSecondaryChange ?? setLocalB)(value);
-  };
-  const [sectorA, setSectorA] = useState("");
-  const [sectorB, setSectorB] = useState("");
+  const country = explicitDemoCountry(meta.countries, primaryCountry) ?? "";
+  const [selectedSector, setSector] = useState("");
   const [hover, setHover] = useState<string | null>(null);
 
-  const demoAvailable = countryA !== "";
-  const requestKeyA = decompositionRequestKey(year, countryA);
-  const requestKeyB = decompositionRequestKey(year, countryB);
-  const loadSide = async (requestYear: number, requestCountry: string): Promise<DecompositionSideData> => {
-    const [countryRows, pageResult] = await Promise.all([
-      api.countryIndicatorsForCountry(requestYear, requestCountry),
-      api.industryIndicatorsAll(requestYear, requestCountry),
-    ]);
-    return { countryRows, page: pageResult };
-  };
-  const sideAQuery = useAsync<DecompositionSideData>(
-    () => loadSide(year, countryA),
-    [requestKeyA],
-    { enabled: demoAvailable, requestKey: requestKeyA },
+  const demoAvailable = country !== "";
+  const requestKey = decompositionRequestKey(year, country);
+  const query = useAsync<DecompositionSideData>(
+    async () => {
+      const [countryRows, pageResult] = await Promise.all([
+        api.countryIndicatorsForCountry(year, country),
+        api.industryIndicatorsAll(year, country),
+      ]);
+      return { countryRows, page: pageResult };
+    },
+    [requestKey],
+    { enabled: demoAvailable, requestKey },
   );
-  const sideBQuery = useAsync<DecompositionSideData>(
-    () => loadSide(year, countryB),
-    [requestKeyB],
-    { enabled: demoAvailable && compare, requestKey: requestKeyB },
-  );
-  const countryRowsA = sideAQuery.status === "success" ? sideAQuery.data?.countryRows ?? null : null;
-  const countryRowsB = sideBQuery.status === "success" ? sideBQuery.data?.countryRows ?? null : null;
-  const pageA = sideAQuery.status === "success" ? sideAQuery.data?.page ?? null : null;
-  const pageB = sideBQuery.status === "success" ? sideBQuery.data?.page ?? null : null;
+  const countryRows = query.status === "success" ? query.data?.countryRows ?? null : null;
+  const page = query.status === "success" ? query.data?.page ?? null : null;
 
-  const sectorsA = (pageA?.rows ?? []).map((row) => String(row.industry));
-  const effSectorA = sectorsA.includes(sectorA) ? sectorA : sectorsA[0] ?? "";
-  // Within one country, B offers A's other industries only: the same country and industry on both sides would
-  // show two identical panels. As at country level, moving A onto B's choice moves B to the next industry.
-  const sectorsB = (pageB?.rows ?? [])
-    .map((row) => String(row.industry))
-    .filter((code) => !(gran === "sector" && countryB === countryA && code === effSectorA));
-  const effSectorB = sectorsB.includes(sectorB) ? sectorB : sectorsB[0] ?? "";
-  const rowA = gran === "country"
-    ? countryRowsA?.find((row) => row.country === countryA)
-    : pageA?.rows.find((row) => row.industry === effSectorA);
-  const rowB = gran === "country"
-    ? countryRowsB?.find((row) => row.country === countryB)
-    : pageB?.rows.find((row) => row.industry === effSectorB);
-  const panelRows = [rowA, ...(compare ? [rowB] : [])];
-  const domainRows = decompositionDomainRows(panelRows, cfg);
+  const sectors = (page?.rows ?? []).map((row) => String(row.industry));
+  const sector = sectors.includes(selectedSector) ? selectedSector : sectors[0] ?? "";
+  const row = gran === "country"
+    ? countryRows?.find((item) => item.country === country)
+    : page?.rows.find((item) => item.industry === sector);
+  const domainRows = decompositionDomainRows([row], cfg);
   const domain = signedDomain(
     domainRows.map((item) => item.values),
     true,
     domainRows.map((item) => item.total),
   );
 
-  // Plain names for the two sides: what is shown, or which column when two are side by side.
-  const sideLabel = (side: "A" | "B") => compare
-    ? side === "A" ? "左栏" : "右栏"
-    : gran === "country" ? "所选国家" : "所选行业";
-  const levelLabel = (sector: string) => gran === "sector" ? sectorLabel(sector) : "国家整体";
+  // A plain name for what is shown.
+  const shownLabel = gran === "country" ? "所选国家" : "所选行业";
+  const levelLabel = gran === "sector" ? sectorLabel(sector) : "国家整体";
 
-  const entityPicker = (side: "A" | "B") => {
-    const country = side === "A" ? countryA : countryB;
-    const sector = side === "A" ? effSectorA : effSectorB;
-    const setSector = side === "A" ? setSectorA : setSectorB;
-    const sectors = side === "A" ? sectorsA : sectorsB;
-    return (
-      <div className="demo-controls" style={{ marginBottom: 10 }} role="group" aria-label={sideLabel(side)}>
-        <b aria-hidden="true">{sideLabel(side)}</b>
-        <LabeledControl label="国家">
+  const entityPicker = (
+    <div className="demo-controls" style={{ marginBottom: 10 }} role="group" aria-label={shownLabel}>
+      <b aria-hidden="true">{shownLabel}</b>
+      <LabeledControl label="国家">
+        {(id) => (
+          <select id={id} value={country} onChange={(event) => onPrimaryChange?.(year, event.target.value)}>
+            {meta.countries.map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
+          </select>
+        )}
+      </LabeledControl>
+      {gran === "sector" && <>
+        <LabeledControl label="行业">
           {(id) => (
-            <select id={id} value={country} onChange={(event) => {
-              if (side === "A") onPrimaryChange?.(year, event.target.value);
-              else setCountryB(event.target.value);
-            }}>
-              {/* At country level B is the recorded comparison country and must differ from A (offering A made the
-                  choice snap back); at industry level A's country is allowed for a within-country comparison. */}
-              {meta.countries.filter((code) => side === "A" || gran === "sector" || code !== countryA).map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
+            <select id={id} value={sector} onChange={(event) => setSector(event.target.value)}>
+              {sectors.map((code) => <option key={code} value={code}>{sectorLabel(code)}</option>)}
             </select>
           )}
         </LabeledControl>
-        {gran === "sector" && <>
-          <LabeledControl label="行业">
-            {(id) => (
-              <select id={id} value={sector} onChange={(event) => setSector(event.target.value)}>
-                {sectors.map((code) => <option key={code} value={code}>{sectorLabel(code)}</option>)}
-              </select>
-            )}
-          </LabeledControl>
-        </>}
-      </div>
-    );
-  };
+      </>}
+    </div>
+  );
 
-  const panel = (
-    row: Row | undefined,
-    side: "A" | "B",
-    page: IndustryPage | null,
-    sector: string,
-    country: string,
-    query: { status: AsyncStatus; error: string | null; retry: () => void },
-  ) => {
+  const panel = () => {
     if (query.status !== "success" || !row) {
       return (
         <div style={{ minWidth: 0 }}>
-          {entityPicker(side)}
+          {entityPicker}
           <DecompositionRequestMessage
-            label={sideLabel(side)}
+            label={shownLabel}
             status={query.status}
             error={query.error}
             empty={query.status === "success" && !row}
@@ -773,7 +707,7 @@ export function DecompositionDemo({
     if (!model.values || model.total == null || model.sum == null || model.error == null) {
       return (
         <div style={{ minWidth: 0 }}>
-          {entityPicker(side)}
+          {entityPicker}
           <div className="decomp-total-line">
             {cfg.totalLabel} = <b>{model.total == null ? "—（未定义）" : fmt(model.total, cfg.unit)}</b>
             {cfg.unit === "amount" && model.total != null && <span className="muted">（百万美元）</span>}
@@ -786,13 +720,12 @@ export function DecompositionDemo({
             <div>{unavailableDashNote(model)}</div>
           </div>
           <DecompositionDetailTable
-            caption={`${sideLabel(side)}：${year} 年 ${countryLabel(country)} · ${levelLabel(sector)} · ${cjkJoin(cfg.totalLabel, "分解明细")}`}
+            caption={`${shownLabel}：${year} 年 ${countryLabel(country)} · ${levelLabel} · ${cjkJoin(cfg.totalLabel, "分解明细")}`}
             parts={cfg.parts}
             values={model.contributions}
             shares={null}
             unit={cfg.unit}
             unavailable
-            compact={compare}
             negativeNote={cfg.negativeNote}
           />
           {step === 6 && <MiniBackwardBar row={row} />}
@@ -815,7 +748,7 @@ export function DecompositionDemo({
     const amount = (value: number) => (precision ? amountAt(value, precision.decimals) : fmt(value, cfg.unit));
     return (
       <div style={{ minWidth: 0 }}>
-        {entityPicker(side)}
+        {entityPicker}
         <div className="decomp-total-line">
           {cfg.totalLabel} = <b>{amount(model.total)}</b>{cfg.unit === "amount" && <span className="muted">（百万美元）</span>}
         </div>
@@ -850,14 +783,13 @@ export function DecompositionDemo({
           zeroTotalHint ?? "这个行业的数值太小（不到本国各行业合计的 0.01%），建议换一个行业。"
         }</div>}
         <DecompositionDetailTable
-          caption={`${sideLabel(side)}：${year} 年 ${countryLabel(country)} · ${levelLabel(sector)} · ${cjkJoin(cfg.totalLabel, "分解明细")}`}
+          caption={`${shownLabel}：${year} 年 ${countryLabel(country)} · ${levelLabel} · ${cjkJoin(cfg.totalLabel, "分解明细")}`}
           parts={cfg.parts}
           values={model.values}
           shares={model.shares}
           unit={cfg.unit}
           hover={hover}
           onHover={setHover}
-          compact={compare}
           negativeNote={cfg.negativeNote}
           decimals={precision?.decimals}
           roundingNote={precision?.checks === false}
@@ -899,13 +831,10 @@ export function DecompositionDemo({
         <LabeledControl label="年份">
           {(id) => (
             <select id={id} value={year} onChange={(event) => {
-              onPrimaryChange?.(Number(event.target.value), countryA);
+              onPrimaryChange?.(Number(event.target.value), country);
             }}>{meta.years.map((value) => <option key={value}>{value}</option>)}</select>
           )}
         </LabeledControl>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <input type="checkbox" checked={compare} onChange={(event) => setCompare(event.target.checked)} /> 并排比较另一个国家或行业
-        </label>
       </div>
       <div className="decomp-formula">
         <span className="df-total">{cfg.totalLabel}</span><span className="df-eq">=</span>
@@ -922,10 +851,7 @@ export function DecompositionDemo({
           </span>
         ))}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: compare ? "minmax(0, 1fr) minmax(0, 1fr)" : "minmax(0, 1fr)", gap: 18 }}>
-        {panel(rowA, "A", pageA, effSectorA, countryA, sideAQuery)}
-        {compare && panel(rowB, "B", pageB, effSectorB, countryB, sideBQuery)}
-      </div>
+      {panel()}
     </div>
   );
 }

@@ -583,6 +583,23 @@ def _ok_run(outcome: str, **design):
     return _sign_run({"design": payload, "result": result})
 
 
+def _steps_two_to_five_reading(
+    country: str, value: float, metric: str, unit: str, source: str = "auto-indicator-comparison"
+) -> dict[str, object]:
+    return {
+        "entity": country,
+        "country": country,
+        "industry": "",
+        "year": 2020,
+        "value": value,
+        "metric": metric,
+        "unit": unit,
+        "release": "ICIO-2023",
+        "scope": "country",
+        "source": source,
+    }
+
+
 def _complete():
     session = empty_session()
     session["steps"] = {str(step): make_record({"quiz": quizzes.correct_quiz(step)}) for step in GATE_STEPS}
@@ -593,32 +610,22 @@ def _complete():
         "year": 2020,
         "table": "intermediate",
     }
-    for step in range(2, 10):
+    for step in range(6, 10):
         session["steps"][str(step)]["data"]["compared"] = ["CHN", "USA"]
+    # Steps 2–5 record one country's country-level reading, as the pages do.
     for step, metric, unit in (
         (2, "FVA_share", "%"),
         (3, "3b_VA_GVC_C_share", "%"),
-        (4, "GVCPs", "长度"),
-        (5, "weighted degree", "加权流量"),
+        (4, "GVCPs", "无量纲"),
+        (5, "weighted degree", "百万美元"),
     ):
         session["steps"][str(step)]["data"].update(
             {
+                "year": 2020,
+                "country": "CHN",
+                "compared": ["CHN"],
                 "metric": metric,
-                "observations": [
-                    {
-                        "entity": country,
-                        "country": country,
-                        "industry": "",
-                        "year": 2020,
-                        "value": value,
-                        "metric": metric,
-                        "unit": unit,
-                        "release": "ICIO-2023",
-                        "scope": "country",
-                        "source": "explicit-indicator-table-comparison",
-                    }
-                    for country, value in (("CHN", 0.2), ("USA", 0.1))
-                ],
+                "observations": [_steps_two_to_five_reading("CHN", 0.2, metric, unit)],
             }
         )
     for step, metric in ((6, "FVA_share"), (7, "3b_VA_GVC_C_share"), (8, "GVCPs")):
@@ -893,10 +900,15 @@ def test_steps_six_to_eight_require_explicit_complete_material():
         lambda observations: observations[1].update(source="legacy-two-click"),
     ],
 )
-def test_steps_two_to_five_require_one_complete_same_year_pair(corrupt):
+def test_steps_two_to_five_legacy_pair_must_stay_one_complete_same_year_pair(corrupt):
     session = _complete()
-    observations = session["steps"]["2"]["data"]["observations"]
-    corrupt(observations)
+    data = session["steps"]["2"]["data"]
+    data["compared"] = ["CHN", "USA"]
+    data["observations"] = [
+        _steps_two_to_five_reading(country, value, "FVA_share", "%") for country, value in (("CHN", 0.2), ("USA", 0.1))
+    ]
+    assert check_material_gate(session) == []
+    corrupt(data["observations"])
 
     assert any(item["step"] == 2 for item in check_material_gate(session))
 
@@ -924,7 +936,6 @@ def test_table_comparison_report_formats_saved_ratio_as_a_percentage():
     section = text.split("### 步骤 2", 1)[1].split("### 步骤 3", 1)[0]
 
     assert "| CHN 中国 | 2020 | 外国增加值项占比 | % | 20.000 |" in section
-    assert "| USA 美国 | 2020 | 外国增加值项占比 | % | 10.000 |" in section
     assert "| % | 0.2 |" not in section
 
 
@@ -1088,25 +1099,27 @@ def test_material_gate_is_independent_of_unfinished_quizzes():
     assert {item["step"] for item in check_gate(session)} == set(range(1, 15))
 
 
-def test_steps_two_to_five_accept_automatic_comparisons():
-    """Steps 2–5 record the two-country comparison automatically from the country being viewed."""
+def test_steps_two_to_five_record_one_country():
+    """Steps 2–5 record the selected country's country-level reading automatically; no comparison country."""
     from gvcsim.report_render import _experiment_sections
 
     session = _complete()
-    for step in (2, 3, 4, 5):
-        for item in session["steps"][str(step)]["data"]["observations"]:
-            item["source"] = "auto-indicator-comparison"
     assert check_material_gate(session) == []
 
-    # The report states honestly that the comparison was recorded by the system.
-    snapshot = "\n".join(_experiment_sections(session))
-    assert "系统自动记录的比较（默认对比国家）：CHN 中国、USA 美国" in snapshot
-    assert "数值为国家级代表指标：页面可按国家×行业浏览" in snapshot
-    # A comparison country the student changed is their choice, even though the page recorded it.
-    changed = json.loads(json.dumps(session))
-    changed["steps"]["2"]["data"]["compared"] = ["CHN", "DEU"]
-    step_two = "\n".join(_experiment_sections(changed)).split("### 步骤 ")[2]
-    assert "学生选定的比较（页面自动记录）：CHN 中国、DEU 德国" in step_two
+    # The report states honestly that the reading was recorded by the system, and reads it as one phrase.
+    sections = "\n".join(_experiment_sections(session)).split("### 步骤 ")
+    step_two = next(part for part in sections if part.startswith("2 "))
+    assert "系统自动记录的国家：CHN 中国" in step_two
+    assert "记录的读数：2020 年 CHN 中国 外国增加值项占比 20.000%" in step_two
+    assert "| CHN 中国 | 2020 | 外国增加值项占比 | % | 20.000 |" in step_two
+    assert "数值为国家级代表指标：页面可按国家×行业浏览" in step_two
+    step_four = next(part for part in sections if part.startswith("4 "))
+    assert "记录的读数：2020 年 CHN 中国 GVC 位置指数" in step_four
+    step_five = next(part for part in sections if part.startswith("5 "))
+    assert "记录的读数：2020 年 CHN 中国 加权总度 0.200 百万美元" in step_five
+    for part in sections:
+        if part[:2] in ("2 ", "3 ", "4 ", "5 "):
+            assert not any(word in part for word in ("对比国家", "两国", "并排比较", "比较对象"))
 
     # Material the student recorded on request after submitting is their choice, not an automatic record;
     # the same holds for the chart material of steps 6-8.
@@ -1114,7 +1127,7 @@ def test_steps_two_to_five_accept_automatic_comparisons():
         session["steps"][str(step)]["data"]["material_chosen"] = True
     sections = "\n".join(_experiment_sections(session)).split("### 步骤 ")
     step_three = next(part for part in sections if part.startswith("3 "))
-    assert "学生选定的比较：CHN 中国、USA 美国" in step_three and "系统自动记录" not in step_three
+    assert "学生选定的国家：CHN 中国" in step_three and "系统自动记录" not in step_three
     step_six = next(part for part in sections if part.startswith("6 "))
     assert "记录的图表材料（学生选定的完整图表" in step_six and "自动记录" not in step_six
     step_seven = next(part for part in sections if part.startswith("7 "))
@@ -1123,15 +1136,95 @@ def test_steps_two_to_five_accept_automatic_comparisons():
     missing = _complete()
     missing["steps"]["2"]["data"]["observations"] = []
     message = "".join(next(item["missing"] for item in check_material_gate(missing) if item["step"] == 2))
-    assert "动手拆解" in message
-    assert "保存两国同年比较" not in message
+    assert "动手拆解" in message and "所选国家" in message
+    assert "两国" not in message and "保存两国同年比较" not in message
 
-    # ROW is the rest-of-world remainder, not an economy: a comparison with it is not material.
-    with_row = _complete()
-    data = with_row["steps"]["5"]["data"]
-    data["compared"] = ["ROW", data["compared"][1]]
-    data["observations"][0].update(entity="ROW", country="ROW")
-    assert [item["step"] for item in check_material_gate(with_row)] == [5]
+
+@pytest.mark.parametrize("source", ["auto-indicator-comparison", "explicit-indicator-table-comparison"])
+def test_steps_two_to_five_keep_legacy_two_country_records(source):
+    """A two-country record saved before steps 2–5 became single-country stays complete and is listed as recorded."""
+    from gvcsim.report_render import _experiment_sections
+
+    session = _complete()
+    data = session["steps"]["3"]["data"]
+    data["compared"] = ["CHN", "USA"]
+    data["observations"] = [
+        _steps_two_to_five_reading(country, value, "3b_VA_GVC_C_share", "%", source)
+        for country, value in (("CHN", 0.2), ("USA", 0.1))
+    ]
+    assert check_material_gate(session) == []
+
+    step_three = next(
+        part for part in "\n".join(_experiment_sections(session)).split("### 步骤 ") if part.startswith("3 ")
+    )
+    label = "系统自动记录的国家" if source == "auto-indicator-comparison" else "记录的国家"
+    assert f"{label}：CHN 中国、USA 美国" in step_three
+    assert (
+        "记录的读数：2020 年 CHN 中国 复杂 GVC 生产份额 20.000%；2020 年 USA 美国 复杂 GVC 生产份额 10.000%"
+        in step_three
+    )
+    assert "| USA 美国 | 2020 | 复杂 GVC 生产份额 | % | 10.000 |" in step_three
+    assert "对比国家" not in step_three and "比较对象" not in step_three
+
+
+def _invalid_steps_two_to_five(case: str) -> dict:
+    session = _complete()
+    data = session["steps"]["2"]["data"]
+    reading = data["observations"][0]
+    if case == "row":
+        data["compared"] = ["ROW"]
+        reading.update(entity="ROW", country="ROW")
+    elif case == "row-in-legacy-pair":
+        data["compared"] = ["ROW", "CHN"]
+        data["observations"] = [{**reading, "entity": "ROW", "country": "ROW"}, reading]
+    elif case == "empty":
+        data["observations"] = []
+    elif case == "no-compared":
+        data["compared"] = []
+    elif case == "industry-scope":
+        reading["scope"] = "country-industry"
+    elif case == "chart-source":
+        reading["source"] = "explicit-indicator-comparison"
+    elif case == "no-source":
+        reading.pop("source")
+    elif case == "other-country":
+        data["compared"] = ["USA"]
+    elif case == "non-finite":
+        reading["value"] = float("nan")
+    elif case == "metric-mismatch":
+        data["metric"] = "DVAex_share"
+    elif case == "three-countries":
+        data["compared"] = ["CHN", "USA", "DEU"]
+        data["observations"] = [{**reading, "entity": code, "country": code} for code in ("CHN", "USA", "DEU")]
+    elif case == "legacy-mixed-years":
+        data["compared"] = ["CHN", "USA"]
+        data["observations"] = [reading, {**reading, "entity": "USA", "country": "USA", "year": 2019}]
+    elif case == "duplicate-country":
+        data["compared"] = ["CHN", "CHN"]
+        data["observations"] = [reading, dict(reading)]
+    return session
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "row",
+        "row-in-legacy-pair",
+        "empty",
+        "no-compared",
+        "industry-scope",
+        "chart-source",
+        "no-source",
+        "other-country",
+        "non-finite",
+        "metric-mismatch",
+        "three-countries",
+        "legacy-mixed-years",
+        "duplicate-country",
+    ],
+)
+def test_steps_two_to_five_reject_invalid_material(case):
+    assert [item["step"] for item in check_material_gate(_invalid_steps_two_to_five(case))] == [2]
 
 
 def test_step_nine_requires_both_a_comparison_and_an_industry_observation():
@@ -1241,8 +1334,8 @@ def test_report_labels_step_five_network_metric_like_the_step_does(tmp_path, mon
 
     report = build(session, "同学")
 
-    assert "记录的代表指标：加权总度" in report.markdown
-    assert "记录的代表指标：weighted degree" not in report.markdown
+    assert "记录的读数：2020 年 CHN 中国 加权总度" in report.markdown
+    assert "weighted degree" not in report.markdown.split("### 步骤 5", 1)[1].split("### 步骤 6", 1)[0]
 
 
 def test_material_gate_requires_complete_current_teaching_panel_snapshot():

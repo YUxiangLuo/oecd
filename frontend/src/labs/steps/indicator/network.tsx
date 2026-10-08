@@ -6,7 +6,7 @@ import { api } from "../../../api";
 import { NetworkCentralityDemo } from "../../../demos";
 import type { IndicatorSchema, Meta, Step, StepStateApi } from "../../../types";
 import { useAsync } from "../../shared";
-import { AutoMaterialStatus, useAutoComparison } from "./auto-comparison";
+import { AutoMaterialStatus, useAutoMaterial } from "./auto-comparison";
 import { IndicatorMethodIntro } from "./indicator-method-intro";
 import { IndicatorTable, type IndicatorStepState, useIndicatorControls } from "./indicator-table";
 import "./indicator-method.css";
@@ -14,14 +14,13 @@ import "./indicator-method.css";
 export function NetworkIndicatorStep({ meta, step: _step, state }: { meta: Meta; step: Step; state: StepStateApi<IndicatorStepState> }) {
   const controls = useIndicatorControls(meta, state);
   const schema = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
-  const auto = useAutoComparison({
+  const auto = useAutoMaterial({
     topic: "network", meta, state, year: controls.year, schema,
-    // “全部” pages the global table without picking a country; keep the recorded pair instead of
-    // replacing it with the CHN–USA default the student never chose.
+    // “全部” pages the global table without picking a country; keep the recorded country instead of
+    // replacing it with the CHN default the student never chose.
     country: meta.countries.includes(controls.country)
       ? controls.country
       : state.data?.compared?.find((code) => meta.countries.includes(code)) ?? "",
-    partner: controls.partner,
     // Recording must not replace the “全部” browsing choice with the recorded country.
     browseCountry: controls.country,
   });
@@ -51,7 +50,7 @@ export function NetworkIndicatorStep({ meta, step: _step, state }: { meta: Meta;
           year={controls.year} country={controls.country} page={controls.page} interacted={controls.interacted}
           onYear={controls.setYear} onCountry={controls.setCountry} onPage={controls.setPage}
         />
-        <AutoMaterialStatus meta={meta} state={state} schema={schema.data} {...auto} onSecond={controls.setPartner} where="上方表格所选国家"
+        <AutoMaterialStatus state={state} schema={schema.data} {...auto} where="上方表格所选国家"
           note="报告记录的是国家整体的加权总度：该国全部出口 + 进口，中间品和最终品都算在内（不含国内流量）。上表的行业数值只算中间品流量，两者不能直接比较。" />
       </section>
     </div>
