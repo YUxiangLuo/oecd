@@ -51,6 +51,11 @@ const signed = (value: number, digits = 3) => {
 const DEFAULT_KINDS: Record<RegressionOutcome, DepvarKind> = { trade: "share", production: "share", length: "length", network: "network" };
 const KIND_UNITS: Record<DepvarKind, string> = { share: "个百分点", length: "长度单位", position: "位置指数单位", network: "中心性原始单位" };
 
+/** The unit as a counted quantity ("个百分点", "个长度单位"), used wherever an amount of it is stated. */
+export function countUnit(kind: DepvarKind): string {
+  return kind === "share" ? KIND_UNITS.share : `个${KIND_UNITS[kind]}`;
+}
+
 /** How the saved Y is read: its family default, or the kind the design carries for a chosen baseline. */
 export function depvarKind(outcome: RegressionOutcome, design?: { depvar_kind?: string } | null): DepvarKind {
   const kind = design?.depvar_kind;
@@ -66,8 +71,8 @@ export function chartDisplayScale(outcome: RegressionOutcome, design?: { depvar_
 
 export function teachingEffect(outcome: RegressionOutcome, beta: number, design?: { depvar_kind?: string } | null): string {
   const kind = depvarKind(outcome, design);
-  const { scale, unit } = chartDisplayScale(outcome, design);
-  return `${signed(beta * scale, kind === "position" ? 4 : kind === "length" ? 3 : 2)} ${scale === 1 ? unit : `个${unit}`}`;
+  const { scale } = chartDisplayScale(outcome, design);
+  return `${signed(beta * scale, kind === "position" ? 4 : kind === "length" ? 3 : 2)} ${countUnit(kind)}`;
 }
 
 function naturalScale(
@@ -97,7 +102,7 @@ function naturalScale(
     return {
       // Point and interval in standard deviations use the same decimals (the interval may need three).
       effect: `${signed(effect, 2)} 个中心性原始单位${standardized == null ? "" : `（约 ${signed(standardized, sdDigits)} 个样本标准差）`}`,
-      interval: hasCi ? `[${signed(ciLow, 2)}, ${signed(ciHigh, 2)}] 个原始单位${standardizedInterval}` : "—",
+      interval: hasCi ? `[${signed(ciLow, 2)}, ${signed(ciHigh, 2)}] ${countUnit("network")}${standardizedInterval}` : "—",
     };
   }
   const mean = response.result.depvar_mean;

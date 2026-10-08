@@ -17,6 +17,7 @@ import {
   reportGenerateLabel,
   reportWaitLabel,
   summarizeReportGate,
+  reflectionLength,
 } from "./report-lab";
 
 afterEach(cleanup);
@@ -570,4 +571,14 @@ test("each report state shows one action group in the submit panel, without dupl
   const current = render(<ReportLab {...finishProps} report={report("graded")} sessionUpdatedAt="2026-08-12T00:00:00Z" />);
   expect(names(current)).toEqual(["查看提交回执与实验总结", "导出 PDF", "重新生成并提交"]);
   current.unmount();
+});
+
+test("analysis length counts characters as the server does: an emoji is one character", () => {
+  expect(reflectionLength("  贸易 😀\n\n分析  ")).toBe(7);
+  expect(reflectionLength("😀😀")).toBe(2);
+});
+
+test("in a save conflict the report actions ask for the server version, not a retry", () => {
+  expect(reportWaitLabel("ready", true, false, "冲突", true)).toBe("请先载入服务器版本");
+  expect(reportWaitLabel("ready", true, false, "网络中断")).toBe("保存失败，请先重试");
 });

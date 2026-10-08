@@ -117,8 +117,8 @@ describe("login requests", () => {
     }) as unknown as typeof fetch;
     try {
       const stalled = api.login("student", "password");
-      jest.advanceTimersByTime(10_000);
-      await expect(stalled).rejects.toThrow("请求超时（10 秒）");
+      jest.advanceTimersByTime(30_000);
+      await expect(stalled).rejects.toThrow("请求超时（30 秒）");
       expect(calls).toBe(1);
       expect((await api.login("student", "password")).token).toBe("token");
       expect(calls).toBe(2);
@@ -255,8 +255,8 @@ describe("GET requests", () => {
     }) as unknown as typeof fetch;
     try {
       const stalled = api.me("timeout-token");
-      jest.advanceTimersByTime(10_000);
-      await expect(stalled).rejects.toThrow("请求超时（10 秒）");
+      jest.advanceTimersByTime(30_000);
+      await expect(stalled).rejects.toThrow("请求超时（30 秒）");
       expect(await api.me("timeout-token")).toEqual(authUser("after-timeout"));
       expect(calls).toBe(2);
     } finally {

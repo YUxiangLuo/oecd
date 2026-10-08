@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { sameJsonValue } from "../../session-store";
 import { MATERIAL_LOCKED_NOTE } from "../../step-task-card";
 import { api } from "../../api";
@@ -42,6 +42,16 @@ export function stepTenGapNote(taxed: boolean[]): string | undefined {
     : "两国都未加税：X 一直为 0，没有差距";
 }
 
+/** The example row worked through on step 10 and saved for steps 11–14: in the last year, the taxed country first. */
+export function representativeRow<T extends { country: string; year: number; teaching_tariff_rate_tau: number }>(
+  rows: readonly T[],
+  countries: readonly string[],
+  year: number | undefined,
+): T | undefined {
+  const last = countries.flatMap((country) => rows.filter((row) => row.country === country && row.year === year));
+  return last.find((row) => row.teaching_tariff_rate_tau > 0) ?? last[0];
+}
+
 export function ShockLab({ meta, step: _step, state, getStep }: {
   meta: Meta;
   step: Step;
@@ -53,11 +63,15 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
   // Only a material about one industry (a trend) seeds the example; a ranking covers many industries,
   // and its first row would be an arbitrary choice the student never made.
   const priorIndustries = new Set((priorNetwork?.observations ?? []).map((item) => item.industry).filter(Boolean));
-  const example = teachingExample(meta, state.data, priorIndustries.size === 1 ? [...priorIndustries][0] : undefined);
+  const priorIndustry = priorIndustries.size === 1 ? [...priorIndustries][0] : undefined;
+  const example = teachingExample(meta, state.data, priorIndustry);
   const countries = example.countries;
   const [first, setFirst] = useState(example.first);
   const [second, setSecond] = useState(example.second);
   const [industry, setIndustry] = useState(example.industry);
+  // The industry came from step 9 rather than from the student here or a saved example: if the default pair
+  // is not in the regression sample for it, fall back to the default industry instead of an unusable example.
+  const inheritedIndustry = useRef(!state.data?.teaching_industry && Boolean(priorIndustry) && example.industry === priorIndustry);
   const groups = useAsync<TeachingGroupsResponse>(() => api.teachingGroups(), ["teaching-groups"]);
   const sample = groups.status === "success" ? groups.data?.sample : undefined;
   const selectedCountries = [first, second].filter(Boolean);
@@ -77,6 +91,12 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
     ? selectedCountries.filter((country) => !panel.rows.some((row) => row.country === country && row.year === lastYear))
     : [];
   const complete = Boolean(panel) && selectedCountries.length >= 1 && missing.length === 0;
+  const fallbackIndustry = teachingExample(meta).industry;
+  useEffect(() => {
+    if (!panel || complete || !inheritedIndustry.current || industry === fallbackIndustry) return;
+    inheritedIndustry.current = false;
+    setIndustry(fallbackIndustry);
+  }, [panel, complete, industry, fallbackIndustry]);
   const sampleIndustries = groups.status === "success" ? groups.data?.industries : undefined;
   const industryOptions = meta.sectors.filter((code) => !sampleIndustries || sampleIndustries.includes(code) || code === industry);
 
@@ -85,9 +105,9 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
     : false;
   const recordExample = () => {
     if (!panel) return;
-    const lastYear = years.at(-1);
-    const representative = panel.rows.find((row) => row.country === first && row.year === lastYear)
-      ?? panel.rows[0];
+    // The same row the page works through below (the taxed country first), so the saved example and the
+    // worked example never differ.
+    const representative = representativeRow(panel.rows, selectedCountries, years.at(-1)) ?? panel.rows[0];
     state.save({
       compared: selectedCountries,
       teaching_industry: industry,
@@ -121,8 +141,10 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
   const lastRows = selectedCountries
     .map((country) => rows.find((row) => row.country === country && row.year === years.at(-1)))
     .filter((row): row is NonNullable<typeof row> => row != null);
-  const exampleRow = lastRows.find((row) => row.teaching_tariff_rate_tau > 0) ?? lastRows[0];
-  const pct = (value: number, digits = 1) => `${(value * 100).toFixed(digits)}%`;
+  const exampleRow = representativeRow(rows, selectedCountries, years.at(-1));
+  // Shares and X in percentage points with two decimals everywhere on this step; the tariff rate as set.
+  const pct = (value: number) => `${(value * 100).toFixed(2)}%`;
+  const rate = (value: number) => `${Number((value * 100).toFixed(2))}%`;
 
   return <div className="shock-workbench">
     <section className="reg-run-card">
@@ -147,7 +169,7 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
           </select>
         </label>
         <label className="model-control"><span className="model-control-label">行业</span>
-          <select value={industry} onChange={(event) => setIndustry(event.target.value)}>
+          <select value={industry} onChange={(event) => { inheritedIndustry.current = false; setIndustry(event.target.value); }}>
             {industryOptions.map((code) => <option key={code} value={code}>{sectorLabel(code)}</option>)}
           </select>
         </label>
@@ -179,14 +201,18 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
             const taxed = row.teaching_tariff_rate_tau > 0;
             return <li key={row.country}>
               <b>{countryLabel(row.country)} · {sectorLabel(industry)}</b>
-              {taxed ? "加税" : "未加税"}：w = {pct(row.teaching_export_share_w)}，{years.at(-1)} 年 X = {(row.teaching_tariff_exposure * 100).toFixed(2)} 个百分点
+              {taxed ? "加税" : "未加税"}：w = {pct(row.teaching_export_share_w)}，{years.at(-1)} 年 X = {(row.teaching_tariff_exposure * 100).toFixed(2)} 个百分点{taxed && row.teaching_tariff_exposure === 0 ? "（不向美国出口，加税也不产生暴露）" : ""}
             </li>;
           })}
         </ul>
         {(() => {
           // The example shows the before/after gap only when a taxed and an untaxed country are both on the chart.
           const taxed = lastRows.map((row) => row.teaching_tariff_rate_tau > 0);
-          const hint = taxed.length === 1
+          // Taxed but with no exports to the US (w = 0): the tariff produces no exposure, so X stays 0.
+          const unexposed = lastRows.filter((row) => row.teaching_tariff_rate_tau > 0 && row.teaching_tariff_exposure === 0);
+          const hint = unexposed.length
+            ? `${unexposed.map((row) => countryLabel(row.country)).join("、")} 被加税，但该行业首年不向美国出口（w = 0），所以 X 一直为 0；换一个行业或国家才能看到加税带来的暴露。`
+            : taxed.length === 1
             ? (taxed[0]
               ? "只看一个加税国家时，图上是它自己的 X 跳起来；再选一个未加税的对比国家（如墨西哥），就能看到两者的差距。"
               : "这个国家未被加税，X 一直为 0；换成加税的国家（如加拿大），或再选一个加税的对比国家，才能看到差距。")
@@ -212,9 +238,11 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
             <div>
               <b>算一次：X = w × τ</b>
               <span>
-                {countryLabel(exampleRow.country)} · {sectorLabel(industry)} · {exampleRow.year} 年：出口份额 w = {pct(exampleRow.teaching_export_share_w, 2)}，税率 τ = {pct(exampleRow.teaching_tariff_rate_tau, 0)}，所以{" "}
-                X = {pct(exampleRow.teaching_export_share_w, 2)} × {pct(exampleRow.teaching_tariff_rate_tau, 0)} = <b>{(exampleRow.teaching_tariff_exposure * 100).toFixed(2)} 个百分点</b>。
-                {exampleRow.teaching_tariff_rate_tau > 0 ? "税率相同时，出口依赖程度不同，暴露也不同。" : "这个国家未被加税，所以 X 一直是 0。"}
+                {countryLabel(exampleRow.country)} · {sectorLabel(industry)} · {exampleRow.year} 年：出口份额 w = {pct(exampleRow.teaching_export_share_w)}，税率 τ = {rate(exampleRow.teaching_tariff_rate_tau)}，所以{" "}
+                X = {pct(exampleRow.teaching_export_share_w)} × {rate(exampleRow.teaching_tariff_rate_tau)} = <b>{(exampleRow.teaching_tariff_exposure * 100).toFixed(2)} 个百分点</b>。
+                {exampleRow.teaching_tariff_rate_tau > 0
+                  ? exampleRow.teaching_tariff_exposure === 0 ? "加税了，但 w = 0，所以 X 仍是 0。" : "税率相同时，出口依赖程度不同，暴露也不同。"
+                  : "这个国家未被加税，所以 X 一直是 0。"}
               </span>
             </div>
             <div>
@@ -227,14 +255,14 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
           设定：前两年税率为 0；加税国家在后三年统一为 25%，未加税国家仍为 0。
         </p>
         {sample && <p className="muted" role="note">
-          后续回归使用全部 {sample.entities.toLocaleString("zh-CN")} 个国家×行业单元 × 5 年 = {sample.rows.toLocaleString("zh-CN")} 条记录，覆盖 {sample.countries} 个国家（{sample.taxed_countries} 国加税、{sample.untaxed_countries} 国未加税）；你选的{selectedCountries.length === 2 ? "两个例子只是其中两行" : "例子只是其中一行"}。
+          后续回归使用全部 {sample.entities.toLocaleString("zh-CN")} 个国家×行业单元 × 5 年 = {sample.rows.toLocaleString("zh-CN")} 条记录，覆盖 {sample.countries} 个国家（{sample.taxed_countries} 国加税、{sample.untaxed_countries} 国未加税）；你选的{selectedCountries.length === 2 ? "两个例子只是其中两个单元（各 5 条记录）" : "例子只是其中一个单元（5 条记录）"}。
         </p>}
       </section>
       <details className="technical-details">
         <summary>逐年读数 · {rows.length} 条</summary>
         <ScrollableRegion className="table-wrap bounded-data-table" label="所选例子的五年关税暴露表">
           <table className="data-table"><thead><tr><th>国家</th><th>行业</th><th>年份</th><th>冲击前出口份额 w</th><th>税率 τ</th><th>关税暴露 X = w × τ</th></tr></thead>
-            <tbody>{rows.map((row) => <tr key={`${row.country}-${row.industry}-${row.year}`}><td>{countryLabel(row.country)}</td><td>{sectorLabel(row.industry)}</td><td>{row.year}</td><td>{(row.teaching_export_share_w * 100).toFixed(2)}%</td><td>{(row.teaching_tariff_rate_tau * 100).toFixed(2)}%</td><td><b>{(row.teaching_export_share_w * 100).toFixed(2)}% × {(row.teaching_tariff_rate_tau * 100).toFixed(2)}% = {(row.teaching_tariff_exposure * 100).toFixed(3)} 个百分点</b></td></tr>)}</tbody>
+            <tbody>{rows.map((row) => <tr key={`${row.country}-${row.industry}-${row.year}`}><td>{countryLabel(row.country)}</td><td>{sectorLabel(row.industry)}</td><td>{row.year}</td><td>{(row.teaching_export_share_w * 100).toFixed(2)}%</td><td>{rate(row.teaching_tariff_rate_tau)}</td><td><b>{pct(row.teaching_export_share_w)} × {rate(row.teaching_tariff_rate_tau)} = {(row.teaching_tariff_exposure * 100).toFixed(2)} 个百分点</b></td></tr>)}</tbody>
           </table>
         </ScrollableRegion>
       </details>

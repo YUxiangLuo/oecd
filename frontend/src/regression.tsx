@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ScrollableRegion } from "./a11y";
-import { api } from "./api";
+import { api, ApiError } from "./api";
 import { useAsync } from "./labs";
 import { ReadingCards } from "./labs/steps/viz/reading-cards";
 import { baselineKeyOf, lessonFor, lessonQuestion, VIZ_STEPS } from "./regression-lessons";
@@ -9,6 +9,7 @@ import { formatPValue } from "./regression-statistics";
 import {
   buildRegressionVerdict,
   chartDisplayScale,
+  countUnit,
   depvarKind,
   globalInferenceIsSuppressed,
 } from "./regression-verdict";
@@ -53,7 +54,8 @@ export function scrollRegressionVerdict(target: HTMLElement | null, behavior: Sc
 function DesignMeta({ design }: { design: RegressionDesignInfo }) {
   return (
     <div className="design-meta">
-      <span>结果指标：{design.depvar_label}</span>
+      {/* Same name as the Y list and the report ("加权总度"); the schema label's "（入+出）" is a step 5 detail. */}
+      <span>结果指标：{design.depvar_label?.replace(/（入\+出）$/, "")}</span>
       <span>解释变量：关税暴露强度</span>
       <span>面板：{design.panel_file}</span>
       <span>观察个体：{ENTITY_LABEL[design.entity] ?? design.entity}</span>
@@ -96,7 +98,8 @@ function DesignEquation({ design }: { design: RegressionDesignInfo }) {
 }
 
 /** One step-10 example unit: its label and its final-year exposure X (a proportion). */
-export interface RegressionExample { label: string; x: number }
+/** An example followed from step 10: its X in the last year and whether it was taxed at all (τ > 0). */
+export interface RegressionExample { label: string; x: number; tau?: number }
 
 /** Network units span closeness (~0.01) to weighted degree (thousands): keep about three significant figures. */
 export function networkDigits(size: number): number {
@@ -107,18 +110,23 @@ export function networkDigits(size: number): number {
 export function exampleEffect(outcome: RegressionOutcome, coef: number, x: number, design?: { depvar_kind?: string } | null): string {
   const change = coef * x;
   const kind = depvarKind(outcome, design);
-  if (kind === "share") return `${Math.abs(change * 100).toFixed(2)} 个百分点`;
-  if (kind === "length") return `${Math.abs(change).toFixed(3)} 个长度单位`;
-  if (kind === "position") return `${Math.abs(change).toFixed(4)} 个位置指数单位`;
+  // A change that rounds to zero at the shown precision says so instead of printing "0.0000".
+  const sized = (size: number, digits: number, unit: string) =>
+    size > 0 && size < 0.5 * 10 ** -digits ? `不到 ${(10 ** -digits).toFixed(digits)} ${unit}` : `${size.toFixed(digits)} ${unit}`;
+  if (kind === "share") return sized(Math.abs(change * 100), 2, "个百分点");
+  if (kind === "length") return sized(Math.abs(change), 3, "个长度单位");
+  if (kind === "position") return sized(Math.abs(change), 4, "个位置指数单位");
   const size = Math.abs(change);
   return `${size.toFixed(networkDigits(size))} 个中心性原始单位`;
 }
 
 /** The result is a coefficient plot plus short sentences: what changed, for the student's example, how sure, what not to claim. */
-export function RegressionResultCard({ outcome, response, examples = [] }: {
+export function RegressionResultCard({ outcome, response, examples = [], exampleSaved = true }: {
   outcome: RegressionOutcome;
   response: RegressionResponse;
   examples?: RegressionExample[];
+  /** False when step 10 has not saved an example yet: the conversion uses the default example. */
+  exampleSaved?: boolean;
 }) {
   const verdict = buildRegressionVerdict(outcome, response);
   const lesson = lessonFor(outcome, response.design.baseline, response.design.baseline_label);
@@ -133,9 +141,9 @@ export function RegressionResultCard({ outcome, response, examples = [] }: {
       ? `平均上升 ${unsignedEffect}`
       : `平均变化为 ${verdict.effect}`;
   return (
-    <section className={`verdict-card verdict-${verdict.state}`} aria-labelledby="reg-result-title" aria-live="polite">
+    <section className={`verdict-card verdict-${verdict.state}`} aria-labelledby="reg-result-title">
       <div className="verdict-kicker">回归结果</div>
-      <h3 id="reg-result-title" className="reg-plain-verdict">方向判断：{verdict.title}</h3>
+      <h3 id="reg-result-title" tabIndex={-1} className="reg-plain-verdict">方向判断：{verdict.title}</h3>
       {verdict.coefficient && response.result.binscatter && response.result.binscatter.bins.length >= 2 && (
         <BinScatterChart
           bins={response.result.binscatter.bins}
@@ -163,14 +171,16 @@ export function RegressionResultCard({ outcome, response, examples = [] }: {
           <li>关税暴露（X）每增加 1 个百分点，{lesson.shortMetric}（Y）<b>{plainResult}</b>；95% 区间为 {verdict.interval}。</li>
         )}
         {!suppressed && verdict.coefficient && examples.length > 0 && (
-          <li className="reg-example-effect">换算到你在步骤 10 选的例子：{examples.map((example, index) => {
+          <li className="reg-example-effect">{exampleSaved ? "换算到你在步骤 10 选的例子" : "换算到默认例子（步骤 10 还没有保存你的例子）"}：{examples.map((example, index) => {
             const coef = verdict.coefficient!.coef;
             const text = example.x > 0
               ? <>{example.label}（X = {(example.x * 100).toFixed(2)} 个百分点）Y 约{coef * example.x < 0 ? "下降" : "上升"} <b>{exampleEffect(outcome, coef, example.x, response.design)}</b></>
-              : <>{example.label}未被加税（X = 0），按估计不变</>;
+              : (example.tau ?? 0) > 0
+                ? <>{example.label}被加税但首年不向美国出口（w = 0，X = 0），按估计不变</>
+                : <>{example.label}未被加税（X = 0），按估计不变</>;
             return <span key={example.label}>{index ? "；" : ""}{text}</span>;
           })}{verdict.state === "insufficient" ? "；但区间跨过 0，这个方向本身并不确定" : ""}。
-            {examples.every((example) => example.x <= 0) && (examples.length === 1
+            {examples.every((example) => example.x <= 0 && !((example.tau ?? 0) > 0)) && (examples.length === 1
               ? "你选的例子未被加税，所以换算结果是不变；回步骤 10 换成加税的国家（如加拿大），或再选一个加税的对比国家，就能看到换算。"
               : "两个例子都未被加税，所以换算结果都是不变；回步骤 10 把其中一个换成加税的国家（如加拿大），就能看到换算。")}</li>
         )}
@@ -202,7 +212,8 @@ export function RegressionCoefficientTable({ response }: { response: RegressionR
               <td>{coef.name}</td>
               <td>{coef.coef.toFixed(4)}</td>
               <td>{ciLow != null && ciHigh != null ? `[${ciLow.toFixed(4)}, ${ciHigh.toFixed(4)}]` : "—"}</td>
-              <td>{coef.se != null ? coef.se.toFixed(4) : "—"}</td><td>{coef.t != null ? coef.t.toFixed(2) : "—"}</td><td>{formatPValue(p)}</td>
+              {/* With inference suppressed, SE and t are not read either (the backend keeps them for integrity checks). */}
+              <td>{inferenceAllowed && coef.se != null ? coef.se.toFixed(4) : "—"}</td><td>{inferenceAllowed && coef.t != null ? coef.t.toFixed(2) : "—"}</td><td>{formatPValue(p)}</td>
             </tr>
           );
         })}</tbody>
@@ -312,6 +323,20 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   const [result, setResult] = useState<RegressionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  // A 429 carries Retry-After: the retry button waits it out with a visible countdown.
+  const [retryAt, setRetryAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (retryAt == null) return;
+    const timer = window.setInterval(() => {
+      const current = Date.now();
+      setNow(current);
+      if (current >= retryAt) setRetryAt(null);
+    }, 500);
+    return () => window.clearInterval(timer);
+  }, [retryAt]);
+  const retryWait = retryAt == null ? 0 : Math.max(0, Math.ceil((retryAt - now) / 1000));
+  const runButtonRef = useRef<HTMLButtonElement>(null);
   const mountedRef = useRef(true);
   const runningRef = useRef(false);
   const runController = useRef<AbortController | null>(null);
@@ -344,7 +369,9 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   const groupSeries = usesDefault ? groups?.outcomes[outcome] : groups?.series?.[outcome]?.[baseline];
 
   // After the run: the estimate converted to the example(s) followed from step 10 (one country or two).
-  const example = teachingExample(meta, getStep?.<TeachingExampleSelection>(10));
+  const stepTen = getStep?.<TeachingExampleSelection & { teaching_observation?: unknown }>(10);
+  const example = teachingExample(meta, stepTen);
+  const exampleSaved = Boolean(stepTen?.teaching_observation);
   const exampleCountries = [example.first, example.second].filter(Boolean);
   const exampleKey = `teaching-example:${exampleCountries.join(",")}:${example.industry}`;
   const exampleQuery = useAsync<TeachingPanelResponse>(
@@ -356,7 +383,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   const examples: RegressionExample[] = exampleQuery.status === "success" && exampleQuery.data
     ? exampleCountries.flatMap((country) => {
       const row = exampleQuery.data!.rows.find((item) => item.country === country && item.year === lastYear);
-      return row ? [{ label: `${countryLabel(country)}·${sectorLabel(example.industry)}`, x: row.teaching_tariff_exposure }] : [];
+      return row ? [{ label: `${countryLabel(country)}·${sectorLabel(example.industry)}`, x: row.teaching_tariff_exposure, tau: row.teaching_tariff_rate_tau }] : [];
     })
     : [];
 
@@ -428,7 +455,13 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
       scrollToVerdictAfterRun.current = true;
       setResult(response);
     } catch (cause) {
-      if (mountedRef.current) setError(userFacingRequestError(cause, "回归运行失败"));
+      if (mountedRef.current) {
+        setError(userFacingRequestError(cause, "回归运行失败"));
+        if (cause instanceof ApiError && cause.status === 429 && cause.retryAfter) {
+          setNow(Date.now());
+          setRetryAt(Date.now() + cause.retryAfter * 1000);
+        }
+      }
     } finally {
       if (runController.current === controller) runController.current = null;
       runningRef.current = false;
@@ -445,6 +478,8 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         verdictAnchorRef.current,
         window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
       );
+      // The run button stays put, but a keyboard user should land on the answer, not stay behind it.
+      document.getElementById("reg-result-title")?.focus({ preventScroll: true });
     });
     return () => window.cancelAnimationFrame(frame);
   }, [result]);
@@ -456,6 +491,9 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         <h3>{lessonQuestion(outcome, baseline)}</h3>
         {outcome !== "trade" && <p className="muted">方法与步骤 11 相同，这次 Y 换成{/^[A-Za-z]/.test(lesson.shortMetric) ? " " : ""}{lesson.shortMetric}。</p>}
         <p className="reg-step-focus"><b>本步重点</b>{lesson.learnThis}</p>
+        {depvarKind(outcome, design) === "network" && (
+          <p className="muted" role="note">这里的 Y 是按真实网络指标的排名校准生成的教学数据，单位是“中心性原始单位”，不是步骤 5、9 的百万美元，不能与那两步的数值直接比较。</p>
+        )}
         {baselineNotice && <p className="reg-boundary" role="status">{baselineNotice}</p>}
         {baselineOptions.length > 1 && (
           <div className="reg-baseline-select">
@@ -504,7 +542,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
           const shown = [preGap, postGap, estimate0 == null ? null : estimate0 * levelScale].filter((value): value is number => value != null && Number.isFinite(value));
           const digits = kind === "network" ? networkDigits(Math.max(0, ...shown.map(Math.abs))) : kind === "position" ? 4 : kind === "length" ? 3 : 2;
           const tiny = 0.5 * 10 ** -digits;
-          const fmt = (value: number) => `${value > 0 ? "+" : ""}${value.toFixed(digits)} ${display.unit}`;
+          const fmt = (value: number) => `${value > 0 ? "+" : ""}${value.toFixed(digits)} ${countUnit(kind)}`;
           const estimate = result && coefficient != null && groups.mean_exposure_taxed != null && !globalInferenceIsSuppressed(result.result.status, result.result.support)
             ? { gap: coefficient * groups.mean_exposure_taxed, label: `回归估计的差距 ${fmt(coefficient * groups.mean_exposure_taxed * levelScale)}` }
             : null;
@@ -535,15 +573,17 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
           <RegressionRequestError label="当前模型设计" error={designQuery.error} onRetry={designQuery.retry} />
         )}
         <button
+          ref={runButtonRef}
           className="run-btn"
-          onClick={run}
-          disabled={running || designQuery.status !== "success" || !design}
+          onClick={() => { if (!running && retryWait === 0) void run(); }}
+          // aria-disabled while running keeps keyboard focus on the button instead of dropping it to the page.
+          aria-disabled={running || retryWait > 0}
+          disabled={designQuery.status !== "success" || !design}
         >
           {running ? "正在计算…" : result ? "重新算一次" : groups ? `算出这个差距（用全部 ${groups.sample.rows.toLocaleString("zh-CN")} 条记录）` : "算出这个差距"}
         </button>
-        {running && (
-          <span className="muted reg-inline-status" role="status" aria-live="polite" aria-busy="true">正在估计…</span>
-        )}
+        {/* Mounted before it has text, so screen readers announce the change. */}
+        <span className={running ? "muted reg-inline-status" : "sr-only"} role="status" aria-live="polite">{running ? "正在估计…" : ""}</span>
         {!running && !baselineNotice && savedRunY && savedRunY.key !== (baseline ?? defaultBaseline) && (
           <p className="reg-boundary" role="status">
             报告材料里保存的仍是上次算出的 Y（{savedRunY.label}）；按上面的按钮算一次，才会换成{/^[A-Za-z]/.test(lesson.shortMetric) ? " " : ""}{lesson.shortMetric}。
@@ -557,14 +597,24 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
       {error && (
         <div className="error-box async-error" role="alert">
           <span>{error}</span>
-          <button type="button" className="secondary" disabled={running || !design} onClick={run}>重试</button>
+          <button
+            type="button"
+            className="secondary"
+            aria-disabled={running || !design || retryWait > 0}
+            onClick={() => {
+              if (running || !design || retryWait > 0) return;
+              // This box disappears when the retry starts; keep focus on the run button that replaces it.
+              runButtonRef.current?.focus();
+              void run();
+            }}
+          >{retryWait > 0 ? `重试（${retryWait} 秒后）` : "重试"}</button>
         </div>
       )}
 
       {result && (
         <div className="reg-results">
           <div ref={verdictAnchorRef} className="verdict-anchor">
-            <RegressionResultCard outcome={outcome} response={result} examples={examples} />
+            <RegressionResultCard outcome={outcome} response={result} examples={examples} exampleSaved={exampleSaved} />
           </div>
           <details className="technical-details">
             <summary>系数表与样本（可选）</summary>

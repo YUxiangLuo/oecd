@@ -21,8 +21,10 @@ export class ApiError extends Error {
   status: number;
   /** 结构化 detail(如第 15 步门槛的 blocked 列表);普通字符串 detail 时为 undefined。 */
   blocked?: import("./types").ReportGateItem[];
+  /** Seconds from a 429/503 Retry-After header, so a page can count down before offering a retry. */
+  retryAfter?: number;
 
-  constructor(status: number, detail: unknown, fallback: string) {
+  constructor(status: number, detail: unknown, fallback: string, retryAfter?: number) {
     // FastAPI 的 detail 可以是字符串,也可以是对象(门槛就返回 {message, blocked})。
     // 直接把对象塞进 Error.message 会渲染成 "[object Object]",这里分开处理。
     const structured = typeof detail === "object" && detail !== null ? (detail as Record<string, unknown>) : null;
@@ -33,6 +35,7 @@ export class ApiError extends Error {
     this.name = "ApiError";
     this.status = status;
     if (Array.isArray(structured?.blocked)) this.blocked = structured.blocked as import("./types").ReportGateItem[];
+    if (retryAfter != null && Number.isFinite(retryAfter) && retryAfter > 0) this.retryAfter = retryAfter;
   }
 }
 
@@ -65,11 +68,19 @@ function authHeaders(token: string | null, extra?: HeadersInit): HeadersInit {
   return token ? { ...extra, Authorization: `Bearer ${token}` } : (extra ?? {});
 }
 
-const GET_TIMEOUT_MS = 10_000;
+/** Retry-After of a response, in seconds (absent or unparsable → undefined). */
+function retryAfterSeconds(resp: Response): number | undefined {
+  const value = Number(resp.headers.get("Retry-After"));
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+// Above the server's 15 s compute queue (gvcsim/concurrency.py) plus a typical request, so a busy classroom
+// waits for its answer instead of timing out while the server is still queueing it.
+const GET_TIMEOUT_MS = 30_000;
 const MUTATION_TIMEOUT_MS = 120_000;
 
 async function withRequestTimeout<T>(
-  url: string,
+  _url: string,
   timeoutMs: number,
   operation: (signal: AbortSignal) => Promise<T>,
   callerSignal?: AbortSignal,
@@ -89,7 +100,7 @@ async function withRequestTimeout<T>(
   try {
     return await Promise.race([operation(controller.signal), aborted]);
   } catch (cause) {
-    if (timedOut) throw new Error(`请求超时（${timeoutMs / 1000} 秒）：${url}`);
+    if (timedOut) throw new Error(`服务器繁忙，请求超时（${timeoutMs / 1000} 秒），请稍后重试。`);
     throw cause;
   } finally {
     globalThis.clearTimeout(timeout);
@@ -113,20 +124,22 @@ async function retryDelay(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 async function getWithToken<T>(url: string, requestToken: string | null, fallback?: string, callerSignal?: AbortSignal): Promise<T> {
+  const deadline = Date.now() + GET_TIMEOUT_MS;
   return withRequestTimeout(url, GET_TIMEOUT_MS, async (signal) => {
     for (let attempt = 0; ; attempt += 1) {
       if (signal.aborted) throw new Error("请求已取消");
       const resp = await fetch(url, { headers: authHeaders(requestToken), signal });
       if (resp.ok) return await resp.json() as T;
       const body = await resp.json().catch(() => null);
-      if (attempt < 2 && [502, 503, 504].includes(resp.status)) {
-        const retryAfter = Number(resp.headers.get("Retry-After"));
-        const backoff = 150 * 2 ** attempt + Math.random() * 100;
-        await retryDelay(Math.max(backoff, Number.isFinite(retryAfter) ? retryAfter * 1000 : 0), signal);
+      const retryAfter = retryAfterSeconds(resp);
+      const wait = Math.max(150 * 2 ** attempt + Math.random() * 100, (retryAfter ?? 0) * 1000);
+      // Retry a busy server only when the wait still fits the request budget; otherwise report it now.
+      if (attempt < 2 && [502, 503, 504].includes(resp.status) && Date.now() + wait < deadline - 1000) {
+        await retryDelay(wait, signal);
         continue;
       }
       if (resp.status === 401) notifyAuthExpired(requestToken);
-      throw new ApiError(resp.status, body?.detail, fallback ?? `${resp.status} ${resp.statusText}`);
+      throw new ApiError(resp.status, body?.detail, fallback ?? `${resp.status} ${resp.statusText}`, retryAfter);
     }
   }, callerSignal);
 }
@@ -148,7 +161,7 @@ async function post<T>(url: string, body?: unknown, method = "POST", callerSigna
     if (!resp.ok) {
       const payload = await resp.json().catch(() => null);
       if (resp.status === 401) notifyAuthExpired(requestToken);
-      throw new ApiError(resp.status, payload?.detail, `${resp.status} ${resp.statusText}`);
+      throw new ApiError(resp.status, payload?.detail, `${resp.status} ${resp.statusText}`, retryAfterSeconds(resp));
     }
     return await resp.json() as T;
   }, callerSignal);
@@ -165,11 +178,10 @@ export const api = {
       });
       if (!resp.ok) {
         const payload = await resp.json().catch(() => null);
-        throw new ApiError(resp.status, payload?.detail, resp.statusText);
+        throw new ApiError(resp.status, payload?.detail, resp.statusText, retryAfterSeconds(resp));
       }
       return await resp.json() as import("./types").LoginResponse;
     }),
-  /** Demo builds only: the least recently used demo student, so classmates rarely land on one account. */
   /** Demo builds: an idle demo student (null when all are in use); `keep` asks for this tab's earlier one back. */
   demoStudent: (keep?: string | null) => getWithToken<{ username: string | null }>(
     keep ? `/api/auth/demo-student?keep=${encodeURIComponent(keep)}` : "/api/auth/demo-student",

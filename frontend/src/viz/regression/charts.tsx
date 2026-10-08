@@ -176,6 +176,11 @@ export function BinScatterChart({ bins, slope, xLabel, yLabel, xScale = 100, ySc
   const digits = (axis: { hi: number; lo: number }) => Math.max(0, Math.min(4, 2 - Math.floor(Math.log10(Math.max(axis.hi - axis.lo, 1e-9) / 4))));
   const fx = (value: number) => value.toFixed(digits(xAxis));
   const fy = (value: number) => value.toFixed(digits(yAxis));
+  // Ticks are round values: trailing zeros trimmed ("-0.1", not "-0.1000").
+  const tick = (value: number, axis: { hi: number; lo: number }) => {
+    const text = String(Number(value.toFixed(digits(axis))));
+    return text === "-0" ? "0" : text;
+  };
   // The slope label sits just off the line's right end: below a falling line, above a rising one. When that
   // side has no room (the line ends in a corner) it goes to the other side instead of onto the line.
   const lineEnd = y(fitted[1]);
@@ -191,16 +196,16 @@ export function BinScatterChart({ bins, slope, xLabel, yLabel, xScale = 100, ySc
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={description} style={{ display: "block", width: "100%", maxWidth: 760, height: "auto" }}>
         <title>{description}</title>
-        {yAxis.ticks.map((tick) => (
-          <g key={`y${tick}`}>
-            <line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke={tick === 0 ? "#9aa3b5" : "#eef0f4"} strokeDasharray={tick === 0 ? "4 3" : undefined} />
-            <text x={m.l - 8} y={y(tick) + 4} textAnchor="end" fontSize={11} fill="#5f6677">{fy(tick)}</text>
+        {yAxis.ticks.map((tick_) => (
+          <g key={`y${tick_}`}>
+            <line x1={m.l} x2={W - m.r} y1={y(tick_)} y2={y(tick_)} stroke={tick_ === 0 ? "#9aa3b5" : "#eef0f4"} strokeDasharray={tick_ === 0 ? "4 3" : undefined} />
+            <text x={m.l - 8} y={y(tick_) + 4} textAnchor="end" fontSize={11} fill="#5f6677">{tick(tick_, yAxis)}</text>
           </g>
         ))}
-        {xAxis.ticks.map((tick) => (
-          <g key={`x${tick}`}>
-            <line x1={x(tick)} x2={x(tick)} y1={m.t} y2={H - m.b} stroke={tick === 0 ? "#9aa3b5" : "#eef0f4"} strokeDasharray={tick === 0 ? "4 3" : undefined} />
-            <text x={x(tick)} y={H - m.b + 16} textAnchor="middle" fontSize={11} fill="#5f6677">{fx(tick)}</text>
+        {xAxis.ticks.map((tick_) => (
+          <g key={`x${tick_}`}>
+            <line x1={x(tick_)} x2={x(tick_)} y1={m.t} y2={H - m.b} stroke={tick_ === 0 ? "#9aa3b5" : "#eef0f4"} strokeDasharray={tick_ === 0 ? "4 3" : undefined} />
+            <text x={x(tick_)} y={H - m.b + 16} textAnchor="middle" fontSize={11} fill="#5f6677">{tick(tick_, xAxis)}</text>
           </g>
         ))}
         <text x={m.l + (W - m.l - m.r) / 2} y={H - 8} textAnchor="middle" fontSize={11} fill="#5f6677">{xLabel}</text>
@@ -217,7 +222,8 @@ export function BinScatterChart({ bins, slope, xLabel, yLabel, xScale = 100, ySc
         ))}
         {/* Kept inside the plot (a line ending at the bottom put it on the x tick labels); small slopes keep
             two significant figures so they match the coefficient chart (-0.0049, not -0.005). */}
-        <text x={x(xAxis.hi) - 6} y={slopeLabelY} textAnchor="end" fontSize={11} fontWeight={700} fill={ESTIMATE}>斜率 β = {Math.abs(slope) >= 100 ? slope.toFixed(0) : Math.abs(slope) >= 0.1 ? slope.toFixed(2) : slope.toPrecision(2)}</text>
+        {/* A white halo keeps the label readable where the line still runs under it near a corner. */}
+        <text x={x(xAxis.hi) - 6} y={slopeLabelY} textAnchor="end" fontSize={11} fontWeight={700} fill={ESTIMATE} stroke="#fff" strokeWidth={3} paintOrder="stroke" strokeLinejoin="round">斜率 β = {Math.abs(slope) >= 100 ? slope.toFixed(0) : Math.abs(slope) >= 0.1 ? slope.toFixed(2) : slope.toPrecision(2)}</text>
       </svg>
       {Tip}
     </div>

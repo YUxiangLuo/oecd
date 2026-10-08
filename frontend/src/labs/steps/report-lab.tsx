@@ -185,7 +185,7 @@ export function ReportStatus({ report }: { report: ClassroomReport }) {
   return (
     <div>
       <span className="muted">已评阅 · {report.score} 分 · {fmtTime(report.graded_at)}</span>
-      {report.feedback && <p className="muted report-feedback">教师评语：{report.feedback}</p>}
+      {report.feedback?.trim() && <p className="muted report-feedback">教师评语：{report.feedback}</p>}
     </div>
   );
 }
@@ -197,12 +197,21 @@ export function reportGenerateLabel(report: ClassroomReport | null) {
   return report.state === "pending" || report.state === "graded" ? "重新生成并提交" : "重新生成报告";
 }
 
+/** Characters as the server counts them (Python ``len`` of the whitespace-collapsed text): code points, so an
+ * emoji is one character, not two UTF-16 units. */
+export function reflectionLength(text: string): number {
+  return [...text.trim().split(/\s+/).join(" ")].length;
+}
+
 export function reportWaitLabel(
   sessionStatus: SessionStatus,
   sessionUnsynced: boolean,
   sessionSyncing: boolean,
   syncError: string | null = null,
+  syncConflict = false,
 ): string | null {
+  // In a conflict a retry cannot succeed: the student has to load the server version first.
+  if (syncConflict) return "请先载入服务器版本";
   if (syncError) return "保存失败，请先重试";
   if (sessionStatus !== "ready") return "正在恢复实验记录…";
   if (sessionSyncing || sessionUnsynced) return "正在保存实验记录…";
@@ -216,9 +225,10 @@ export function reportGenerateButtonLabel(
   sessionUnsynced: boolean,
   sessionSyncing: boolean,
   syncError: string | null = null,
+  syncConflict = false,
 ): string {
   if (generating) return "服务端生成中…";
-  return reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, syncError) ?? reportGenerateLabel(report);
+  return reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, syncError, syncConflict) ?? reportGenerateLabel(report);
 }
 
 export function ReportLab({
@@ -269,7 +279,10 @@ export function ReportLab({
   }, [blocked]);
 
   const reflection = (state.data ?? {}) as ReportReflectionState;
-  const writtenCount = REFLECTION_FIELDS.filter((field) => String(reflection[field.key] ?? "").trim().replace(/\s+/g, " ").length >= field.min).length;
+  const writtenCount = REFLECTION_FIELDS.filter((field) => reflectionLength(String(reflection[field.key] ?? "")) >= field.min).length;
+  // A paste beyond the limit is cut by the browser; say so instead of losing the end silently.
+  const [pasteCut, setPasteCut] = useState<string | null>(null);
+  const [attemptedIncomplete, setAttemptedIncomplete] = useState(false);
   // Same split as the gate summary below: steps 1–14, plus global conditions (step 0) counted apart.
   const materialMissing = visibleBlocked.filter((item) => item.step > 0 && item.step < 15);
   const globalMissing = visibleBlocked.filter((item) => item.step <= 0).length;
@@ -338,7 +351,11 @@ export function ReportLab({
       else showToast("报告草稿已生成，请预览后提交");
     } catch (cause) {
       const requestError = cause as Error & { blocked?: ReportGateItem[] };
-      if (requestError.blocked) setBlocked(requestError.blocked);
+      if (requestError.blocked) {
+        setBlocked(requestError.blocked);
+        // Mark the short analysis fields for assistive technology once a submit was refused for them.
+        if (requestError.blocked.some((item) => item.step === 15)) setAttemptedIncomplete(true);
+      }
       else if (!generated && isApiErrorStatus(cause, 409)) {
         // The report changed under us (typically the teacher just graded it): show the current state
         // instead of a stale page and a message about a draft that was never generated.
@@ -397,7 +414,7 @@ export function ReportLab({
         <span className="reg-section-step">最后一步 · 完成报告</span>
         <h2>检查材料，写出分析并提交</h2>
         <ol>
-          <li><b>1 · 检查实验材料</b><span>{state.syncError ? "保存失败，请先重试保存" : reportGate == null || sessionStatus !== "ready" ? "正在核对服务器记录" : sessionUnsynced || sessionSyncing ? "保存后将重新核对材料" : materialMissing.length || globalMissing ? `${[materialMissing.length ? `第 1–14 步中 ${materialMissing.length} 个步骤还有 ${materialMissing.reduce((count, item) => count + item.missing.length, 0)} 项待补齐` : null, globalMissing ? `${globalMissing} 项全局条件未满足` : null].filter(Boolean).join("，")}，见下方入口` : "已保存材料与理解题已齐"}</span></li>
+          <li><b>1 · 检查实验材料</b><span>{state.syncConflict ? "另一处已更新记录，请先点页面顶部的“载入服务器版本”" : state.syncError ? "保存失败，请先重试保存" : reportGate == null || sessionStatus !== "ready" ? "正在核对服务器记录" : sessionUnsynced || sessionSyncing ? "保存后将重新核对材料" : materialMissing.length || globalMissing ? `${[materialMissing.length ? `第 1–14 步中 ${materialMissing.length} 个步骤还有 ${materialMissing.reduce((count, item) => count + item.missing.length, 0)} 项待补齐` : null, globalMissing ? `${globalMissing} 项全局条件未满足` : null].filter(Boolean).join("，")}，见下方入口` : "已保存材料与理解题已齐"}</span></li>
           <li><b>2 · 写下自己的分析</b><span>{writtenCount} / 3 段达到最低字数 · 内容仍需自己核对</span></li>
           <li><b>3 · 提交给老师</b><span>{report && report.state !== "draft" && reportOutdated ? "报告需更新：之后的修改还没交给老师，请重新生成并提交" : report?.state === "pending" ? "已提交，等待评阅" : report?.state === "graded" ? "已评阅，可查看反馈" : report ? "已有草稿，尚未提交" : "生成报告不等于提交"}</span></li>
         </ol>
@@ -422,14 +439,17 @@ export function ReportLab({
           </div>
           {REFLECTION_FIELDS.map((field, index) => {
             const value = String(reflection[field.key] ?? "");
-            const length = value.trim().split(/\s+/).join(" ").length;
+            const length = reflectionLength(value);
+            const countId = `report-count-${field.key}`;
+            const short = length < field.min;
             return (
               <label key={field.key}>
-                <span><b>{index + 1}. {field.label}</b><small>{reflectionCountLabel(length, field.min)}</small></span>
+                <span><b>{index + 1}. {field.label}</b><small id={countId}>{reflectionCountLabel(length, field.min)}</small></span>
                 <small id={`report-hint-${field.key}`} className="report-writing-hint">{field.prompt}</small>
                 <textarea
                   aria-label={field.label}
-                  aria-describedby={`report-hint-${field.key}`}
+                  aria-describedby={`report-hint-${field.key} ${countId}${pasteCut === field.key ? ` report-paste-${field.key}` : ""}`}
+                  aria-invalid={attemptedIncomplete && short ? true : undefined}
                   value={value}
                   rows={field.key === "research_question" ? 2 : 4}
                   maxLength={REFLECTION_MAX_LENGTH}
@@ -437,7 +457,18 @@ export function ReportLab({
                   data-report-reflection-incomplete={length < field.min ? "true" : undefined}
                   disabled={busy}
                   onChange={(event) => state.save({ [field.key]: event.target.value })}
+                  onPaste={(event) => {
+                    const target = event.currentTarget;
+                    const pasted = event.clipboardData.getData("text");
+                    const room = REFLECTION_MAX_LENGTH - (target.value.length - (target.selectionEnd - target.selectionStart));
+                    setPasteCut(pasted.length > room ? field.key : null);
+                  }}
                 />
+                {pasteCut === field.key && (
+                  <small id={`report-paste-${field.key}`} className="report-writing-hint" role="status">
+                    粘贴的内容超过 {REFLECTION_MAX_LENGTH} 字上限，超出的部分没有放进来；请精简后再粘贴。
+                  </small>
+                )}
               </label>
             );
           })}
@@ -460,18 +491,18 @@ export function ReportLab({
         <div className="report-actions">
           {(!report || reportOutdated) && <button type="button" className="primary" disabled={busy} onClick={() => { void generate(true); }}>
             {submitting ? "正在提交报告…" : generating ? "正在整理报告…"
-              : reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, state.syncError) ?? (report ? "更新报告并提交给老师" : "生成并提交报告")}
+              : reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, state.syncError, Boolean(state.syncConflict)) ?? (report ? "更新报告并提交给老师" : "生成并提交报告")}
           </button>}
           {report?.state === "draft" && !reportOutdated && (
             <button type="button" className="primary" disabled={busy} onClick={() => { void submit(); }}>
-              {submitting ? "提交中…" : reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, state.syncError) ?? "提交报告给老师"}
+              {submitting ? "提交中…" : reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, state.syncError, Boolean(state.syncConflict)) ?? "提交报告给老师"}
             </button>
           )}
           {/* Draft only (no report, or a draft): a submitted report is updated by the primary action above, or
               regenerated here only when it is current (e.g. to pick up a newer report layout). */}
           {(!report || report.state === "draft") && (
             <button type="button" className="secondary" disabled={busy} onClick={() => { void generate(); }}>
-              {reportGenerateButtonLabel(report, generating, sessionStatus, sessionUnsynced, sessionSyncing, state.syncError)}
+              {reportGenerateButtonLabel(report, generating, sessionStatus, sessionUnsynced, sessionSyncing, state.syncError, Boolean(state.syncConflict))}
             </button>
           )}
           {report && report.state !== "draft" && <button type="button" className="secondary" disabled={busy} onClick={() => setOutro(report)}>查看提交回执与实验总结</button>}
@@ -483,7 +514,7 @@ export function ReportLab({
           {/* Regenerating a current submitted report clears any grade, so it comes last. */}
           {(report && report.state !== "draft" && !reportOutdated) && (
             <button type="button" className="secondary" disabled={busy} onClick={() => { void generate(); }}>
-              {reportGenerateButtonLabel(report, generating, sessionStatus, sessionUnsynced, sessionSyncing, state.syncError)}
+              {reportGenerateButtonLabel(report, generating, sessionStatus, sessionUnsynced, sessionSyncing, state.syncError, Boolean(state.syncConflict))}
             </button>
           )}
         </div>

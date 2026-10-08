@@ -123,6 +123,8 @@
 }
 .run-btn.done { background: #12a150; }
 .run-btn:disabled { opacity: 0.7; cursor: default; }
+/* Busy buttons stay focusable (aria-disabled) so keyboard focus is not dropped; they look disabled. */
+.run-btn[aria-disabled="true"], button.secondary[aria-disabled="true"] { opacity: 0.7; cursor: default; }
 
 @keyframes regfade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .reg-results { margin-top: 16px; animation: regfade 0.35s ease both; }
