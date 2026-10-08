@@ -35,3 +35,16 @@ test("Escape closes the menu, and opening one menu closes the others", () => {
   expect(first.open).toBe(false);
   expect(second.open).toBe(true);
 });
+
+test("tabbing out of an open menu closes it; a blur without a new focus target leaves it to the click handler", () => {
+  const view = render(<><StudentRowMenu student={student(1)} onPick={() => {}} /><button>下一个</button></>);
+  const menu = view.container.querySelector("details")!;
+  const item = screen.getByRole("button", { name: "修改姓名：学生 1（s1）" });
+  menu.open = true;
+  fireEvent.blur(item, { relatedTarget: null });
+  expect(menu.open).toBe(true);
+  fireEvent.blur(item, { relatedTarget: menu.querySelector("summary") });
+  expect(menu.open).toBe(true);
+  fireEvent.blur(item, { relatedTarget: screen.getByRole("button", { name: "下一个" }) });
+  expect(menu.open).toBe(false);
+});

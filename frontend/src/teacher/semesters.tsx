@@ -5,7 +5,8 @@ import { useAsync } from "../labs/shared";
 import type { AcademicSemester, ClassGroup } from "../types";
 import { userFacingRequestError } from "../user-facing-error";
 import { StudentBatchModal } from "./student-batch";
-import { EmptyState, Modal, StatusPill, Toolbar } from "./ui";
+import { normalizeLabel } from "./text";
+import { ConfirmModal, EmptyState, LoadFailure, Modal, StatusPill, Toolbar, useModalErrorFocus } from "./ui";
 
 type Editor =
   | { kind: "semester" }
@@ -18,14 +19,14 @@ export function SemestersTab() {
   const [refresh, setRefresh] = useState(0);
   const [editor, setEditor] = useState<Editor>(null);
   const [batchClassId, setBatchClassId] = useState<number | null>(null);
-  const { data, error } = useAsync(() => api.classroom.semesters(), [refresh], { keepPreviousData: true });
+  const { data, error, retry } = useAsync(() => api.classroom.semesters(), [refresh], { keepPreviousData: true });
   const semesters = data?.semesters ?? [];
   const mutate = async (operation: Promise<unknown>) => {
     await operation;
     setRefresh((value) => value + 1);
   };
 
-  if (error) return <div className="error-box" role="alert">{error}</div>;
+  if (error) return <LoadFailure what="学期与班级" error={error} onRetry={retry} />;
   return (
     <div>
       <Toolbar>
@@ -38,7 +39,7 @@ export function SemestersTab() {
         {semesters.map((semester) => (
           <section className={`semester-card${semester.is_active ? "" : " archived"}`} key={semester.id}>
             <header className="semester-card-head">
-              <div>
+              <div className="semester-card-title">
                 <div className="semester-title-row">
                   <h3>{semester.name}</h3>
                   <StatusPill tone={semester.is_active ? "ok" : "muted"}>
@@ -50,13 +51,17 @@ export function SemestersTab() {
               <div className="semester-actions">
                 <button className="sm" onClick={() => setEditor({ kind: "rename-semester", semester })}>重命名</button>
                 <ArchiveAction active={semester.is_active}
+                  confirm={{
+                    title: `归档学期“${semester.name}”？`,
+                    message: "归档后不能在该学期添加班级、导入或分配学生；已有的分班归属和学生的实验记录都会保留，之后可以随时恢复。",
+                  }}
                   onChange={() => mutate(api.classroom.updateSemester(semester.id, { is_active: !semester.is_active }))} />
               </div>
             </header>
             <div className="class-list">
               {semester.classes.map((group) => (
                 <div className="class-row" key={group.id}>
-                  <div>
+                  <div className="class-row-name">
                     <b>{group.name}</b>
                     <span>{group.student_count} 名学生{group.is_active ? "" : " · 已归档"}</span>
                   </div>
@@ -65,8 +70,9 @@ export function SemestersTab() {
                       aria-label={`导入学生：${semester.name} · ${group.name}`}
                       onClick={() => setBatchClassId(group.id)}>导入学生</button>}
                     <button className="sm" onClick={() => setEditor({ kind: "rename-class", group })}>重命名</button>
-                    <ArchiveAction active={group.is_active}
-                      onChange={() => mutate(api.classroom.updateClass(group.id, { is_active: !group.is_active }))} />
+                    {/* Inside an archived semester a class can be neither used nor archived on its own. */}
+                    {semester.is_active && <ArchiveAction active={group.is_active}
+                      onChange={() => mutate(api.classroom.updateClass(group.id, { is_active: !group.is_active }))} />}
                   </div>
                 </div>
               ))}
@@ -76,7 +82,7 @@ export function SemestersTab() {
               <button className="secondary semester-add-class" onClick={() => setEditor({ kind: "class", semester })}>
                 + 添加班级
               </button>
-            ) : <p className="muted archived-help">恢复学期后才能添加班级或分配学生。</p>}
+            ) : <p className="muted archived-help">恢复学期后才能添加班级、分配学生或调整班级的归档状态。</p>}
           </section>
         ))}
       </div>
@@ -106,9 +112,15 @@ export function SemestersTab() {
   );
 }
 
-function ArchiveAction({ active, onChange }: { active: boolean; onChange: () => Promise<void> }) {
+function ArchiveAction({ active, confirm, onChange }: {
+  active: boolean;
+  /** Ask before archiving (not before restoring). */
+  confirm?: { title: string; message: string };
+  onChange: () => Promise<void>;
+}) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const action = active ? "归档" : "恢复";
   const submit = async () => {
     if (saving) return;
@@ -124,10 +136,18 @@ function ArchiveAction({ active, onChange }: { active: boolean; onChange: () => 
   };
   return (
     <div className="semester-archive-action">
-      <button className="sm" disabled={saving} onClick={() => { void submit(); }}>
+      {/* aria-disabled, not disabled: a disabled button drops keyboard focus to the page while saving. */}
+      <button className="sm" aria-disabled={saving || undefined}
+        onClick={() => {
+          if (saving) return;
+          if (active && confirm) setConfirming(true);
+          else void submit();
+        }}>
         {saving ? `${action}中…` : action}
       </button>
       {error && <div className="error-box" role="alert">{error}</div>}
+      {confirming && confirm && <ConfirmModal title={confirm.title} message={confirm.message} confirmLabel="归档"
+        onConfirm={() => { void submit(); }} onClose={() => setConfirming(false)} />}
     </div>
   );
 }
@@ -142,8 +162,10 @@ export function NameModal({ title, label, initial, onClose, onSubmit }: {
   const [name, setName] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const errorRef = useModalErrorFocus(error);
   const submit = async () => {
-    const normalized = name.trim();
+    // Same normalization as the server, so what is checked here is what gets stored.
+    const normalized = normalizeLabel(name);
     if (!normalized) return setError(`${label}不能为空`);
     setSaving(true);
     setError(null);
@@ -151,17 +173,19 @@ export function NameModal({ title, label, initial, onClose, onSubmit }: {
       await onSubmit(normalized);
       onClose();
     } catch (cause) {
-      setError(String((cause as Error).message ?? cause));
+      setError(userFacingRequestError(cause, "保存失败"));
       setSaving(false);
     }
   };
+  // No autoFocus here: Modal focuses the first field itself, and autoFocus made it lose the element to
+  // return focus to when the dialog closes.
   return (
     <Modal title={title} onClose={() => { if (!saving) onClose(); }}>
-      <form className="modal-form" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+      <form className="modal-form" noValidate onSubmit={(event) => { event.preventDefault(); void submit(); }}>
         <LabeledControl label={label}>{(id) => (
-          <input id={id} autoFocus disabled={saving} value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
+          <input id={id} disabled={saving} value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
         )}</LabeledControl>
-        {error && <div className="error-box" role="alert">{error}</div>}
+        {error && <div ref={errorRef} className="error-box" role="alert" tabIndex={-1}>{error}</div>}
         <div className="modal-actions">
           <button type="button" disabled={saving} onClick={onClose}>取消</button>
           <button type="submit" className="primary" disabled={saving}>{saving ? "保存中…" : "保存"}</button>

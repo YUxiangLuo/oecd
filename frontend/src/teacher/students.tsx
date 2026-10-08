@@ -1,13 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { LabeledControl, ScrollableRegion } from "../a11y";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import type { AcademicSemester, StudentRow } from "../types";
+import { userFacingRequestError } from "../user-facing-error";
 import { AcademicFilters, matchesAcademicFilter } from "./academic-filter";
-import { EmptyState, Modal, SearchInput, StatusPill, Toolbar } from "./ui";
+import { normalizeLabel, stripInvisibleEdges } from "./text";
+import { EmptyState, LoadFailure, Modal, SearchInput, StatusPill, Toolbar, useModalErrorFocus } from "./ui";
 
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
+// No maxLength on password fields: a pasted longer password would be cut silently (it is masked) and the
+// handed-out password would not work. studentFieldError says so instead.
+export const PASSWORD_MAX_LENGTH = 256;
 export const PASSWORD_INPUT_PROPS = { type: "password", autoComplete: "new-password" } as const;
+export const VALID_ACTIVITY_HINT = "最近一次保存实验记录、生成或提交报告的时间（仅登录或浏览不计）";
 
 export async function settleModalSubmission(
   operation: () => Promise<void>,
@@ -22,7 +28,7 @@ export async function settleModalSubmission(
     onClose();
     return true;
   } catch (cause) {
-    setError(String((cause as Error).message ?? cause));
+    setError(userFacingRequestError(cause, "保存失败"));
     return false;
   } finally {
     setSaving(false);
@@ -36,10 +42,14 @@ export function studentFieldError(
   value: string,
   { label, password = false, required = true, maxLength }: { label: string; password?: boolean; required?: boolean; maxLength?: number },
 ) {
-  if (password && value.length < 12) return "密码至少 12 位";
+  if (password && value.length < 12) return "密码至少 12 个字符";
+  if (password && value.length > PASSWORD_MAX_LENGTH) return `密码不能超过 ${PASSWORD_MAX_LENGTH} 个字符`;
   if (password && !value.trim()) return "密码不能全是空格";
-  if (!password && required && !value.trim()) return `${label}不能为空`;
-  if (!password && maxLength != null && value.trim().length > maxLength) return `${label}不能超过 ${maxLength} 个字符`;
+  // Names and 学号 are checked in the form the server stores them (zero-width characters, full-width
+  // letters and repeated spaces normalized), so a name of only invisible characters is blank here too.
+  const normalized = password ? value : normalizeLabel(value);
+  if (!password && required && !normalized) return `${label}不能为空`;
+  if (!password && maxLength != null && normalized.length > maxLength) return `${label}不能超过 ${maxLength} 个字符`;
   return null;
 }
 
@@ -47,7 +57,7 @@ type NewStudent = { username: string; display_name: string; password: string; st
 
 /** The create form's first problem, checked as the server will (usernames and 学号 are compared exactly, so trimmed). */
 export function newStudentError(student: NewStudent): string | null {
-  if (!/^[a-zA-Z0-9_.-]{2,40}$/.test(student.username)) return "用户名须为 2–40 位字母、数字、下划线、点或连字符";
+  if (!/^[a-zA-Z0-9_.-]{2,40}$/.test(stripInvisibleEdges(student.username))) return "用户名须为 2–40 位字母、数字、下划线、点或连字符";
   return studentFieldError(student.display_name, { label: "姓名", maxLength: STUDENT_NAME_MAX_LENGTH })
     ?? studentFieldError(student.student_no, { label: "学号", required: false, maxLength: STUDENT_NO_MAX_LENGTH })
     ?? studentFieldError(student.password, { label: "初始密码", password: true });
@@ -82,6 +92,11 @@ export function StudentRowMenu({
       if (event.key !== "Escape" || !event.currentTarget.open) return;
       event.currentTarget.removeAttribute("open");
       event.currentTarget.querySelector("summary")?.focus();
+    }} onBlur={(event) => {
+      // Tabbing out of an open menu closes it. Without a next focus target (a click on the page), the
+      // pointerdown listener decides, so a click on a menu item in browsers that do not focus buttons still lands.
+      const next = event.relatedTarget;
+      if (next instanceof Node && !event.currentTarget.contains(next)) event.currentTarget.removeAttribute("open");
     }} onToggle={(event) => {
       const menu = event.currentTarget;
       if (!menu.open) return;
@@ -112,15 +127,8 @@ export function StudentRowMenu({
   );
 }
 
-function useModalErrorFocus(error: string | null) {
-  const errorRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (error) errorRef.current?.focus();
-  }, [error]);
-  return errorRef;
-}
-
 export function StudentsTab() {
+  const activityHintId = useId();
   const [refresh, setRefresh] = useState(0);
   // A click outside an open row menu closes it (native <details> stays open otherwise).
   useEffect(() => {
@@ -137,15 +145,20 @@ export function StudentsTab() {
   const [classId, setClassId] = useState<number | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
   // Keep the table while it reloads after an edit: clearing it flashed "暂无学生" and lost the scroll position.
-  const { data, error, status } = useAsync<{ students: StudentRow[] }>(() => api.classroom.students(), [refresh], { keepPreviousData: true });
-  const { data: academic, error: academicError } = useAsync(() => api.classroom.semesters(), [refresh], { keepPreviousData: true });
+  const { data, error, status, retry } = useAsync<{ students: StudentRow[] }>(() => api.classroom.students(), [refresh], { keepPreviousData: true });
+  const { data: academic, error: academicError, retry: retryAcademic } = useAsync(() => api.classroom.semesters(), [refresh], { keepPreviousData: true });
 
   const run = async (operation: Promise<unknown>) => {
     await operation;
     setRefresh((value) => value + 1);
   };
 
-  if (error || academicError) return <div className="error-box">{error ?? academicError}</div>;
+  if (error || academicError) {
+    return <LoadFailure what="学生列表" error={(error ?? academicError)!} onRetry={() => {
+      if (error) retry();
+      if (academicError) retryAcademic();
+    }} />;
+  }
   const all = data?.students ?? [];
   const semesters = academic?.semesters ?? [];
   const needle = query.trim().toLowerCase();
@@ -171,13 +184,16 @@ export function StudentsTab() {
       </Toolbar>
       {/* The previous rows stay while a refresh loads; say so, since they may be a moment out of date. */}
       <p className="muted list-refreshing" role="status">{data && status === "loading" ? "正在刷新列表…" : ""}</p>
+      <p id={activityHintId} className="sr-only">有效活动：{VALID_ACTIVITY_HINT}</p>
       <ScrollableRegion className="table-wrap student-table-scroll" label="学生进度表，可横向及纵向滚动">
         <table className="data-table">
-          <thead><tr><th>姓名</th><th>用户名</th><th>学号</th><th>班级</th><th>完成步骤</th><th>报告</th><th>得分</th><th>有效活动</th><th>最近登录</th><th>操作</th></tr></thead>
+          <thead><tr><th>姓名</th><th>用户名</th><th>学号</th><th>班级</th><th>完成步骤</th><th>报告</th><th>得分</th>
+            <th className="th-hint" title={VALID_ACTIVITY_HINT} aria-describedby={activityHintId}>有效活动</th>
+            <th>最近登录</th><th>操作</th></tr></thead>
           <tbody>
             {students.map((student) => (
               <tr key={student.id}>
-                <td>{student.display_name}</td>
+                <td className="student-name-cell">{student.display_name}</td>
                 <td className="mono">{student.username}</td>
                 <td className="student-no-cell" title={student.student_no || undefined}>{student.student_no || "—"}</td>
                 <td className="class-memberships">{student.enrollments.length
@@ -218,7 +234,8 @@ export function StudentsTab() {
       {modal && modal.type !== "student" && (
         modal.type !== "enrollment" &&
         <FieldModal
-          title={modal.type === "name" ? "修改姓名" : modal.type === "student_no" ? "修改学号" : `重置 ${modal.student.display_name} 的密码`}
+          title={modal.type === "name" ? `修改 ${modal.student.display_name} 的姓名`
+            : modal.type === "student_no" ? `修改 ${modal.student.display_name} 的学号` : `重置 ${modal.student.display_name} 的密码`}
           label={modal.type === "name" ? "姓名" : modal.type === "student_no" ? "学号" : "新密码"}
           initial={modal.type === "name" ? modal.student.display_name : modal.type === "student_no" ? modal.student.student_no : ""}
           password={modal.type === "password"}
@@ -239,7 +256,12 @@ export function StudentModal({ semesters = [], onClose, onSubmit }: { semesters?
   const errorRef = useModalErrorFocus(error);
   const close = () => { if (!saving) onClose(); };
   const submit = async () => {
-    const body = { ...form, username: form.username.trim(), display_name: form.display_name.trim(), student_no: form.student_no.trim() };
+    const body = {
+      ...form,
+      username: stripInvisibleEdges(form.username),
+      display_name: normalizeLabel(form.display_name),
+      student_no: normalizeLabel(form.student_no),
+    };
     const problem = newStudentError(body);
     if (problem) {
       setError(problem);
@@ -258,7 +280,7 @@ export function StudentModal({ semesters = [], onClose, onSubmit }: { semesters?
           {semester.classes.filter((group) => group.is_active).map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
         </optgroup>)}
       </select>}</LabeledControl>
-      <LabeledControl label="初始密码（至少 12 位）">{(id) => <input id={id} name="student-password" disabled={saving} {...PASSWORD_INPUT_PROPS} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />}</LabeledControl>
+      <LabeledControl label="初始密码（至少 12 个字符）">{(id) => <input id={id} name="student-password" disabled={saving} {...PASSWORD_INPUT_PROPS} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />}</LabeledControl>
       {error && <div ref={errorRef} className="error-box" role="alert" tabIndex={-1}>{error}</div>}
       <div className="modal-actions"><button type="button" disabled={saving} onClick={close}>取消</button><button type="submit" className="primary" disabled={saving}>{saving ? "创建中…" : "创建账号"}</button></div>
     </form></Modal>
@@ -280,6 +302,7 @@ export function EnrollmentModal({ student, semesters, onClose, onSubmit }: {
   const [classId, setClassId] = useState<number | null>(existing?.class_id ?? null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const errorRef = useModalErrorFocus(error);
   const semester = semesters.find((item) => item.id === termId);
   const submit = async () => {
     if (termId == null) return setError("请先创建并选择学期");
@@ -289,7 +312,7 @@ export function EnrollmentModal({ student, semesters, onClose, onSubmit }: {
       await onSubmit(termId, classId);
       onClose();
     } catch (cause) {
-      setError(String((cause as Error).message ?? cause));
+      setError(userFacingRequestError(cause, "保存失败"));
       setSaving(false);
     }
   };
@@ -310,7 +333,7 @@ export function EnrollmentModal({ student, semesters, onClose, onSubmit }: {
             (semester.is_active && group.is_active) || existing?.class_id === group.id
           ).map((group) => <option key={group.id} value={group.id}>{group.name}{group.is_active && semester.is_active ? "" : "（已归档，仅保留现有归属）"}</option>)}
         </select>}</LabeledControl>
-        {error && <div className="error-box" role="alert">{error}</div>}
+        {error && <div ref={errorRef} className="error-box" role="alert" tabIndex={-1}>{error}</div>}
         <div className="modal-actions"><button type="button" disabled={saving} onClick={onClose}>取消</button><button type="submit" className="primary" disabled={saving || !semester}>{saving ? "保存中…" : "保存"}</button></div>
       </form>
     </Modal>
@@ -327,7 +350,7 @@ export function FieldModal({ title, label, initial, password = false, required =
     const validationError = studentFieldError(value, { label, password, required, maxLength });
     if (validationError) return setError(validationError);
     await settleModalSubmission(
-      () => onSubmit(password ? value : value.trim()),
+      () => onSubmit(password ? value : normalizeLabel(value)),
       onClose,
       setError,
       setSaving,
