@@ -121,7 +121,7 @@ export function AutoMaterialStatus({ meta, state, schema, first, second, metric,
       {recorded.length === 2
         ? <span role="status">{recorded[0].year} 年{fieldLabel(recorded[0].metric, schema)}：{recorded.map((item) => `${countryLabel(item.country)} ${fmtField(item.value, item.metric, schema)}${item.unit === "百万美元" ? " 百万美元" : ""}`).join("；")}</span>
         : <span role="status">
-          {loadFailed ? userFacingRequestError(loadError, "国家级数据加载失败") : "正在记录当前选择…"}
+          {loadFailed ? userFacingRequestError(loadError, "国家整体数据加载失败") : "正在记录当前选择…"}
           {loadFailed && onRetryLoad && <button type="button" className="secondary" onClick={(event) => { const button = event.currentTarget; onRetryLoad(); keepFocusNear(button); }}>重试</button>}
         </span>}
       <label className="auto-material-partner">对比国家
