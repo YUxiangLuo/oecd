@@ -285,6 +285,25 @@ export function limitInsertion(
   return { value: before + kept + after, caret: before.length + kept.length, cut: true };
 }
 
+/**
+ * Why regenerating was refused (409), from the report this page showed and the one the server now has:
+ * a new grade, a submission from another tab, or another update. Null when the server's report is unknown
+ * or unchanged (the server's own message is shown then).
+ */
+export function reportConflictMessage(seen: ClassroomReport | null, latest: ClassroomReport | null): string | null {
+  if (!latest) return null;
+  if (latest.state === "graded" && (seen?.state !== "graded" || seen.graded_at !== latest.graded_at)) {
+    return "老师刚刚评阅了这份报告，页面已显示最新状态。请先查看评分与评语，再决定是否重新生成。";
+  }
+  if (latest.state === "pending" && seen?.state !== "pending") {
+    return "这份报告已在别处提交给老师，页面已显示最新状态。请核对后再决定是否重新生成。";
+  }
+  if (seen?.updated_at !== latest.updated_at || seen?.state !== latest.state) {
+    return "这份报告已在别处更新，页面已显示最新状态。请核对后再决定是否重新生成。";
+  }
+  return null;
+}
+
 export function reportWaitLabel(
   sessionStatus: SessionStatus,
   sessionUnsynced: boolean,
@@ -503,11 +522,11 @@ export function ReportLab({
         if (requestError.blocked.some((item) => item.step === 15)) setAttemptedIncomplete(true);
       }
       else if (!generated && isApiErrorStatus(cause, 409)) {
-        // The report changed under us (typically the teacher just graded it): show the current state
-        // instead of a stale page and a message about a draft that was never generated.
+        // The report changed under us: the teacher graded it, or it was submitted or regenerated in another
+        // tab. Show the current state instead of a stale page, and say which of these happened.
         const latest = await api.classroom.session().catch(() => null);
         if (latest?.report) onReportChanged({ report: latest.report, completion: latest.completion, report_gate: latest.report_gate, material_gate: latest.material_gate });
-        setError("这份报告刚刚有了新的评阅或更新，页面已显示最新状态。请先查看评分与评语，再决定是否重新生成。");
+        setError(reportConflictMessage(report, latest?.report ?? null) ?? userFacingRequestError(cause, "报告生成失败"));
       } else setError(userFacingRequestError(cause, generated ? "报告已生成为草稿，但提交给老师失败，请重试提交" : "报告生成失败"));
     } finally {
       setGenerating(false);

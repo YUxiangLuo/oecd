@@ -21,6 +21,7 @@ import {
   limitInsertion,
   codePointLength,
   REFLECTION_MAX_LENGTH,
+  reportConflictMessage,
 } from "./report-lab";
 import { useState } from "react";
 
@@ -418,9 +419,34 @@ test("a 409 because the teacher just graded shows the current report, not a phan
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: /重新生成|更新报告/ })); });
     expect(changed).toEqual(["graded"]);
     const alert = screen.getByRole("alert").textContent ?? "";
-    expect(alert).toContain("刚刚有了新的评阅");
+    expect(alert).toContain("老师刚刚评阅了这份报告");
     expect(alert).not.toContain("草稿会保留");
   } finally { generate.mockRestore(); session.mockRestore(); }
+});
+
+test("a 409 because the report was submitted in another tab says so, not that it was graded", async () => {
+  const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new ApiError(409, "报告或评分已更新，请刷新页面核对后再确认重新生成", "Conflict"));
+  const latest = mutation("pending");
+  const session = spyOn(api.classroom, "session").mockResolvedValue({ release_id: "a".repeat(32), session: { version: "experiment-session-simple-v3", steps: {}, shared: {} }, updated_at: null, ...latest });
+  const changed: string[] = [];
+  try {
+    render(<ReportLab {...finishProps} report={report("draft")} onReportChanged={(r) => changed.push(r.report.state)} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重新生成草稿" })); });
+    expect(changed).toEqual(["pending"]);
+    const alert = screen.getByRole("alert").textContent ?? "";
+    expect(alert).toContain("已在别处提交给老师");
+    expect(alert).not.toContain("评分与评语");
+  } finally { generate.mockRestore(); session.mockRestore(); }
+});
+
+test("the 409 message follows what changed on the server", () => {
+  const graded = report("graded");
+  expect(reportConflictMessage(report("pending"), graded)).toContain("老师刚刚评阅");
+  expect(reportConflictMessage(graded, { ...graded, graded_at: "2026-08-14T00:00:00Z" })).toContain("老师刚刚评阅");
+  expect(reportConflictMessage(null, report("draft"))).toContain("已在别处更新");
+  expect(reportConflictMessage(report("pending"), { ...report("pending"), updated_at: "2026-08-14T00:00:00Z" })).toContain("已在别处更新");
+  expect(reportConflictMessage(report("pending"), report("pending"))).toBeNull();
+  expect(reportConflictMessage(report("pending"), null)).toBeNull();
 });
 
 test("draft generation keeps toast feedback when no outro is shown", async () => {
