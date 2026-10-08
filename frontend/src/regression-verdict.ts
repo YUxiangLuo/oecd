@@ -52,7 +52,8 @@ interface RegressionVerdict {
   warnings: string[];
 }
 
-const signed = (value: number, digits = 3) => {
+/** A signed number as the headline prints it; a nonzero value that rounds to 0 keeps 2 significant digits. */
+export const signed = (value: number, digits = 3) => {
   const fixed = value.toFixed(digits);
   const text = value !== 0 && Number(fixed) === 0 ? value.toPrecision(2) : fixed;
   return `${value >= 0 ? "+" : ""}${text}`;
@@ -91,6 +92,24 @@ export function teachingEffect(outcome: RegressionOutcome, beta: number, design?
  */
 export const shareDigits = (pointsEstimate: number) => (Math.abs(pointsEstimate) >= 0.005 && Math.abs(pointsEstimate) < 0.1 ? 3 : 2);
 
+/** A value per 1 percentage point of X, signed, in the headline's digits for its kind (shares 2–3, lengths 3, position 4, network 2). */
+export function signedEffect(value: number, kind: DepvarKind): string {
+  return signed(value, kind === "position" ? 4 : kind === "length" ? 3 : kind === "share" ? shareDigits(value) : 2);
+}
+
+/**
+ * Decimals of a size in standard deviations (report `standardized_digits`): 3 when the point or an interval end is
+ * below 0.1 (2 decimals put 0.0459 on the edge of "[-0.05, -0.04]"), otherwise 2; more until the interval's ends
+ * differ, at most 4.
+ */
+export function standardizedDigits(point: number | null, bounds: [number, number] | null): number {
+  const values = [point, ...(bounds ?? [])].filter((value): value is number => value != null && Number.isFinite(value));
+  const start = values.some((value) => Math.abs(value) < 0.1) ? 3 : 2;
+  if (!bounds) return start;
+  for (let digits = start; digits <= 4; digits++) if (signed(bounds[0], digits) !== signed(bounds[1], digits)) return digits;
+  return 4;
+}
+
 function naturalScale(
   outcome: RegressionOutcome,
   coefficient: CoefStat,
@@ -108,17 +127,16 @@ function naturalScale(
   }
   if (kind === "network") {
     const sd = response.result.depvar_std;
-    const standardized = typeof sd === "number" && Number.isFinite(sd) && sd > 0 ? effect / sd : null;
-    // A narrow interval whose ends round to the same two decimals is shown with three, so it is not read as a point.
-    const sdDigits = typeof sd === "number" && sd > 0 && signed(ciLow / sd, 2) === signed(ciHigh / sd, 2) ? 3 : 2;
-    const standardizedInterval = typeof sd === "number" && Number.isFinite(sd) && sd > 0
-      ? `；约 [${signed(ciLow / sd, sdDigits)}, ${signed(ciHigh / sd, sdDigits)}] 个标准差`
-      : "";
+    const validSd = typeof sd === "number" && Number.isFinite(sd) && sd > 0;
+    const standardized = validSd ? effect / sd : null;
+    const sdBounds: [number, number] | null = validSd && hasCi ? [ciLow / sd, ciHigh / sd] : null;
+    // Point and interval share their digits: 3 below 0.1, more when the interval's ends would print alike.
+    const sdDigits = standardizedDigits(standardized, sdBounds);
+    const standardizedInterval = sdBounds ? `；约 [${signed(sdBounds[0], sdDigits)}, ${signed(sdBounds[1], sdDigits)}] 个标准差` : "";
     const intervalShort = hasCi ? `[${signed(ciLow, 2)}, ${signed(ciHigh, 2)}] ${countUnit("network")}` : "—";
     return {
-      // Point and interval in standard deviations use the same decimals (the interval may need three).
       // A standard deviation is the typical gap in Y between country×industry records.
-      // Unsigned, as in the report ("幅度约 0.05 个标准差"): the number before it carries the sign.
+      // Unsigned, as in the report ("幅度约 0.047 个标准差"): the number before it carries the sign.
       effect: `${signed(effect, 2)} 个中心性原始单位${standardized == null ? "" : `（幅度约 ${signed(standardized, sdDigits).replace(/^[+−-]/, "")} 个标准差，标准差即 Y 的典型差距）`}`,
       interval: hasCi ? `${intervalShort}${standardizedInterval}` : "—",
       intervalShort,

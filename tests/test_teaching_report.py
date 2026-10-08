@@ -78,7 +78,7 @@ def test_report_tiny_nonzero_numbers_and_standardized_effect_preserve_sign():
         {"name": "tariff_shock", "coef": -690.746, "ci_low": -15099, "ci_high": 13718},
     )
     # The standard-deviation size is unsigned (the leading estimate carries the sign) but never rounds to 0.
-    assert effect.startswith("-6.91 个中心性原始单位") and "幅度约 0.0035 个标准差" in effect
+    assert effect.startswith("-6.91 个中心性原始单位") and "幅度约 0.003 个标准差" in effect
 
 
 def test_report_network_interval_in_standard_deviations_never_shows_equal_ends():
@@ -1098,7 +1098,7 @@ def test_steps_two_to_five_accept_automatic_comparisons():
     # The report states honestly that the comparison was recorded by the system.
     snapshot = "\n".join(_experiment_sections(session))
     assert "系统自动记录的比较（默认对比国家）：CHN 中国、USA 美国" in snapshot
-    assert "数值为国家级代表指标" in snapshot
+    assert "数值为国家级代表指标：页面可按国家×行业浏览" in snapshot
     # A comparison country the student changed is their choice, even though the page recorded it.
     changed = json.loads(json.dumps(session))
     changed["steps"]["2"]["data"]["compared"] = ["CHN", "DEU"]
@@ -1353,6 +1353,11 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert "预设" not in report.markdown
     assert (
         "关税暴露 X 越高的国家×行业，外国增加值项占比平均越高（X 每高 1 个百分点，约高 1.20 个百分点）。"
+        in report.markdown
+    )
+    assert "- **可以支持的表述**：关税暴露 X 越高的国家×行业" in report.markdown
+    assert (
+        "- **按步骤 10 的例子换算**：CHN 中国 · s1 的 X 为 2.00 个百分点，按估计与 X 相关的差异约为 +2.40 个百分点（Y 偏高）。"
         in report.markdown
     )
     assert "本实验没有生成冲击后的投入产出表或网络" not in report.markdown
@@ -2312,3 +2317,62 @@ def test_bold_markup_closes_before_chinese_punctuation():
     session = _complete()
     text = "\n".join(teaching_report._experiment_sections(session))
     assert not _re.search(r"[。：；，]\*\*[^\s*|]", text)
+
+
+
+def test_report_regression_headings_name_the_step_not_its_default_y(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    markdown = build(_complete(), "同学").markdown
+    summary = markdown.split("## 关键证据摘要", 1)[1].split("## 理解题答题记录", 1)[0]
+    appendix = markdown.split("## 技术附录", 1)[1].split("## 数据检查", 1)[0]
+    # A saved run may use another Y than the step title's default, so the headings name the regression only;
+    # the saved Y follows below them ("结果指标 Y").
+    for step, name in ((11, "贸易流回归"), (12, "生产回归"), (13, "长度回归"), (14, "网络回归")):
+        assert f"### 步骤 {step} · {name}（用于汇总表）\n" in summary
+        assert f"### 步骤 {step} · {name}\n" in appendix
+    headings = [line for line in (summary + appendix).splitlines() if line.startswith("### 步骤 1")]
+    assert len(headings) == 8 and not any("关税与" in line for line in headings)
+    # An open direction gets a caution, not "可以支持的表述".
+    assert summary.count("- **表述提醒**：95% 区间包含 0") == 4
+    assert "可以支持的表述" not in summary
+    # The step 10 example is converted in each step, as on the page.
+    assert summary.count("- **按步骤 10 的例子换算**：CHN 中国 · s1 的 X 为 2.00 个百分点") == 4
+    assert "但区间包含 0，差异的高低方向并不确定。" in summary
+
+
+def test_report_example_conversion_reads_like_the_page():
+    from gvcsim.report_render import _example_conversion
+
+    example = {"country": "CAN", "industry": "C29", "teaching_tariff_exposure": 0.2325, "teaching_tariff_rate_tau": 0.25}
+    coefficient = {"coef": -0.55}
+    line = _example_conversion("trade", {}, coefficient, True, example)
+    assert line is not None and line.endswith("的 X 为 23.25 个百分点，按估计与 X 相关的差异约为 -12.79 个百分点（Y 偏低）。")
+    length = _example_conversion("length", {"depvar_kind": "length"}, {"coef": -1.8}, True, example)
+    assert length is not None and length.endswith("约为 -0.419 个长度单位（Y 偏短）。")
+    imposer = _example_conversion("trade", {}, coefficient, True, {**example, "country": "USA"})
+    assert imposer is not None and "属于加征关税的一方，按设计不在回归样本中" in imposer
+    untaxed = _example_conversion(
+        "trade", {}, coefficient, True, {**example, "teaching_tariff_exposure": 0, "teaching_tariff_rate_tau": 0}
+    )
+    assert untaxed is not None and untaxed.endswith("未被加税，X = 0，按估计没有与 X 相关的差异。")
+    assert _example_conversion("trade", {}, coefficient, True, None) is None
+
+
+def test_report_network_standardized_size_uses_three_decimals_below_point_one():
+    _, effect, interval = teaching_report._natural_effect(
+        "network",
+        {"method": "twfe_intensity"},
+        {"status": "ok", "depvar_std": 1000},
+        {"name": "teaching_tariff_exposure", "coef": -4590, "ci_low": -4800, "ci_high": -4300},
+    )
+    # Two decimals would read "幅度约 0.05" next to "约 [-0.05, -0.04]": the point on its interval's edge.
+    assert effect.endswith("（幅度约 0.046 个标准差）")
+    assert interval.endswith("（约 [-0.048, -0.043] 个标准差）")
+    _, large, large_interval = teaching_report._natural_effect(
+        "network",
+        {"method": "twfe_intensity"},
+        {"status": "ok", "depvar_std": 100},
+        {"name": "teaching_tariff_exposure", "coef": -4590, "ci_low": -6000, "ci_high": -3000},
+    )
+    assert large.endswith("（幅度约 0.46 个标准差）") and large_interval.endswith("（约 [-0.60, -0.30] 个标准差）")
