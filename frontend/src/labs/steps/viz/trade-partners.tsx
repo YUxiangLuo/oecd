@@ -55,7 +55,7 @@ export function regionMatrix(edges: NetworkData["edges"]): number[][] {
 function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: string; partners: NetworkPartner[]; colorIndex: number; scaleMax: number }) {
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
   const top = [...partners].slice(0, TOP_PARTNERS).sort((a, b) => (REGION_OF[a.c] ?? 5) - (REGION_OF[b.c] ?? 5) || b.total - a.total);
-  const W = 420, H = 320, cx = W / 2, cy = H / 2 + 6, R = 118;
+  const W = 420, H = 320, cx = W / 2, cy = H / 2, R = 118;
   const width = (value: number) => 1 + (value / (scaleMax || 1)) * 9;
   const linesFor = (partner: NetworkPartner): TipLine[] => [
     ["", `${countryLabel(country)} ↔ ${countryLabel(partner.c)} · ${REGIONS[REGION_OF[partner.c] ?? 5]}`],
@@ -66,7 +66,10 @@ function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: stri
   if (!top.length) return <p role="status">{countryLabel(country)} 在该年没有贸易伙伴数据。</p>;
   return (
     <div ref={wrapRef} className="hover-wrap">
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${countryLabel(country)}与前 ${top.length} 个贸易伙伴的关系图；线宽表示双向流量，箭头指向买方`} style={{ width: "100%", display: "block" }}>
+      {/* The key is page text: as one SVG line it ran past the diagram's right edge. */}
+      <p className="ego-network-key">线宽 = 双向流量；蓝箭头 = {countryLabel(country)} 卖出，绿箭头 = {countryLabel(country)} 买入；伙伴按地理区域分组</p>
+      {/* Capped so a stacked (full-width) panel does not blow the 11-unit node labels up to page-heading size. */}
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${countryLabel(country)}与前 ${top.length} 个贸易伙伴的关系图；线宽表示双向流量，箭头指向买方`} style={{ width: "100%", maxWidth: 560, margin: "0 auto", display: "block" }}>
         <defs>
           <marker id={`ego-out-${country}`} markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" viewBox="0 0 10 8">
             <path d="M0,0 L10,4 L0,8 z" fill={CAT[0]} />
@@ -75,7 +78,6 @@ function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: stri
             <path d="M0,0 L10,4 L0,8 z" fill={CAT[1]} />
           </marker>
         </defs>
-        <text x={12} y={16} fontSize={11} fill="#596173">线宽 = 双向流量；蓝箭头 = {countryLabel(country)} 卖出，绿箭头 = {countryLabel(country)} 买入；伙伴按地理区域分组</text>
         {top.map((partner, index) => {
           const angle = -Math.PI / 2 + (index / top.length) * Math.PI * 2;
           const x = cx + Math.cos(angle) * R, y = cy + Math.sin(angle) * R;
@@ -184,7 +186,7 @@ export function TradePartners({ meta, countries, year, onYear }: {
       <p className="muted" id="region-matrix-note">
         几乎每两个国家之间都有贸易，所以“介数”这类只看连接的指标在国家层面都差不多；本步的网络指标改在“国家×行业”层面计算。这里只看：主要伙伴、买卖方向、各区域之间的流向。
       </p>
-      <div className={`comparison-facets${countries.length > 2 ? " comparison-facets--stacked" : ""}`}>
+      <div className={`comparison-facets ${countries.length > 2 ? "comparison-facets--stacked" : "comparison-facets--roomy"}`}>
         {countries.map((country, index) => {
           const partners = current.partners[country] ?? [];
           return (

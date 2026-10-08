@@ -100,6 +100,8 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
   const segments = composition.segments;
   const focus = composition.focus ?? segments[segments.length - 1].key;
   const focusName = segments.find((segment) => segment.key === focus)?.name ?? focus;
+  // The cards show the focus part's share, so they carry the indicator's name, not the part's.
+  const focusLabel = composition.focusLabel ?? focusName;
   const ownShares = segments.map((segment) => ({ segment, share: share(first, segment.key) }));
   if (ownShares.some((item) => item.share === null)) {
     // A total of exactly zero (an industry that does not export at all) is not missing data: say so.
@@ -117,7 +119,7 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
       small: `占${totalLabel}的比重`,
     },
     {
-      eyebrow: `${countryLabel(first)} · ${focusName}`,
+      eyebrow: `${countryLabel(first)} · ${focusLabel}`,
       big: indicatorNumber(ownFocus, "%"),
       small: `${cjkJoin(focusName, "占")}${totalLabel}的比重`,
     },
@@ -125,7 +127,7 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
   for (const other of others) {
     const value = share(other, focus);
     cards.push({
-      eyebrow: `与对比国家 ${countryLabel(other)} · ${focusName}`,
+      eyebrow: `与对比国家 ${countryLabel(other)} · ${focusLabel}`,
       big: value === null ? "对比国家构成不完整" : `${countryLabel(first)} ${gapReading(ownFocus, value, "%")}`,
       small: value === null ? "该国分项或总量缺失" : `${countryLabel(other)} ${fixedIndicatorNumber(value, "%")}；比较的是份额，不是金额`,
     });

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { LengthViz } from "../views/length-comparison";
-import { CompositionBar, QuadrantScatter, RankBarChart, RANK_HIGHLIGHT_TEXT } from "./charts";
+import { CompositionBar, QuadrantScatter, RankBarChart, RANK_HIGHLIGHT_TEXT, xTickAnchor } from "./charts";
 
 function contrastOnWhite(hex: string): number {
   const channels = [1, 3, 5].map((index) => Number.parseInt(hex.slice(index, index + 2), 16) / 255);
@@ -135,6 +135,18 @@ describe("Steps 6-9 chart semantic data equivalents", () => {
     const css = await Bun.file(new URL("../../styles.css", import.meta.url)).text();
     expect(css).toContain("grid-template-columns: minmax(112px, 128px) minmax(120px, 1fr) 72px");
     expect(css).toContain(".composition-chart-track { min-width: 120px; }");
+  });
+
+  test("a log-axis end tick is anchored inside the plot instead of being cut at the SVG edge", () => {
+    // "10,000,000" centred on the last tick (x = 642 of 660) ran about 12 units past the right edge.
+    expect(xTickAnchor(642, "10,000,000", 660)).toBe("end");
+    expect(xTickAnchor(350, "10,000,000", 660)).toBe("middle");
+    expect(xTickAnchor(642, "6", 660)).toBe("middle");
+    expect(xTickAnchor(10, "1,000", 660)).toBe("start");
+    const html = renderToStaticMarkup(
+      <QuadrantScatter rows={[{ country: "AAA", x: 120, y: 1 }, { country: "BBB", x: 8_400_000, y: 2 }]} xKey="x" yKey="y" xLabel="出口" yLabel="份额" xFormat="amount" xScale="log" />,
+    );
+    expect(html).toMatch(/text-anchor="end"[^>]*>10,000,000</);
   });
 
   test("empty chart input exposes a named empty state rather than an unnamed table", () => {
