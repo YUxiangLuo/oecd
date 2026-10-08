@@ -722,6 +722,15 @@ describe("steps 2–3: the shown numbers check by hand (round 12)", () => {
     // CAN 2016 (step 2): whole millions are not enough for three decimals of a percentage.
     expect(checks(82395.44226559399, 426596.90991223184)).toBe("82,395.4 / 426,596.9 = 19.315%");
     expect(checks(0.5598, 1.3783)).toBe("0.5598 / 1.3783 = 40.615%");
+    // MLT H51 2016 (step 3): was "15 / 100 = 15.415%".
+    expect(checks(15.353631712234272, 99.60180000000042)).toBe("15.354 / 99.602 = 15.415%");
+  });
+
+  test("MLT H51 2016: the four rows now add up to the shown total (they read 2.136 + 51 + 31 + 15 against 100)", () => {
+    const values = [2.136177408891449, 50.97644689781885, 31.135543981055907, 15.353631712234272];
+    expect(values.map((value) => fmt(value, "amount"))).toEqual(["2.136", "50.98", "31.14", "15.35"]);
+    expect(fmt(values.reduce((a, b) => a + b, 0), "amount")).toBe("99.60");
+    expect(displayedSumNote(values, values.reduce((a, b) => a + b, 0))).toBeNull();
   });
 
   test("the sum line says what the shown rows add to when rounding makes them differ", () => {

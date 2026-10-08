@@ -112,6 +112,18 @@ describe("mark-level hover layers", () => {
     expect(group.getAttribute("data-hovered")).toBeNull();
   });
 
+  test("pair bars name an undefined value and say both kinds of gap are left blank (round 12)", () => {
+    const view = render(
+      <IndicatorPairBars
+        countries={["LUX", "KHM"]}
+        unit="%"
+        groups={[{ key: "O", label: "O 公共管理与国防", values: [0.868, null], reasons: [null, "无法计算"] }]}
+      />,
+    );
+    expect(view.container.textContent).toContain("无法计算");
+    expect(view.container.textContent).toContain("负值画在左边，缺少或无法计算的数据留空。");
+  });
+
   test("trajectory points read both lengths and the ratio; endpoints are focusable", () => {
     const rows: Row[] = [
       { country: "CHN", year: 2016, PLy_GVC: 2, PLv_GVC: 3 },
