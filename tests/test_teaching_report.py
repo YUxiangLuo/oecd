@@ -1967,8 +1967,7 @@ def test_step9_report_reads_the_industry_against_the_same_industry_worldwide(tmp
     section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 9", 1)[1]
     # Extremes are read among the saved countries only, never the median bars.
     assert (
-        "最高为 CHN 中国 · C27 电气设备（154）" in section
-        and "最低为 USA 美国 · C26 计算机电子光学（44）" in section
+        "最高为 CHN 中国 · C27 电气设备（154）" in section and "最低为 USA 美国 · C26 计算机电子光学（44）" in section
     )
 
 
