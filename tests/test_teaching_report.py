@@ -1865,7 +1865,7 @@ def test_report_translates_settings_controls_and_rounds_display_values(tmp_path,
     assert "关税暴露 X" in markdown
     assert "总增加值规模(log, ICIO GVA proxy)" not in markdown
     assert "0.0013729825631389496" not in markdown
-    assert "看 Y 怎样随 X 变化（双向固定效应，TWFE），不加控制变量" in markdown
+    assert "Y 平均相差多少（双向固定效应，TWFE），不加控制变量" in markdown
     assert "twfe_intensity ×" not in markdown
     assert "icio_derived" not in markdown
 

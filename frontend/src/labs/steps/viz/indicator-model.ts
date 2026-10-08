@@ -271,6 +271,8 @@ export function changeReading(
   fixedDigits?: number,
 ): string {
   const difference = (end - start) * (unit === "%" ? 100 : 1);
+  // An exact zero change reads "0", whatever the page precision ("0 个百分点", not "0.00000 个百分点").
+  if (difference === 0) return `0${unit === "%" ? " 个百分点" : unit === "无量纲" ? "" : ` ${unit}`}`;
   const digits = fixedDigits ?? textDigits(difference, unit);
   // With a page-specific precision, a change too small to show is said so ("+不到 0.01 个百分点").
   if (fixedDigits != null && difference !== 0 && Math.abs(difference) < 0.5 * 10 ** -fixedDigits) {

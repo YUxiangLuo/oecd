@@ -649,7 +649,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
               scale={levelScale}
               unit={display.unit ?? lesson.unit}
               title={`加税前后：两组${/^[A-Za-z]/.test(lesson.shortMetric) ? " " : ""}${lesson.shortMetric}的平均变化`}
-              estimate={estimate}
+              estimate={estimate && { ...estimate, uncertain: estimateUncertain }}
             />
             <ReadingCards label="两组读图" cards={[
               { eyebrow: `加税前（${groups.years[0]}–${groups.policy_year - 1}）`, big: preGap == null ? "缺失" : Math.abs(preGap) < tiny ? "两组差不多" : `两组相差 ${fmt(preGap)}`, small: "每条线都减去了本组加税前的平均水平，所以起点都接近 0" },

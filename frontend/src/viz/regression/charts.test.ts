@@ -38,7 +38,7 @@ describe("fixed regression forest chart", () => {
     expect(markup).not.toContain("***");
   });
 
-  test("a weak share estimate is labelled as in the headline (3 decimals), and 0 = 不变 sits above the rows", () => {
+  test("a weak share estimate is labelled as in the headline (3 decimals), and 0 = 无关联 sits above the rows", () => {
     const markup = renderToStaticMarkup(createElement(CoefForestChart, {
       coefs: [{ name: "x", coef: 0.00752, ci_low: -0.0112, ci_high: 0.0262, p: 0.43, stars: "" }],
       globalStatus: "ok",
@@ -46,7 +46,7 @@ describe("fixed regression forest chart", () => {
     expect(markup).toContain(">+0.008<");
     expect(markup).toContain(">-0.011<");
     expect(markup).not.toContain("0.0075");
-    const zero = /<text x="[\d.]+" y="([\d.]+)"[^>]*>0 = 不变/.exec(markup);
+    const zero = /<text x="[\d.]+" y="([\d.]+)"[^>]*>0 = 无关联/.exec(markup);
     expect(Number(zero?.[1])).toBeLessThan(62 - 21 - 10);
   });
 });

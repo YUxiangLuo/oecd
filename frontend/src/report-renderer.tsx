@@ -408,7 +408,7 @@ function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coef
     <ReportFigure title={chart.title ?? "系数图"}>
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
         {hasCi
-          ? "点 = 估计值 · 横线 = 95% 区间（真实系数的合理取值范围） · 竖线 = 0（Y 不随 X 变化）；区间包含 0 时方向不确定"
+          ? "点 = 估计值 · 横线 = 95% 区间（真实系数的合理取值范围） · 竖线 = 0（X 与 Y 没有关联）；区间包含 0 时方向不确定"
           : "这次的数据不够判断方向，只显示估计值，不显示 95% 区间"}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "系数图"} style={{ width: "100%", height: "auto" }}>

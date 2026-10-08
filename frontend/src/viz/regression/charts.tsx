@@ -85,7 +85,7 @@ export function CoefForestChart({
     hi: inferenceAllowed ? coefficient.ci_high : null,
   }));
   const hasCi = pts.some((point) => point.lo != null && point.hi != null);
-  // padT leaves a band above the first row for "0 = 不变", so an estimate near 0 never has its value on it.
+  // padT leaves a band above the first row for "0 = 无关联", so an estimate near 0 never has its value on it.
   const rowH = 64, padT = 30, padB = 46, labelW = 150, padR = 28;
   const width = 640, height = padT + pts.length * rowH + padB;
   const plotW = width - labelW - padR;
@@ -122,7 +122,7 @@ export function CoefForestChart({
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
         {!inferenceAllowed
           ? suppressionCopy
-          : `点 = 估计值${hasCi ? ` · 横线 = ${INTERVAL_FIRST_MENTION}` : ""} · 竖线 = 0（Y 不随 X 变化）；区间包含 0 时方向不确定`}
+          : `点 = 估计值${hasCi ? ` · 横线 = ${INTERVAL_FIRST_MENTION}` : ""} · 竖线 = 0（X 与 Y 没有关联）；区间包含 0 时方向不确定`}
       </div>
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={description} style={{ display: "block", width: "100%", maxWidth: 760, height: "auto" }}>
         <title>{hasCi ? `${description}；完整数值见“详细数字”里的系数表` : description}</title>
@@ -174,7 +174,7 @@ export function CoefForestChart({
           );
         })}
         <line x1={x(0)} x2={x(0)} y1={padT - 6} y2={height - padB} stroke="#1f2430" strokeWidth={1.8} />
-        <text x={x(0) + 5} y={padT - 12} fontSize={10.5} fill="#5f6677">0 = 不变</text>
+        <text x={x(0) + 5} y={padT - 12} fontSize={10.5} fill="#5f6677">0 = 无关联</text>
       </svg>
       {Tip}
     </div>

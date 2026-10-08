@@ -169,7 +169,7 @@ export function TrendSummary({
       <div>
         <span>{countryLabel(first)} · {metricLabel ? `${metricLabel} · ` : ""}{firstYear}→{lastYear}</span>
         <b>{changeReading(start, end, unit, digits)}</b>
-        <small>{fixedIndicatorNumber(start, unit, digits ?? smallAmountDigits(start, unit))} → {fixedIndicatorNumber(end, unit, digits ?? smallAmountDigits(end, unit))}</small>
+        <small>{start === 0 && end === 0 ? indicatorNumber(0, unit) : `${fixedIndicatorNumber(start, unit, digits ?? smallAmountDigits(start, unit))} → ${fixedIndicatorNumber(end, unit, digits ?? smallAmountDigits(end, unit))}`}</small>
       </div>
       {startRank != null && endRank != null && startRef && endRef && (() => {
         const from = rankText(startRank, startRef.ties?.[first], startRef.n);
