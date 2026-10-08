@@ -232,7 +232,8 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
   // Signing in with the unconfirmed local pick could land on a classmate's account: wait for the server first.
   const awaitingSuggestion = suggestion === "pending" && !edited.current && demoStudent != null && username === demoStudent.username;
 
-  const demoAccounts = demoStudent || noIdleDemoStudent ? [
+  // Built only in the demo build, so the production bundle carries none of the demo labels.
+  const demoAccounts = demoMode && (demoStudent || noIdleDemoStudent) ? [
     ...(demoStudent ? [{
       ...demoStudent,
       label: "学生身份",
