@@ -277,8 +277,8 @@ export function displayedSumNote(values: readonly number[], sum: number, panelDe
     const shownRows = values.map((value) => parsedAmount(amountAt(value, panelDecimals)));
     const added = shownRows.reduce((acc, value) => acc + (Number.isNaN(value) ? 0 : value), 0);
     const shownSum = parsedAmount(amountAt(sum, panelDecimals));
-    // Strict, as the two-part lines: the shown rows either add up to the shown sum exactly or the line says so.
-    if (Number.isNaN(shownSum) || Math.abs(added - shownSum) < 10 ** -panelDecimals / 2) return null;
+    // Within one last digit the line reads "≈" instead (see displayedRowsAddUp); only a larger gap gets the sentence.
+    if (Number.isNaN(shownSum) || Math.abs(added - shownSum) <= 10 ** -panelDecimals * (1 + 1e-9)) return null;
     return `（上表各项按显示值相加为 ${amountText(added, panelDecimals)}，差别来自四舍五入）`;
   }
   const shown = values.map((value) => shownAmount(fmt(value, "amount"), value));
@@ -287,6 +287,16 @@ export function displayedSumNote(values: readonly number[], sum: number, panelDe
   if (Math.abs(total - shownSum) <= 10 ** -amountDecimals(sum) * (1 + 1e-9)) return null;
   const decimals = Math.max(...values.map((value) => (value === 0 ? 0 : amountDecimals(value))));
   return `（上表各项按显示值相加为 ${amountText(total, decimals)}，差别来自四舍五入）`;
+}
+
+/** Whether the rows as displayed add up exactly to the displayed sum; when not, the sum line reads "≈", as the
+ * two-part lines do ("31.136 + 15.354 ≈ 46.489"). */
+export function displayedRowsAddUp(values: readonly number[], sum: number, panelDecimals?: number): boolean {
+  if (panelDecimals == null) return true;
+  const added = values.map((value) => parsedAmount(amountAt(value, panelDecimals)))
+    .reduce((acc, value) => acc + (Number.isNaN(value) ? 0 : value), 0);
+  const shownSum = parsedAmount(amountAt(sum, panelDecimals));
+  return Number.isNaN(shownSum) || Math.abs(added - shownSum) < 10 ** -panelDecimals / 2;
 }
 
 /** A share already in percent, to three decimals as everywhere else ("11.730%"); an exact zero is "0%". */
@@ -826,7 +836,7 @@ export function DecompositionDemo({
         </div>
         {model.closure != null ? (
           <div className={`decomp-identity ${model.closure ? "ok" : "bad"}`}>
-            {model.closure ? "✓" : "✗"} {cfg.parts.length} 项相加 = {amount(model.sum)}，{model.closure ? "等于" : "不等于"}{cfg.totalLabel}{model.error < 1e-6 ? "" : `（差 ${model.error.toPrecision(2)}）`}
+            {model.closure ? "✓" : "✗"} {cfg.parts.length} 项相加 {cfg.unit === "amount" && !displayedRowsAddUp(model.values, model.sum, precision?.decimals) ? "≈" : "="} {amount(model.sum)}，{model.closure ? "等于" : "不等于"}{cfg.totalLabel}{model.error < 1e-6 ? "" : `（差 ${model.error.toPrecision(2)}）`}
             {cfg.unit === "amount" && displayedSumNote(model.values, model.sum, precision?.decimals)}
           </div>
         ) : negligible && zeroTotalHint ? null : (

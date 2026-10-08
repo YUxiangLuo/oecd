@@ -15,7 +15,7 @@ import {
   betweennessExamplePair,
   betweennessExampleSentence,
   decompositionModelReason,
-  displayedSumNote,
+  displayedRowsAddUp, displayedSumNote,
   fmt,
   formulaAmount,
   networkDemoKeyTransition,
@@ -813,7 +813,7 @@ describe("steps 2–3: every table row checks by hand, not only the formula (rou
     ]);
     for (const cell of cells) expect(byHand(cell.amount, total)).toBe(cell.share);
     expect(text).toContain("= 0.55999 / 1.37876 = 40.615%");
-    expect(text).toContain("6 项相加 = 1.37876，");
+    expect(text).toContain("6 项相加 ≈ 1.37876，");
     expect(text).toContain("EXDVA）= DVAex + DVArt = 0.75549 + 0.00015 = 0.75564。");
     expect(text).not.toContain("<0.001");
     expect(text).not.toContain("末位可能有出入");
@@ -861,8 +861,10 @@ describe("steps 2–3: every table row checks by hand, not only the formula (rou
     expect(sumText(31.135543981055907, 15.353631712234272, 3)).toBe("31.136 + 15.354 ≈ 46.489");
     expect(sumText(2.5, 0.000004, 5)).toBe("2.50000 + <0.00001 = 2.50000（不到 0.00001 的一项按 0 相加）");
     expect(displayedSumNote([0.75549, 0.00015], 0.75564, 5)).toBeNull();
-    // Strict, as the two-part lines: rows that add up one last digit off ("1.37877" vs "1.37876") say so.
-    expect(displayedSumNote([31.1355, 15.3536], 46.4891, 3)).toBe("（上表各项按显示值相加为 46.490，差别来自四舍五入）");
+    // One last digit off ("46.490" vs "46.489"): no sentence, the sum line reads "≈" instead.
+    expect(displayedSumNote([31.1355, 15.3536], 46.4891, 3)).toBeNull();
+    expect(displayedRowsAddUp([31.1355, 15.3536], 46.4891, 3)).toBe(false);
+    expect(displayedRowsAddUp([0.75549, 0.00015], 0.75564, 5)).toBe(true);
     expect(displayedSumNote([1.0004, 1.0004, 1.0004, 1.0004], 4.0016, 3)).toBe("（上表各项按显示值相加为 4.000，差别来自四舍五入）");
   });
 });
