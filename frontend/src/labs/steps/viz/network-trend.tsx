@@ -148,6 +148,10 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     const timer = window.setTimeout(() => setFlash(""), 6000);
     return () => window.clearTimeout(timer);
   }, [flash]);
+  // The task card says 报告材料：未保存 while a save fails or conflicts; the green note must not contradict it.
+  useEffect(() => {
+    if (syncError) setFlash("");
+  }, [syncError]);
   // Report material follows the chart the student is looking at; incomplete charts never overwrite it.
   useEffect(() => {
     if (!pendingKey || matchesSaved || syncing || locked) return;
@@ -234,7 +238,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         { label: "视角", value: view === "topology" ? "流量与路径" : view === "flows" ? "买入与卖出" : extraLenses.find((lens) => lens.key === view)?.label ?? view },
         { label: "材料", value: "探索视角，不记录材料" },
       ]}
-      note={flash ? <span className="scope-flash">✓ {flash}</span> : undefined}
+      note={flash && !syncError ? <span className="scope-flash">✓ {flash}</span> : undefined}
     />
     {!recordable && view !== "topology" && view !== "flows" ? renderExtra?.(view, selected, year, setYear) : query.status !== "success" ? <AsyncStateMessage status={query.status} error={query.error} loadingLabel="正在加载历年行业指标…" onRetry={query.retry} /> : view === "topology" ? (
       // One scatter per row: in two columns the 660-wide chart shrank its axis text to about 7px.
@@ -262,8 +266,8 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     ) : view === "flows" ? (
       <>
       {selected.length > 1 && <p className="muted">每个国家的条长按本国最大的行业缩放：条长只在同一国家内比较，跨国比较请看数值。</p>}
-      {/* The butterfly's fixed label and value columns leave no room for bars in a third of the row. */}
-      <div className={`comparison-facets${selected.length > 2 ? " comparison-facets--stacked" : ""}`}>
+      {/* The butterfly needs about 440px for readable bars: two panels share a row only when each gets that. */}
+      <div className={`comparison-facets ${selected.length > 2 ? "comparison-facets--stacked" : "comparison-facets--roomy"}`}>
         {selected.map((country) => {
           const rows = industriesOf(country)
             .filter((row) => typeof row["weighted degree"] === "number")

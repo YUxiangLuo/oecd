@@ -346,6 +346,11 @@ export function IndicatorExplorer({
     const timer = window.setTimeout(() => setFlash(""), 6000);
     return () => window.clearTimeout(timer);
   }, [flash]);
+  // A failed or conflicting save (the task card says 报告材料：未保存) withdraws the green "已更新" note:
+  // it is hidden while the error lasts and does not come back after it.
+  useEffect(() => {
+    if (state.syncError) setFlash("");
+  }, [state.syncError]);
   const viewName = lenses.find((lens) => lens.key === (composition ? "composition" : view))?.label ?? "";
   // Report material follows the chart the student is looking at: every complete chart is recorded
   // automatically, replacing the previous one. Incomplete charts never overwrite a complete record.
@@ -709,7 +714,7 @@ export function IndicatorExplorer({
             onJump: composition || view === "directions" || view === "positioning" || view === "structure" || view === "segments" ? undefined : jump(metricRef),
           },
         ]}
-        note={flash ? <span className="scope-flash">✓ {flash}</span> : undefined}
+        note={flash && !state.syncError ? <span className="scope-flash">✓ {flash}</span> : undefined}
       />
       <div className="viz-chart">
       {!validYears ? <div className="error-box" role="alert">

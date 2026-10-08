@@ -227,7 +227,8 @@ button.footer-next:hover { text-decoration: underline; }
 .decomp-table tr.on { background: #f7f8fb; }
 .decomp-table-head th { padding: 4px 8px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-align: left; border-bottom: 1px solid #e7e9f0; white-space: nowrap; }
 .decomp-table-head th:nth-child(2), .decomp-table-head th:nth-child(3) { text-align: right; }
-.decomp-table td, .decomp-table tbody th { padding: 9px 8px; vertical-align: top; }
+/* Baseline, not top: the Space Grotesk numbers otherwise sit higher than the row labels. */
+.decomp-table td, .decomp-table tbody th { padding: 9px 8px; vertical-align: baseline; }
 .dt-name { font-weight: 600; color: #2a3040; white-space: nowrap; text-align: left; }
 .dt-swatch { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 8px; vertical-align: middle; }
 .dt-val { text-align: right; font-family: "Space Grotesk", sans-serif; color: #3a4050; white-space: nowrap; }

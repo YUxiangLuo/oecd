@@ -16,6 +16,7 @@ import {
 import { LENGTH_TOPIC } from "./length";
 import { PRODUCTION_TOPIC } from "./production";
 import { TRADE_TOPIC } from "./trade";
+import { compositionCards } from "./reading-cards";
 import type { Row } from "./scaffold";
 
 describe("indicator data contract", () => {
@@ -189,6 +190,21 @@ describe("gap readings", () => {
     }));
     expect(html).toContain("差距基本不变");
     expect(html).not.toContain("差距扩大 0");
+  });
+});
+
+describe("composition reading cards", () => {
+  test("the focus-share card carries the indicator name, not the part's legend name", () => {
+    const row = (country: string, fva: number) => ({
+      country, year: 2020, industry: "", gross_exports: 100, DVAex: 80 - fva, DVArt: 5, DDC: 5, FVA: fva, FDC: 5, taxsub: 5,
+    });
+    const cards = compositionCards({
+      rows: [row("CHN", 12), row("USA", 6)], countries: ["CHN", "USA"], composition: TRADE_TOPIC.composition!,
+      totalLabel: "总出口", year: 2020, industry: "",
+    });
+    expect(cards[1].eyebrow).toBe("CHN 中国 · 外国增加值项占比");
+    expect(cards[2].eyebrow).toBe("与对比国家 USA 美国 · 外国增加值项占比");
+    expect(PRODUCTION_TOPIC.composition?.focusLabel).toBe("复杂 GVC 生产份额");
   });
 });
 

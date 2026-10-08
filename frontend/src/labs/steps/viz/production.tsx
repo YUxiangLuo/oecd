@@ -69,6 +69,7 @@ export const PRODUCTION_TOPIC: IndicatorTopic = {
       { key: "3b_VA_GVC_C", name: "复杂 GVC", color: CAT[4] },
     ],
     focus: "3b_VA_GVC_C",
+    focusLabel: "复杂 GVC 生产份额",
     note: "四类生产活动各占本国总增加值的份额：纯国内不跨境，传统贸易随最终品跨境一次，简单 GVC 随中间品跨境一次，复杂 GVC 至少跨境两次。负分项画成红色，放在 0 的左边。",
     // The same four activities read from the final-goods side (step 7 四类生产活动 · 后向).
     alternate: {
@@ -83,6 +84,7 @@ export const PRODUCTION_TOPIC: IndicatorTopic = {
         { key: "3b_FGY_GVC_C", name: "复杂 GVC", color: CAT[4] },
       ],
       focus: "3b_FGY_GVC_C",
+      focusLabel: "后向复杂 GVC 生产份额",
       note: "从本国生产的最终品往回看：其中的增加值属于哪一类。分母是最终品总值，和前向不同，所以前向、后向的份额不能直接比。",
     },
   },

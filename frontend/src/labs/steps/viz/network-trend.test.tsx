@@ -153,6 +153,10 @@ test("the record follows the current chart, waits while a sync is in flight, and
   expect(updated).toHaveLength(6);
   expect(updated.map((item) => item.value)).toEqual([7, 7, 7, 3, 3, 3]);
   expect(updated.every((item) => item.metric === "betweenesscentrality")).toBe(true);
+  // The task card says 报告材料：未保存 while the save fails: no green "已更新为" note beside it.
+  expect(document.querySelector(".scope-flash")).toBeNull();
+  rerender(<NetworkTrend {...props} observations={updated} />);
+  expect(document.querySelector(".scope-flash")?.textContent).toContain("报告材料已更新为");
 });
 
 test("after the report is submitted, step 9 records only when the student asks", async () => {

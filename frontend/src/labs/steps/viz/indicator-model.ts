@@ -32,6 +32,8 @@ export interface CompositionSpec {
   segments: { key: string; name: string; color: string }[];
     /** The part the step reads first (reading cards, report); defaults to the last segment. */
     focus?: string;
+    /** The focus part's share as an indicator name ("外国增加值项占比"), for the reading cards; defaults to the part's name. */
+    focusLabel?: string;
     note: string;
 }
 

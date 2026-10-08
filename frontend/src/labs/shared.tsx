@@ -231,7 +231,6 @@ export function Pager({ page, pages, total, onChange }: {
           onKeyDown={(event) => {
             if (event.key === "Enter") commit();
           }}
-          style={{ width: 48, textAlign: "center" }}
         />
         / {safePages} 页{total != null ? ` · 共 ${total} 条` : ""}
       </span>
