@@ -67,7 +67,8 @@ export function CoefForestChart({
     hi: inferenceAllowed ? coefficient.ci_high : null,
   }));
   const hasCi = pts.some((point) => point.lo != null && point.hi != null);
-  const rowH = 64, padT = 16, padB = 46, labelW = 150, padR = 28;
+  // padT leaves a band above the first row for "0 = 不变", so an estimate near 0 never has its value on it.
+  const rowH = 64, padT = 30, padB = 46, labelW = 150, padR = 28;
   const width = 640, height = padT + pts.length * rowH + padB;
   const plotW = width - labelW - padR;
   const maxAbs = Math.max(
@@ -80,7 +81,11 @@ export function CoefForestChart({
   const y = (index: number) => padT + (index + 0.5) * rowH;
   const decimals = Math.max(0, Math.min(4, 1 - Math.floor(Math.log10(extent / 2))));
   const format = (value: number) => (value === 0 ? "0" : value.toFixed(decimals));
-  const valueLabel = (value: number) => (Math.abs(value) < 0.01 && scale === 1 ? value.toFixed(4) : value.toFixed(Math.max(2, decimals)));
+  // Shares (scale 1) match the headline: 3 decimals from 0.005 to 0.1 ("0.008"), 2 significant digits below.
+  const valueLabel = (value: number) => {
+    if (scale === 1 && value !== 0 && Math.abs(value) < 0.1) return Math.abs(value) >= 0.005 ? value.toFixed(3) : value.toPrecision(2);
+    return value.toFixed(Math.max(2, decimals));
+  };
   const tip = (point: (typeof pts)[number]): [string, string][] => inferenceAllowed ? [
     ["", point.displayName],
     [unit ? `估计值（${unit}）` : "估计值", valueLabel(point.coef)],
@@ -146,7 +151,7 @@ export function CoefForestChart({
           );
         })}
         <line x1={x(0)} x2={x(0)} y1={padT - 6} y2={height - padB} stroke="#1f2430" strokeWidth={1.8} />
-        <text x={x(0) + 5} y={padT + 4} fontSize={10.5} fill="#5f6677">0 = 不变</text>
+        <text x={x(0) + 5} y={padT - 12} fontSize={10.5} fill="#5f6677">0 = 不变</text>
       </svg>
       {Tip}
     </div>
@@ -259,6 +264,20 @@ const UNTAXED = "#6b7487";
  * A dashed line marks when the simulated tariff starts; the gap that opens after it is what the
  * regression then quantifies.
  */
+/** Centres for stacked labels: in order of their wanted position, at least half of both heights apart, inside [top, bottom]. */
+export function spreadLabels(items: { key: string; at: number; size: number }[], top: number, bottom: number): Record<string, number> {
+  const sorted = [...items].sort((a, b) => a.at - b.at);
+  const centres = sorted.map((item) => item.at);
+  const gap = (index: number) => (sorted[index - 1].size + sorted[index].size) / 2 + 2;
+  for (let index = 1; index < sorted.length; index++) centres[index] = Math.max(centres[index], centres[index - 1] + gap(index));
+  const last = sorted.length - 1;
+  if (last >= 0) centres[last] = Math.min(centres[last], bottom - sorted[last].size / 2);
+  for (let index = last - 1; index >= 0; index--) centres[index] = Math.min(centres[index], centres[index + 1] - gap(index + 1));
+  if (sorted.length) centres[0] = Math.max(centres[0], top + sorted[0].size / 2);
+  for (let index = 1; index < sorted.length; index++) centres[index] = Math.max(centres[index], centres[index - 1] + gap(index));
+  return Object.fromEntries(sorted.map((item, index) => [item.key, centres[index]]));
+}
+
 export function GroupChangeChart({
   years, policyYear, taxed, untaxed, scale = 1, unit, title, estimate,
 }: {
@@ -286,11 +305,19 @@ export function GroupChangeChart({
   const path = (series: { year: number; change: number }[]) => series
     .map((point, index) => `${index ? "L" : "M"}${x(point.year)},${y(point.change * scale)}`).join(" ");
   const policyX = (x(policyYear - 1) + x(policyYear)) / 2;
-  const label = (series: { year: number; change: number }[], text: string, color: string, dy: number) => {
-    const last = series.at(-1);
-    return last && <text x={x(last.year) + 8} y={y(last.change * scale) + dy} dominantBaseline="middle" fontSize={11.5} fontWeight={700} fill={color}>{text}</text>;
-  };
   const lastTaxed = taxed.at(-1)?.change ?? 0, lastUntaxed = untaxed.at(-1)?.change ?? 0;
+  // The two group names and the two-line estimate share the right margin. When the lines end close together
+  // (a weak Y) they would print on top of each other, so their centres are pushed apart, keeping their order.
+  const estimateY = estimate && estimateEnd != null ? (y(lastUntaxed * scale) + y(estimateEnd * scale)) / 2 : null;
+  const slots = spreadLabels([
+    { key: "taxed", at: y(lastTaxed * scale) + (lastTaxed < lastUntaxed ? 8 : -8), size: 14 },
+    { key: "untaxed", at: y(lastUntaxed * scale) + (lastTaxed < lastUntaxed ? -8 : 8), size: 14 },
+    ...(estimateY == null ? [] : [{ key: "estimate", at: estimateY, size: 28 }]),
+  ], padT, height - 4);
+  const label = (series: { year: number; change: number }[], text: string, color: string, key: string) => {
+    const last = series.at(-1);
+    return last && <text x={x(last.year) + 8} y={slots[key]} dominantBaseline="middle" fontSize={11.5} fontWeight={700} fill={color}>{text}</text>;
+  };
   const [estimateHead, ...estimateRest] = (estimate?.label ?? "").split(" ");
   const estimateValue = estimateRest.join(" ");
   const description = `${title}：加税组与未加税组相对加税前平均水平的变化，${policyYear} 年起加税`;
@@ -319,7 +346,7 @@ export function GroupChangeChart({
               <line x1={bx - 4} x2={bx + 4} y1={y0} y2={y0} />
               <line x1={bx - 4} x2={bx + 4} y1={y1} y2={y1} />
               {/* Two lines ("回归估计的差距" / value and unit): on one line a unit such as 中心性原始单位 ran off the chart. */}
-              <text x={bx + 7} y={(y0 + y1) / 2 + 4} fontSize={10.5} fill="#2a2f3a" stroke="none">
+              <text x={bx + 7} y={slots.estimate + 4} fontSize={10.5} fill="#2a2f3a" stroke="none">
                 <tspan x={bx + 7} dy="-0.6em">{estimateHead}</tspan>
                 <tspan x={bx + 7} dy="1.2em">{estimateValue}</tspan>
               </text>
@@ -338,8 +365,8 @@ export function GroupChangeChart({
             ))}
           </g>
         ))}
-        {label(taxed, "加税国家组", TAXED, lastTaxed < lastUntaxed ? 8 : -8)}
-        {label(untaxed, "未加税国家组", UNTAXED, lastTaxed < lastUntaxed ? -8 : 8)}
+        {label(taxed, "加税国家组", TAXED, "taxed")}
+        {label(untaxed, "未加税国家组", UNTAXED, "untaxed")}
       </svg>
     </div>
   );

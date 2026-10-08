@@ -43,6 +43,8 @@ from gvcsim.teaching_report import (
         ("length", 0.0305694, -0.04700555, 0.10814435, "+0.00031 个长度单位", "[-0.00047, +0.001] 个长度单位"),
         ("trade", 0.37101, -0.00428547, 0.746307, "+0.37 个百分点", "[-0.0043, +0.75] 个百分点"),
         ("production", 0, -0.01, 0.01, "+0.00 个百分点", "[-0.01, +0.01] 个百分点"),
+        # The weak Y: under 0.1 point it keeps 3 decimals, as the page headline does.
+        ("production", 0.00752, -0.0112, 0.0262, "+0.008 个百分点", "[-0.011, +0.026] 个百分点"),
     ],
 )
 def test_report_small_effects_match_card_precision(outcome, coef, low, high, effect, interval):
@@ -77,6 +79,25 @@ def test_report_tiny_nonzero_numbers_and_standardized_effect_preserve_sign():
     )
     # The standard-deviation size is unsigned (the leading estimate carries the sign) but never rounds to 0.
     assert effect.startswith("-6.91 个中心性原始单位") and "幅度约 0.0035 个标准差" in effect
+
+
+def test_report_network_interval_in_standard_deviations_never_shows_equal_ends():
+    _, _, interval = teaching_report._natural_effect(
+        "network",
+        {"method": "twfe_intensity"},
+        {"status": "ok", "depvar_std": 856},
+        {"name": "teaching_tariff_exposure", "coef": -4010.70, "ci_low": -4109.84, "ci_high": -3911.56},
+    )
+    assert interval.endswith("（约 [-0.048, -0.046] 个标准差）")
+
+
+def test_report_appendix_counts_taxed_records_by_x_without_causal_wording():
+    from gvcsim.report_render import _technical_support_lines
+
+    support = {"treated_entities": 1854, "treated_clusters": 44, "untreated_entities": 1346, "untreated_clusters": 31}
+    text = "\n".join(_technical_support_lines({}, {}, support))
+    assert "加税情况：X 大于 0 的国家×行业 1,854 个（来自 44 个国家）；X 始终为 0 的 1,346 个（含 31 个国家的全部行业）。" in text
+    assert "受关税影响" not in text and "没受影响" not in text
 
 
 @pytest.mark.parametrize(
