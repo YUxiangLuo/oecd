@@ -82,13 +82,15 @@ def test_report_tiny_nonzero_numbers_and_standardized_effect_preserve_sign():
 
 
 def test_report_network_interval_in_standard_deviations_never_shows_equal_ends():
-    _, _, interval = teaching_report._natural_effect(
+    _, effect, interval = teaching_report._natural_effect(
         "network",
         {"method": "twfe_intensity"},
         {"status": "ok", "depvar_std": 856},
         {"name": "teaching_tariff_exposure", "coef": -4010.70, "ci_low": -4109.84, "ci_high": -3911.56},
     )
     assert interval.endswith("（约 [-0.048, -0.046] 个标准差）")
+    # The point size keeps the interval's digits, as on the page: 0.047, not 0.05 outside its own interval.
+    assert effect.endswith("（幅度约 0.047 个标准差）")
 
 
 def test_report_appendix_counts_taxed_records_by_x_without_causal_wording():

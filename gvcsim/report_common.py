@@ -312,15 +312,17 @@ def _natural_effect(
     elif kind == "network":
         sd = result.get("depvar_std")
         positive_sd = float(sd) if isinstance(sd, (int, float)) and float(sd) > 0 else None
-        effect_text = f"{_signed(effect, 2)} 个中心性原始单位"
-        # Unsigned, as on the page ("平均下降 39.70 …（幅度约 0.05 个标准差）"): the number before it carries the sign.
-        if positive_sd is not None:
-            effect_text += f"（幅度约 {_signed(effect / positive_sd, 2)[1:]} 个标准差）"
         sd_bounds = (ci[0] * increment / positive_sd, ci[1] * increment / positive_sd) if ci and positive_sd else None
         # A narrow interval would print as "[-0.05, -0.05]" at 2 decimals; add digits until the ends differ.
+        # The point size uses the same digits, as on the page ("0.047", inside "[-0.048, -0.046]").
         sd_digits = next(
-            (d for d in (2, 3, 4) if sd_bounds and _signed(sd_bounds[0], d) != _signed(sd_bounds[1], d)), 4
+            (d for d in (2, 3, 4) if sd_bounds and _signed(sd_bounds[0], d) != _signed(sd_bounds[1], d)),
+            4 if sd_bounds else 2,
         )
+        effect_text = f"{_signed(effect, 2)} 个中心性原始单位"
+        # Unsigned, as on the page ("平均下降 39.70 …（幅度约 0.047 个标准差）"): the number before it carries the sign.
+        if positive_sd is not None:
+            effect_text += f"（幅度约 {_signed(effect / positive_sd, sd_digits)[1:]} 个标准差）"
         interval = (
             f"[{_signed(ci[0] * increment, 2)}, {_signed(ci[1] * increment, 2)}] 个中心性原始单位"
             + (
