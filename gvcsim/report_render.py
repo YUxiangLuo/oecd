@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from typing import Any, cast
 
@@ -62,6 +63,14 @@ def _cjk_punctuation(text: str) -> str:
 def _rate(percent: float) -> str:
     """A tariff rate as set (10%, 7.5%), without padding zeros."""
     return f"{percent:.2f}".rstrip("0").rstrip(".")
+
+
+def _points(share: float) -> str:
+    """A share in percentage points to two decimals, as on step 10; a tiny one keeps two significant digits."""
+    points = share * 100
+    if 0 < points < 0.005:
+        return f"{points:.{min(10, math.ceil(-math.log10(points)) + 1)}f}"
+    return f"{points:.2f}"
 
 
 # How each recorded unit is read, in the order the notes list them (steps 6–9).
@@ -287,9 +296,9 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                     f"{_safe(sector_label(str(teaching_observation.get('industry'))))} · {_safe(teaching_observation.get('year'))}",
                     # X is read in percentage points throughout steps 10–14, so print it the same way here.
                     # Same precision as step 10's table: w and X to two decimals, the tariff rate as set.
-                    f"- w = {float(teaching_observation['teaching_export_share_w']) * 100:.2f}%；"
+                    f"- w = {_points(float(teaching_observation['teaching_export_share_w']))}%；"
                     f"τ = {_rate(float(teaching_observation['teaching_tariff_rate_tau']) * 100)}%；"
-                    f"X = w × τ = {float(teaching_observation['teaching_tariff_exposure']) * 100:.2f} 个百分点",
+                    f"X = w × τ = {_points(float(teaching_observation['teaching_tariff_exposure']))} 个百分点",
                 )
             )
         lines.append("")
@@ -344,7 +353,7 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
         "",
         "下表列出四步保存的结果（贸易流、生产、长度、网络）。四个 Y 的单位不同，只比较方向和区间是否包含 0，不比数字大小。",
         "",
-        "| 步骤 | 指标 | X 每增加 1 个百分点时 Y 的变化 | 95% 区间 | 方向 |",
+        "| 步骤 | 指标 | X 每高 1 个百分点，Y 平均相差 | 95% 区间 | 方向 |",
         "|---|---|---|---|---|",
     ]
     designs = []
@@ -419,7 +428,7 @@ def _coefficient_chart(
     chart = {
         "version": 1,
         "type": "coefficient",
-        "title": f"步骤 {step} · X 每增加 1 个百分点时 Y 的平均变化",
+        "title": f"步骤 {step} · X 每高 1 个百分点，Y 平均相差多少",
         "x_label": unit,
         "items": [item],
     }
@@ -468,6 +477,9 @@ def _teaching_sample_lines(source_filter: dict[str, Any] | None) -> list[str]:
         f"- 首年共有 {_count(source_filter.get('source_baseline_rows'))} 个国家×行业（不含“世界其他地区”ROW），"
         f"其中 {_count(source_filter.get('excluded_source_baseline_rows'))} 个缺少必要数据被剔除，"
         f"剩下 {_count(source_filter.get('published_entities'))} 个用于四项回归。",
+        # Two different stages: this one builds the sample; each run's "计算时再剔除" checks it again.
+        "- 上面的剔除在准备关税数据时就已完成。下面每步回归里的“计算时再剔除 n 条”是计算前对这份样本再检查一遍、"
+        "去掉仍缺数值的年度记录，和上面不是同一批，也不重复计算，通常为 0。",
         "- 剔除规则：首年四个默认指标和对美出口份额都要有效；两类份额和出口份额在 0–1 之间，长度大于 0，加权总度不小于 0。",
         "- 下面的记录数按“每个国家×行业每年一条”计。",
         "",
@@ -481,7 +493,7 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
         "本节用课堂上的读数单位说明估计结果；公式和详细数字见技术附录。",
         "",
         *_teaching_sample_lines(source_filter),
-        "区间说明：" + CLUSTER_INTERVAL_NOTE,
+        "区间说明：95% 区间是真实系数的合理取值范围，包含 0 时方向不确定。" + CLUSTER_INTERVAL_NOTE,
         "",
         *_comparison_table(runs),
     ]
@@ -534,11 +546,17 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
             )
         )
         flow = result.get("sample_flow")
-        dropped = f"；计算前剔除 {_count(flow.get('dropped_rows_total'))} 条" if isinstance(flow, dict) else ""
+        dropped = f"；计算时再剔除 {_count(flow.get('dropped_rows_total'))} 条" if isinstance(flow, dict) else ""
         lines.append(
             f"- 使用 {_count(result.get('n_obs'))} 条年度记录（{_count(result.get('n_entities'))} 个国家×行业"
             f" × {_count(result.get('n_times'))} 年，来自 {_count(result.get('n_clusters'))} 个国家）{dropped}。"
         )
+        if _depvar_kind(outcome, design) == "network":
+            # Said here, next to the number, not only in the appendix: the unit is not step 5/9's 百万美元.
+            lines.append(
+                "- **单位**：中心性原始单位。这一步的 Y 是课程按真实网络指标的排名校准生成的，"
+                "不是步骤 5、9 里以百万美元计的加权总度，不能和那两步的数值直接比较。"
+            )
         reasons = [*_list_values(result.get("status_reasons")), *_list_values(support.get("reasons"))]
         design_limit = _summary_design_limit(status, support, reasons)
         if design_limit:
@@ -598,7 +616,7 @@ def _technical_estimate_tables(
     # 1 percentage point of X in Y's unit, so the two can be matched (they differ 100x for lengths and centrality).
     lines = [
         "",
-        "| 变量 | 系数（X 按份额计） | X 每增加 1 个百分点 | 标准误 | 95% 区间（按系数计） | p 值 |",
+        "| 变量 | 系数（X 按份额计） | X 每高 1 个百分点，Y 平均相差 | 标准误 | 95% 区间（按系数计） | p 值 |",
         "|---|---:|---:|---:|---:|---:|",
     ]
     primary = _primary_coefficient(design, result)
@@ -634,10 +652,11 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
         # One source line per paragraph: Markdown joins consecutive lines with a space, which would show
         # after each "。".
         "以下是你在步骤 11–14 保存的计算结果，生成报告时不会重算；同一步可能有最近一次计算和一份用于汇总表的结果。"
-        "表中数字四舍五入到 4 位有效数字，很小的 p 值显示为 <0.0001，不是说概率为零。"
-        "系数按“X 从 0 增加到 1（100 个百分点）”计（X 存的是份额，0.01 即 1 个百分点），"
-        "所以正文“关税暴露 X 每增加 1 个百分点”的数 = 系数 × 0.01，表中另列一栏；"
-        "贸易流和生产两项的 Y 也是份额，再乘 100 换成百分点，两次换算抵消，数值与系数相同；长度和网络两项相差 100 倍。",
+        "表中数字四舍五入到 4 位有效数字，很小的 p 值显示为 <0.0001，不是说概率为零。",
+        "",
+        "表中的“系数”是 X 从 0 增加到 1（即 100 个百分点）时 Y 的变化；除以 100，才是正文里“X 每高 1 个百分点”的数，"
+        "表中另列一栏。贸易流和生产两步的 Y 是份额，正文又把它换成百分点（乘 100），一除一乘，两栏数字相同；"
+        "长度和网络两步不做这一步，两栏相差 100 倍。",
         "",
     ]
     grouped: dict[int, list[dict[str, Any]]] = {step: [] for step in _STEP_OUTCOMES}

@@ -4,6 +4,14 @@ import type {
 
 export type EvidenceState = "negative" | "positive" | "insufficient" | "suppressed";
 
+/** The interval named with its meaning, where a result first mentions it (not "where the estimate may fall"). */
+export const INTERVAL_FIRST_MENTION = "95% 区间（真实系数的合理取值范围）";
+
+/** How a gap in Y is said: lengths are 长/短, everything else 高/低. */
+export function differenceWords(kind: DepvarKind): { higher: string; lower: string } {
+  return kind === "length" ? { higher: "长", lower: "短" } : { higher: "高", lower: "低" };
+}
+
 export const REGRESSION_STATUS_LABELS: Record<RegressionStatus, string> = {
   ok: "可以解释结果",
   warning: "可以解释，但须说明设计问题",
@@ -186,8 +194,8 @@ export function buildRegressionVerdict(
     evidence: !validInterval
       ? "95% 区间没有记录完整，不能判断方向；请重新计算，也不要把它读成“区间包含 0”。"
       : state === "insufficient"
-      ? `95% 区间（估计值可能落在的范围）为 ${scaled.interval}，包含 0：不能说“没有关联”，只能说方向还不确定。`
-      : `95% 区间（估计值可能落在的范围）为 ${scaled.interval}，整个区间都在 0 的一侧，所以方向是明确的。`,
+      ? `${INTERVAL_FIRST_MENTION}为 ${scaled.interval}，包含 0：不能说“没有关联”，只能说方向还不确定。`
+      : `${INTERVAL_FIRST_MENTION}为 ${scaled.interval}，整个区间都在 0 的一侧，所以方向是明确的。`,
     coefficient,
   };
 }

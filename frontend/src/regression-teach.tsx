@@ -95,7 +95,7 @@ export function RegressionEvidenceMatrix({
       <div className="table-wrap" role="region" aria-label="四步结果汇总表，可横向滚动" tabIndex={0}>
         <table className="data-table reg-evidence-table">
           <thead>
-            <tr><th>步骤</th><th>指标类型</th><th>方向</th><th>X 每增加 1 个百分点时 Y 的变化</th><th>95% 区间</th><th>解释限制</th></tr>
+            <tr><th>步骤</th><th>指标类型</th><th>方向</th><th>X 每高 1 个百分点，Y 平均相差</th><th>95% 区间</th><th>解释限制</th></tr>
           </thead>
           <tbody>
             {REGRESSION_FAMILIES.map((item) => {

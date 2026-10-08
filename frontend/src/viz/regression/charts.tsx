@@ -1,4 +1,4 @@
-import { globalInferenceIsSuppressed } from "../../regression-verdict";
+import { globalInferenceIsSuppressed, INTERVAL_FIRST_MENTION } from "../../regression-verdict";
 import { CLUSTER_INTERVAL_LABEL, formatPValue } from "../../regression-statistics";
 import type { RegressionStatus, TreatmentSupport } from "../../types";
 import { cardStyle, useTip } from "../shared";
@@ -96,7 +96,7 @@ export function CoefForestChart({
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
         {!inferenceAllowed
           ? suppressionCopy
-          : `点 = 估计值${hasCi ? " · 横线 = 95% 区间（估计值可能落在的范围）" : ""} · 竖线 = 0（Y 不随 X 变化）；区间包含 0 时方向不确定`}
+          : `点 = 估计值${hasCi ? ` · 横线 = ${INTERVAL_FIRST_MENTION}` : ""} · 竖线 = 0（Y 不随 X 变化）；区间包含 0 时方向不确定`}
       </div>
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={description} style={{ display: "block", width: "100%", maxWidth: 760, height: "auto" }}>
         <title>{hasCi ? `${description}；完整数值见“详细数字”里的系数表` : description}</title>
@@ -160,12 +160,17 @@ const BIN = "#216cc0";
  * ~20 equal-count bins on y, and the fitted line through the origin with the estimated slope. This is
  * what the regression "sees" after the fixed effects are taken out.
  */
-export function BinScatterChart({ bins, slope, slopeUnit, xLabel, yLabel, xScale = 100, yScale = 1, title = "回归在量什么" }: {
+export function BinScatterChart({ bins, slope, slopeUnit, slopeWords, xLabel, yLabel, xScale = 100, yScale = 1, title = "回归在量什么" }: {
   bins: { x: number; y: number; n: number }[];
   /** The estimate in display units: shown Y units per one percentage point of X (what the label prints). */
   slope: number;
   /** Counted unit of the slope's Y change ("个百分点", "个长度单位"), printed after the number. */
   slopeUnit?: string;
+  /**
+   * The words for a lower and a higher Y ("低"/"高", "短"/"长") when the direction is settled (the 95% interval
+   * excludes 0): the label then reads "Y 平均低 0.55 个百分点". Without them it gives the signed gap ("相差").
+   */
+  slopeWords?: { lower: string; higher: string };
   xLabel: string;
   yLabel: string;
   /** Display scales: shares are stored as fractions and shown in percentage points. */
@@ -197,12 +202,16 @@ export function BinScatterChart({ bins, slope, slopeUnit, xLabel, yLabel, xScale
   const corners = [m.t + 12, H - m.b - 6];
   const slopeLabelY = Math.abs(corners[0] - lineEnd) >= Math.abs(corners[1] - lineEnd) ? corners[0] : corners[1];
   const slopeText = Math.abs(slope) >= 100 ? slope.toFixed(0) : Math.abs(slope) >= 0.1 ? slope.toFixed(2) : slope.toPrecision(2);
+  // An association across records, as in the result headline: "X 每高 1 个百分点，Y 平均低 0.55 个百分点".
+  const slopeReading = slopeWords && slope !== 0
+    ? `平均${slope < 0 ? slopeWords.lower : slopeWords.higher} ${slopeText.replace(/^-/, "")}`
+    : `平均相差 ${slopeText}`;
   const description = `分箱散点图：横轴为扣掉平均水平后的 X，纵轴为各组 Y 的平均；直线的斜率就是估计值`;
   return (
     <div ref={wrapRef} className="binscatter-plot" style={{ ...cardStyle, flex: "1 1 320px", minWidth: 280 }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3a4050" }}>{title}</div>
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
-        把全部记录按 X 从小到大分成 {bins.length} 组，每个点是一组的平均值。X 和 Y 都先扣掉了每个国家×行业自己的平均水平和每年的共同变化。直线的斜率就是估计值。
+        把全部记录按 X 从小到大最多分成 {bins.length} 组，每个点是一组的平均值；很多记录的 X 相同时，几组的点会重合，看到的点会少一些。X 和 Y 都先扣掉了每个国家×行业自己的平均水平和每年的共同变化。直线的斜率就是估计值。
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={description} style={{ display: "block", width: "100%", maxWidth: 760, height: "auto" }}>
         <title>{description}</title>
@@ -233,7 +242,7 @@ export function BinScatterChart({ bins, slope, slopeUnit, xLabel, yLabel, xScale
         {/* Kept inside the plot (a line ending at the bottom put it on the x tick labels); small slopes keep
             two significant figures so they match the coefficient chart (-0.0049, not -0.005). */}
         {/* A white halo keeps the label readable where the line still runs under it near a corner. */}
-        <text data-slope-label x={x(xAxis.hi) - 6} y={slopeLabelY} textAnchor="end" fontSize={11} fontWeight={700} fill={ESTIMATE} stroke="#fff" strokeWidth={3} paintOrder="stroke" strokeLinejoin="round">{slopeUnit ? `斜率：X 每增加 1 个百分点，Y ${slopeText} ${slopeUnit}` : `斜率 = ${slopeText}`}</text>
+        <text data-slope-label x={x(xAxis.hi) - 6} y={slopeLabelY} textAnchor="end" fontSize={11} fontWeight={700} fill={ESTIMATE} stroke="#fff" strokeWidth={3} paintOrder="stroke" strokeLinejoin="round">{slopeUnit ? `斜率：X 每高 1 个百分点，Y ${slopeReading} ${slopeUnit}` : `斜率 = ${slopeText}`}</text>
       </svg>
       {Tip}
     </div>

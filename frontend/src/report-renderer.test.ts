@@ -267,7 +267,7 @@ describe("parseReportChart", () => {
     expect(html).toContain("外国增加值项占比");
     expect(html).toContain("-0.55");
     expect(html).toContain("[-0.61, -0.50]");
-    expect(html).toContain("横线 = 95% 区间（估计值可能落在的范围）");
+    expect(html).toContain("横线 = 95% 区间（真实系数的合理取值范围）");
   });
 });
 
