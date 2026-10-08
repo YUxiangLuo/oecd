@@ -394,3 +394,9 @@ test("crowded labels at the chart edge never lie across a lower label's leader",
     }
   }
 });
+
+test("the default comparison country is the USA, or the first other country when A is the USA", async () => {
+  const { defaultPartner } = await import("./indicator-model");
+  expect(defaultPartner(["ARG", "CHN", "USA"], "CHN")).toBe("USA");
+  expect(defaultPartner(["ARG", "CHN", "USA"], "USA")).toBe("ARG");
+});

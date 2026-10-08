@@ -186,7 +186,7 @@ try {
     window.__select(s[0], "CAN"); window.__select(s[1], "MEX"); window.__select(s[2], "C29"); return true; })()`);
   await page.waitFor(`window.__find("MEX 墨西哥 · C29") && document.querySelector(".teaching-example-summary")`);
   await Bun.sleep(2500);
-  await scrollTo(page, `window.__find("先看一个例子")`, 8);
+  await scrollTo(page, `window.__find("跟踪一个例子（可选）")`, 8);
   await save("10-shocks.png", await page.screenshot(), student.username, "Step 10 followed example (Canada vs Mexico, motor vehicles).");
 
   await open(page, 11, `document.querySelector(".diverging-bars svg") && document.querySelector(".reg-example-effect")`);
