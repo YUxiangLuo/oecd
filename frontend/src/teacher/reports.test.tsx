@@ -5,7 +5,8 @@ import { TeacherWorkspace } from "../app-shell";
 import type { TeacherReport } from "../types";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  GradeView, RELOADED_REVIEW_NOTE, REPORT_FILTER_LABELS, ReportRowAction, STALE_REVIEW_HINT, reportRowAction, reportsEmptyState,
+  GradeView, RELOADED_REVIEW_NOTE, REPORT_FILTER_LABELS, ReportRowAction, STALE_REVIEW_HINT, UNCHANGED_REVIEW_HINT, reportRowAction, reportsEmptyState,
+  reviewPosition,
 } from "./reports";
 
 afterEach(cleanup);
@@ -42,8 +43,8 @@ describe("report list action names", () => {
     expect(pending.visible).toBe("评阅报告");
     expect(pending.accessible).toBe("评阅报告：深度测试主学生");
     expect(pending.accessible.includes(pending.visible)).toBe(true);
-    expect(graded.visible).toBe("查看/改评");
-    expect(graded.accessible).toBe("查看/改评：深度测试主学生");
+    expect(graded.visible).toBe("查看或修改评分");
+    expect(graded.accessible).toBe("查看或修改评分：深度测试主学生");
     expect(graded.accessible.includes(graded.visible)).toBe(true);
     for (const label of Object.values(REPORT_FILTER_LABELS)) {
       expect(label.includes(pending.visible)).toBe(false);
@@ -79,9 +80,9 @@ describe("stale teacher report recovery", () => {
       render(<TeacherWorkspace user={{ username: "teacher", name: "老师", role: "teacher" }} meta={null}
         showPasswordChange={false} onRequestPasswordChange={password} onClosePasswordChange={() => {}}
         onPasswordChanged={() => {}} onLogout={logout} />);
-      fireEvent.click(screen.getByRole("button", { name: /报告评阅 批改与打分/ }));
+      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
       fireEvent.click(await screen.findByRole("button", { name: "评阅报告：学生" }));
-      const feedback = await screen.findByRole("textbox", { name: "评语（可空）" });
+      const feedback = await screen.findByRole("textbox", { name: "评语（选填）" });
       fireEvent.change(feedback, { target: { value: "不能丢失的评语" } });
       for (const name of [/学生与进度 账号/, /^修改密码$/, /^退出$/]) {
         fireEvent.click(screen.getByRole("button", { name }));
@@ -187,7 +188,7 @@ describe("stale teacher report recovery", () => {
 
   test("announces a 409 and offers an explicit latest-report reload", async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () => new Response(JSON.stringify({ detail: "报告内容已更新，请重新加载后评阅" }), {
+    globalThis.fetch = (async () => new Response(JSON.stringify({ detail: "老师甲刚把这份报告评为 84 分" }), {
       status: 409,
       headers: { "Content-Type": "application/json" },
     })) as unknown as typeof fetch;
@@ -199,10 +200,13 @@ describe("stale teacher report recovery", () => {
       const update = screen.getByRole("button", { name: "更新评阅" }) as HTMLButtonElement;
       fireEvent.click(update);
 
-      expect((await screen.findByRole("alert")).textContent).toContain("报告内容已更新");
+      const alert = await screen.findByRole("alert");
+      // One message: the cause from the server, then what to do.
+      expect(alert.textContent).toBe(`没有保存：老师甲刚把这份报告评为 84 分。${STALE_REVIEW_HINT}`);
+      expect(document.querySelectorAll(".error-box")).toHaveLength(1);
       const reload = screen.getByRole("button", { name: "载入最新报告" });
       expect(reload.getAttribute("aria-describedby")).toBeTruthy();
-      expect(document.getElementById(reload.getAttribute("aria-describedby")!)?.textContent).toBe(STALE_REVIEW_HINT);
+      expect(document.getElementById(reload.getAttribute("aria-describedby")!)).toBe(alert);
       expect(update.disabled).toBe(true);
       fireEvent.click(reload);
       // Nothing is lost on reload, so there is no "leave" confirmation; the typed draft goes along.
@@ -231,23 +235,23 @@ describe("teacher review flow", () => {
       spyOn(api.classroom, "reports").mockResolvedValue({ reports: [pendingReport] }),
       spyOn(api.classroom, "students").mockResolvedValue({ students: [] }),
       spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] }),
-      spyOn(api.classroom, "grade").mockRejectedValue(new ApiError(409, "报告内容已更新，请重新加载后评阅", "409")),
+      spyOn(api.classroom, "grade").mockRejectedValue(new ApiError(409, "学生刚重新提交了报告", "409")),
       detail,
     ];
     const confirm = spyOn(window, "confirm").mockReturnValue(false);
     try {
       renderReports();
-      fireEvent.click(screen.getByRole("button", { name: /报告评阅 批改与打分/ }));
+      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
       fireEvent.click(await screen.findByRole("button", { name: "评阅报告：学生" }));
       fireEvent.change(await screen.findByRole("spinbutton"), { target: { value: "88" } });
-      fireEvent.change(screen.getByRole("textbox", { name: "评语（可空）" }), { target: { value: "保留的评语" } });
+      fireEvent.change(screen.getByRole("textbox", { name: "评语（选填）" }), { target: { value: "保留的评语" } });
       fireEvent.click(screen.getByRole("button", { name: "提交评阅" }));
       fireEvent.click(await screen.findByRole("button", { name: "载入最新报告" }));
       const note = await screen.findByText(RELOADED_REVIEW_NOTE);
       expect(confirm).not.toHaveBeenCalled();
       expect(detail).toHaveBeenCalledTimes(2);
       expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("88");
-      expect((screen.getByRole("textbox", { name: "评语（可空）" }) as HTMLTextAreaElement).value).toBe("保留的评语");
+      expect((screen.getByRole("textbox", { name: "评语（选填）" }) as HTMLTextAreaElement).value).toBe("保留的评语");
       await waitFor(() => expect(document.activeElement).toBe(note));
       // Still an unsaved draft against the newer report: leaving asks.
       fireEvent.click(screen.getByRole("button", { name: "← 返回列表" }));
@@ -273,7 +277,7 @@ describe("teacher review flow", () => {
     ];
     try {
       renderReports();
-      fireEvent.click(screen.getByRole("button", { name: /报告评阅 批改与打分/ }));
+      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
       fireEvent.click(await screen.findByRole("button", { name: "评阅报告：学生" }));
       const heading = await screen.findByRole("heading", { level: 3, name: "学生（student）" });
       await waitFor(() => expect(document.activeElement).toBe(heading));
@@ -299,10 +303,10 @@ describe("teacher review flow", () => {
 
       // Back to 全部: the row is there, open it and return without changes; focus lands on that row's button.
       fireEvent.click(screen.getByRole("button", { name: "全部" }));
-      fireEvent.click(screen.getByRole("button", { name: "查看/改评：学生" }));
+      fireEvent.click(screen.getByRole("button", { name: "查看或修改评分：学生" }));
       fireEvent.click(await screen.findByRole("button", { name: "← 返回列表" }));
       await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
-      expect(document.activeElement).toBe(screen.getByRole("button", { name: "查看/改评：学生" }));
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "查看或修改评分：学生" }));
     } finally {
       spies.forEach((spy) => spy.mockRestore());
     }
@@ -317,7 +321,7 @@ describe("teacher review flow", () => {
     ];
     try {
       renderReports();
-      fireEvent.click(screen.getByRole("button", { name: /报告评阅 批改与打分/ }));
+      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
       await screen.findByText("还没有学生提交报告");
       reports.mockResolvedValue({ reports: [pendingReport] });
       fireEvent.click(screen.getByRole("button", { name: "刷新列表" }));
@@ -343,7 +347,7 @@ describe("teacher review flow", () => {
     ];
     try {
       renderReports();
-      fireEvent.click(screen.getByRole("button", { name: /报告评阅 批改与打分/ }));
+      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
       const alert = await screen.findByRole("alert");
       expect(alert.textContent).toContain("报告列表加载失败：网络连接中断");
       expect(alert.textContent).not.toContain("Failed to fetch");
@@ -372,4 +376,114 @@ test("the review header marks an archived class and the feedback counter ignores
   expect(container.querySelector(".grade-count")?.textContent).toBe("评语 0 / 4000 字");
   fireEvent.change(screen.getByRole("textbox"), { target: { value: "  很好  " } });
   expect(container.querySelector(".grade-count")?.textContent).toBe("评语 2 / 4000 字");
+});
+
+test("a report's place in its list gives 第 k / n 份 and its neighbours", () => {
+  expect(reviewPosition([7, 8, 9], 7)).toEqual({ index: 0, total: 3, previous: null, next: 8 });
+  expect(reviewPosition([7, 8, 9], 8)).toEqual({ index: 1, total: 3, previous: 7, next: 9 });
+  expect(reviewPosition([7, 8, 9], 9)).toEqual({ index: 2, total: 3, previous: 8, next: null });
+  expect(reviewPosition([7, 8, 9], 5)).toBeNull();
+});
+
+test("an unchanged graded review cannot be re-saved; a change re-enables it", () => {
+  render(<GradeView data={report} grader="老师" onBack={() => {}} onReload={() => {}} />);
+  const update = screen.getByRole("button", { name: "更新评阅" }) as HTMLButtonElement;
+  expect(update.disabled).toBe(true);
+  expect(screen.getByText(UNCHANGED_REVIEW_HINT)).toBeTruthy();
+  fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "91" } });
+  expect(update.disabled).toBe(false);
+  expect(screen.queryByText(UNCHANGED_REVIEW_HINT)).toBeNull();
+  expect(screen.getByText("评阅人：老师。学生重新生成报告后，本次评分会被清除。")).toBeTruthy();
+});
+
+test("graded rows get a secondary button; only reports still to grade get the solid one", () => {
+  const graded = renderToStaticMarkup(<ReportRowAction report={{ state: "graded", display_name: "甲" }} onOpen={() => {}} />);
+  const pending = renderToStaticMarkup(<ReportRowAction report={{ state: "pending", display_name: "乙" }} onOpen={() => {}} />);
+  expect(graded).toContain('class="sm"');
+  expect(pending).toContain('class="primary sm"');
+});
+
+describe("moving through the list while grading", () => {
+  const pendingReport = { ...report, state: "pending" as const, score: null, feedback: "" };
+  const queue = [7, 8, 9].map((id) => ({ ...pendingReport, account_id: id, username: `s${id}`, display_name: `学生${id}` }));
+
+  function renderWorkspace() {
+    return render(<TeacherWorkspace user={{ username: "teacher", name: "老师", role: "teacher" }} meta={null}
+      showPasswordChange={false} onRequestPasswordChange={() => {}} onClosePasswordChange={() => {}}
+      onPasswordChanged={() => {}} onLogout={() => {}} />);
+  }
+
+  test("保存并评阅下一份 saves and opens the next report of the filtered list; 上一份/下一份 keep the unsaved-changes guard", async () => {
+    const grade = spyOn(api.classroom, "grade").mockImplementation(async (accountId) => ({ ...queue.find((item) => item.account_id === accountId)!, state: "graded" as const }));
+    const spies = [
+      grade,
+      spyOn(api.classroom, "reports").mockResolvedValue({ reports: queue }),
+      spyOn(api.classroom, "reportDetail").mockImplementation(async (accountId) => queue.find((item) => item.account_id === accountId)!),
+      spyOn(api.classroom, "students").mockResolvedValue({ students: [] }),
+      spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] }),
+    ];
+    const confirm = spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      renderWorkspace();
+      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "评阅报告：学生7" }));
+      await screen.findByRole("heading", { level: 3, name: "学生7（s7）" });
+      expect(screen.getByText("第 1 / 3 份")).toBeTruthy();
+      expect((screen.getByRole("button", { name: "‹ 上一份" }) as HTMLButtonElement).disabled).toBe(true);
+
+      fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "80" } });
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "保存并评阅下一份" })); });
+      expect(grade).toHaveBeenLastCalledWith(7, 80, "", report.updated_at);
+      await screen.findByRole("heading", { level: 3, name: "学生8（s8）" });
+      expect(screen.getByText("第 2 / 3 份")).toBeTruthy();
+
+      // An unsaved draft asks before moving; cancelling keeps it.
+      fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "70" } });
+      fireEvent.click(screen.getByRole("button", { name: "下一份 ›" }));
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("70");
+      confirm.mockReturnValue(true);
+      fireEvent.click(screen.getByRole("button", { name: "下一份 ›" }));
+      await screen.findByRole("heading", { level: 3, name: "学生9（s9）" });
+      expect(screen.getByText("第 3 / 3 份")).toBeTruthy();
+      // The last report has no next: one plain save button, which returns to the list.
+      expect((screen.getByRole("button", { name: "下一份 ›" }) as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.queryByRole("button", { name: "保存并评阅下一份" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "‹ 上一份" }));
+      await screen.findByRole("heading", { level: 3, name: "学生8（s8）" });
+      // The draft typed for 学生8 before leaving it was not carried over.
+      expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("");
+      expect(grade).toHaveBeenCalledTimes(1);
+    } finally {
+      spies.forEach((spy) => spy.mockRestore());
+      confirm.mockRestore();
+    }
+  });
+
+  test("a submitted report's status in 学生与进度 opens it in 报告评阅", async () => {
+    const student = {
+      id: 8, username: "s8", display_name: "学生8", student_no: "", demo_seed: false, last_login_at: null,
+      created_at: "2026-09-01T00:00:00Z", report_state: "pending" as const, score: null, submitted_at: report.submitted_at,
+      verified_completed_count: 15, verified_total_steps: 15, verified_completed_steps: [], completion_missing: [],
+      last_valid_activity: null, enrollments: [],
+    };
+    const spies = [
+      spyOn(api.classroom, "reports").mockResolvedValue({ reports: queue }),
+      spyOn(api.classroom, "reportDetail").mockImplementation(async (accountId) => queue.find((item) => item.account_id === accountId)!),
+      spyOn(api.classroom, "students").mockResolvedValue({ students: [student, { ...student, id: 3, username: "s3", display_name: "学生3", report_state: null }] }),
+      spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] }),
+    ];
+    try {
+      renderWorkspace();
+      expect(screen.queryByRole("button", { name: /学生3（s3）$/ })).toBeNull();
+      fireEvent.click(await screen.findByRole("button", { name: "待评阅，打开报告：学生8（s8）" }));
+      await screen.findByRole("heading", { level: 3, name: "学生8（s8）" });
+      expect(document.title).toContain("报告评阅");
+      expect(screen.getByText("第 1 / 1 份")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "← 返回列表" }));
+      expect(await screen.findByRole("button", { name: "评阅报告：学生8" })).toBeTruthy();
+    } finally {
+      spies.forEach((spy) => spy.mockRestore());
+    }
+  });
 });

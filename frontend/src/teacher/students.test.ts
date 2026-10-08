@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { EnrollmentModal, FieldModal, StudentModal, StudentRowMenu, newStudentError, settleModalSubmission, studentFieldError } from "./students";
+import {
+  DEMO_PASSWORD_HINT, EnrollmentModal, FieldModal, StudentModal, StudentRowMenu, newStudentError, newStudentProblem, nextStudentSort,
+  settleModalSubmission, sortStudents, studentFieldError, summarizeStudents,
+} from "./students";
 import type { AcademicSemester, StudentRow } from "../types";
 
 describe("teacher student modal submission", () => {
@@ -36,8 +39,8 @@ describe("teacher student modal submission", () => {
   test("keeps fixed demo-pool passwords out of the editable password modal", async () => {
     const source = await Bun.file(new URL("./students.tsx", import.meta.url)).text();
     expect(source).toContain("disabled={student.demo_seed}");
-    expect(source).toContain("固定演示口令");
-    expect(source).toContain("如需演示改密，请新建普通学生账号");
+    expect(source).toContain("title={student.demo_seed ? DEMO_PASSWORD_HINT : undefined}");
+    expect(DEMO_PASSWORD_HINT).toBe("演示账号不能修改密码。要演示改密码，请新建一个学生账号。");
   });
 
   test("allows clearing an optional student number but not a display name", () => {
@@ -151,8 +154,10 @@ describe("teacher student modal submission", () => {
       onClose: () => {},
       onSubmit: async () => {},
     }));
-    expect(editHtml).toContain("2025 秋（已归档，仅可移出）");
-    expect(editHtml).toContain("历史班（已归档，仅保留现有归属）");
+    expect(editHtml).toContain("2025 秋（已归档）");
+    expect(editHtml).toContain("历史班（已归档）");
+    expect(editHtml).toContain(">不分班<");
+    expect(editHtml).toContain("已归档的学期或班级只能保留现有分班或移出");
   });
 });
 
@@ -189,12 +194,14 @@ describe("teacher student row menu accessible names", () => {
     expect(html).toContain(">重置密码<");
   });
 
-  test("keeps the fixed-demo wording and still names the row", () => {
+  test("a demo account's reset item is disabled, says why and still names the row", () => {
     const seeded = { ...student, username: "student08", display_name: "演示学生 08", demo_seed: true };
     const html = renderToStaticMarkup(createElement(StudentRowMenu, { student: seeded, onPick: () => {} }));
 
-    expect(html).toContain('aria-label="固定演示口令：演示学生 08（student08）"');
-    expect(html).toContain(">固定演示口令<");
+    expect(html).toContain('aria-label="重置密码：演示学生 08（student08）"');
+    expect(html).toMatch(/<button disabled=""[^>]*>重置密码</);
+    expect(html).toContain(`title="${DEMO_PASSWORD_HINT}"`);
+    expect(html).toContain('title="更多操作"');
   });
 
   test("每个自定义可访问名都包含可见文字（WCAG 2.5.3）", () => {
@@ -205,5 +212,54 @@ describe("teacher student row menu accessible names", () => {
     for (const [, name, visible] of pairs) {
       expect(name).toContain(visible);
     }
+  });
+});
+
+describe("student table sorting and summary", () => {
+  const row = (id: number, overrides: Partial<StudentRow>): StudentRow => ({
+    id, username: `s${id}`, display_name: `学生${id}`, student_no: "", demo_seed: false, last_login_at: null,
+    created_at: "2026-09-01T00:00:00Z", report_state: null, score: null, submitted_at: null,
+    verified_completed_count: 0, verified_total_steps: 15, verified_completed_steps: [], completion_missing: [],
+    last_valid_activity: null, enrollments: [], ...overrides,
+  });
+  const rows = [
+    row(1, { display_name: "王五", verified_completed_count: 15, report_state: "graded", score: 90, last_login_at: "2026-10-02T09:00:00" }),
+    row(2, { display_name: "张三", verified_completed_count: 0, last_login_at: null }),
+    row(3, { display_name: "李四", verified_completed_count: 6, report_state: "draft", last_valid_activity: "2026-10-01T08:00:00", last_login_at: "2026-10-01T08:00:00" }),
+    row(4, { display_name: "赵六", verified_completed_count: 15, report_state: "pending", student_no: "2026010", last_login_at: "2026-10-03T10:00:00" }),
+    row(5, { display_name: "钱七", verified_completed_count: 15, report_state: "graded", score: 75, student_no: "2026002" }),
+  ];
+  const names = (sorted: StudentRow[]) => sorted.map((student) => student.display_name);
+
+  test("each column sorts both ways; missing values stay last", () => {
+    expect(names(sortStudents(rows, null))).toEqual(["王五", "张三", "李四", "赵六", "钱七"]);
+    expect(names(sortStudents(rows, { key: "name", direction: "ascending" }))).toEqual(["李四", "钱七", "王五", "张三", "赵六"]);
+    expect(names(sortStudents(rows, { key: "progress", direction: "ascending" }))).toEqual(["张三", "李四", "钱七", "王五", "赵六"]);
+    expect(names(sortStudents(rows, { key: "report", direction: "ascending" }))).toEqual(["张三", "李四", "赵六", "钱七", "王五"]);
+    expect(names(sortStudents(rows, { key: "score", direction: "descending" }))).toEqual(["王五", "钱七", "李四", "张三", "赵六"]);
+    expect(names(sortStudents(rows, { key: "score", direction: "ascending" }))).toEqual(["钱七", "王五", "李四", "张三", "赵六"]);
+    expect(names(sortStudents(rows, { key: "student_no", direction: "ascending" }))).toEqual(["钱七", "赵六", "李四", "王五", "张三"]);
+    expect(names(sortStudents(rows, { key: "login", direction: "descending" }))).toEqual(["赵六", "王五", "李四", "钱七", "张三"]);
+    expect(names(sortStudents(rows, { key: "activity", direction: "ascending" }))).toEqual(["李四", "钱七", "王五", "张三", "赵六"]);
+  });
+
+  test("a header click starts ascending and flips on the same column", () => {
+    expect(nextStudentSort(null, "score")).toEqual({ key: "score", direction: "ascending" });
+    expect(nextStudentSort({ key: "score", direction: "ascending" }, "score")).toEqual({ key: "score", direction: "descending" });
+    expect(nextStudentSort({ key: "score", direction: "descending" }, "name")).toEqual({ key: "name", direction: "ascending" });
+  });
+
+  test("the summary puts every student in one bucket and averages the scores", () => {
+    expect(summarizeStudents(rows)).toEqual({ total: 5, notStarted: 1, inProgress: 1, pending: 1, graded: 2, averageScore: 82.5 });
+    expect(summarizeStudents(rows.slice(1, 3))).toEqual({ total: 2, notStarted: 1, inProgress: 1, pending: 0, graded: 0, averageScore: null });
+    expect(summarizeStudents([])).toEqual({ total: 0, notStarted: 0, inProgress: 0, pending: 0, graded: 0, averageScore: null });
+  });
+
+  test("a create-form problem names the field it is about", () => {
+    const student = { username: "df-a", display_name: "学生", password: "long-password-1", student_no: "" };
+    expect(newStudentProblem({ ...student, username: "a" })?.field).toBe("username");
+    expect(newStudentProblem({ ...student, display_name: " " })?.field).toBe("display_name");
+    expect(newStudentProblem({ ...student, student_no: "9".repeat(41) })?.field).toBe("student_no");
+    expect(newStudentProblem({ ...student, password: "short" })).toEqual({ field: "password", message: "密码至少 12 个字符" });
   });
 });

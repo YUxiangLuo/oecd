@@ -296,7 +296,7 @@ class AcademicUpdateRequest(TextRequest):
     @classmethod
     def supplied_fields_are_not_null(cls, value: Any) -> Any:
         if value is None:
-            raise ValueError("更新字段不能为 null；不修改请省略该字段")
+            raise ValueError("提交的内容不完整，请刷新页面后重试")
         return value
 
     _normalize_name = field_validator("name", mode="before")(normalize_label)
@@ -461,7 +461,7 @@ class StudentUpdateRequest(TextRequest):
     @classmethod
     def supplied_fields_are_not_null(cls, value: Any) -> Any:
         if value is None:
-            raise ValueError("更新字段不能为 null；不修改请省略该字段，清空学号请使用空字符串")
+            raise ValueError("提交的内容不完整，请刷新页面后重试")
         return value
 
     _normalize_labels = field_validator("display_name", "student_no", mode="before")(normalize_label)
