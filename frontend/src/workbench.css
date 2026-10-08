@@ -341,6 +341,43 @@
 .teaching-example-summary li { padding: 7px 10px; border: 1px solid #e3e4ee; border-radius: 8px; background: #fff; font-size: 12px; color: #4a5265; }
 .teaching-example-summary b { margin-right: 6px; color: #2a3040; }
 .teaching-example-hint { margin: -4px 0 12px; padding: 8px 12px; border-radius: 8px; background: #fff8e8; color: #7a5300; font-size: 12.5px; }
+/* 步骤 10：全部样本的四个数字卡、75 国关税暴露条形图（viz/regression/country-exposure.tsx） */
+.teaching-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 10px 0 6px; padding: 0; list-style: none; }
+.teaching-tiles li { min-width: 0; padding: 10px 12px; border: 1px solid #e3e5ee; border-radius: 10px; background: #fafbfe; }
+.teaching-tiles b { display: block; color: #1b1f2b; font-size: 21px; line-height: 1.2; font-variant-numeric: tabular-nums; word-break: keep-all; }
+.teaching-tiles span { display: block; margin-top: 2px; color: #5a6274; font-size: 11.5px; line-height: 1.45; }
+.teaching-tiles li.taxed { border-top: 3px solid #d6731f; }
+.teaching-tiles li.untaxed { border-top: 3px solid #6b7487; }
+.teaching-tiles li.imposer b { font-size: 17px; }
+.teaching-one-line { margin: 4px 0 0; color: #5a6274; font-size: 12px; line-height: 1.6; }
+.country-exposure { margin: 8px 0 0; }
+.country-exposure-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 8px; color: #4a5265; font-size: 11.5px; }
+.country-exposure-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.country-exposure-legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; }
+.country-exposure-legend i.line { height: 3px; width: 14px; border-radius: 2px; }
+.country-exposure-badge {
+  display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-right: 3px;
+  border-radius: 50%; background: #1f2430; color: #fff; font-size: 9.5px; font-weight: 800;
+}
+.country-exposure-bar { cursor: default; outline: none; }
+.country-exposure-untaxed { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; align-items: start; margin: 10px 0 0; padding-top: 9px; border-top: 1px dashed #dde1ea; }
+.country-exposure-untaxed > b { display: inline-flex; align-items: center; gap: 6px; padding-top: 3px; color: #3a4050; font-size: 12px; white-space: nowrap; }
+.country-exposure-untaxed > b i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
+.country-exposure-codes { display: flex; flex-wrap: wrap; gap: 4px; }
+.country-exposure-codes > span {
+  display: inline-flex; align-items: center; padding: 2px 6px; border: 1px solid #d5d9e2; border-bottom: 3px solid #6b7487;
+  border-radius: 5px; background: #fff; color: #4a5265; font-size: 11px; font-variant-numeric: tabular-nums;
+}
+.country-exposure-codes > span.selected { border-color: #1f2430; color: #1b1f2b; font-weight: 800; }
+.country-exposure-codes > span:focus-visible { outline: 2px solid #4b47e0; outline-offset: 1px; }
+.country-exposure-note { margin: 8px 0 0; color: #5a6274; font-size: 11.5px; }
+.country-exposure-table > summary { cursor: pointer; color: #4b47e0; font-size: 11.5px; font-weight: 700; }
+.country-exposure-table table { margin-top: 6px; }
+.teaching-x-card { margin: 12px 0 0; padding: 11px 14px; border: 1px solid #dcdff0; border-radius: 10px; background: #f8f8ff; }
+.teaching-x-card > b { display: block; color: #35328d; font-size: 12.5px; }
+.teaching-x-card > p { margin: 4px 0 0; color: #3f4759; font-size: 12.5px; line-height: 1.6; }
+.teaching-x-card .teaching-x-formula { font-size: 15px; color: #1b1f2b; font-variant-numeric: tabular-nums; }
+@media (max-width: 900px) { .teaching-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .reg-step-focus { margin: 4px 0 8px; color: #394258; font-size: 12.5px; line-height: 1.65; }
 .reg-step-focus b { margin-right: 6px; color: #4b47e0; }
 .reg-group-figure { margin: 10px 0 12px; }
