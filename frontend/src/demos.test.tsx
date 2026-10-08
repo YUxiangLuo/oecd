@@ -2,7 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api";
-import { buildDecompositionModel, type DecompositionSpec } from "./decomposition-model";
+import { buildDecompositionModel, type DecompositionModel, type DecompositionSpec } from "./decomposition-model";
 import {
   ClosenessPathTable,
   DecompositionDemo,
@@ -21,6 +21,8 @@ import {
   teachingBetweennessPairs,
   teachingNetworkCentralitySnapshot,
   teachingNetworkEdgesForNode,
+  unavailableDashNote,
+  unavailableTotalNote,
   zeroTotalDecompositionHint,
 } from "./demos";
 import type { Meta } from "./types";
@@ -188,10 +190,37 @@ describe("indicator calculation disclosure", () => {
       await waitFor(() => expect(view.getByText("当前分解不可用")).toBeTruthy());
       const disclosure = view.getByLabelText("GVC 位置指数计算公示");
       expect(disclosure.textContent).toContain("3.324 / 3.545 = 0.937");
+      // Round 12: the headline length is defined, only its share-weighted split is not; "—" is not missing data.
+      const box = view.getByText("当前分解不可用").parentElement!.textContent ?? "";
+      expect(box).toContain("SVA 小于 0，无法按份额加权平均。");
+      expect(box).toContain("前向总生产长度 PLv = 1.643 仍有定义");
+      expect(box).toContain("“—”表示这一项无法计算（不是缺少数据）");
+      expect(box).not.toContain("表示没有数据");
     } finally {
       countryRequest.mockRestore();
       industryRequest.mockRestore();
     }
+  });
+});
+
+describe("the unavailable step 4 split names undefined parts as such (round 12)", () => {
+  const cfg = { totalLabel: "前向总生产长度 PLv", unit: "number" as const, weightTotal: "SVA" };
+  const model = (reason: DecompositionModel["reason"], total: number | null) => ({ reason, total }) as DecompositionModel;
+
+  test("LUX B09: SVA is 0, so the dash means 无法计算 and no total is claimed", () => {
+    expect(unavailableDashNote(model("zero-weight-denominator", null))).toBe("“—”表示这一项无法计算（不是缺少数据），不按 0 计算。");
+    expect(unavailableTotalNote(model("zero-weight-denominator", null), cfg)).toBeNull();
+  });
+
+  test("missing fields still read as missing data", () => {
+    expect(unavailableDashNote(model("missing-fields", 2))).toBe("“—”表示没有数据，不按 0 计算。");
+    expect(unavailableTotalNote(model("missing-fields", 2), cfg)).toBeNull();
+  });
+
+  test("MLT H51: a negative SVA leaves PLv defined and says so", () => {
+    expect(unavailableTotalNote(model("negative-weight-denominator", 2.1310588), cfg)).toBe(
+      "前向总生产长度 PLv = 2.131 仍有定义：总长度由投入产出关系直接算出，不需要份额；无法计算的只是按 SVA 份额加权的各段贡献，所以这里只是拆不开。",
+    );
   });
 });
 

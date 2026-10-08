@@ -181,3 +181,24 @@ describe("network table sort scope", () => {
   });
 
 });
+
+describe("undefined path metrics in the step 5 table (round 12)", () => {
+  test("an isolated node reads 无连接，无法定义 for its distances, not 0, while its degree stays 0", () => {
+    // LUX A03 2020: no links at all; the pipeline stores 0 for every distance metric.
+    const html = renderToStaticMarkup(
+      <IndicatorDataTable
+        groupLabel="生产网络指标"
+        schema={null}
+        columns={["country", "industry", "year", "degree", "closnesscentrality", "Eccentricity", "harmonicclosnesscentrality"]}
+        rows={[{ country: "LUX", industry: "A03", year: 2020, degree: 0, closnesscentrality: 0, Eccentricity: 0, harmonicclosnesscentrality: 0 }]}
+        year={2020}
+        country="LUX"
+        page={1}
+      />,
+    );
+    expect(html.match(/data-metric-undefined="true"/g)).toHaveLength(3);
+    expect(html).toContain("无连接，无法定义");
+    // The degree of an isolated node is a real zero.
+    expect(html).toMatch(/<td>0<\/td>/);
+  });
+});

@@ -350,6 +350,20 @@ export function decompositionModelReason(model: DecompositionModel, weightLabel?
   return "总量为负，无法算比重。";
 }
 
+/** A weight of 0 or below makes the weighted parts undefined, not missing: the "—" line says which. */
+export function unavailableDashNote(model: DecompositionModel): string {
+  return model.reason === "zero-weight-denominator" || model.reason === "negative-weight-denominator"
+    ? "“—”表示这一项无法计算（不是缺少数据），不按 0 计算。"
+    : "“—”表示没有数据，不按 0 计算。";
+}
+
+/** A total that is still defined while its share-weighted split is not (MLT H51 2020: SVA -1.268, PLv 2.131):
+ * the headline length comes straight from the input–output relations; only the weighted parts need SVA > 0. */
+export function unavailableTotalNote(model: DecompositionModel, cfg: Pick<DecompCfg, "totalLabel" | "unit" | "weightTotal">): string | null {
+  if (model.reason !== "negative-weight-denominator" || model.total == null || !cfg.weightTotal) return null;
+  return `${cfg.totalLabel} = ${fmt(model.total, cfg.unit)} 仍有定义：总长度由投入产出关系直接算出，不需要份额；无法计算的只是按 ${cfg.weightTotal} 份额加权的各段贡献，所以这里只是拆不开。`;
+}
+
 function MiniBackwardBar({ row }: { row: Row }) {
   const model = buildDecompositionModel(row, PLY_DECOMP);
   const position = finiteNumber(row.GVCPs);
@@ -604,7 +618,8 @@ export function DecompositionDemo({
           <div className="decomp-unavailable" role="status">
             <b>当前分解不可用</b>
             <div>{decompositionModelReason(model, cfg.weightTotal)}</div>
-            <div>“—”表示没有数据，不按 0 计算。</div>
+            {unavailableTotalNote(model, cfg) && <div>{unavailableTotalNote(model, cfg)}</div>}
+            <div>{unavailableDashNote(model)}</div>
           </div>
           <DecompositionDetailTable
             caption={`${sideLabel(side)}：${year} 年 ${countryLabel(country)} · ${levelLabel(sector)} · ${cjkJoin(cfg.totalLabel, "分解明细")}`}

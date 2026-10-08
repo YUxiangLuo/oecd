@@ -44,7 +44,7 @@ export function NetworkRanking({ rows, countries, unit, onIndustry, reference = 
   const withReference = rows.some((row) => reference.has(row.industry));
   return <>
     <p className="muted">
-      行业按 {countryLabel(countries[0])} 从高到低排列，所选国家使用同一组行业、同一顺序和从 0 开始的刻度。条长与数值成比例，单位：{unit}。缺少的数据留空，不当作 0。点击行业名查看历年变化。
+      行业按 {countryLabel(countries[0])} 从高到低排列，所选国家使用同一组行业、同一顺序和从 0 开始的刻度。条长与数值成比例，单位：{unit}。缺少或无法定义的数据留空，不当作 0。点击行业名查看历年变化。
       {withReference && "灰色竖线是该行业在全部经济体中的中位数；“全球第 N 位”是每个国家这一行业在全部经济体同一行业中的排名（从高到低）。"}
     </p>
     <ScrollableRegion label="行业排名条形图" className="bounded-data-table" style={{ padding: 12 }}>

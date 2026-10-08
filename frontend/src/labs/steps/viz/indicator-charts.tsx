@@ -63,6 +63,7 @@ export function TrendSummary({
   sameIndustry = false,
   digits,
   metricLabel,
+  reasonFor,
 }: {
   readings: ComparisonReading[];
   countries: string[];
@@ -75,12 +76,39 @@ export function TrendSummary({
   sameIndustry?: boolean;
   /** The indicator the cards read, where no chart title names it (历年构成: 外国增加值项占比, 后向复杂 GVC 生产份额). */
   metricLabel?: string;
+  /** Why a reading is empty when it is undefined rather than missing, as a whole clause ("该行业总增加值为负，
+   *  复杂 GVC 生产份额无法计算（不是缺少数据）"); null when the data is really missing. */
+  reasonFor?: (country: string, year: number) => string | null;
 }) {
   const value = (country: string, year: number) =>
     readings.find((item) => item.country === country && item.year === year)?.value ?? null;
   const [first, ...others] = countries;
   const own = years.filter((year) => value(first, year) !== null);
+  /** "2020 年该行业总增加值为负，…（不是缺少数据）" / "2016、2020 年缺少数据": each empty year with its own reason. */
+  const gapText = (country: string, at: number[]) => {
+    const parts = [...new Set(at)].map((year) => ({ year, reason: reasonFor?.(country, year) ?? null }));
+    const grouped = [...new Set(parts.map((part) => part.reason))].map((reason) => {
+      const when = parts.filter((part) => part.reason === reason).map((part) => part.year);
+      return `${when.join("、")} 年${reason ?? "缺少数据（缺少的数据留空）"}`;
+    });
+    const undefinedOnly = parts.every((part) => part.reason);
+    return {
+      text: grouped.join("；"),
+      undefinedOnly,
+      word: undefinedOnly && parts.every((part) => part.reason!.includes("无法定义")) ? "无法定义" : "无法计算",
+    };
+  };
   if (own.length < 2) {
+    const empty = years.filter((year) => value(first, year) === null);
+    const gap = gapText(first, empty);
+    if (gap.undefinedOnly && empty.length) {
+      const reasons = [...new Set(empty.map((year) => reasonFor!(first, year)))];
+      return <p className="muted">{own.length
+        ? `${countryLabel(first)}在所选年份只有 ${own[0]} 年有读数（${gap.text}），暂不能读出期间变化。`
+        : reasons.length === 1
+          ? `${countryLabel(first)}在所选年份${reasons[0]}，暂不能读出期间变化。`
+          : `${countryLabel(first)}：${gap.text}，暂不能读出期间变化。`}</p>;
+    }
     return <p className="muted">{own.length
       ? `${countryLabel(first)}在所选年份只有 ${own[0]} 年有读数，暂不能读出期间变化。`
       : `${countryLabel(first)}在所选年份没有读数，暂不能读出期间变化。`}</p>;
@@ -95,11 +123,13 @@ export function TrendSummary({
   const endRank = endRef?.ranks[first];
   const gapCards = others.map((second) => {
     if (value(second, firstYear) === null || value(second, lastYear) === null) {
+      // Name the empty year(s) and why: an undefined share is not missing data.
+      const gap = gapText(second, [firstYear, lastYear].filter((year) => value(second, year) === null));
       return (
         <div key={second}>
           <span>与对比国家 {countryLabel(second)}</span>
-          <b>期间读数不完整</b>
-          <small>{firstYear} 或 {lastYear} 年缺失，暂不比较差距（缺失留空）</small>
+          <b>{gap.undefinedOnly ? `期间读数${gap.word}` : "期间读数不完整"}</b>
+          <small>{gap.text}，暂不比较差距</small>
         </div>
       );
     }
@@ -251,9 +281,12 @@ export function IndicatorTrendChart({
   digits,
   emptyReading,
   emptyStatus,
+  reasonFor,
 }: {
   /** Replaces "缺失" in the readout where a value is undefined rather than missing (step 9: no outgoing links). */
   emptyReading?: (country: string, year: number) => string | null;
+  /** The whole clause the trend cards give for an undefined reading (see TrendSummary). */
+  reasonFor?: (country: string, year: number) => string | null;
   /** Replaces the "no valid readings" message when every value is undefined rather than missing (and says why). */
   emptyStatus?: string;
   rows: Row[];
@@ -535,7 +568,7 @@ export function IndicatorTrendChart({
       {Tip}
       </div>
       {context
-        ? <TrendSummary readings={readings} countries={countries} years={years} unit={unit} distribution={band} sameIndustry={sameIndustry} digits={digits} />
+        ? <TrendSummary readings={readings} countries={countries} years={years} unit={unit} distribution={band} sameIndustry={sameIndustry} digits={digits} reasonFor={reasonFor} />
         : <ComparisonSummary
           readings={readings}
           countries={countries}
@@ -1068,7 +1101,7 @@ export function IndicatorPairBars({
           ))}
         </div>
       ))}
-      <p className="muted">单位：{unit}。各国从同一个 0 起画，负值画在左边，缺少的数据留空。</p>
+      <p className="muted">单位：{unit}。各国从同一个 0 起画，负值画在左边，缺少或无法计算的数据留空。</p>
       {Tip}
     </div>
   );

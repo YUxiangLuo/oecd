@@ -165,8 +165,9 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
 /* ----------------------------------------------------------------- industry dot plot */
 
 export function IndustryDotPlot({ groups, countries, unit, nationals = [], label, onPick }: {
-  /** One row per industry, ordered as they should appear; values follow `countries`. */
-  groups: { key: string; label: string; values: (number | null)[] }[];
+  /** One row per industry, ordered as they should appear; values follow `countries`. `reasons[i]` replaces
+   *  "缺失" for a value that is undefined rather than missing ("无法计算": the industry exports nothing). */
+  groups: { key: string; label: string; values: (number | null)[]; reasons?: (string | null)[] }[];
   countries: string[];
   unit: string;
   /** Each economy's national (country-level) value, drawn as a vertical line in its colour. */
@@ -181,9 +182,11 @@ export function IndustryDotPlot({ groups, countries, unit, nationals = [], label
   const zeroBased = unit === "%" || unit === "百万美元";
   const axis = niceDomain(zeroBased ? Math.min(0, ...values) : Math.min(...values), zeroBased ? Math.max(0, ...values) : Math.max(...values));
   const px = (value: number) => ((value - axis.lo) / (axis.hi - axis.lo || 1)) * 100;
+  const reading = (group: typeof groups[number], index: number) =>
+    group.values[index] === null && group.reasons?.[index] ? group.reasons[index]! : indicatorNumber(group.values[index], unit);
   const linesFor = (group: typeof groups[number]): TipLine[] => [
     ["", group.label],
-    ...group.values.map((value, index): TipLine => [countryLabel(countries[index]), indicatorNumber(value, unit), CAT[index]]),
+    ...group.values.map((_, index): TipLine => [countryLabel(countries[index]), reading(group, index), CAT[index]]),
   ];
   return (
     // The value column fits every compared economy's reading (five did not fit the fixed 110px column).
@@ -205,7 +208,7 @@ export function IndustryDotPlot({ groups, countries, unit, nationals = [], label
           // One Tab stop per row: the industry button when the row can be picked, the row itself otherwise.
           tabIndex={onPick ? -1 : 0}
           role="group"
-          aria-label={`${group.label}：${group.values.map((value, index) => `${countryLabel(countries[index])} ${indicatorNumber(value, unit)}`).join("，")}`}
+          aria-label={`${group.label}：${group.values.map((_, index) => `${countryLabel(countries[index])} ${reading(group, index)}`).join("，")}`}
           onMouseMove={(event) => { setHovered(group.key); show(event, linesFor(group)); }}
           onMouseLeave={() => { setHovered(null); hide(); }}
           onFocus={(event) => { setHovered(group.key); showFor(event.currentTarget, linesFor(group)); }}
@@ -223,7 +226,7 @@ export function IndustryDotPlot({ groups, countries, unit, nationals = [], label
               <i key={countries[index]} className="dot" data-country={countries[index]} style={{ left: `${px(value)}%`, background: CAT[index], zIndex: 10 - index }} />
             ))}
           </div>
-          <span className="dot-plot-values">{group.values.map((value, index) => <b key={countries[index]} style={{ color: CAT[index] }}>{indicatorNumber(value, unit)}</b>)}</span>
+          <span className="dot-plot-values">{group.values.map((_, index) => <b key={countries[index]} style={{ color: CAT[index] }}>{reading(group, index)}</b>)}</span>
         </div>
       ))}
       {Tip}

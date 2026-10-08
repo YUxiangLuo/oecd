@@ -333,6 +333,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       {finite.length ? <IndicatorTrendChart
         rows={(query.data ?? []).filter((row) => row.industry === industry).map((row) => ({ ...row, [metric]: networkValue(row[metric], metric) }))}
         emptyReading={(country, at) => (points.some((point) => point.country === country && point.year === at && point.undefined) ? PATH_UNDEFINED_LABEL : null)}
+        reasonFor={(country, at) => (points.some((point) => point.country === country && point.year === at && point.undefined) ? `该行业无连接，${label}无法定义（不是 0）` : null)}
         countries={selected}
         years={years}
         metric={metric}
