@@ -104,6 +104,9 @@ describe("indicator data contract", () => {
     expect(changeReading(1_968_964.539, 2_496_175.368, "百万美元")).toBe("+527,211 百万美元");
     expect(changeReading(0.4, 0.75, "百万美元")).toBe("+0.350 百万美元");
     expect(changeReading(1.029, 1.023, "无量纲")).toBe("-0.006");
+    // Round 12: a change below 10 million keeps three decimals, as steps 1–5 read small amounts.
+    expect(changeReading(10, 4.832, "百万美元")).toBe("-5.168 百万美元");
+    expect(changeReading(10, 22.4, "百万美元")).toBe("+12 百万美元");
   });
 });
 

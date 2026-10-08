@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { cjkJoin } from "../../../format";
 import { countryLabel, medianSkipReason, sectorLabel } from "../../../viz";
 import { finiteValue, NO_RANK, NO_RANK_NOTE, rankText, type CompositionSpec, type YearDistribution } from "./indicator-model";
-import { fixedIndicatorNumber, indicatorNumber } from "./indicator-charts";
+import { fixedIndicatorNumber, textNumber } from "./indicator-charts";
 import type { Row } from "./scaffold";
 
 /* Reading cards (design doc 4.5): every view ends with the same three-sentence frame under its chart:
@@ -35,7 +35,8 @@ export function gapReading(first: number, other: number, unit: string): string {
   const difference = first - other;
   if (difference === 0) return "与它持平";
   const magnitude = Math.abs(difference) * (unit === "%" ? 100 : 1);
-  const digits = unit === "百万美元" && magnitude >= 1 ? 0 : 3;
+  // Amounts read whole from 10 up; below 10 three decimals, as in the cards ("比它高 3.832 百万美元", not "4").
+  const digits = unit === "百万美元" && magnitude >= 10 ? 0 : 3;
   const text = magnitude.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits });
   if (text === "0") return "与它基本持平";
   const suffix = unit === "%" ? " 个百分点" : unit === "无量纲" ? "" : ` ${unit}`;
@@ -64,7 +65,7 @@ export function comparisonCards({ rows, countries, metric, label, unit, year, in
     : { eyebrow: `${countryLabel(first)} · ${year}`, big: "缺失", small: `${label}在该年没有有效读数（缺少的数据留空，不当作 0）` }];
   const cards: ReadingCard[] = [{
     eyebrow: `${countryLabel(first)} · ${year}${industry ? ` · ${sectorLabel(industry)}` : ""}`,
-    big: indicatorNumber(own, unit),
+    big: textNumber(own, unit),
     small: label,
   }];
   if (distribution) {
@@ -77,7 +78,7 @@ export function comparisonCards({ rows, countries, metric, label, unit, year, in
     });
     cards.push({
       eyebrow: `全球中位数 · ${year}`,
-      big: indicatorNumber(distribution.median, unit),
+      big: textNumber(distribution.median, unit),
       small: `${countryLabel(first)} ${gapReading(own, distribution.median, unit).replace("它", "中位数")}`,
     });
   }
@@ -87,7 +88,7 @@ export function comparisonCards({ rows, countries, metric, label, unit, year, in
     cards.push({
       eyebrow: `与对比国家 ${countryLabel(other)}`,
       big: value === null ? (reason ? "对比国家无法计算" : "对比国家缺失") : `${year} 年 ${countryLabel(first)} ${gapReading(own, value, unit)}`,
-      small: value === null ? reason ?? "该国在该年没有有效读数" : `${countryLabel(other)} ${indicatorNumber(value, unit)}；差距不代表因果关系`,
+      small: value === null ? reason ?? "该国在该年没有有效读数" : `${countryLabel(other)} ${textNumber(value, unit)}；差距不代表因果关系`,
     });
   }
   return cards;
@@ -117,7 +118,7 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
     const total = valueOf(rows, country, year, composition.total, industry);
     const prefix = comparison ? `与对比国家 ${countryLabel(country)} · ${focusLabel}` : `${countryLabel(country)} · ${year}`;
     if (total === 0) return { eyebrow: prefix, big: `${comparison ? `${countryLabel(country)} ` : ""}${totalLabel}为 0`, small: "没有可分解的总量，构成份额无定义；可换一个行业或国家" };
-    if (total !== null && total < 0) return { eyebrow: prefix, big: `${comparison ? `${countryLabel(country)} ` : ""}${totalLabel}为负`, small: `总量为负（${indicatorNumber(total, "百万美元")} 百万美元），无法算比重${amountShown ? "" : "；切到“金额”可看各分项"}` };
+    if (total !== null && total < 0) return { eyebrow: prefix, big: `${comparison ? `${countryLabel(country)} ` : ""}${totalLabel}为负`, small: `总量为负（${textNumber(total, "百万美元")} 百万美元），无法算比重${amountShown ? "" : "；切到“金额”可看各分项"}` };
     return null;
   };
   if (ownShares.some((item) => item.share === null)) {
@@ -129,12 +130,12 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
   const cards: ReadingCard[] = [
     {
       eyebrow: `${countryLabel(first)} · ${year} · 最大分项`,
-      big: `${largest.segment.name} ${indicatorNumber(largest.share!, "%")}`,
+      big: `${largest.segment.name} ${textNumber(largest.share!, "%")}`,
       small: `占${totalLabel}的比重`,
     },
     {
       eyebrow: `${countryLabel(first)} · ${focusLabel}`,
-      big: indicatorNumber(ownFocus, "%"),
+      big: textNumber(ownFocus, "%"),
       small: `${cjkJoin(focusName, "占")}${totalLabel}的比重`,
     },
   ];
@@ -190,7 +191,7 @@ export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLa
       if (!point) return absent(country);
       return {
         eyebrow: `${index ? "对比国家 " : ""}${countryLabel(country)}`,
-        big: `横轴 ${indicatorNumber(point.x, unitOf(xFormat))}，纵轴 ${indicatorNumber(point.y, unitOf(yFormat))}`,
+        big: `横轴 ${textNumber(point.x, unitOf(xFormat))}，纵轴 ${textNumber(point.y, unitOf(yFormat))}`,
         small: `${skipMedian}，不比较中位数`,
       };
     });
@@ -208,7 +209,7 @@ export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLa
     return {
       eyebrow: `${index ? "对比国家 " : ""}${countryLabel(country)}`,
       big: `${xLabel}${side(point.x, xMedian)}中位数，${yLabel}${side(point.y, yMedian)}中位数`,
-      small: `横轴 ${indicatorNumber(point.x, unitOf(xFormat))}，纵轴 ${indicatorNumber(point.y, unitOf(yFormat))}；中位数按图上 ${points.length} 个经济体计算`,
+      small: `横轴 ${textNumber(point.x, unitOf(xFormat))}，纵轴 ${textNumber(point.y, unitOf(yFormat))}；中位数按图上 ${points.length} 个经济体计算`,
     };
   });
 }
@@ -231,12 +232,12 @@ export function segmentCards({ rows, countries, year, industry, segments }: {
     {
       eyebrow: `${countryLabel(first)} · ${year} · 最长的一段`,
       big: `${longest.segment.label} · ${longestSide}`,
-      small: `${indicatorNumber(longestSide === "前向" ? longest.forward : longest.backward, unit)}；三段长度不能相加，总长度是三段按增加值份额加权的平均`,
+      small: `${textNumber(longestSide === "前向" ? longest.forward : longest.backward, unit)}；三段长度不能相加，总长度是三段按增加值份额加权的平均`,
     },
     {
       eyebrow: `${countryLabel(first)} · ${gvc.segment.label} · 前向对后向`,
       big: gvc.forward === null || gvc.backward === null ? "缺失" : gvc.forward > gvc.backward ? "前向更长（更偏上游）" : gvc.forward < gvc.backward ? "后向更长（更偏下游）" : "前后向相等",
-      small: gvc.forward === null || gvc.backward === null ? "缺失留空" : `${indicatorNumber(gvc.forward, unit)} 对 ${indicatorNumber(gvc.backward, unit)}`,
+      small: gvc.forward === null || gvc.backward === null ? "缺失留空" : `${textNumber(gvc.forward, unit)} 对 ${textNumber(gvc.backward, unit)}`,
     },
   ];
   for (const other of others) {
@@ -244,7 +245,7 @@ export function segmentCards({ rows, countries, year, industry, segments }: {
     cards.push({
       eyebrow: `与对比国家 ${countryLabel(other)} · ${gvc.segment.label}前向`,
       big: gvc.forward === null || value === null ? "对比国家缺失" : `${countryLabel(first)} ${gapReading(gvc.forward, value, unit)}`,
-      small: value === null ? "该国在该年没有有效读数" : `${countryLabel(other)} ${indicatorNumber(value, unit)}；差距不代表因果关系`,
+      small: value === null ? "该国在该年没有有效读数" : `${countryLabel(other)} ${textNumber(value, unit)}；差距不代表因果关系`,
     });
   }
   return cards;
@@ -252,7 +253,7 @@ export function segmentCards({ rows, countries, year, industry, segments }: {
 
 /** A level reading with its unit spelled out ("33,672 百万美元"); shares already carry "%". */
 const amountWithUnit = (value: number, unit: string) =>
-  unit === "%" || !unit ? indicatorNumber(value, unit) : `${indicatorNumber(value, unit)} ${unit}`;
+  unit === "%" || !unit ? textNumber(value, unit) : `${textNumber(value, unit)} ${unit}`;
 
 /** 行业排名: the observed country's top industry and, per comparison country, the industry with the widest gap. */
 export function industryCards({ groups, countries, label, unit }: {

@@ -43,6 +43,7 @@ import {
   LengthPositionTrajectory,
   TrendSummary,
   indicatorNumber,
+  textNumber,
 } from "./indicator-charts";
 import { ScopeCard } from "./scope-card";
 import { AddCountryControl } from "./add-country";
@@ -591,6 +592,22 @@ export function IndicatorExplorer({
   const structureComposition = topic.composition;
   const structureFocus = structureComposition?.focus ?? structureComposition?.segments.at(-1)?.key ?? "";
   const structureSortKey = field(`${structureFocus}_share`) ? `${structureFocus}_share` : structureFocus;
+  // 行业结构 bars leave out industries whose shares cannot be drawn (the same rule as CompositionBar): say how many
+  // and why, so MLT's H51 (negative value added) or LUX's idle industries do not vanish silently.
+  const structureHiddenNote = (country: string): string | null => {
+    if (!structureComposition) return null;
+    const total = structureComposition.total;
+    const hidden = structureRows(country).filter((row) => !(finiteValue(row[structureSortKey]) && finiteValue(row[total])
+      && (row[total] as number) > 0 && structureComposition.segments.every((segment) => finiteValue(row[segment.key]))));
+    if (!hidden.length) return null;
+    const groups = [
+      { text: `${label(total)}为负`, rows: hidden.filter((row) => finiteValue(row[total]) && (row[total] as number) < 0) },
+      { text: `${label(total)}为 0（没有这类生产活动）`, rows: hidden.filter((row) => row[total] === 0) },
+      { text: "缺少数据", rows: hidden.filter((row) => !finiteValue(row[total]) || (row[total] as number) > 0) },
+    ].filter((group) => group.rows.length);
+    const undefinedOnly = groups.every((group) => group.text !== "缺少数据");
+    return `另有 ${hidden.length} 个行业没有画出：${groups.map((group) => `${group.rows.map((row) => String(row.industry)).join("、")} ${group.text}`).join("；")}${undefinedOnly ? "，份额无法计算（不是缺少数据）" : ""}。`;
+  };
   // 行业排名 rows: an undefined reading reads "无法计算" (zero exports), not "缺失".
   const rankGroups = ranked.map((row) => {
     const sector = String(row.industry);
@@ -1043,7 +1060,7 @@ export function IndicatorExplorer({
               )}
               {droppedBars.length > 0 && (
                 <p className="muted">
-                  {droppedBars.map((item) => `${countryLabel(item.country)} · ${item.year}：${label(activeComposition.total)}为${item.value === 0 ? " 0" : `负（${indicatorNumber(item.value, "百万美元")} 百万美元）`}`).join("；")}，构成份额无法计算，占比图里不画；切换到“金额”可看各分项。
+                  {droppedBars.map((item) => `${countryLabel(item.country)} · ${item.year}：${label(activeComposition.total)}为${item.value === 0 ? " 0" : `负（${textNumber(item.value, "百万美元")} 百万美元）`}`).join("；")}，构成份额无法计算，占比图里不画；切换到“金额”可看各分项。
                 </p>
               )}
               {view === "composition"
@@ -1106,6 +1123,7 @@ export function IndicatorExplorer({
                 <section key={country} className="comparison-facet">
                   <h4>{countryLabel(country)} · {year} · 行业结构</h4>
                   {topic.key === "production" && structureComposition ? (
+                    <>
                     <CompositionBar
                       dataLabel={`${countryLabel(country)} 行业结构`}
                       rows={structureRows(country)}
@@ -1116,6 +1134,8 @@ export function IndicatorExplorer({
                       sortFormat={unit(structureSortKey) === "%" ? "pct" : "amount"}
                       valueFormat="amount"
                     />
+                    {structureHiddenNote(country) && <p className="muted">{structureHiddenNote(country)}</p>}
+                    </>
                   ) : (
                     <QuadrantScatter
                       dataLabel={`${countryLabel(country)} 行业结构`}

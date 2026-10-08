@@ -257,6 +257,12 @@ export const readingDigits = (value: number, unit: string) =>
     ? 0
     : 3;
 
+/** Sentences and reading cards: an amount below 10 keeps three decimals, as steps 1–5 do ("比它高 3.832 百万美元",
+ * not "4"; a total of -1.268, not "-1"), so a small gap or total is not rounded away. Tables, axis ticks and
+ * tooltips keep {@link readingDigits}, the precision the report uses for the recorded readings. */
+export const textDigits = (value: number, unit: string) =>
+  unit === "百万美元" && value !== 0 && Math.abs(value) < 10 ? 3 : readingDigits(value, unit);
+
 export function changeReading(
   start: number,
   end: number,
@@ -265,7 +271,7 @@ export function changeReading(
   fixedDigits?: number,
 ): string {
   const difference = (end - start) * (unit === "%" ? 100 : 1);
-  const digits = fixedDigits ?? readingDigits(difference, unit);
+  const digits = fixedDigits ?? textDigits(difference, unit);
   // With a page-specific precision, a change too small to show is said so ("+不到 0.01 个百分点").
   if (fixedDigits != null && difference !== 0 && Math.abs(difference) < 0.5 * 10 ** -fixedDigits) {
     return `${difference > 0 ? "+" : "-"}不到 ${(10 ** -fixedDigits).toFixed(fixedDigits)}${unit === "%" ? " 个百分点" : unit === "无量纲" ? "" : ` ${unit}`}`;

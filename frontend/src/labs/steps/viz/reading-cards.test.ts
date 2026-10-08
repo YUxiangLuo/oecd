@@ -1,5 +1,42 @@
 import { describe, expect, test } from "bun:test";
-import { positioningCards } from "./reading-cards";
+import { compositionCards, gapReading, positioningCards } from "./reading-cards";
+import { textNumber } from "./indicator-charts";
+
+describe("amounts below 10 in reading texts keep three decimals (round 12)", () => {
+  test("step 6 产品税减补贴 B05_06: a gap of 3.832 is not read as 4", () => {
+    expect(gapReading(3.832, 0, "百万美元")).toBe("比它高 3.832 百万美元");
+    expect(gapReading(0, 5.2, "百万美元")).toBe("比它低 5.200 百万美元");
+    expect(gapReading(25, 12.6, "百万美元")).toBe("比它高 12 百万美元");
+  });
+
+  test("readings in cards: 3.4 reads 3.400, larger amounts stay whole, shares unchanged", () => {
+    expect(textNumber(3.4, "百万美元")).toBe("3.400");
+    expect(textNumber(-1.268, "百万美元")).toBe("-1.268");
+    expect(textNumber(4279.4, "百万美元")).toBe("4,279");
+    expect(textNumber(0, "百万美元")).toBe("0");
+    expect(textNumber(0.1234, "%")).toBe("12.340%");
+  });
+
+  test("step 7 MLT H51: a negative total reads -1.268, as step 3 does", () => {
+    const rows = [
+      { country: "CHN", year: 2020, industry: "H51", SVA: 10, a: 6, b: 4 },
+      { country: "MLT", year: 2020, industry: "H51", SVA: -1.2681, a: -0.6, b: -0.6681 },
+    ];
+    const cards = compositionCards({
+      rows, countries: ["CHN", "MLT"], year: 2020, industry: "H51", totalLabel: "总增加值",
+      composition: { total: "SVA", segments: [{ key: "a", name: "甲", color: "#000" }, { key: "b", name: "乙", color: "#111" }], note: "" },
+    });
+    expect(cards.at(-1)!.small).toContain("总量为负（-1.268 百万美元）");
+  });
+
+  test("定位图: a small x amount is not read as a whole number", () => {
+    const [card] = positioningCards({
+      reference: [{ country: "LUX", x: 3.21, y: 0.5 }], countries: ["LUX"], xKey: "x", yKey: "y",
+      xLabel: "总出口", yLabel: "份额", xFormat: "amount", yFormat: "pct",
+    });
+    expect(String(card.big)).toContain("横轴 3.210");
+  });
+});
 
 const cards = (points: [string, number, number][], countries = ["CHN"]) => positioningCards({
   reference: points.map(([country, x, y]) => ({ country, x, y })),

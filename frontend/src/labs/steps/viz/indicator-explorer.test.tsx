@@ -5,6 +5,7 @@ import type { Meta, Step, StepStateApi } from "../../../types";
 import type { VizStepState } from "./scaffold";
 import { LengthPositionTrajectory } from "./indicator-charts";
 import { LengthVizStep } from "./length";
+import { ProductionVizStep } from "./production";
 import { TradeVizStep } from "./trade";
 
 const release = "a".repeat(32);
@@ -620,6 +621,27 @@ describe("行业排名 with an industry that exports nothing (round 12)", () => 
       expect(view.saves.every((saved) => saved.indicator_selection?.view !== "industry")).toBe(true);
     } finally { restore(); }
   });
+});
+
+test("step 7 行业结构 says how many industries it leaves out and why (round 12)", async () => {
+  const part = { "1_VA_D": 4, "2_VA_RT": 2, "3a_VA_GVC_S": 1, "3b_VA_GVC_C": 3 };
+  const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year).map((row) => ({ ...row, SVA: 10, ...part })));
+  const perCountry = spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => {
+    const page = [
+      { country, year, industry: "A", SVA: 10, ...part },
+      // MLT H51: negative value added; LUX B09: no production at all.
+      { country, year, industry: "H51", SVA: -1.268, "1_VA_D": -0.04, "2_VA_RT": -0.634, "3a_VA_GVC_S": -0.397, "3b_VA_GVC_C": -0.197 },
+      { country, year, industry: "B09", SVA: 0, "1_VA_D": 0, "2_VA_RT": 0, "3a_VA_GVC_S": 0, "3b_VA_GVC_C": 0 },
+    ];
+    return { rows: page, total: page.length, page: 1, page_size: 200 };
+  });
+  const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+  try {
+    const view = setup(ProductionVizStep);
+    await view.findByRole("button", { name: "四类生产活动" });
+    fireEvent.click(view.getByRole("button", { name: "行业结构" }));
+    await waitFor(() => expect(view.getAllByText("另有 2 个行业没有画出：H51 总增加值为负；B09 总增加值为 0（没有这类生产活动），份额无法计算（不是缺少数据）。")).toHaveLength(2));
+  } finally { rows.mockRestore(); perCountry.mockRestore(); schema.mockRestore(); }
 });
 
 describe("undefined lengths and medians that say nothing (round 11)", () => {

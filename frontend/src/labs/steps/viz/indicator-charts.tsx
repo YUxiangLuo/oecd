@@ -35,6 +35,16 @@ export const fixedIndicatorNumber = (value: number | null, unit: string, digits?
     // A tiny negative that rounds to zero reads "0.000", not "-0.000".
     : stripNegativeZero(`${(unit === "%" ? value * 100 : value).toLocaleString("zh-CN", { minimumFractionDigits: digits ?? readingDigits(value, unit), maximumFractionDigits: digits ?? readingDigits(value, unit) })}${unit === "%" ? "%" : ""}`);
 
+/** Sentences and reading cards read an amount from 1 to 10 to three decimals (as steps 1–5 do), where tables and
+ * ticks read whole millions; undefined keeps the shared precision. See `textDigits` in indicator-model. */
+export const smallAmountDigits = (value: number | null, unit: string) =>
+  value !== null && unit === "百万美元" && Math.abs(value) >= 1 && Math.abs(value) < 10 ? 3 : undefined;
+
+/** A reading inside a sentence or a reading card: as {@link indicatorNumber}, except that an amount below 10 keeps
+ * three decimals ("3.832", not "4"). */
+export const textNumber = (value: number | null, unit: string) =>
+  value === 0 ? indicatorNumber(0, unit) : fixedIndicatorNumber(value, unit, smallAmountDigits(value, unit));
+
 /** Size of a gap or its change as displayed, or null when it rounds to zero (so it never reads “差距扩大 0”). */
 const magnitudeReading = (value: number, unit: string, digits?: number) => {
   const reading = changeReading(0, Math.abs(value), unit, digits).replace("+", "");
@@ -159,7 +169,7 @@ export function TrendSummary({
       <div>
         <span>{countryLabel(first)} · {metricLabel ? `${metricLabel} · ` : ""}{firstYear}→{lastYear}</span>
         <b>{changeReading(start, end, unit, digits)}</b>
-        <small>{fixedIndicatorNumber(start, unit, digits)} → {fixedIndicatorNumber(end, unit, digits)}</small>
+        <small>{fixedIndicatorNumber(start, unit, digits ?? smallAmountDigits(start, unit))} → {fixedIndicatorNumber(end, unit, digits ?? smallAmountDigits(end, unit))}</small>
       </div>
       {startRank != null && endRank != null && startRef && endRef && (() => {
         const from = rankText(startRank, startRef.ties?.[first], startRef.n);
@@ -182,7 +192,7 @@ export function TrendSummary({
         <div>
           <span>{sameIndustry ? "同行业全球中位数" : "全球中位数"} · {firstYear}→{lastYear}</span>
           <b>{changeReading(startRef.median, endRef.median, unit)}</b>
-          <small>{fixedIndicatorNumber(startRef.median, unit)} → {fixedIndicatorNumber(endRef.median, unit)}</small>
+          <small>{fixedIndicatorNumber(startRef.median, unit, smallAmountDigits(startRef.median, unit))} → {fixedIndicatorNumber(endRef.median, unit, smallAmountDigits(endRef.median, unit))}</small>
         </div>
       )}
       {gapCards}
