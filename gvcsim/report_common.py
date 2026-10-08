@@ -20,10 +20,10 @@ _STEP_OUTCOMES = {
 }
 # Keyed by the saved Y's kind, not its family: step 13 can use the GVC position index instead of a length.
 _KIND_DIMENSIONS = {
-    "share": "份额原始单位（乘以 100 后按百分点解释）",
-    "length": "长度单位",
+    "share": "份额（×100 = 百分点）",
+    "length": "长度单位（1 个长度单位约等于平均多经过 1 个生产环节）",
     "position": "位置指数单位",
-    "network": "中心性原始单位（教学 Y 按真实网络指标的排名校准生成，不是步骤 5、9 的百万美元）；跨指标比较时另参考样本标准差单位",
+    "network": "中心性原始单位（不是步骤 5、9 的百万美元）；另附标准差换算（标准差即 Y 的典型差距）",
 }
 _STUDENT_METRIC_LABELS = {
     **{key: value["label"] for key, value in cast(dict[str, dict[str, Any]], INDICATOR_SCHEMA["fields"]).items()},
@@ -41,81 +41,18 @@ _SHOCK_SOURCE_STATUS_LABELS = {
     "teaching_encoding_no_event_source": "没有逐项事件 URL 的教学编码",
 }
 _STATUS_LABELS = {
-    "ok": "可报告",
-    "warning": "需谨慎解释",
-    "insufficient": "样本支持度不足",
-    "invalid_design": "设计无效",
-    "unknown": "未记录设计状态",
+    "ok": "可以解读",
+    "warning": "可以解读，但要写明下面的限制",
+    "insufficient": "数据不够，不能判断方向",
+    "invalid_design": "计算设定有问题，不能判断方向",
+    "unknown": "没有记录",
 }
-# Same-family alternative baselines (teaching.BASELINES): what a direction would mean if the real
-# indicator of the same definition moved that way.
-_BASELINE_INTERPRETATIONS = {
-    "DVAex_share": {
-        "negative": "国内增加值出口占比下降：出口价值中由本国创造的部分变小。",
-        "positive": "国内增加值出口占比上升：出口价值中由本国创造的部分变大。",
-    },
-    "3_VA_GVC_share": {
-        "negative": "前向 GVC 生产总份额下降：SVA 中与跨境生产相关的部分占比变小。",
-        "positive": "前向 GVC 生产总份额上升：SVA 中与跨境生产相关的部分占比变大。",
-    },
-    "3a_VA_GVC_S_share": {
-        "negative": "简单 GVC 生产份额下降：只跨境一次就被吸收的增加值占比变小。",
-        "positive": "简单 GVC 生产份额上升：只跨境一次就被吸收的增加值占比变大。",
-    },
-    "3_FGY_GVC_share": {
-        "negative": "后向 GVC 生产总份额下降：最终品生产中与跨境生产相关的部分占比变小。",
-        "positive": "后向 GVC 生产总份额上升：最终品生产中与跨境生产相关的部分占比变大。",
-    },
-    "2_VA_RT_share": {
-        "negative": "传统贸易生产份额下降：经一次出口直接被进口国吸收的增加值占比变小。",
-        "positive": "传统贸易生产份额上升：经一次出口直接被进口国吸收的增加值占比变大。",
-    },
-    "1_VA_D_share": {
-        "negative": "纯国内生产份额下降：不经出口、在国内被吸收的增加值占比变小。",
-        "positive": "纯国内生产份额上升：不经出口、在国内被吸收的增加值占比变大。",
-    },
-    "PLy_GVC": {
-        "negative": "后向 GVC 段长度缩短：从最终品回溯的 GVC 生产环节减少。",
-        "positive": "后向 GVC 段长度延长：从最终品回溯的 GVC 生产环节增加。",
-    },
-    "GVCPs": {
-        "negative": "位置指数下降：在该口径下相对更靠下游。",
-        "positive": "位置指数上升：在该口径下相对更上游。",
-    },
-    "weighted_indegree": {
-        "negative": "加权入度下降：买入侧的流量规模变小。",
-        "positive": "加权入度上升：买入侧的流量规模变大。",
-    },
-    "weighted_outdegree": {
-        "negative": "加权出度下降：卖出侧的流量规模变小。",
-        "positive": "加权出度上升：卖出侧的流量规模变大。",
-    },
-    "betweenesscentrality": {
-        "negative": "介数下降：在二值拓扑最短路径上的中介位置减弱。",
-        "positive": "介数上升：在二值拓扑最短路径上的中介位置增强。",
-    },
-    "closnesscentrality": {
-        "negative": "接近中心性下降：到其他节点的网络距离变远。",
-        "positive": "接近中心性上升：到其他节点的网络距离变近。",
-    },
-}
-_OUTCOME_INTERPRETATIONS = {
-    "trade": {
-        "negative": "外国增加值项占比下降：出口价值中来自国外投入的部分变小。",
-        "positive": "外国增加值项占比上升：出口价值中来自国外投入的部分变大。",
-    },
-    "production": {
-        "negative": "复杂 GVC 生产份额下降：SVA 中经多次跨境生产的部分占比变小。",
-        "positive": "复杂 GVC 生产份额上升：SVA 中经多次跨境生产的部分占比变大。",
-    },
-    "length": {
-        "negative": "前向 GVC 段长度缩短：增加值到最终吸收经过的生产环节减少。",
-        "positive": "前向 GVC 段长度延长：增加值到最终吸收经过的生产环节增加。",
-    },
-    "network": {
-        "negative": "加权总度下降：节点买入与卖出的总流量规模变小。",
-        "positive": "加权总度上升：节点买入与卖出的总流量规模变大。",
-    },
+# The fixed Y of each step, as the step pages name it.
+_DEFAULT_Y_LABELS = {
+    "trade": "外国增加值项占比",
+    "production": "复杂 GVC 生产份额",
+    "length": "前向 GVC 段长度",
+    "network": "加权总度",
 }
 _REFLECTION_MIN_LENGTHS = {
     "research_question": 12,
@@ -155,7 +92,7 @@ def composition_set(step: int, metrics: Iterable[str]) -> tuple[tuple[str, ...],
 class ReportGateError(RuntimeError):
     def __init__(self, missing: list[dict[str, Any]]):
         self.missing = missing
-        super().__init__("实验报告需要先完成理解检查、关键实验操作与原创分析")
+        super().__init__("先答对理解题、补齐实验材料、写完你的分析，才能生成报告")
 
 
 @dataclass
@@ -257,6 +194,15 @@ def _signed(value: float, digits: int) -> str:
     return f"{value:+#.2g}" if value != 0 and float(rounded.replace(",", "")) == 0 else rounded
 
 
+# The design labels are a data contract (saved runs are checked against them); the report words them plainly.
+_SETTING_DISPLAY = {
+    "granularity": {"country_industry": "国家×行业"},
+    "shock_type": {"tariff": "关税"},
+    "method": {"twfe_intensity": "双向固定效应（TWFE）"},
+    "scenario": {"clean": "基准情景"},
+}
+
+
 def _setting_value(key: str, value: Any) -> str:
     mappings = {
         "granularity": GRANULARITY_LABELS,
@@ -264,10 +210,22 @@ def _setting_value(key: str, value: Any) -> str:
         "method": METHOD_LABELS,
         "control_mode": CONTROL_MODE_LABELS,
         "price_mode": PRICE_MODE_LABELS,
-        "scenario": {"clean": "基准教学面板"},
+        "scenario": {"clean": "基准情景"},
     }
+    display = _SETTING_DISPLAY.get(key, {}).get(str(value))
+    if display is not None:
+        return display
     mapping = mappings.get(key, {})
     return _safe(mapping.get(str(value), value))
+
+
+def _model_summary(design: dict[str, Any]) -> str:
+    """The saved model in plain words: "双向固定效应（TWFE） · 国家×行业 · 不加控制变量"."""
+    return " · ".join(
+        _setting_value(key, design.get(key))
+        for key in ("method", "granularity", "control_mode")
+        if design.get(key) not in (None, "")
+    )
 
 
 def _coefficient_label(name: Any, design: dict[str, Any]) -> str:
@@ -347,12 +305,12 @@ def _natural_effect(
         positive_sd = float(sd) if isinstance(sd, (int, float)) and float(sd) > 0 else None
         effect_text = f"{_signed(effect, 2)} 个中心性原始单位"
         if positive_sd is not None:
-            effect_text += f"（约 {_signed(effect / positive_sd, 2)} 个样本标准差）"
+            effect_text += f"（约 {_signed(effect / positive_sd, 2)} 个标准差）"
         interval = (
             f"[{_signed(ci[0] * increment, 2)}, {_signed(ci[1] * increment, 2)}] 个中心性原始单位"
             + (
                 f"（约 [{_signed(ci[0] * increment / positive_sd, 2)}, {_signed(ci[1] * increment / positive_sd, 2)}]"
-                " 个样本标准差）"
+                " 个标准差）"
                 if positive_sd is not None
                 else ""
             )
@@ -373,29 +331,66 @@ def _natural_effect(
     return effect_label, effect_text, interval
 
 
-def _interpretations(outcome: str, design: dict[str, Any] | None) -> dict[str, str]:
-    """Direction sentences for the saved Y: the family's fixed indicator or the chosen same-family baseline."""
-    key = design.get("baseline") if isinstance(design, dict) else None
-    if isinstance(key, str) and key in _BASELINE_INTERPRETATIONS and not _is_default_baseline(outcome, design or {}):
-        return _BASELINE_INTERPRETATIONS[key]
-    return _OUTCOME_INTERPRETATIONS[outcome]
+def y_display(label: Any) -> str:
+    """A saved Y label (a data contract) as the pages show it: "加权总度", "介数"."""
+    text = str(label).removesuffix("（入+出）")
+    return "介数" if text == "网络介数（全正边二值）" else text
+
+
+def _y_label(outcome: str, design: dict[str, Any] | None) -> str:
+    """The saved Y as the step pages name it: the family's fixed Y or the chosen same-family indicator."""
+    design = design if isinstance(design, dict) else {}
+    if design.get("baseline") is not None and _is_default_baseline(outcome, design):
+        return _DEFAULT_Y_LABELS.get(outcome, outcome)
+    for key in ("baseline_label", "depvar_label"):
+        label = design.get(key)
+        if isinstance(label, str) and label:
+            return y_display(label)
+    return _DEFAULT_Y_LABELS.get(outcome, outcome)
+
+
+def _effect_size(outcome: str, design: dict[str, Any] | None, coefficient: dict[str, Any]) -> str:
+    """The size of the change per 1 percentage point of X, unsigned, in the step's unit ("0.55 个百分点")."""
+    effect = abs(float(coefficient["coef"]) * 0.01)
+    kind = _depvar_kind(outcome, design or {})
+    if kind == "share":
+        return f"{_signed(effect * 100, 2)[1:]} 个百分点"
+    if kind == "network":
+        return f"{_signed(effect, 2)[1:]} 个中心性原始单位"
+    if kind == "position":
+        return f"{_signed(effect, 4)[1:]} 个位置指数单位"
+    return f"{_signed(effect, 3)[1:]} 个长度单位"
+
+
+def _association(outcome: str, design: dict[str, Any] | None, coefficient: dict[str, Any], negative: bool) -> str:
+    """What a direction supports, as an association across country×industry records, with its number."""
+    long_short = _depvar_kind(outcome, design or {}) == "length"
+    more, less = ("长", "短") if long_short else ("高", "低")
+    word = less if negative else more
+    return (
+        f"关税暴露 X 越高的国家×行业，{_y_label(outcome, design)}平均越{word}"
+        f"（X 每高 1 个百分点，约{word} {_effect_size(outcome, design, coefficient)}）。"
+    )
 
 
 def _evidence_reading(
     outcome: str, coefficient: dict[str, Any], suppressed: bool, design: dict[str, Any] | None = None
 ) -> tuple[str, str]:
     if suppressed:
-        return "不可作方向判断", "统计推断已被抑制；点估计只是计算输出，不能据此判断上升或下降。"
+        return (
+            "方向不确定（不显示区间）",
+            "这一项数据不够，不显示 95% 区间；不能据此判断方向，也不能写成“没有影响”。",
+        )
     ci_low, ci_high = coefficient.get("ci_low"), coefficient.get("ci_high")
     if not isinstance(ci_low, (int, float)) or not isinstance(ci_high, (int, float)):
-        return "证据不足", "置信区间未记录，不能确定估计方向。"
+        return "方向不确定（区间没有记录）", "95% 区间没有记录，不能判断方向。"
     if ci_high < 0:
-        return "本次样本支持负向关联", _interpretations(outcome, design)["negative"]
+        return "方向明确：X 越高，Y 越低", _association(outcome, design, coefficient, negative=True)
     if ci_low > 0:
-        return "本次样本支持正向关联", _interpretations(outcome, design)["positive"]
+        return "方向明确：X 越高，Y 越高", _association(outcome, design, coefficient, negative=False)
     return (
-        "证据不足，无法判断方向",
-        "95% 置信区间包含 0（跨过或触及）；这不等于“没有效应”，而是当前证据不足以确定方向。",
+        "方向不确定",
+        "95% 区间包含 0：不能说“没有关联”，只能说方向还不确定。",
     )
 
 
@@ -407,9 +402,8 @@ def _summary_design_limit(status: str, support: dict[str, Any], reasons: list[An
         treated_clusters = _count(support.get("treated_clusters"))
         untreated_entities = _count(support.get("untreated_entities"))
         return (
-            f"估计样本中没有完全未暴露的对照聚类：{treated_clusters} 个聚类都至少包含一个暴露实体；"
-            f"仍有 {untreated_entities} 个未暴露实体，"
-            "聚类层面的共同冲击识别仍更依赖模型设定。"
+            f"没有完全不受关税影响的国家可以对照：{treated_clusters} 个国家都至少有一个行业受到影响"
+            f"（仍有 {untreated_entities} 个国家×行业没受影响），所以结果更依赖模型假设。"
         )
     if status == "warning" and reasons:
         return _safe(reasons[0], 360)

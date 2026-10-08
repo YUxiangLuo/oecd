@@ -12,10 +12,7 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
-CLUSTER_INTERVAL_NOTE = (
-    "按国家聚类的区间使用有限样本近似；当信息集中在少数国家时，实际覆盖率可能低于 95%，"
-    "国家数量多也不保证达到标称覆盖率。"
-)
+CLUSTER_INTERVAL_NOTE = "95% 区间按国家计算（按国家聚类），是近似值；结果主要由少数国家决定时，区间可能偏窄。"
 
 # 处理聚类数低于此值时抑制推断。
 #
@@ -205,37 +202,32 @@ def analyze_support(
     if reversal_entities:
         shown = "、".join(reversal_entities[:3])
         more = f" 等 {len(reversal_entities)} 个" if len(reversal_entities) > 3 else ""
-        share_text = f"占处理后个体-年 {scan.share:.2%}({scan.miscoded_rows}/{scan.post_rows})"
+        share_text = f"占受影响之后记录的 {scan.share:.2%}（{scan.miscoded_rows}/{scan.post_rows}）"
         escalate(
             STATUS_INVALID_DESIGN,
-            f"存在处理撤销:{shown}{more}个体在首次正暴露后又回到零暴露状态,{share_text}。"
-            "吸收型 ATT 要求处理不可逆；撤销比例小不能保证偏差小，已抑制 p 值、星号与置信区间。"
-            "可把该诊断写入报告；连续强度 TWFE 只能描述逐年强度关联，不能据此作因果推断。",
+            f"有国家×行业（{shown}{more}）开始受关税影响后又回到零，{share_text}。"
+            "这种情况下不能判断方向，所以不显示 95% 区间和 p 值；可以把这个原因写进报告。",
         )
 
     if treated_clusters < MIN_TREATED_CLUSTERS:
         escalate(
             STATUS_INSUFFICIENT,
-            f"处理支持度不足:只有 {treated_clusters} 个处理聚类(按 {cluster} 聚类),"
-            f"低于课程停止线 {MIN_TREATED_CLUSTERS}。该阈值不是达到即有效的统计定理；"
-            f"总聚类数 {len(all_cluster_ids)} 不能补救处理侧信息不足，已抑制 p 值、星号与置信区间。",
+            f"受关税影响的国家太少：只有 {treated_clusters} 个（至少需要 {MIN_TREATED_CLUSTERS} 个），"
+            f"所以不显示 95% 区间和 p 值；一共有 {len(all_cluster_ids)} 个国家也弥补不了这一点。",
         )
 
     if absorbing and untreated_clusters == 0 and treated_clusters > 0:
         if untreated_entities > 0:
             escalate(
                 STATUS_WARNING,
-                f"估计样本中没有完全未暴露的对照聚类:全部 {treated_clusters} 个聚类都至少包含一个暴露实体,"
-                f"但样本仍有 {untreated_entities} 个未暴露实体（可能包括冻结 cohort 中仅保留冲击前行的实体）。"
-                f"公开 cohort-time ATT 只使用从未处理或截至比较期尚未处理的实体作对照；"
-                f"不过没有整个聚类都未暴露，按聚类 delete-one 推断仍更依赖国家聚类之间的独立变化。",
+                f"没有完全不受关税影响的国家可以对照：{treated_clusters} 个国家都至少有一个行业受到影响"
+                f"（仍有 {untreated_entities} 个国家×行业没受影响），所以结果更依赖模型假设。",
             )
         else:
             escalate(
                 STATUS_WARNING,
-                f"估计样本中没有未暴露实体或完全未暴露聚类:全部 {treated_clusters} 个聚类和"
-                f"全部 {treated_entities} 个实体都包含处理后暴露行；不存在从未处理对照。"
-                f"cohort-time ATT 只能使用尚未处理 cohort，最后处理期可能无法估计。",
+                f"所有 {treated_clusters} 个国家、{treated_entities} 个国家×行业都受到关税影响，"
+                "没有不受影响的对照，所以结果更依赖模型假设。",
             )
 
     return TreatmentSupport(

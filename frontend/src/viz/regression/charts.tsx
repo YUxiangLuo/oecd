@@ -58,7 +58,7 @@ export function CoefForestChart({
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
   const inferenceAllowed = !globalInferenceIsSuppressed(globalStatus, globalSupport);
-  const suppressionCopy = "整体设计门禁已抑制统计推断；仅显示描述性点估计。";
+  const suppressionCopy = "这次的数据不够判断方向，所以只显示估计值，不显示 95% 区间。";
   const pts = scaleForestCoefs(coefs, scale).map((coefficient) => ({
     ...coefficient,
     displayName: labels?.[coefficient.name] ?? coefficient.name,
@@ -83,23 +83,23 @@ export function CoefForestChart({
   const valueLabel = (value: number) => (Math.abs(value) < 0.01 && scale === 1 ? value.toFixed(4) : value.toFixed(Math.max(2, decimals)));
   const tip = (point: (typeof pts)[number]): [string, string][] => inferenceAllowed ? [
     ["", point.displayName],
-    ["系数", valueLabel(point.coef)],
-    ["标称 95% CI", point.lo != null && point.hi != null ? `[${valueLabel(point.lo)}, ${valueLabel(point.hi)}]` : "不可评估"],
-    ["p 值", formatPValue(point.p, "不可评估")],
-  ] : [["", point.displayName], ["描述性点估计", valueLabel(point.coef)], ["显示状态", suppressionCopy]];
+    [unit ? `估计值（${unit}）` : "估计值", valueLabel(point.coef)],
+    ["95% 区间", point.lo != null && point.hi != null ? `[${valueLabel(point.lo)}, ${valueLabel(point.hi)}]` : "没有区间"],
+    ["p 值", formatPValue(point.p, "没有 p 值")],
+  ] : [["", point.displayName], [unit ? `估计值（${unit}）` : "估计值", valueLabel(point.coef)], ["说明", suppressionCopy]];
   const description = hasCi
-    ? `系数图：点估计及${CLUSTER_INTERVAL_LABEL}`
-    : inferenceAllowed ? "系数图：本设计不可作推断，无置信区间" : "系数图：整体设计门禁已抑制统计推断，仅显示描述性点估计";
+    ? `估计值图：估计值及${CLUSTER_INTERVAL_LABEL}`
+    : inferenceAllowed ? "估计值图：这次没有 95% 区间" : "估计值图：数据不够判断方向，只显示估计值";
   return (
     <div ref={wrapRef} className="coef-plot" style={{ ...cardStyle, flex: "1 1 320px", minWidth: 280 }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3a4050" }}>{title}{unit ? `（${unit}）` : ""}</div>
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
         {!inferenceAllowed
           ? suppressionCopy
-          : `点 = 估计值${hasCi ? " · 横线 = 95% 区间" : ""} · 竖线 = 0（无效应）；区间跨过 0 时方向不确定`}
+          : `点 = 估计值${hasCi ? " · 横线 = 95% 区间（估计值可能落在的范围）" : ""} · 竖线 = 0（Y 不随 X 变化）；区间包含 0 时方向不确定`}
       </div>
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={description} style={{ display: "block", width: "100%", maxWidth: 760, height: "auto" }}>
-        <title>{hasCi ? `${description}；完整数值见系数表` : description}</title>
+        <title>{hasCi ? `${description}；完整数值见“详细数字”里的系数表` : description}</title>
         {ticks.map((value) => (
           <g key={value}>
             {value !== 0 && <line x1={x(value)} x2={x(value)} y1={padT} y2={height - padB} stroke="#eef0f4" strokeWidth={1} />}
@@ -113,6 +113,9 @@ export function CoefForestChart({
           const fill = !inferenceAllowed ? NEUTRAL : ESTIMATE;
           // The value sits just above the estimate, kept inside the plot so it never meets the row label or whisker.
           const labelAt = Math.min(Math.max(x(point.coef), labelW + 24), width - padR - 24);
+          const hasInterval = point.lo != null && point.hi != null;
+          // An interval narrower than the dot would hide under it: draw a hollow ring and say so in words.
+          const narrow = hasInterval && x(point.hi!) - x(point.lo!) < 2 * 6.5;
           return (
             <g key={point.name} onMouseEnter={(event) => show(event, tip(point))} onMouseMove={(event) => show(event, tip(point))} onMouseLeave={hide}>
               <text x={labelW - 12} y={y(index) - (parts.length > 1 ? 5 : 0)} dominantBaseline="middle" textAnchor="end" fontSize={11.5} fill="#3a4050">
@@ -123,7 +126,9 @@ export function CoefForestChart({
                   <line x1={x(point.lo)} x2={x(point.hi)} y1={y(index)} y2={y(index)} />
                   <line x1={x(point.lo)} x2={x(point.lo)} y1={y(index) - 8} y2={y(index) + 8} />
                   <line x1={x(point.hi)} x2={x(point.hi)} y1={y(index) - 8} y2={y(index) + 8} />
-                  {x(point.hi) - x(point.lo) < 64
+                  {narrow
+                    ? <text data-narrow-ci x={labelAt} y={y(index) + 24} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">区间很窄 [{valueLabel(point.lo)}, {valueLabel(point.hi)}]，在图上与点重合</text>
+                    : x(point.hi) - x(point.lo) < 64
                     ? <text x={(x(point.lo) + x(point.hi)) / 2} y={y(index) + 22} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">[{valueLabel(point.lo)}, {valueLabel(point.hi)}]</text>
                     : <>
                       <text x={x(point.lo)} y={y(index) + 22} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">{valueLabel(point.lo)}</text>
@@ -131,7 +136,9 @@ export function CoefForestChart({
                     </>}
                 </g>
               )}
-              <circle cx={x(point.coef)} cy={y(index)} r={6.5} fill={fill} stroke="#fff" strokeWidth={2} />
+              {narrow
+                ? <circle cx={x(point.coef)} cy={y(index)} r={5} fill="none" stroke={fill} strokeWidth={2} />
+                : <circle cx={x(point.coef)} cy={y(index)} r={6.5} fill={fill} stroke="#fff" strokeWidth={2} />}
               <text x={labelAt} y={y(index) - 21} textAnchor="middle" fontSize={11.5} fontWeight={700} fill="#2a2f3a">
                 {valueLabel(point.coef)}
               </text>
@@ -139,7 +146,7 @@ export function CoefForestChart({
           );
         })}
         <line x1={x(0)} x2={x(0)} y1={padT - 6} y2={height - padB} stroke="#1f2430" strokeWidth={1.8} />
-        <text x={x(0) + 5} y={padT + 4} fontSize={10.5} fill="#5f6677">0 = 无效应</text>
+        <text x={x(0) + 5} y={padT + 4} fontSize={10.5} fill="#5f6677">0 = 不变</text>
       </svg>
       {Tip}
     </div>
@@ -150,13 +157,15 @@ const BIN = "#216cc0";
 
 /**
  * Binned scatter: the within-transformed regressor on x, the mean within-transformed outcome in each of
- * ~20 equal-count bins on y, and the fitted line through the origin with the estimated slope β. This is
+ * ~20 equal-count bins on y, and the fitted line through the origin with the estimated slope. This is
  * what the regression "sees" after the fixed effects are taken out.
  */
-export function BinScatterChart({ bins, slope, xLabel, yLabel, xScale = 100, yScale = 1, title = "回归在量什么" }: {
+export function BinScatterChart({ bins, slope, slopeUnit, xLabel, yLabel, xScale = 100, yScale = 1, title = "回归在量什么" }: {
   bins: { x: number; y: number; n: number }[];
-  /** β already in display units: shown Y units per one shown X unit (what the label prints). */
+  /** The estimate in display units: shown Y units per one percentage point of X (what the label prints). */
   slope: number;
+  /** Counted unit of the slope's Y change ("个百分点", "个长度单位"), printed after the number. */
+  slopeUnit?: string;
   xLabel: string;
   yLabel: string;
   /** Display scales: shares are stored as fractions and shown in percentage points. */
@@ -181,18 +190,19 @@ export function BinScatterChart({ bins, slope, xLabel, yLabel, xScale = 100, ySc
     const text = String(Number(value.toFixed(digits(axis))));
     return text === "-0" ? "0" : text;
   };
-  // The slope label sits just off the line's right end: below a falling line, above a rising one. When that
-  // side has no room (the line ends in a corner) it goes to the other side instead of onto the line.
+  // The slope label is right-aligned in whichever corner (top or bottom) is farther from where the line
+  // ends, so it never sits on the line (a label just off the line end landed on it when the line ran into
+  // a corner).
   const lineEnd = y(fitted[1]);
-  const [preferred, other] = slope < 0 ? [lineEnd + 16, lineEnd - 8] : [lineEnd - 8, lineEnd + 16];
-  const fits = (value: number) => value >= m.t + 12 && value <= H - m.b - 4;
-  const slopeLabelY = Math.min(H - m.b - 4, Math.max(m.t + 12, fits(preferred) ? preferred : other));
-  const description = `分箱散点图：横轴为扣除固定效应后的 X，纵轴为各箱 Y 的平均；直线斜率为估计的 β`;
+  const corners = [m.t + 12, H - m.b - 6];
+  const slopeLabelY = Math.abs(corners[0] - lineEnd) >= Math.abs(corners[1] - lineEnd) ? corners[0] : corners[1];
+  const slopeText = Math.abs(slope) >= 100 ? slope.toFixed(0) : Math.abs(slope) >= 0.1 ? slope.toFixed(2) : slope.toPrecision(2);
+  const description = `分箱散点图：横轴为扣掉平均水平后的 X，纵轴为各组 Y 的平均；直线的斜率就是估计值`;
   return (
     <div ref={wrapRef} className="binscatter-plot" style={{ ...cardStyle, flex: "1 1 320px", minWidth: 280 }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3a4050" }}>{title}</div>
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
-        每个点是 X 相近的一组单元的平均（全部单元按 X 分成 {bins.length} 组；X、Y 都已扣掉各自起点和共同年份变化）；直线斜率就是 β
+        把全部记录按 X 从小到大分成 {bins.length} 组，每个点是一组的平均值。X 和 Y 都先扣掉了每个国家×行业自己的平均水平和每年的共同变化。直线的斜率就是估计值。
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={description} style={{ display: "block", width: "100%", maxWidth: 760, height: "auto" }}>
         <title>{description}</title>
@@ -223,7 +233,7 @@ export function BinScatterChart({ bins, slope, xLabel, yLabel, xScale = 100, ySc
         {/* Kept inside the plot (a line ending at the bottom put it on the x tick labels); small slopes keep
             two significant figures so they match the coefficient chart (-0.0049, not -0.005). */}
         {/* A white halo keeps the label readable where the line still runs under it near a corner. */}
-        <text x={x(xAxis.hi) - 6} y={slopeLabelY} textAnchor="end" fontSize={11} fontWeight={700} fill={ESTIMATE} stroke="#fff" strokeWidth={3} paintOrder="stroke" strokeLinejoin="round">斜率 β = {Math.abs(slope) >= 100 ? slope.toFixed(0) : Math.abs(slope) >= 0.1 ? slope.toFixed(2) : slope.toPrecision(2)}</text>
+        <text data-slope-label x={x(xAxis.hi) - 6} y={slopeLabelY} textAnchor="end" fontSize={11} fontWeight={700} fill={ESTIMATE} stroke="#fff" strokeWidth={3} paintOrder="stroke" strokeLinejoin="round">{slopeUnit ? `斜率：X 每增加 1 个百分点，Y ${slopeText} ${slopeUnit}` : `斜率 = ${slopeText}`}</text>
       </svg>
       {Tip}
     </div>

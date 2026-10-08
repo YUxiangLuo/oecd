@@ -45,7 +45,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     definition: "WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 总出口的比重。",
     downMeaning: "外国增加值项占比下降：出口价值中来自国外投入的部分变小。",
     upMeaning: "外国增加值项占比上升：出口价值中来自国外投入的部分变大。",
-    dontClaim: "不要写成“已经证明生产回流”。这一项占比下降，不能告诉我们企业是否把生产搬回国内。",
+    dontClaim: "不要写成“已经证明生产回流”。这一项占比的变化，不能说明企业是否把生产搬回国内。",
   },
   production: {
     outcome: "production",
@@ -56,7 +56,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "百分点",
     priorStep: 3,
     priorLabel: "GVC 生产分解指标",
-    learnThis: "读区间：估计值有正有负，单看正负不一定有足够证据判断上升或下降；还要看区间是否包含 0。",
+    learnThis: "读区间：只看估计值的正负还不够，还要看 95% 区间是否包含 0；包含 0 时方向还不确定。",
     definition: "增加值经过多次跨境生产后被最终吸收的比例。",
     downMeaning: "复杂 GVC 生产份额下降：SVA 中经多次跨境生产的部分占比变小。",
     upMeaning: "复杂 GVC 生产份额上升：SVA 中经多次跨境生产的部分占比变大。",
@@ -71,11 +71,11 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "长度单位",
     priorStep: 4,
     priorLabel: "GVC 长度分解指标",
-    learnThis: "读单位：长度单位不是百分点，不能与前两步的份额系数直接比大小。",
+    learnThis: "读单位：长度单位不是百分点（1 个长度单位约等于平均多经过 1 个生产环节），不能和前两步的数字比大小。",
     definition: "GVC 活动诱发的累计总产出除以关联增加值。",
     downMeaning: "前向 GVC 段长度缩短：增加值到最终吸收经过的生产环节减少。",
     upMeaning: "前向 GVC 段长度延长：增加值到最终吸收经过的生产环节增加。",
-    dontClaim: "不要写成“比贸易流效应更大 / 更小”。",
+    dontClaim: "不要拿它和贸易流回归的数字比大小：两者单位不同。",
   },
   network: {
     outcome: "network",
@@ -86,11 +86,11 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "中心性原始单位（另附标准差换算）",
     priorStep: 5,
     priorLabel: "全球生产网络指标",
-    learnThis: "读网络 Y：按步骤 9 所看指标（默认加权总度）的原始单位读方向和区间，不与前三步的系数比大小。",
-    definition: "全球国家×行业图上一个节点的加权入度加出度（自环双计）。",
+    learnThis: "读单位：网络 Y 的单位是“中心性原始单位”，只看方向和区间，不和前三步的数字比大小。",
+    definition: "全球国家×行业图上一个节点的加权入度加出度（买入 + 卖出；自环即行业卖给自己的部分，两侧各算一次）。",
     downMeaning: "加权总度下降：节点买入与卖出的总流量规模变小。",
     upMeaning: "加权总度上升：节点买入与卖出的总流量规模变大。",
-    dontClaim: "不要写成连接已经减少或脱钩，也不要拿它当“政策总效应”。",
+    dontClaim: "不要写成连接已经减少或脱钩，也不要拿它当作关税的“总影响”。",
   },
 };
 
@@ -161,16 +161,16 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "从最终产品端回溯 GVC 活动的初始增加值所经过的生产长度。",
     downMeaning: "后向 GVC 段长度缩短：从最终品回溯的 GVC 生产环节减少。",
     upMeaning: "后向 GVC 段长度延长：从最终品回溯的 GVC 生产环节增加。",
-    dontClaim: "不要写成“比贸易流效应更大 / 更小”，也不要把后向长度与前向长度的系数相减。",
+    dontClaim: "不要拿它和贸易流回归的数字比大小（单位不同），也不要把后向长度和前向长度的估计值相减。",
   },
   GVCPs: {
     shortMetric: "GVC 位置指数",
-    learnThis: "读单位：位置指数单位不是百分点，也不是长度；回归读的是指数的变化，上升表示相对更偏上游，不与长度或份额的系数比大小。",
+    learnThis: "读单位：位置指数不是百分点，也不是长度；上升表示相对更偏上游。不要和长度或份额的结果比大小。",
     unit: "位置指数单位",
     definition: "前向与后向 GVC 长度之比的位置指数，>1 表示在该口径下相对更上游。",
     downMeaning: "位置指数下降：在该口径下相对更靠下游。",
     upMeaning: "位置指数上升：在该口径下相对更上游。",
-    dontClaim: "不要写成“已经变得更上游 / 更下游”。位置指数不能与长度系数比大小。",
+    dontClaim: "不要写成“已经变得更上游 / 更下游”。位置指数不能和长度的估计值比大小。",
   },
   weighted_indegree: {
     shortMetric: "加权入度",
@@ -178,7 +178,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "全球国家×行业图上一个节点的加权入度，即买入侧的流量规模。",
     downMeaning: "加权入度下降：买入侧的流量规模变小。",
     upMeaning: "加权入度上升：买入侧的流量规模变大。",
-    dontClaim: "不要写成买入已经减少或脱钩，也不要拿它当“政策总效应”。",
+    dontClaim: "不要写成买入已经减少或脱钩，也不要拿它当作关税的“总影响”。",
   },
   weighted_outdegree: {
     shortMetric: "加权出度",
@@ -186,15 +186,15 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "全球国家×行业图上一个节点的加权出度，即卖出侧的流量规模。",
     downMeaning: "加权出度下降：卖出侧的流量规模变小。",
     upMeaning: "加权出度上升：卖出侧的流量规模变大。",
-    dontClaim: "不要写成卖出已经减少或脱钩，也不要拿它当“政策总效应”。",
+    dontClaim: "不要写成卖出已经减少或脱钩，也不要拿它当作关税的“总影响”。",
   },
   betweenesscentrality: {
-    shortMetric: "网络介数",
+    shortMetric: "介数",
     unit: "中心性原始单位（另附标准差换算）",
-    definition: "全球国家×行业图上的最短路径介数（全正边、二值、未归一化）。",
-    downMeaning: "介数下降：在二值拓扑最短路径上的中介位置减弱。",
-    upMeaning: "介数上升：在二值拓扑最短路径上的中介位置增强。",
-    dontClaim: "不要挑绝对值最大的系数当“政策总效应”，也不要写成已经脱钩。",
+    definition: "全球国家×行业图上的最短路径介数（只看连接、不看金额；未归一化）。",
+    downMeaning: "介数下降：在连接网络的最短路径上，处于中转位置的程度减弱。",
+    upMeaning: "介数上升：在连接网络的最短路径上，处于中转位置的程度增强。",
+    dontClaim: "不要挑数值最大的结果当作关税的“总影响”，也不要写成已经脱钩。",
   },
   closnesscentrality: {
     shortMetric: "接近中心性",
@@ -202,11 +202,18 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "全球国家×行业图上到其他节点最短路径距离的倒数。",
     downMeaning: "接近中心性下降：到其他节点的网络距离变远。",
     upMeaning: "接近中心性上升：到其他节点的网络距离变近。",
-    dontClaim: "不要挑绝对值最大的系数当“政策总效应”，也不要写成网络位置已经边缘化。",
+    dontClaim: "不要挑数值最大的结果当作关税的“总影响”，也不要写成网络位置已经边缘化。",
   },
 };
 
-/** The step's lesson with the wording of the chosen same-family baseline (the family's own wording by default). */
+/**
+ * A saved Y label as the pages show it. The server labels are a data contract: "加权总度（入+出）" drops its
+ * step 5 detail and "网络介数（全正边二值）" reads "介数", as on steps 5 and 9.
+ */
+export function displayBaselineLabel(label: string | null | undefined): string {
+  return (label ?? "").replace(/（入\+出）$/, "").replace(/^网络介数（全正边二值）$/, "介数");
+}
+
 /** The fixed Y of each step (teaching.BASELINES[outcome][0] on the server). */
 export const DEFAULT_BASELINES: Record<RegressionOutcome, string> = {
   trade: "FVA_share",
@@ -244,9 +251,10 @@ export function lessonQuestion(outcome: RegressionOutcome, baseline?: string | n
   return `关税暴露（X）增加 1 个百分点时，${lesson.shortMetric}（Y）如何变化？`;
 }
 
+/** The direction column of the four-step summary, in the result card's words. */
 export function familyDirectionLabel(direction: ReadingDirection): string {
-  if (direction === "negative") return "下降";
-  if (direction === "positive") return "上升";
-  if (direction === "suppressed") return "无法评估";
-  return "看不出";
+  if (direction === "negative") return "方向明确：X 越高，Y 越低";
+  if (direction === "positive") return "方向明确：X 越高，Y 越高";
+  if (direction === "suppressed") return "方向不确定（不显示区间）";
+  return "方向不确定";
 }

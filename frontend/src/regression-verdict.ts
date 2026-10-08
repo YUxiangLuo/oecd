@@ -37,6 +37,8 @@ interface RegressionVerdict {
   effectLabel: string;
   effect: string;
   interval: string;
+  /** The interval in the step's own unit only (no standard-deviation conversion), for the headline. */
+  intervalShort: string;
   evidence: string;
   coefficient: CoefStat | null;
   warnings: string[];
@@ -79,17 +81,15 @@ function naturalScale(
   outcome: RegressionOutcome,
   coefficient: CoefStat,
   response: RegressionResponse,
-): { effect: string; interval: string } {
+): { effect: string; interval: string; intervalShort: string } {
   const effect = coefficient.coef * 0.01;
   const hasCi = hasValidInterval(coefficient);
   const ciLow = (coefficient.ci_low ?? 0) * 0.01;
   const ciHigh = (coefficient.ci_high ?? 0) * 0.01;
   const kind = depvarKind(outcome, response.design);
   if (kind === "share") {
-    return {
-      effect: `${signed(effect * 100, 2)} 个百分点`,
-      interval: hasCi ? `[${signed(ciLow * 100, 2)}, ${signed(ciHigh * 100, 2)}] 个百分点` : "—",
-    };
+    const interval = hasCi ? `[${signed(ciLow * 100, 2)}, ${signed(ciHigh * 100, 2)}] 个百分点` : "—";
+    return { effect: `${signed(effect * 100, 2)} 个百分点`, interval, intervalShort: interval };
   }
   if (kind === "network") {
     const sd = response.result.depvar_std;
@@ -97,12 +97,15 @@ function naturalScale(
     // A narrow interval whose ends round to the same two decimals is shown with three, so it is not read as a point.
     const sdDigits = typeof sd === "number" && sd > 0 && signed(ciLow / sd, 2) === signed(ciHigh / sd, 2) ? 3 : 2;
     const standardizedInterval = typeof sd === "number" && Number.isFinite(sd) && sd > 0
-      ? `；约 [${signed(ciLow / sd, sdDigits)}, ${signed(ciHigh / sd, sdDigits)}] 个样本标准差`
+      ? `；约 [${signed(ciLow / sd, sdDigits)}, ${signed(ciHigh / sd, sdDigits)}] 个标准差`
       : "";
+    const intervalShort = hasCi ? `[${signed(ciLow, 2)}, ${signed(ciHigh, 2)}] ${countUnit("network")}` : "—";
     return {
       // Point and interval in standard deviations use the same decimals (the interval may need three).
-      effect: `${signed(effect, 2)} 个中心性原始单位${standardized == null ? "" : `（约 ${signed(standardized, sdDigits)} 个样本标准差）`}`,
-      interval: hasCi ? `[${signed(ciLow, 2)}, ${signed(ciHigh, 2)}] ${countUnit("network")}${standardizedInterval}` : "—",
+      // A standard deviation is the typical gap in Y between country×industry records.
+      effect: `${signed(effect, 2)} 个中心性原始单位${standardized == null ? "" : `（约 ${signed(standardized, sdDigits)} 个标准差，标准差即 Y 的典型差距）`}`,
+      interval: hasCi ? `${intervalShort}${standardizedInterval}` : "—",
+      intervalShort,
     };
   }
   const mean = response.result.depvar_mean;
@@ -111,9 +114,11 @@ function naturalScale(
     ? (effect / Math.abs(mean)) * 100 : null;
   const unit = KIND_UNITS[kind];
   const digits = kind === "position" ? 4 : 3;
+  const interval = hasCi ? `[${signed(ciLow, digits)}, ${signed(ciHigh, digits)}] 个${unit}` : "—";
   return {
     effect: `${signed(effect, digits)} 个${unit}${relative == null ? "" : `（约为样本均值的 ${signed(relative, 2)}%）`}`,
-    interval: hasCi ? `[${signed(ciLow, digits)}, ${signed(ciHigh, digits)}] 个${unit}` : "—",
+    interval,
+    intervalShort: interval,
   };
 }
 
@@ -135,10 +140,11 @@ export function buildRegressionVerdict(
     return {
       ...base,
       state: globalInferenceIsSuppressed(response.result.status, support) ? "suppressed" : "insufficient",
-      title: "当前设定没有可解读的政策系数",
+      title: "没算出估计值",
       effect: "—",
       interval: "—",
-      evidence: "可保存并报告该诊断；请说明缺少支持的原因，不能用不存在的系数判断方向。",
+      intervalShort: "—",
+      evidence: "这次没有算出 X 的估计值；结果仍会保存，请在报告里写明原因，不要据此判断方向。",
       coefficient: null,
     };
   }
@@ -146,17 +152,18 @@ export function buildRegressionVerdict(
   if (globalInferenceIsSuppressed(response.result.status, support)) {
     const invalid = response.result.status === "invalid_design" || support?.status === "invalid_design";
     const diagnostic = reasons.length
-      ? `无法推断：${reasons.join("；")}`
-      : "无法进行统计推断，且未提供具体原因；请核对完整诊断。";
+      ? `原因：${reasons.join("；")}。`
+      : "系统没有给出具体原因。";
     return {
       ...base,
       state: "suppressed",
-      title: invalid ? "这个设计不能用于统计推断"
-        : response.result.status === "insufficient" ? "样本支持度不足，无法给出显著性"
-          : "设计有效性未知或状态不一致，无法给出显著性",
+      title: invalid ? "方向不确定：这次的计算设定不能用来判断方向"
+        : response.result.status === "insufficient" ? "方向不确定：这次的数据不够判断方向"
+          : "方向不确定：结果状态没有记录完整",
       effect: scaled.effect,
       interval: "—",
-      evidence: `${diagnostic} 点估计仅供描述，不提供置信区间，不能据此判断上升或下降。`,
+      intervalShort: "—",
+      evidence: `${diagnostic}这次只显示估计值、不显示 95% 区间，不能据此判断上升或下降。`,
       coefficient,
     };
   }
@@ -169,15 +176,16 @@ export function buildRegressionVerdict(
   return {
     ...base,
     state,
-    title: state === "negative" ? "本次样本支持负向关联"
-      : state === "positive" ? "本次样本支持正向关联" : "本次样本不足以判断方向",
+    title: state === "negative" ? "方向明确：X 越高，Y 越低"
+      : state === "positive" ? "方向明确：X 越高，Y 越高" : "方向不确定",
     effect: scaled.effect,
     interval: scaled.interval,
+    intervalShort: scaled.intervalShort,
     evidence: !validInterval
-      ? "置信区间缺失或不合法，不能判断关联方向；请重新运行回归，不能将其解释为区间包含 0。"
+      ? "95% 区间没有记录完整，不能判断方向；请重新计算，也不要把它读成“区间包含 0”。"
       : state === "insufficient"
-      ? "95% 置信区间包含 0（跨过或触及）；这不等于“没有效应”，而是当前证据不足以确定方向。"
-      : "95% 置信区间完全位于 0 的一侧，支持本次样本中的关联方向。",
+      ? `95% 区间（估计值可能落在的范围）为 ${scaled.interval}，包含 0：不能说“没有关联”，只能说方向还不确定。`
+      : `95% 区间（估计值可能落在的范围）为 ${scaled.interval}，整个区间都在 0 的一侧，所以方向是明确的。`,
     coefficient,
   };
 }

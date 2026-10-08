@@ -28,7 +28,7 @@ test("step 10 uses the dedicated teaching tariff panel independently of the old 
   expect(html).toContain("对比国家 B");
   expect(html).toContain("不选对比国家");
   expect(html).toContain("步骤 11–14 会把回归结果换算到你选的例子上");
-  expect(html).toContain("正在读取关税面板");
+  expect(html).toContain("正在读取关税数据");
   expect(html).not.toContain("政策事件");
   expect(html).not.toContain("解释变量（X）");
   expect(html).not.toContain("0.25 × 0.20 = 0.05");
@@ -72,7 +72,7 @@ test("step 10 keeps the saved example when the chosen unit is not in the teachin
     teaching_observation: { country: "CAN", industry: "C29", year: 2020, teaching_export_share_w: 0.9, teaching_tariff_rate_tau: 0.25, teaching_tariff_exposure: 0.225, version: "step10-tariff-teaching-v5" },
   };
   render(<ShockLab meta={meta} step={step} state={{ data: saved, save, complete: false, syncing: false, syncError: null, syncNow: () => {} }} />);
-  await waitFor(() => expect(screen.getByText(/不在回归样本中/)).toBeTruthy());
+  await waitFor(() => expect(screen.getByText(/不在回归样本里/)).toBeTruthy());
   expect(screen.getByText(/已记录的例子保持不变/)).toBeTruthy();
   expect(save).not.toHaveBeenCalled();
   await waitFor(() => expect(screen.queryByRole("option", { name: "T 家庭自用生产" })).toBeNull());
@@ -104,7 +104,7 @@ test("step 10 keeps the saved example when a chosen unit has no row in the repre
     teaching_observation: { country: "CAN", industry: "C29", year: 2020, teaching_export_share_w: 0.9, teaching_tariff_rate_tau: 0.25, teaching_tariff_exposure: 0.225, version: "step10-tariff-teaching-v5" },
   };
   render(<ShockLab meta={meta} step={step} state={{ data: saved, save, complete: false, syncing: false, syncError: null, syncNow: () => {} }} />);
-  await waitFor(() => expect(screen.getByText(/CAN 加拿大 · C29 汽车及零部件 不在回归样本中/)).toBeTruthy());
+  await waitFor(() => expect(screen.getByText(/CAN 加拿大 · C29 汽车及零部件 不在回归样本里/)).toBeTruthy());
   expect(save).not.toHaveBeenCalled();
   groups.mockRestore();
   series.mockRestore();
@@ -133,6 +133,18 @@ test("step 10 can follow a single taxed country and records it alone", async () 
   expect((screen.getByRole("combobox", { name: "对比国家 B" }) as HTMLSelectElement).value).toBe("");
   expect(document.querySelectorAll(".teaching-example-summary li")).toHaveLength(1);
   expect(screen.getByText(/所以 X = 90\.00% × 25% =/)).toBeTruthy();
+  // X jumps in one year: a step line whose jump and the policy marker both sit on 2018, read in percentage points.
+  await waitFor(() => expect(document.querySelector('[data-mark-year="2018"]')).not.toBeNull());
+  const svg = document.querySelector('[data-mark-year="2018"]')!.closest("svg")!;
+  const marker = Number(svg.querySelector('[data-mark-year="2018"] line')!.getAttribute("x1"));
+  const steps = [...svg.querySelectorAll('polyline[data-series="CAN"]')];
+  expect(steps.length).toBe(4);
+  // The 2017→2018 segment rises at its end, at the 2018 position where the marker line is.
+  const jump = steps[1].getAttribute("points")!.split(" ").map((point) => point.split(",").map(Number));
+  expect(jump[1][0]).toBe(marker);
+  expect(jump[2][0]).toBe(marker);
+  expect(jump[2][1]).toBeLessThan(jump[1][1]);
+  expect(document.body.textContent).toContain("关税暴露 X · 个百分点");
   await waitFor(() => expect(save).toHaveBeenCalled());
   expect((save.mock.calls[0] as unknown[])[0]).toMatchObject({ compared: ["CAN"], teaching_country: "CAN", teaching_year: 2020 });
   groups.mockRestore();
@@ -143,7 +155,7 @@ test("step 10 can follow a single taxed country and records it alone", async () 
 
 test("the step 10 gap note matches whether the two countries were taxed", () => {
   expect(stepTenGapNote([true, false])).toContain("就是加税那年起的 X");
-  expect(stepTenGapNote([true, true])).toContain("差距来自出口依赖 w 的不同");
+  expect(stepTenGapNote([true, true])).toContain("差距来自对美出口份额 w 的不同");
   expect(stepTenGapNote([false, false])).toContain("没有差距");
   expect(stepTenGapNote([true])).toBeUndefined();
 });

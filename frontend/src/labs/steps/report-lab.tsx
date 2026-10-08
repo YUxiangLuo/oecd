@@ -35,8 +35,8 @@ const REFLECTION_FIELDS: {
   starter: string;
   min: number;
 }[] = [
-  { key: "research_question", label: "研究问题", prompt: "我比较了哪些国家、行业和年份？我想了解哪项指标的变化？请区分指标比较和关税回归。", starter: "句式参考：本实验比较了……和……的……指标，想了解……；并用关税数据读回归结果。", min: 12 },
-  { key: "evidence_interpretation", label: "结果解释", prompt: "引用保存的数字，注明对象、年份、指标、方向和区间。比较四项回归结果；无法推断时写明原因，不要写成“没有效应”。", starter: "句式参考：步骤……显示，……在……年的……为……；步骤 11 的回归估计 X 每增加 1 个百分点，Y 平均……，95% 区间为……。", min: 40 },
+  { key: "research_question", label: "研究问题", prompt: "我比较了哪些国家、行业和年份？我想了解哪项指标的变化？请区分指标比较和关税回归。", starter: "句式参考：本实验比较了……和……的……指标，想了解……；再用关税回归看这些指标怎样随关税暴露 X 变化。", min: 12 },
+  { key: "evidence_interpretation", label: "结果解释", prompt: "引用保存的数字，注明对象、年份、指标、方向和区间。比较四项回归结果；方向不确定或没算出估计值时写明原因，不要写成“没有影响”。", starter: "句式参考：步骤……显示，……在……年的……为……；步骤 11 的回归估计关税暴露 X 每增加 1 个百分点，Y 平均……，95% 区间为……。", min: 40 },
   { key: "limitations", label: "局限与反思", prompt: "我的比较还有哪些限制？哪些结论不能推出？下一步需要什么数据或检验？", starter: "句式参考：回归只描述 X 与 Y 的关联，因此……；我的比较只覆盖……；若要进一步验证，需要……。", min: 30 },
 ];
 
@@ -113,8 +113,8 @@ export function summarizeReportGate(blocked: ReportGateItem[]) {
   const missingCount = count(blocked);
   const ownCount = count(blocked.filter((item) => item.step >= 15));
   const scope = [
-    stepCount > 0 ? `第 1–14 步中 ${stepCount} 个步骤` : null,
-    globalCount > 0 ? `${globalCount} 项全局条件` : null,
+    stepCount > 0 ? `步骤 1–14 中 ${stepCount} 个步骤` : null,
+    globalCount > 0 ? `${globalCount} 项其他条件` : null,
   ].filter(Boolean).join("、");
   const earlierCount = missingCount - ownCount;
   const parts = [
@@ -129,13 +129,19 @@ export function summarizeReportGate(blocked: ReportGateItem[]) {
   };
 }
 
-export function GateCard({ blocked, onNavigateStep }: { blocked: ReportGateItem[]; onNavigateStep: (step: number) => void }) {
+export function GateCard({ blocked, onNavigateStep, flash = 0 }: {
+  blocked: ReportGateItem[];
+  onNavigateStep: (step: number) => void;
+  /** Bumped when a blocked generate button sends the student here: the panel briefly highlights. */
+  flash?: number;
+}) {
   const overview = summarizeReportGate(blocked);
   const next = overview.next;
   if (!next) return null;
   const goToStep = (step: number) => { activateReportGateDestination(step, onNavigateStep); };
   return (
-    <section className="report-gate-panel" aria-labelledby="report-gate-title">
+    // The key restarts the highlight animation on every new flash.
+    <section key={flash} className={flash ? "report-gate-panel report-gate-flash" : "report-gate-panel"} aria-labelledby="report-gate-title">
       <div className="report-gate-head">
         <span className="report-gate-badge" aria-hidden="true">!</span>
         <div className="report-gate-title">
@@ -144,7 +150,7 @@ export function GateCard({ blocked, onNavigateStep }: { blocked: ReportGateItem[
         </div>
         {next.step > 0 && (
           <button type="button" className="primary report-gate-next-button" onClick={() => goToStep(next.step)}>
-            {next.step === 15 ? "继续填写原创分析" : `继续步骤 ${next.step}`}
+            {next.step === 15 ? "去写你的分析" : `继续步骤 ${next.step}`}
           </button>
         )}
       </div>
@@ -182,19 +188,23 @@ export function GateCard({ blocked, onNavigateStep }: { blocked: ReportGateItem[
 export function ReportStatus({ report }: { report: ClassroomReport }) {
   if (report.state === "draft") return <span className="muted">草稿 · 尚未提交</span>;
   if (report.state === "pending") return <span className="muted">提交于 {fmtTime(report.submitted_at)} · 等待教师评阅</span>;
+  // Graded: a score card, so the score and the teacher's comments are the first thing on the page.
   return (
-    <div>
-      <b className="report-grade">已评阅 · {report.score} 分</b><span className="muted"> · {fmtTime(report.graded_at)}</span>
-      {report.feedback?.trim() && <div className="report-feedback" tabIndex={0} role="region" aria-label="教师评语"><b>教师评语：</b>{report.feedback}</div>}
+    <div className="report-score-card">
+      <b className="report-grade">已评阅 · {report.score} 分</b>
+      <span className="muted">评阅时间：{fmtTime(report.graded_at)}</span>
+      {report.feedback?.trim()
+        ? <div className="report-feedback" tabIndex={0} role="region" aria-label="教师评语"><b>教师评语：</b>{report.feedback}</div>
+        : <span className="muted">老师没有写评语。</span>}
     </div>
   );
 }
 
-export const REPORT_GENERATE_FIRST_LABEL = "根据实验记录生成报告";
+export const REPORT_GENERATE_FIRST_LABEL = "只生成草稿（不提交）";
 
 export function reportGenerateLabel(report: ClassroomReport | null) {
   if (!report) return REPORT_GENERATE_FIRST_LABEL;
-  return report.state === "pending" || report.state === "graded" ? "重新生成并提交" : "重新生成报告";
+  return report.state === "pending" || report.state === "graded" ? "重新生成并提交" : "重新生成草稿";
 }
 
 /** Characters as the server counts them (Python ``len`` of the whitespace-collapsed text): code points, so an
@@ -227,7 +237,7 @@ export function reportGenerateButtonLabel(
   syncError: string | null = null,
   syncConflict = false,
 ): string {
-  if (generating) return "服务端生成中…";
+  if (generating) return "正在生成报告…";
   return reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, syncError, syncConflict) ?? reportGenerateLabel(report);
 }
 
@@ -275,8 +285,21 @@ export function ReportLab({
   useEffect(() => { void preloadReportRenderer().catch(() => {}); }, []);
   // A newer acknowledged session supersedes a gate returned for an older snapshot.
   useEffect(() => { setBlocked([]); }, [reportGate]);
+  // A gate panel the student is sent to highlights briefly, so the click visibly did something.
+  const [gateFlash, setGateFlash] = useState(0);
+  const showGate = () => {
+    setGateFlash((value) => value + 1);
+    window.requestAnimationFrame(() => {
+      const title = document.getElementById("report-gate-title");
+      title?.closest("section")?.scrollIntoView?.({ block: "center" });
+      title?.focus({ preventScroll: true });
+    });
+  };
   useEffect(() => {
-    if (blocked.length > 0) document.getElementById("report-gate-title")?.focus();
+    if (blocked.length > 0) {
+      setGateFlash((value) => value + 1);
+      document.getElementById("report-gate-title")?.focus();
+    }
   }, [blocked]);
 
   const reflection = (state.data ?? {}) as ReportReflectionState;
@@ -288,6 +311,17 @@ export function ReportLab({
   const materialMissing = visibleBlocked.filter((item) => item.step > 0 && item.step < 15);
   const globalMissing = visibleBlocked.filter((item) => item.step <= 0).length;
   const busy = generating || submitting || printing;
+  // The saved records still miss items: generating cannot succeed, so the generate buttons say why and point
+  // to the list instead (while the session is saving, the list may be out of date and the click goes through).
+  const gated = visibleBlocked.length > 0 && sessionStatus === "ready" && !sessionUnsynced && !sessionSyncing;
+  const gatedCount = visibleBlocked.reduce((count, item) => count + item.missing.length, 0);
+  const generateOrShowGate = (submitAfter = false) => {
+    if (gated) {
+      showGate();
+      return;
+    }
+    void generate(submitAfter);
+  };
   // The server compares content fingerprints, so typing and deleting a character (or changing a view-only
   // setting) leaves the report current; the timestamp is only a fallback before the server has answered.
   const reportOutdated = Boolean(report && (sessionUnsynced || sessionSyncing
@@ -419,17 +453,17 @@ export function ReportLab({
         <span className="reg-section-step">最后一步 · 完成报告</span>
         <h2>检查材料，写出分析并提交</h2>
         <ol>
-          <li><b>1 · 检查实验材料</b><span>{state.syncConflict ? "另一处已更新记录，请先点页面顶部的“载入服务器版本”" : state.syncError ? "保存失败，请先重试保存" : reportGate == null || sessionStatus !== "ready" ? "正在核对服务器记录" : sessionUnsynced || sessionSyncing ? "保存后将重新核对材料" : materialMissing.length || globalMissing ? `${[materialMissing.length ? `第 1–14 步中 ${materialMissing.length} 个步骤还有 ${materialMissing.reduce((count, item) => count + item.missing.length, 0)} 项待补齐` : null, globalMissing ? `${globalMissing} 项全局条件未满足` : null].filter(Boolean).join("，")}，见下方入口` : "已保存材料与理解题已齐"}</span></li>
-          <li><b>2 · 写下自己的分析</b><span>{writtenCount} / 3 段达到最低字数 · 内容仍需自己核对</span></li>
-          <li><b>3 · 提交给老师</b><span>{report && report.state !== "draft" && reportOutdated ? "报告需更新：之后的修改还没交给老师，请重新生成并提交" : report?.state === "pending" ? "已提交，等待评阅" : report?.state === "graded" ? <a href="#report-status-card" onClick={(event) => { event.preventDefault(); statusCardRef.current?.scrollIntoView?.({ block: "center" }); statusCardRef.current?.focus({ preventScroll: true }); }}>已评阅，查看分数与评语</a> : report ? "已有草稿，尚未提交" : "生成报告不等于提交"}</span></li>
+          <li><b>1 · 检查实验材料</b><span>{state.syncConflict ? "另一处已更新记录，请先点页面顶部的“载入服务器版本”" : state.syncError ? "保存失败，请先重试保存" : reportGate == null || sessionStatus !== "ready" ? "正在核对服务器记录" : sessionUnsynced || sessionSyncing ? "保存后将重新核对材料" : materialMissing.length || globalMissing ? `${[materialMissing.length ? `步骤 1–14 中 ${materialMissing.length} 个步骤还有 ${materialMissing.reduce((count, item) => count + item.missing.length, 0)} 项待补齐` : null, globalMissing ? `${globalMissing} 项其他条件未满足` : null].filter(Boolean).join("，")}，见下方入口` : "材料和理解题都已齐全"}</span></li>
+          <li><b>2 · 写你的分析</b><span>{writtenCount} / 3 段达到最低字数 · 内容仍需自己核对</span></li>
+          <li><b>3 · 提交给老师</b><span>{report && report.state !== "draft" && reportOutdated ? "报告需更新：之后的修改还没交给老师，请重新生成并提交" : report?.state === "pending" ? "已提交，等待评阅" : report?.state === "graded" ? <a href="#report-status-card" onClick={(event) => { event.preventDefault(); statusCardRef.current?.scrollIntoView?.({ block: "center" }); statusCardRef.current?.focus({ preventScroll: true }); }}>{report.feedback?.trim() ? "已评阅，查看分数与评语" : "已评阅，查看分数"}</a> : report ? "已有草稿，尚未提交" : "生成报告不等于提交"}</span></li>
         </ol>
       </section>
-      {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} />}
+      {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} flash={gateFlash} />}
       <details className="report-reference"><summary>查看已保存的四项回归结果</summary>
-        <p className="muted">四个 Y 的单位不同，每张图各用自己的轴；只比较方向和区间是否跨 0。</p>
+        <p className="muted">四个 Y 的单位不同，每张图各用自己的轴；只比较方向和区间是否包含 0。</p>
         <RegressionFamilyPanels getStep={getStep} />
         <RegressionEvidenceMatrix getStep={getStep} />
-        <p className="muted">系数图和换算到例子可回到步骤 11–14 查看；步骤 6–9 的图表读数会自动写进报告。这里只列出已保存的结果，结论需要你自己写。</p>
+        <p className="muted">按你的例子换算的结果在步骤 11–14；步骤 6–9 的图表读数会自动写进报告。这里只列出已保存的结果，结论要你自己写。</p>
       </details>
       <section className="report-reflection" aria-labelledby={REPORT_REFLECTION_TITLE_ID}>
         <div>
@@ -492,14 +526,15 @@ export function ReportLab({
             {report.state === "graded" && "重新生成会重新提交报告，并清除原评分。"}</p>
         </div>
       )}
+      {report && <section className="submit-card" id="report-status-card" ref={statusCardRef} tabIndex={-1} aria-label="报告状态"><ReportStatus report={report} /></section>}
       <section className="report-submit-panel" aria-label="提交报告">
         <h3>{report && report.state !== "draft" ? (reportOutdated ? "报告需更新后重新提交" : "报告已交给老师") : "核对完毕后，完成提交"}</h3>
         <p>提交前会先保存文字并检查材料；导出 PDF 仅供个人留存，不能代替提交。
           {report?.state === "graded" && "重新生成并提交会替换已评阅报告并清除原评分。"}</p>
         {/* One action group per state: the primary action first, never two buttons doing the same thing. */}
         <div className="report-actions">
-          {(!report || reportOutdated) && <button type="button" className="primary" disabled={busy} onClick={() => { void generate(true); }}>
-            {submitting ? "正在提交报告…" : generating ? "正在整理报告…"
+          {(!report || reportOutdated) && <button type="button" className="primary" disabled={busy} aria-disabled={gated || undefined} aria-describedby={gated ? "report-gated-reason" : undefined} onClick={() => generateOrShowGate(true)}>
+            {submitting ? "正在提交报告…" : generating ? "正在生成报告…"
               : reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, state.syncError, Boolean(state.syncConflict)) ?? (report ? "更新报告并提交给老师" : "生成并提交报告")}
           </button>}
           {report?.state === "draft" && !reportOutdated && (
@@ -510,7 +545,7 @@ export function ReportLab({
           {/* Draft only (no report, or a draft): a submitted report is updated by the primary action above, or
               regenerated here only when it is current (e.g. to pick up a newer report layout). */}
           {(!report || report.state === "draft") && (
-            <button type="button" className="secondary" disabled={busy} onClick={() => { void generate(); }}>
+            <button type="button" className="secondary" disabled={busy} aria-disabled={gated || undefined} aria-describedby={gated ? "report-gated-reason" : undefined} onClick={() => generateOrShowGate()}>
               {reportGenerateButtonLabel(report, generating, sessionStatus, sessionUnsynced, sessionSyncing, state.syncError, Boolean(state.syncConflict))}
             </button>
           )}
@@ -522,22 +557,20 @@ export function ReportLab({
           )}
           {/* Regenerating a current submitted report clears any grade, so it comes last. */}
           {(report && report.state !== "draft" && !reportOutdated) && (
-            <button type="button" className="secondary" disabled={busy} onClick={() => { void generate(); }}>
+            <button type="button" className="secondary" disabled={busy} aria-disabled={gated || undefined} aria-describedby={gated ? "report-gated-reason" : undefined} onClick={() => generateOrShowGate()}>
               {reportGenerateButtonLabel(report, generating, sessionStatus, sessionUnsynced, sessionSyncing, state.syncError, Boolean(state.syncConflict))}
             </button>
           )}
         </div>
+        {gated && <p id="report-gated-reason" className="report-gated-reason" role="note">还有 {gatedCount} 项没完成，现在还不能生成报告；请先按上方“还不能生成报告”的清单补齐。</p>}
       </section>
 
       {error && <div className="error-box" role="alert">{error}</div>}
 
       {report ? (
-        <>
-          <section className="submit-card" id="report-status-card" ref={statusCardRef} tabIndex={-1} aria-label="报告状态"><ReportStatus report={report} /></section>
-          <div className="report-body" tabIndex={-1} aria-label="报告正文"><ReportMarkdown markdown={report.markdown} /></div>
-        </>
+        <div className="report-body" tabIndex={-1} aria-label="报告正文"><ReportMarkdown markdown={report.markdown} /></div>
       ) : (
-        <p className="muted">也可以先生成草稿预览再提交；不显著或无法推断的诊断同样可以写进报告。</p>
+        <p className="muted">可以先只生成草稿看看，再提交。区间包含 0、或者没算出估计值的结果，也要写进报告。</p>
       )}
       {confirmRegenerate && (
         <ConfirmModal

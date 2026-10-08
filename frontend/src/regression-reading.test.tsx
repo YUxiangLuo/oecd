@@ -22,20 +22,22 @@ describe("fixed teaching regression reading", () => {
     const html = renderToStaticMarkup(<RegressionResultCard outcome="trade" response={response()} />);
     const dom = new DOMParser().parseFromString(html, "text/html");
     expect(html).toContain("回归结果");
-    expect(html).toContain("方向判断：本次样本支持正向关联");
+    // The headline answers the question with the number; the direction reading is the sub-line.
+    expect(dom.querySelector(".reg-plain-verdict")?.textContent).toBe("关税暴露 X 每增加 1 个百分点 → 外国增加值项占比平均上升 2.00 个百分点95% 区间：[+1.00, +3.00] 个百分点");
+    expect(dom.querySelector(".reg-verdict-direction")?.textContent).toBe("方向明确：X 越高，Y 越高");
     expect(html).not.toContain("模拟");
     // One coefficient plot: zero line plus one dot (one colour, no bar) with its interval.
     expect(dom.querySelectorAll("svg[role=img]")).toHaveLength(1);
     expect(dom.querySelectorAll("svg rect")).toHaveLength(0);
     expect(dom.querySelector('svg circle[r="6.5"]')?.getAttribute("fill")).toBe("#2a2f3a");
     expect(dom.querySelector(".coef-ci")).not.toBeNull();
-    // Three short sentences, no folds.
-    expect(dom.querySelectorAll(".reg-result-points > li")).toHaveLength(3);
+    // One short reading of the interval, no folds; the caveat is a separate callout after the charts.
+    expect(dom.querySelectorAll(".reg-result-points > li")).toHaveLength(1);
+    expect(dom.querySelector(".reg-result-points")?.textContent).toContain("95% 区间（估计值可能落在的范围）为 [+1.00, +3.00] 个百分点");
     expect(dom.querySelector("details")).toBeNull();
-    expect(html).toContain("平均上升 2.00 个百分点");
-    expect(html).toContain("[+1.00, +3.00] 个百分点");
-    expect(html).toContain("标称 95% 的近似聚类区间");
-    expect(html).toContain("不要写成“已经证明生产回流”");
+    expect(html).toContain("95% 区间（按国家计算）");
+    expect(dom.querySelector(".reg-caveat")?.textContent).toContain("不要写成“已经证明生产回流”");
+    expect(html).not.toMatch(/β|本次样本|置信区间|标称/);
     expect(html).not.toMatch(/处理组|对照组|处理聚类|同时置信带|与生成时的预设关系|使用的年度记录/);
   });
 
@@ -52,14 +54,15 @@ describe("fixed teaching regression reading", () => {
     const html = renderToStaticMarkup(<RegressionResultCard outcome="trade" response={withBins} />);
     const dom = new DOMParser().parseFromString(html, "text/html");
     expect(dom.querySelectorAll("svg[role=img]")).toHaveLength(2);
-    // β for a share outcome is already "percentage points of Y per percentage point of X".
-    expect(html).toContain("斜率 β = -0.55");
+    // For a share outcome the slope is already "percentage points of Y per percentage point of X".
+    expect(dom.querySelector("[data-slope-label]")?.textContent).toBe("斜率：X 每增加 1 个百分点，Y -0.55 个百分点");
     // Bin means are shown in percentage points (×100), so the Y axis spans about ±1.1, not ±0.011.
     const texts = [...dom.querySelectorAll("svg text")].map((node) => node.textContent ?? "");
     expect(texts.some((text) => /^-?1\.[0-9]+$/.test(text))).toBe(true);
     expect(texts.some((text) => text === "0.0100" || text === "-0.0100")).toBe(false);
-    // A narrow interval is labelled once, in the middle, instead of two colliding end labels.
-    expect(html).toContain("[-0.57, -0.53]");
+    // An interval narrower than the dot is said in words, and the dot becomes a ring.
+    expect(dom.querySelector("[data-narrow-ci]")?.textContent).toBe("区间很窄 [-0.57, -0.53]，在图上与点重合");
+    expect(dom.querySelector('.coef-plot circle[fill="none"]')).not.toBeNull();
   });
 
   test("a non-share Y draws its fitted line through the bins, not 100× flatter", () => {
@@ -78,20 +81,21 @@ describe("fixed teaching regression reading", () => {
     const [x1, y1, x2, y2] = ["x1", "y1", "x2", "y2"].map((name) => Number(line.getAttribute(name)));
     const centres = [...svg.querySelectorAll("[data-bin] circle[r=\"5\"]")].map((dot) => [Number(dot.getAttribute("cx")), Number(dot.getAttribute("cy"))]);
     for (const [cx, cy] of centres) expect(Math.abs(y1 + ((cx - x1) / (x2 - x1)) * (y2 - y1) - cy)).toBeLessThan(0.5);
-    expect(svg.textContent).toContain("斜率 β = -20.00");
+    // The slope label names its unit: the per-percentage-point value, not the raw coefficient (−2000).
+    expect(svg.textContent).toContain("斜率：X 每增加 1 个百分点，Y -20.00 个中心性原始单位");
   });
 
   test.each([
-    [-0.8, -0.2, "本次样本支持负向关联", true],
-    [-0.9, 0.1, "本次样本不足以判断方向", false],
-    [-0.8, 0, "本次样本不足以判断方向", false],
+    [-0.8, -0.2, "方向明确：X 越高，Y 越低", true],
+    [-0.9, 0.1, "方向不确定", false],
+    [-0.8, 0, "方向不确定", false],
   ])("negative point estimate with interval [%s, %s] is interpreted using the interval", (low, high, title, negative) => {
     const data = response();
     Object.assign(data.result.coefs[0], { coef: -0.4, ci_low: low, ci_high: high });
     const { container } = render(<RegressionResultCard outcome="production" response={data} />);
-    expect(container.querySelector(".reg-plain-verdict")?.textContent).toBe(`方向判断：${title}`);
+    expect(container.querySelector(".reg-verdict-direction")?.textContent).toBe(title);
     expect(container.textContent?.includes("平均下降")).toBe(negative);
-    expect(container.querySelector(".reg-result-points")?.textContent).toMatch(negative ? /平均下降 0.40 个百分点/ : /平均变化为 -0.40 个百分点/);
+    expect(container.querySelector(".reg-plain-verdict")?.textContent).toMatch(negative ? /平均下降 0.40 个百分点/ : /平均变化为 -0.40 个百分点/);
     // The estimate dot keeps one colour whatever its sign; the sign is read from its position.
     expect(container.querySelector('svg circle[r="6.5"]')?.getAttribute("fill")).toBe("#2a2f3a");
   });
@@ -101,13 +105,14 @@ describe("fixed teaching regression reading", () => {
     data.result.status = "invalid_design";
     data.result.status_reasons = ["可用于比较的国家太少"];
     const { container } = render(<RegressionResultCard outcome="trade" response={data} />);
-    expect(screen.getByText(/方向判断：这个设计不能用于统计推断/)).toBeTruthy();
-    expect(screen.getByText(/无法推断：可用于比较的国家太少/)).toBeTruthy();
+    expect(screen.getByText("方向不确定：这次的计算设定不能用来判断方向")).toBeTruthy();
+    expect(screen.getByText(/原因：可用于比较的国家太少/)).toBeTruthy();
+    expect(container.querySelector(".reg-headline-interval")?.textContent).toBe("这次不显示 95% 区间");
     expect(container.textContent).not.toMatch(/平均上升|平均下降|区间未跨过/);
     // The chart keeps only a grey descriptive dot: no colour, no interval.
     expect(container.querySelector('svg circle[r="6.5"]')?.getAttribute("fill")).toBe("#b6bac6");
     expect(container.querySelector(".coef-ci")).toBeNull();
-    expect(container.textContent).toContain("仅显示描述性点估计");
+    expect(container.textContent).toContain("只显示估计值，不显示 95% 区间");
     expect(container.textContent).not.toContain("[+1.00, +3.00]");
   });
 
@@ -115,7 +120,7 @@ describe("fixed teaching regression reading", () => {
     const data = response();
     data.result.coefs = [];
     const { container } = render(<RegressionResultCard outcome="trade" response={data} />);
-    expect(screen.getByText(/当前设定没有可解读的政策系数/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "没算出 X 的估计值" })).toBeTruthy();
     expect(container.querySelector("svg")).toBeNull();
     expect(container.textContent).not.toContain("平均变化为 —");
   });
@@ -128,11 +133,11 @@ describe("fixed teaching regression reading", () => {
       { label: "MEX 墨西哥·C29", x: 0 },
     ]} />);
     const sentence = container.querySelector(".reg-example-effect")!.textContent;
-    expect(sentence).toBe("换算到你在步骤 10 选的例子：CAN 加拿大·C29（X = 9.32 个百分点）Y 约下降 5.13 个百分点；MEX 墨西哥·C29未被加税（X = 0），按估计不变。");
+    expect(sentence).toBe("按你在步骤 10 选的例子换算：CAN 加拿大·C29（X = 9.32 个百分点）Y 约下降 5.13 个百分点；MEX 墨西哥·C29未被加税（X = 0），按估计 Y 不变。");
     // An uncertain direction is flagged; suppressed inference and missing examples show no conversion.
     Object.assign(data.result.coefs[0], { ci_low: -1, ci_high: 0.2 });
     const uncertain = render(<RegressionResultCard outcome="trade" response={data} examples={[{ label: "例子", x: 0.05 }]} />);
-    expect(uncertain.container.querySelector(".reg-example-effect")!.textContent).toContain("区间跨过 0，这个方向本身并不确定");
+    expect(uncertain.container.querySelector(".reg-example-effect")!.textContent).toContain("区间包含 0，这个方向本身并不确定");
     data.result.status = "invalid_design";
     const suppressed = render(<RegressionResultCard outcome="trade" response={data} examples={[{ label: "例子", x: 0.05 }]} />);
     expect(suppressed.container.querySelector(".reg-example-effect")).toBeNull();
@@ -147,6 +152,20 @@ describe("fixed teaching regression reading", () => {
     expect(screen.getByRole("list", { name: "本次计算的限制" }).textContent).toContain("部分国家年度记录缺失");
     expect(screen.getByText("平均上升 2.00 个百分点")).toBeTruthy();
   });
+
+  test("the coefficient table states its scale next to the page's per-percentage-point reading", () => {
+    // A length outcome: the raw coefficient (X as a share) is 100 times the reading per percentage point.
+    const data = response();
+    data.design.outcome = "length";
+    data.design.depvar_kind = "length";
+    Object.assign(data.result.coefs[0], { coef: -1.8186, ci_low: -1.9, ci_high: -1.7 });
+    const table = render(<RegressionCoefficientTable response={data} />);
+    const headers = [...table.container.querySelectorAll("th")].map((cell) => cell.textContent);
+    expect(headers.slice(0, 3)).toEqual(["变量", "X 每增加 1 个百分点（长度单位）", "系数（X 按份额计）"]);
+    const cells = [...table.container.querySelectorAll("tbody td")].map((cell) => cell.textContent);
+    expect(cells[1]).toBe("-0.018 个长度单位");
+    expect(cells[2]).toBe("-1.8186");
+  });
 });
 
 test.each(["unknown", "conflicting"])("%s status suppresses table and forest inference", (status) => {
@@ -155,12 +174,12 @@ test.each(["unknown", "conflicting"])("%s status suppresses table and forest inf
   else data.result.support!.status = "warning";
   const table = render(<RegressionCoefficientTable response={data} />);
   const cells = table.container.querySelectorAll("tbody td");
-  expect(cells[2].textContent).toBe("—");
-  expect(cells[5].textContent).toBe("—");
+  expect(cells[3].textContent).toBe("—");
+  expect(cells[6].textContent).toBe("—");
   table.unmount();
   const plot = render(<CoefForestChart coefs={data.result.coefs} globalStatus={data.result.status} globalSupport={data.result.support} />);
   fireEvent.mouseEnter(plot.container.querySelector("circle")!.closest("g")!);
-  expect(plot.container.textContent).toContain("仅显示描述性点估计");
+  expect(plot.container.textContent).toContain("只显示估计值");
   expect(plot.container.textContent).not.toContain("p 值 ·");
 });
 
@@ -180,6 +199,6 @@ test.each([
   table.unmount();
   const plot = render(<CoefForestChart coefs={data.result.coefs} globalStatus={data.result.status} globalSupport={data.result.support} />);
   fireEvent.mouseEnter(plot.container.querySelector("circle")!.closest("g")!);
-  expect(plot.container.textContent).toContain(`p 值 · ${p == null ? "不可评估" : expected}`);
+  expect(plot.container.textContent).toContain(`p 值 · ${p == null ? "没有 p 值" : expected}`);
 });
 

@@ -58,7 +58,7 @@ def _reflection_section(session: dict[str, Any]) -> list[str]:
 
 
 def _quiz_sections(session: dict[str, Any]) -> list[str]:
-    lines = ["## 理解检查摘要", ""]
+    lines = ["## 理解题答题记录", ""]
     for step in GATE_STEPS:
         selected = quizzes.selected_answers(step, _step_data(session, step).get("quiz"))
         lines.extend((f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}", ""))

@@ -11,7 +11,7 @@ from gvcsim.report_common import (
     REFLECTION_TEXT_LIMIT,
     ReportGateError,
     TeachingReport,
-    _OUTCOME_INTERPRETATIONS,
+    _evidence_reading,
     _STUDENT_METRIC_LABELS,
     _natural_effect,
     _observation_reading,

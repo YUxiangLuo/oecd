@@ -53,8 +53,8 @@ describe("fixed TWFE verdict", () => {
     const verdict = buildRegressionVerdict("trade", response("trade", coefficient(-0.01, low, high)));
     expect(verdict.state).toBe("insufficient");
     expect(verdict.interval).toBe("—");
-    expect(verdict.evidence).toContain("置信区间缺失或不合法");
-    expect(verdict.evidence).not.toContain("95% 置信区间包含 0");
+    expect(verdict.evidence).toContain("95% 区间没有记录完整");
+    expect(verdict.evidence).not.toMatch(/区间（估计值可能落在的范围）为 .*包含 0/);
   });
 
   test.each([null, undefined, "unknown"])("suppresses an unknown result status %s", (status) => {
@@ -62,14 +62,14 @@ describe("fixed TWFE verdict", () => {
     payload.result.status = status as RegressionResponse["result"]["status"];
     const verdict = buildRegressionVerdict("trade", payload);
     expect(verdict.state).toBe("suppressed");
-    expect(verdict.title).toContain("有效性未知");
+    expect(verdict.title).toContain("结果状态没有记录完整");
     expect(verdict.interval).toBe("—");
   });
 
   test("uses confidence intervals rather than coefficient sign", () => {
     const verdict = buildRegressionVerdict("trade", response("trade", coefficient(-0.01, -0.03, 0.01)));
     expect(verdict.state).toBe("insufficient");
-    expect(verdict.evidence).toContain("不等于“没有效应”");
+    expect(verdict.evidence).toContain("不能说“没有关联”");
   });
 
   test("scales the fixed intensity coefficient to a one-point increase", () => {
@@ -93,7 +93,7 @@ describe("fixed TWFE verdict", () => {
     const verdict = buildRegressionVerdict(
       "trade", response("trade", coefficient(-0.005, null, null), blockedSupport("invalid_design")),
     );
-    expect(verdict.title).toContain("不能用于统计推断");
+    expect(verdict.title).toContain("计算设定不能用来判断方向");
   });
 });
 

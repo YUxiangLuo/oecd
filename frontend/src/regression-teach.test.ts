@@ -93,9 +93,10 @@ describe("student-first regression reading", () => {
     expect(html).toContain("四步结果汇总");
     expect(html).toContain('aria-label="四步结果汇总表，可横向滚动"');
     expect(html.match(/<th scope="row">/g)).toHaveLength(4);
-    expect(html).toContain("下降");
-    expect(html).toContain("待估计");
-    expect(html).toContain("不同指标的系数不能比大小");
+    expect(html).toContain("方向明确：X 越高，Y 越低");
+    expect(html).toContain("还没计算");
+    expect(html).toContain("四个 Y 的单位不同，数字不能比大小");
+    expect(html).not.toMatch(/TWFE|处理前|标称/);
     expect(html).toContain("-0.02 个百分点");
     expect(html).not.toContain("</b><span>百分点</span>");
   });
@@ -123,6 +124,6 @@ describe("RegressionFamilyPanels", () => {
     expect(html).toContain("国内增加值出口占比");
     expect(html).toContain("步骤 13 · 长度（位置指数单位）");
     expect(html).toContain("GVC 位置指数");
-    expect(html).toContain("步骤 12 · 生产：还没有可用结果");
+    expect(html).toContain("步骤 12 · 生产：还没计算");
   });
 });

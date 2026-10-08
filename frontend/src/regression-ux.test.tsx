@@ -42,7 +42,7 @@ describe("simple regression workbench", () => {
       expect(dom.body.textContent).not.toContain("模拟");
       expect(dom.querySelector(".reg-step-focus")).not.toBeNull();
       expect(dom.body.textContent).not.toContain("teaching_tariff_exposure");
-      expect(dom.querySelector(".reg-step-focus")?.textContent).toMatch(/^本步重点(读数|读区间|读单位|读网络 Y)：/);
+      expect(dom.querySelector(".reg-step-focus")?.textContent).toMatch(/^本步重点 · (读数|读区间|读单位)：/);
       expect(html.includes("方法与步骤 11 相同")).toBe(outcome !== "trade");
       expect(dom.querySelectorAll("select, details, table")).toHaveLength(0);
       expect(html).not.toMatch(/五年示例|可选趋势对照|可选小练习|四步结果汇总|计算方法说明|先用眼睛看/);
@@ -138,7 +138,10 @@ describe("simple regression workbench", () => {
     await waitFor(() => expect(select.value).toBe("DVAex_share"));
     await waitFor(() => expect(design).toHaveBeenCalledWith("trade", "DVAex_share"));
     // The saved result is shown for that Y; the server's disclaimer is not shown to students.
-    await waitFor(() => expect(document.querySelector(".reg-result-points")?.textContent).toContain("国内增加值出口占比（Y）平均上升 0.50 个百分点"));
+    await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均上升 0.50 个百分点"));
+    // A switched Y is said next to the question, with a way back to the step's default.
+    expect(document.querySelector(".reg-y-pill")?.textContent).toContain("当前 Y：国内增加值出口占比（不是本步默认）");
+    expect(screen.getByRole("button", { name: "恢复默认（外国增加值项占比）" })).toBeTruthy();
     expect(document.querySelector(".reg-result-boundary")).toBeNull();
     expect(document.body.textContent).not.toContain("教学模拟");
   });
@@ -156,6 +159,27 @@ describe("simple regression workbench", () => {
     expect(screen.getByRole("button", { name: /^计算贸易流回归/ })).toBeTruthy();
     fireEvent.change(select, { target: { value: "DVAex_share" } });
     expect(screen.queryByText(/报告材料里保存的仍是/)).toBeNull();
+  });
+
+  test("a saved result makes recalculating secondary, and a failed recalculation labels the old result", async () => {
+    spyOn(api, "regressionDesign").mockResolvedValue({} as RegressionDesignInfo);
+    spyOn(api, "teachingGroups").mockResolvedValue(groupsWithBaselines);
+    spyOn(api, "teachingSeries").mockResolvedValue({ version: "v", disclaimer: "", rows: [], total: 0, years: [] } as TeachingPanelResponse);
+    spyOn(api, "runRegression").mockRejectedValue(new TypeError("Failed to fetch"));
+    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, materialLocked: true, data: { run: savedRun("FVA_share", "外国增加值项占比") } as never }} />);
+    const rerun = await screen.findByRole("button", { name: "重新计算贸易流回归" });
+    expect(rerun.className).toBe("run-btn secondary");
+    // A submitted report: the warning is a callout, not a grey footnote.
+    expect(document.querySelector(".reg-rerun-warning")?.textContent).toContain("重新计算会替换报告材料里保存的结果");
+    await waitFor(() => expect(rerun.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(rerun);
+    await screen.findByRole("alert");
+    expect(screen.getByRole("alert").textContent).toBe("贸易流回归没有算完：网络连接中断，请检查连接后重试。");
+    // The run button is the one retry action; the old result stays, said to be the last saved one.
+    expect(screen.getByRole("button", { name: "重试：计算贸易流回归" }).className).toBe("run-btn");
+    expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
+    expect(document.querySelector(".reg-stale-note")?.textContent).toBe("这次计算没有成功；下面仍是上次保存的结果。");
+    expect(document.querySelector(".reg-results-stale .reg-plain-verdict")).not.toBeNull();
   });
 
   test("falls back to the default Y when the saved baseline is not offered by the release", async () => {
