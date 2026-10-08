@@ -285,7 +285,7 @@ describe("teacher review flow", () => {
       fireEvent.change(score, { target: { value: "120" } });
       fireEvent.click(screen.getByRole("button", { name: "提交评阅" }));
       const scoreError = screen.getByRole("alert");
-      expect(scoreError.textContent).toBe("分数须为 0-100 的整数");
+      expect(scoreError.textContent).toBe("分数须为 0–100 的整数");
       expect(score.getAttribute("aria-invalid")).toBe("true");
       expect(score.getAttribute("aria-describedby")).toBe(scoreError.id);
       expect(document.activeElement).toBe(score);

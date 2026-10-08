@@ -1,3 +1,4 @@
+import { normalizeLabel } from "./text";
 import { useEffect, useId, useRef, useState } from "react";
 import { ScrollableRegion } from "../a11y";
 import { api, isApiErrorStatus } from "../api";
@@ -115,11 +116,12 @@ export function ReportsTab({ user, onGraded, onRefresh }: { user: AuthUser; onGr
   const reports = data?.reports ?? [];
   const semesters = academic?.semesters ?? [];
   const pending = reports.filter((report) => report.state === "pending").length;
-  const needle = query.trim().toLowerCase();
+  // Normalized like stored names (full-width letters/digits, zero-width characters), then case-folded.
+  const needle = normalizeLabel(query).toLowerCase();
   const shown = reports
     .filter((report) => filter === "all" || report.state === filter)
     .filter((report) => matchesAcademicFilter(report.enrollments, semesterId, classId))
-    .filter((report) => !needle || [report.display_name, report.username, report.student_no].some((value) => (value ?? "").toLowerCase().includes(needle)));
+    .filter((report) => !needle || [report.display_name, report.username, report.student_no].some((value) => normalizeLabel(value ?? "").toLowerCase().includes(needle)));
   return (
     <div ref={listRef}>
       <Toolbar>
@@ -240,8 +242,9 @@ export function GradeView({ data, grader, onBack, onReload, initialDraft }: {
   const submit = () => {
     if (saving || stale) return;
     const numeric = Number(score);
-    if (score.trim() === "" || !Number.isInteger(numeric) || numeric < 0 || numeric > 100) {
-      setScoreError("分数须为 0-100 的整数");
+    // Digits only: Number() would also read "1e2" as 100.
+    if (!/^\s*\d{1,3}\s*$/.test(score) || !Number.isInteger(numeric) || numeric < 0 || numeric > 100) {
+      setScoreError("分数须为 0–100 的整数");
       scoreRef.current?.focus();
       return;
     }
@@ -283,7 +286,7 @@ export function GradeView({ data, grader, onBack, onReload, initialDraft }: {
               {GRADE_RUBRIC.map(([title, detail]) => <li key={title}><b>{title}</b><span>{detail}</span></li>)}
             </ol>
           </details>
-          <label className="grade-field">分数（0-100）<input ref={scoreRef} type="number" min={0} max={100} disabled={saving} value={score}
+          <label className="grade-field">分数（0–100）<input ref={scoreRef} type="number" min={0} max={100} disabled={saving} value={score}
             aria-invalid={scoreError ? true : undefined} aria-describedby={scoreError ? scoreErrorId : undefined}
             onChange={(event) => { const next = event.target.value; setScore(next); reviewGuard.publish({ dirty: next !== initialScore || feedback !== data.feedback, saving: false }); setSaveError(null); setScoreError(null); }} /></label>
           {scoreError && <div id={scoreErrorId} className="error-box grade-score-error" role="alert">{scoreError}</div>}

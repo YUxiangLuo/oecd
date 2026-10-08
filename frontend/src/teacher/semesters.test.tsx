@@ -44,7 +44,7 @@ for (const target of ["semester", "class"] as const) {
         const { container } = render(<SemestersTab />);
         await screen.findByText("测试班级");
         const scope = within(container.querySelector(target === "semester" ? ".semester-card-head" : ".class-row") as HTMLElement);
-        const button = scope.getByRole("button", { name: active ? "归档" : "恢复" }) as HTMLButtonElement;
+        const button = scope.getByRole("button", { name: active ? /^归档/ : /^恢复/ }) as HTMLButtonElement;
         // Archiving a semester asks first; restoring and class changes do not.
         const asks = target === "semester" && active;
         const press = () => {
@@ -78,7 +78,7 @@ for (const target of ["semester", "class"] as const) {
           const refreshed = container.querySelector(target === "semester" ? ".semester-card-head" : ".class-row");
           expect(refreshed).not.toBeNull();
           const controls = within(refreshed as HTMLElement);
-          expect(controls.getByRole("button", { name: active ? "恢复" : "归档" })).toBeTruthy();
+          expect(controls.getByRole("button", { name: active ? /^恢复/ : /^归档/ })).toBeTruthy();
           expect(controls.queryByRole("alert")).toBeNull();
         });
       } finally {
@@ -99,9 +99,9 @@ test("an archived semester shows no class archive buttons", async () => {
     const { container } = render(<SemestersTab />);
     await screen.findByText("旧班级");
     const row = within(container.querySelector(".class-row") as HTMLElement);
-    expect(row.queryByRole("button", { name: "归档" })).toBeNull();
-    expect(row.getByRole("button", { name: "重命名" })).toBeTruthy();
-    expect(within(container.querySelector(".semester-card-head") as HTMLElement).getByRole("button", { name: "恢复" })).toBeTruthy();
+    expect(row.queryByRole("button", { name: /^归档/ })).toBeNull();
+    expect(row.getByRole("button", { name: "重命名班级：旧学期 · 旧班级" })).toBeTruthy();
+    expect(within(container.querySelector(".semester-card-head") as HTMLElement).getByRole("button", { name: /^恢复/ })).toBeTruthy();
   } finally { list.mockRestore(); }
 });
 

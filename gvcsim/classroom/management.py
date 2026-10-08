@@ -176,6 +176,14 @@ def _ensure_student_no_free(c: Any, student_no: str, exclude_id: int | None = No
     ).fetchone()
     if owner is not None:
         raise StudentNumberTaken(f"学号 {student_no} 已被学生 {owner['username']} 使用")
+    # Same rule as the batch import (学号 doubles as the login name there): a 学号 may not be another account's
+    # username. A student's own username may equal its 学号.
+    account = c.execute(
+        "SELECT username FROM accounts WHERE username=%s AND id IS DISTINCT FROM %s LIMIT 1",
+        (student_no, exclude_id),
+    ).fetchone()
+    if account is not None:
+        raise StudentNumberTaken(f"学号 {student_no} 已是账号 {account['username']} 的用户名，请换一个学号")
 
 
 def create_student(

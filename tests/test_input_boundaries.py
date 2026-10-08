@@ -336,6 +336,22 @@ def test_single_create_rejects_a_username_that_is_another_students_number(teachi
     assert db.find_account("2026555") is None
 
 
+def test_a_student_number_may_not_be_another_accounts_username(teaching_db):
+    client = client_for("teacher")
+    clash = client.post(
+        "/api/classroom/students",
+        json={"username": "new-one", "display_name": "丙", "password": "valid-password-2026", "student_no": "student"},
+    )
+    assert clash.status_code == 409, clash.text
+    assert "student" in clash.json()["detail"]
+    # A student's own username may equal its 学号 (the batch import does exactly that).
+    own = client.post(
+        "/api/classroom/students",
+        json={"username": "2026777", "display_name": "丁", "password": "valid-password-2026", "student_no": "2026777"},
+    )
+    assert own.status_code == 200, own.text
+
+
 def test_whitespace_only_feedback_is_saved_empty(teaching_db):
     session = db.save_session("student", empty_session())
     assert session is not None

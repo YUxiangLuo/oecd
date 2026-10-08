@@ -6,7 +6,7 @@ import type { AcademicSemester, StudentRow } from "../types";
 import { userFacingRequestError } from "../user-facing-error";
 import { AcademicFilters, matchesAcademicFilter } from "./academic-filter";
 import { normalizeLabel, stripInvisibleEdges } from "./text";
-import { EmptyState, LoadFailure, Modal, SearchInput, StatusPill, Toolbar, useModalErrorFocus } from "./ui";
+import { EmptyState, LoadFailure, Modal, SearchInput, StatusPill, Toolbar, useModalErrorFocus, useRefetchOnVisible } from "./ui";
 
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
 // No maxLength on password fields: a pasted longer password would be cut silently (it is masked) and the
@@ -87,7 +87,11 @@ export function StudentRowMenu({
     onPick(type, student);
   };
   return (
-    <details className="row-menu" onKeyDown={(event) => {
+    <details className="row-menu" onPointerDown={(event) => {
+      const menu = event.currentTarget;
+      menu.dataset.pointerDown = "1";
+      window.addEventListener("pointerup", () => { window.setTimeout(() => { delete menu.dataset.pointerDown; }, 0); }, { once: true });
+    }} onKeyDown={(event) => {
       // Escape closes the menu and returns to its ⋯, like other menus.
       if (event.key !== "Escape" || !event.currentTarget.open) return;
       event.currentTarget.removeAttribute("open");
@@ -96,7 +100,13 @@ export function StudentRowMenu({
       // Tabbing out of an open menu closes it. Without a next focus target (a click on the page), the
       // pointerdown listener decides, so a click on a menu item in browsers that do not focus buttons still lands.
       const next = event.relatedTarget;
-      if (next instanceof Node && !event.currentTarget.contains(next)) event.currentTarget.removeAttribute("open");
+      const menu = event.currentTarget;
+      if (next instanceof Node && !menu.contains(next)) menu.removeAttribute("open");
+      // Tabbing past the last row leaves no next target; close once focus has really left the menu.
+      // (Not while a pointer is pressed in the menu: that click is choosing an item.)
+      else if (next == null && menu.dataset.pointerDown !== "1") {
+        window.setTimeout(() => { if (!menu.contains(document.activeElement)) menu.removeAttribute("open"); }, 0);
+      }
     }} onToggle={(event) => {
       const menu = event.currentTarget;
       if (!menu.open) return;
@@ -146,6 +156,8 @@ export function StudentsTab() {
   const [modal, setModal] = useState<ModalState>(null);
   // Keep the table while it reloads after an edit: clearing it flashed "暂无学生" and lost the scroll position.
   const { data, error, status, retry } = useAsync<{ students: StudentRow[] }>(() => api.classroom.students(), [refresh], { keepPreviousData: true });
+  // Progress changes during class: refresh when the teacher comes back to this tab (not while a dialog is open).
+  useRefetchOnVisible(() => setRefresh((value) => value + 1), modal == null);
   const { data: academic, error: academicError, retry: retryAcademic } = useAsync(() => api.classroom.semesters(), [refresh], { keepPreviousData: true });
 
   const run = async (operation: Promise<unknown>) => {
@@ -161,11 +173,12 @@ export function StudentsTab() {
   }
   const all = data?.students ?? [];
   const semesters = academic?.semesters ?? [];
-  const needle = query.trim().toLowerCase();
+  // Normalized like stored names (full-width letters/digits, zero-width characters), then case-folded.
+  const needle = normalizeLabel(query).toLowerCase();
   const students = all
     .filter((student) => matchesAcademicFilter(student.enrollments, semesterId, classId))
     .filter((student) => !needle || [student.display_name, student.username, student.student_no]
-      .some((value) => (value ?? "").toLowerCase().includes(needle)));
+      .some((value) => normalizeLabel(value ?? "").toLowerCase().includes(needle)));
 
   return (
     <div>
@@ -179,6 +192,7 @@ export function StudentsTab() {
           onClassChange={setClassId}
         />
         <div className="toolbar-actions">
+          <button type="button" onClick={() => setRefresh((value) => value + 1)}>刷新列表</button>
           <button className="primary" onClick={() => setModal({ type: "student" })}>+ 添加学生</button>
         </div>
       </Toolbar>

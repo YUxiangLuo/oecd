@@ -49,8 +49,8 @@ export function SemestersTab() {
                 <p>{semester.student_count} 名学生 · {semester.classes.length} 个班级</p>
               </div>
               <div className="semester-actions">
-                <button className="sm" onClick={() => setEditor({ kind: "rename-semester", semester })}>重命名</button>
-                <ArchiveAction active={semester.is_active}
+                <button className="sm" aria-label={`重命名学期：${semester.name}`} onClick={() => setEditor({ kind: "rename-semester", semester })}>重命名</button>
+                <ArchiveAction active={semester.is_active} target={`学期：${semester.name}`}
                   confirm={{
                     title: `归档学期“${semester.name}”？`,
                     message: "归档后不能在该学期添加班级、导入或分配学生；已有的分班归属和学生的实验记录都会保留，之后可以随时恢复。",
@@ -69,9 +69,9 @@ export function SemestersTab() {
                     {semester.is_active && group.is_active && <button className="sm"
                       aria-label={`导入学生：${semester.name} · ${group.name}`}
                       onClick={() => setBatchClassId(group.id)}>导入学生</button>}
-                    <button className="sm" onClick={() => setEditor({ kind: "rename-class", group })}>重命名</button>
+                    <button className="sm" aria-label={`重命名班级：${semester.name} · ${group.name}`} onClick={() => setEditor({ kind: "rename-class", group })}>重命名</button>
                     {/* Inside an archived semester a class can be neither used nor archived on its own. */}
-                    {semester.is_active && <ArchiveAction active={group.is_active}
+                    {semester.is_active && <ArchiveAction active={group.is_active} target={`班级：${semester.name} · ${group.name}`}
                       onChange={() => mutate(api.classroom.updateClass(group.id, { is_active: !group.is_active }))} />}
                   </div>
                 </div>
@@ -112,8 +112,10 @@ export function SemestersTab() {
   );
 }
 
-function ArchiveAction({ active, confirm, onChange }: {
+function ArchiveAction({ active, target, confirm, onChange }: {
   active: boolean;
+  /** What is archived, for the button's accessible name ("归档学期：2026 秋"). */
+  target: string;
   /** Ask before archiving (not before restoring). */
   confirm?: { title: string; message: string };
   onChange: () => Promise<void>;
@@ -137,7 +139,7 @@ function ArchiveAction({ active, confirm, onChange }: {
   return (
     <div className="semester-archive-action">
       {/* aria-disabled, not disabled: a disabled button drops keyboard focus to the page while saving. */}
-      <button className="sm" aria-disabled={saving || undefined}
+      <button className="sm" aria-disabled={saving || undefined} aria-label={`${action}${target}`}
         onClick={() => {
           if (saving) return;
           if (active && confirm) setConfirming(true);
@@ -167,6 +169,9 @@ export function NameModal({ title, label, initial, onClose, onSubmit }: {
     // Same normalization as the server, so what is checked here is what gets stored.
     const normalized = normalizeLabel(name);
     if (!normalized) return setError(`${label}不能为空`);
+    // Checked on the normalized text (as the server does); no maxLength on the input, which would count pasted
+    // zero-width characters and cut a long name silently.
+    if (normalized.length > 80) return setError(`${label}不能超过 80 个字符（当前 ${normalized.length} 个）`);
     setSaving(true);
     setError(null);
     try {
@@ -183,7 +188,7 @@ export function NameModal({ title, label, initial, onClose, onSubmit }: {
     <Modal title={title} onClose={() => { if (!saving) onClose(); }}>
       <form className="modal-form" noValidate onSubmit={(event) => { event.preventDefault(); void submit(); }}>
         <LabeledControl label={label}>{(id) => (
-          <input id={id} disabled={saving} value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
+          <input id={id} disabled={saving} value={name} onChange={(event) => setName(event.target.value)} />
         )}</LabeledControl>
         {error && <div ref={errorRef} className="error-box" role="alert" tabIndex={-1}>{error}</div>}
         <div className="modal-actions">
