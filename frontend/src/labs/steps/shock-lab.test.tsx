@@ -18,7 +18,7 @@ const countryRow = (country: string, mean: number, industries = 44) => ({
 });
 /** The whole-sample overview step 10 leads with (the real release has 44 taxed and 31 untaxed countries). */
 const countriesOverview: TeachingCountriesResponse = {
-  version: "step10-tariff-teaching-v6", year: 2020, market: "USA", tariff_rate: 0.25, policy_year: 2018,
+  version: "step10-tariff-teaching-v7", year: 2020, market: "USA", tariff_rate: 0.25, policy_year: 2018,
   taxed_countries: 3, untaxed_countries: 2, entities: 210,
   countries: [countryRow("CAN", 0.143), countryRow("CRI", 0.0782), countryRow("BRN", 0.0142), countryRow("AUT", 0), countryRow("MEX", 0, 43)],
 };

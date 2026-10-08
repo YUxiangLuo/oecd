@@ -21,14 +21,22 @@ import pandas as pd
 # the GVC total is simple + complex, weighted degree is in + out), so their estimates add up exactly; the GVC
 # position index sits near 1; a backward complex-GVC share with no preset relation (β = 0) shows an interval that
 # can include 0; and the imposing market (USA) is left out of the regression sample.
-VERSION = "step10-tariff-teaching-v6"
-# A contract upgrade must not silently redraw policy assignment or noise.
+# v7 (2026-10-09): the taxed countries are no longer drawn at random. They are the sample economies whose goods
+# trade surplus with the market (USA) was at least TAXED_SURPLUS_MIN in the first year, computed from the ICIO
+# bilateral flows (goods = ICIO sectors A, B and C), so "who is taxed" follows the logic of the 2018 tariffs and can
+# be checked against the data. The rate stays one flat 25% from the third year.
+VERSION = "step10-tariff-teaching-v7"
+# Seeds the noise draws only (policy assignment is a data rule since v7); changing it would redraw every Y.
 RANDOMIZATION_VERSION = "step10-tariff-teaching-v1"
 X_COLUMN = "teaching_tariff_exposure"
 OUTCOMES = ("trade", "production", "length", "network")
 SEED = 20260913
 MARKET = "USA"
 TARIFF_PATH = (0.0, 0.0, 0.25, 0.25, 0.25)
+# First-year goods trade surplus with the market, in ICIO units (million USD), from which a country is taxed.
+TAXED_SURPLUS_MIN = 1000.0
+SURPLUS_COLUMN = "teaching_market_goods_surplus"
+TAXED_RULE = {"basis": "first-year goods trade surplus with the market (ICIO sectors A-C)", "min_million_usd": TAXED_SURPLUS_MIN}
 DISCLAIMER = "课程关税实验数据集：X 与四个 Y 按课程数据契约生成，不是 OECD 发布结果。"
 # What students and readers see (step 10, the step 11–14 result card and the report); DISCLAIMER above is
 # the release contract value and stays unchanged. The frontend keeps the same sentence in regression-lessons.ts.
@@ -274,13 +282,38 @@ def _unit_number(value: str, salt: str, seed: int = SEED) -> float:
     return int.from_bytes(raw[:8], "big") / (2**64 - 1)
 
 
+# The Y with no preset relation (β = 0) is the course's example of an interval that includes 0. With the v7 taxed
+# countries its first draw happened to land at p ≈ 0.04 (a 1-in-20 outcome for β = 0); the course uses the next
+# draw instead (p ≈ 0.41), and the release build checks that the interval still includes 0 (WEAK_Y below).
+WEAK_Y = ("production", "3b_FGY_GVC_C_share")
+WEAK_Y_DRAW = "|draw2"
+
+
 def _noise_salt(outcome: str, item: Baseline) -> str:
     # The default Y keeps its v1–v3 draws; every alternative baseline gets its own independent draws.
+    if (outcome, item.key) == WEAK_Y:
+        return f"{outcome}:{item.key}{WEAK_Y_DRAW}"
     return outcome if item is default_baseline(outcome) else f"{outcome}:{item.key}"
 
 
 def _baseline_column(outcome: str, item: Baseline) -> str:
     return f"_baseline_{outcome}_{item.key}"
+
+
+def _is_goods_sector(sector: pd.Series) -> pd.Series:
+    """ICIO goods sectors: agriculture (A), mining (B) and manufacturing (C); tariffs fall on goods."""
+    return sector.astype(str).str[0].isin(["A", "B", "C"])
+
+
+def market_goods_surplus(exposure: pd.DataFrame, year: int) -> pd.Series:
+    """Each economy's goods trade surplus with the market in ``year``: goods exports to it minus goods imports from
+    it, both from the ICIO bilateral flows (``bilateral_exports`` of country→imposer), in million USD."""
+    if "bilateral_exports" not in exposure.columns:
+        raise ValueError("教学关税缺少双边出口额，无法按对美顺差确定被加税国家")
+    rows = exposure.loc[exposure.year.eq(year) & _is_goods_sector(exposure.sector)]
+    to_market = rows.loc[rows.imposer.eq(MARKET) & rows.country.ne(MARKET)].groupby("country").bilateral_exports.sum()
+    from_market = rows.loc[rows.country.eq(MARKET) & rows.imposer.ne(MARKET)].groupby("imposer").bilateral_exports.sum()
+    return to_market.sub(from_market, fill_value=0.0).astype(float)
 
 
 def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *, seed: int = SEED) -> pd.DataFrame:
@@ -373,7 +406,10 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
     )
     out = out.sort_values(["country", "industry", "year"]).reset_index(drop=True)
     entities = out.entity_id.astype(str)
-    exposed = out.country.astype(str).map(lambda value: _unit_number(value, "policy") < 0.60)
+    # Taxed = a first-year goods surplus with the market of at least TAXED_SURPLUS_MIN (a data rule, not a draw).
+    surplus = market_goods_surplus(exposure, years[0])
+    out[SURPLUS_COLUMN] = out.country.map(surplus).fillna(0.0).astype(float)
+    exposed = out[SURPLUS_COLUMN].ge(TAXED_SURPLUS_MIN)
     out["teaching_tariff_rate_tau"] = out.year.map(dict(zip(years, TARIFF_PATH, strict=True))) * exposed
     out[X_COLUMN] = out.teaching_export_share_w * out.teaching_tariff_rate_tau
     out["teaching_treated"] = out[X_COLUMN].gt(0).astype(int)
@@ -466,6 +502,7 @@ def model_snapshot(outcome: str, baseline_key: str | None = None) -> dict:
         "beta": item.beta,
         "tariff_path": list(TARIFF_PATH),
         "market": MARKET,
+        "taxed_rule": TAXED_RULE,
         "calibration": item.calibration,
         "disclaimer": DISCLAIMER,
     }
@@ -491,6 +528,9 @@ def country_exposure_overview(panel: pd.DataFrame) -> dict:
             "max_exposure": float(values.max()),
             "industries": int(values.size),
             "exposed_industries": int(values.gt(0).sum()),
+            "market_goods_surplus": (
+                float(rows.loc[rows.country.eq(country), SURPLUS_COLUMN].iloc[0]) if SURPLUS_COLUMN in rows else None
+            ),
         }
         for country, values in grouped
     ]
@@ -503,6 +543,7 @@ def country_exposure_overview(panel: pd.DataFrame) -> dict:
         "market": MARKET,
         "tariff_rate": float(max(TARIFF_PATH)),
         "policy_year": policy_years[0] if policy_years else None,
+        "taxed_rule": {**TAXED_RULE, "year": years[0]},
         "taxed_countries": sum(1 for item in countries if item["taxed"]),
         "untaxed_countries": sum(1 for item in countries if not item["taxed"]),
         "entities": int(rows[["country", "industry"]].drop_duplicates().shape[0]),

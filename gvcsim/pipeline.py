@@ -26,6 +26,7 @@ import shutil
 from contextlib import contextmanager
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from gvcsim import publication, shocks
@@ -51,6 +52,8 @@ from gvcsim.regression.teaching import (
     MARKET as TEACHING_MARKET,
     SEED as TEACHING_SEED,
     TARIFF_PATH as TEACHING_TARIFF_PATH,
+    TAXED_RULE as TEACHING_TAXED_RULE,
+    WEAK_Y as TEACHING_WEAK_Y,
     BASELINES as TEACHING_BASELINES,
     VERSION as TEACHING_VERSION,
     baseline_parameters as teaching_baseline_parameters,
@@ -174,6 +177,27 @@ def compute_year(year: int, verbose: bool = True) -> None:
     log(f"[{year}] 完成,产物已写入 {PROCESSED_DIR}")
 
 
+def _check_weak_teaching_y(teaching: pd.DataFrame) -> None:
+    """Step 12 teaches an interval that includes 0 with the no-relation Y; a release where it does not is refused."""
+    from gvcsim.regression.design import RegressionDesign
+    from gvcsim.regression.panel import run_design_with_benchmark
+
+    outcome, key = TEACHING_WEAK_Y
+    try:
+        result, _ = run_design_with_benchmark(teaching, RegressionDesign(outcome, teaching=True, baseline=key))
+    except (ValueError, np.linalg.LinAlgError):
+        # A design that cannot be estimated at all (e.g. a tiny synthetic release) is disclosed by the release's
+        # regression QC; this check only guards the teaching point on an estimable release.
+        return
+    info = result.to_dict()
+    if info.get("status") not in ("ok", "warning"):
+        return
+    coef = info["coefs"][0]
+    low, high = coef.get("ci_low"), coef.get("ci_high")
+    if low is None or high is None or not (low <= 0 <= high):
+        raise ValueError(f"教学弱效应 Y（{key}）的 95% 区间不含 0：[{low}, {high}]；请调整 WEAK_Y_DRAW 后重建")
+
+
 def build_panel(
     *,
     allow_stylized_shock_fallback: bool = False,
@@ -269,6 +293,7 @@ def build_panel(
         ignore_index=True,
     )
     teaching = build_teaching_panel(sector, exposure, seed=TEACHING_SEED)
+    _check_weak_teaching_y(teaching)
     # A release carries every same-family baseline; a missing one means the ICIO panel lost a column.
     missing_baselines = [
         f"{outcome}:{item.key}"
@@ -386,6 +411,7 @@ def finalize_release(staging: Path, selected_years: list[int], *, release_id: st
                     "parameters": {
                         "market": TEACHING_MARKET,
                         "tariff_path": list(TEACHING_TARIFF_PATH),
+                        "taxed_rule": TEACHING_TAXED_RULE,
                         "betas": TEACHING_BETAS,
                         "calibration": TEACHING_CALIBRATION,
                         "baselines": teaching_baseline_parameters(),

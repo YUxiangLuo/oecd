@@ -196,6 +196,7 @@ def _release_metadata(
             "parameters": {
                 "market": teaching.MARKET,
                 "tariff_path": list(teaching.TARIFF_PATH),
+                "taxed_rule": teaching.TAXED_RULE,
                 "betas": teaching.BETAS,
                 "calibration": teaching.CALIBRATION,
                 "baselines": teaching.baseline_parameters(),

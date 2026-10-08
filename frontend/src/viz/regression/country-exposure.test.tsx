@@ -9,7 +9,7 @@ const row = (country: string, mean: number, taxed = mean > 0, exposed = taxed ? 
 });
 
 const countriesFixture: TeachingCountriesResponse = {
-  version: "step10-tariff-teaching-v6", year: 2020, market: "USA", tariff_rate: 0.25, policy_year: 2018,
+  version: "step10-tariff-teaching-v7", year: 2020, market: "USA", tariff_rate: 0.25, policy_year: 2018,
   taxed_countries: 5, untaxed_countries: 3, entities: 350,
   countries: [
     row("CAN", 0.143), row("CRI", 0.0782, true, 42, 43), row("COL", 0.0727), row("PER", 0.057), row("LUX", 0.0051, true, 40, 40),

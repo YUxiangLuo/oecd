@@ -34,7 +34,22 @@ def _exposure(source):
     frame["imposer"] = "USA"
     frame["export_exposure"] = frame.sector.map({"s1": 0.4, "s2": 0.1, "s3": 0.8})
     frame.loc[frame.year.gt(2016), "export_exposure"] = 0.02
-    return frame
+    frame["bilateral_exports"] = 0.0
+    return pd.concat([frame, _goods_flows(sorted(source.country.unique()))], ignore_index=True)
+
+
+def _goods_flows(countries, surplus=lambda index: 1500.0 if index % 2 == 0 else -500.0):
+    """Goods flows with the USA (sector C10T12, not in the source panel): every other country has a surplus of
+    1,500 (taxed under the ≥ 1,000 rule), the rest a deficit (untaxed)."""
+    rows = []
+    for index, country in enumerate(countries):
+        balance = surplus(index)
+        to_us, from_us = 2000.0, 2000.0 - balance
+        rows.append({"country": country, "sector": "C10T12", "imposer": "USA", "year": 2016,
+                     "export_exposure": 0.5, "bilateral_exports": to_us})
+        rows.append({"country": "USA", "sector": "C10T12", "imposer": country, "year": 2016,
+                     "export_exposure": 0.1, "bilateral_exports": from_us})
+    return pd.DataFrame(rows)
 
 
 def test_teaching_panel_is_separate_reproducible_and_has_transparent_tariff_path():
@@ -100,7 +115,7 @@ def test_v2_preserves_randomization_and_halves_noise_without_changing_effects():
         atol=1e-9,
     )
     snapshot = model_snapshot("trade")
-    assert snapshot["version"] == "step10-tariff-teaching-v6"
+    assert snapshot["version"] == "step10-tariff-teaching-v7"
     assert snapshot["randomization_version"] == "step10-tariff-teaching-v1"
     assert snapshot["tariff_path"] == [0, 0, 0.25, 0.25, 0.25]
     assert teaching.SEED == 20260913
@@ -380,7 +395,7 @@ def test_alternative_baselines_add_their_own_y_without_changing_the_family_defau
     snapshot = model_snapshot("trade", "DVAex_share")
     assert snapshot["baseline"] == "DVAex_share"
     assert snapshot["beta"] == 0.55 and snapshot["y_column"] == "teaching_y_trade_DVAex_share"
-    assert snapshot["baseline_kind"] == "share" and snapshot["version"] == "step10-tariff-teaching-v6"
+    assert snapshot["baseline_kind"] == "share" and snapshot["version"] == "step10-tariff-teaching-v7"
     assert model_snapshot("trade")["baseline"] == "FVA_share"
     with pytest.raises(ValueError):
         model_snapshot("trade", "PLy_GVC")  # a length baseline is not in the trade family
@@ -505,3 +520,28 @@ def test_estimate_overview_matches_a_single_run_for_every_baseline():
             coef = result.to_dict()["coefs"][0]
             assert item["coef"] == pytest.approx(coef["coef"])
             assert item["ci_low"] == pytest.approx(coef["ci_low"]) and item["ci_high"] == pytest.approx(coef["ci_high"])
+
+
+def test_taxed_countries_are_those_with_a_first_year_goods_surplus_with_the_market():
+    from gvcsim.regression.teaching import SURPLUS_COLUMN, TAXED_SURPLUS_MIN, market_goods_surplus
+
+    countries = ("AAA", "BBB", "CCC", "DDD")
+    source = _source(countries)
+    exposure = _exposure(source)
+    # Services flows (sector not A–C) and later years do not count towards the goods surplus.
+    exposure = pd.concat([exposure, pd.DataFrame([
+        {"country": "BBB", "sector": "G", "imposer": "USA", "year": 2016, "export_exposure": 0.1, "bilateral_exports": 9e9},
+        {"country": "BBB", "sector": "C10T12", "imposer": "USA", "year": 2017, "export_exposure": 0.1, "bilateral_exports": 9e9},
+    ])], ignore_index=True)
+    surplus = market_goods_surplus(exposure, 2016)
+    assert surplus.to_dict() == {"AAA": 1500.0, "BBB": -500.0, "CCC": 1500.0, "DDD": -500.0}
+    panel = build_teaching_panel(source, exposure)
+    taxed = panel.groupby("country").teaching_tariff_rate_tau.max().gt(0)
+    assert taxed.to_dict() == {country: surplus[country] >= TAXED_SURPLUS_MIN for country in countries}
+    assert panel.groupby("country")[SURPLUS_COLUMN].first().to_dict() == surplus.to_dict()
+
+
+def test_teaching_panel_refuses_exposure_without_bilateral_flows():
+    source = _source()
+    with pytest.raises(ValueError, match="双边出口额"):
+        build_teaching_panel(source, _exposure(source).drop(columns="bilateral_exports"))

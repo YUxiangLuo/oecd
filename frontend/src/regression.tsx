@@ -43,7 +43,7 @@ import { DivergingBarChart, type DivergingBarRow } from "./viz/regression/diverg
 import { NEGATIVE, POSITIVE, UNCERTAIN } from "./viz/regression/palette";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
-export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v6";
+export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v7";
 
 /** Reveal a freshly calculated verdict inside the course's scroll container (see content-scroll.ts). */
 export const scrollRegressionVerdict = scrollIntoCourseContent;

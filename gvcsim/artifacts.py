@@ -617,6 +617,7 @@ def validate_release(processed_dir: Path | None = None, *, verify_integrity: boo
     expected_parameters = {
         "market": teaching.MARKET,
         "tariff_path": list(teaching.TARIFF_PATH),
+        "taxed_rule": teaching.TAXED_RULE,
         "betas": teaching.BETAS,
         "calibration": {name: list(values) for name, values in teaching.CALIBRATION.items()},
         "baselines": teaching.baseline_parameters(),
