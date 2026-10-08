@@ -13,10 +13,13 @@ import {
   betweennessExamplePair,
   betweennessExampleSentence,
   decompositionModelReason,
+  displayedSumNote,
+  fmt,
   formulaAmount,
   networkDemoKeyTransition,
   networkDemoNodeAccessibleName,
   nextNetworkDemoNode,
+  ratioOperands,
   sumText,
   teachingBetweennessPairs,
   teachingNetworkCentralitySnapshot,
@@ -71,7 +74,7 @@ describe("indicator calculation disclosure", () => {
       <IndicatorCalculationDisclosure step={4} row={{ FVA: 20, gross_exports: 80 }} />,
     );
     expect(html).toContain("外国增加值项占比 = FVA / 总出口");
-    expect(html).toContain("= 20 / 80 = <b>25.000%</b>");
+    expect(html).toContain("= 20.00 / 80.00 = <b>25.000%</b>");
     expect(html).toContain("FVA 不包括外国重复计算 FDC");
   });
 
@@ -87,7 +90,7 @@ describe("indicator calculation disclosure", () => {
       <IndicatorCalculationDisclosure step={5} row={{ "3b_VA_GVC_C": 15, "3_VA_GVC": 40, SVA: 60 }} />,
     );
     expect(html).toContain("复杂 GVC 生产份额 = 3b_VA_GVC_C / 总增加值 SVA");
-    expect(html).toContain("= 15 / 60 = <b>25.000%</b>");
+    expect(html).toContain("= 15.00 / 60.00 = <b>25.000%</b>");
     expect(html).not.toContain("40 / 60");
   });
 
@@ -98,7 +101,8 @@ describe("indicator calculation disclosure", () => {
         row={{ FVA: 1.180410305310168e-5, gross_exports: 9.999997853224356e-5 }}
       />,
     );
-    expect(step2).toContain("= 0.0000118 / 0.0001 = <b>11.804%</b>");
+    // Three significant digits (0.0000118) would give 11.8%; the operand takes the digits the percentage needs.
+    expect(step2).toContain("= 0.000011804 / 0.0001 = <b>11.804%</b>");
     expect(step2).not.toContain("= 0 / 0");
 
     const step3 = renderToStaticMarkup(
@@ -107,7 +111,7 @@ describe("indicator calculation disclosure", () => {
         row={{ "3b_VA_GVC_C": 0.0002487161528365, SVA: 0.0117999999999999 }}
       />,
     );
-    expect(step3).toContain("= 0.000249 / 0.0118 = <b>2.108%</b>");
+    expect(step3).toContain("= 0.0002487 / 0.0118 = <b>2.108%</b>");
     expect(step3).not.toContain("= 0 / 0.01");
   });
 
@@ -588,8 +592,10 @@ test("a merged two-part sum adds up as shown when a part is below 10, at the tab
   // Was "9": two parts read "5" and "3" in the table could not add up to it.
   expect(sumText(5.4, 3.3)).toBe("5.400 + 3.300 = 8.700");
   // Round 10: the EXDVA line mixed "0.9979" with the table's "0.998".
-  expect(sumText(5298.2, 0.9979)).toBe("5,298 + 0.998 = 5,299");
-  expect(sumText(120, 30)).toBe("150");
+  expect(sumText(5298.2, 0.9979)).toBe("5,298.2 + 0.998 = 5,299.2");
+  // Round 12: below 10,000 the parts are read with decimals, so they are written out too.
+  expect(sumText(120.4, 30.25)).toBe("120.40 + 30.25 = 150.65");
+  expect(sumText(120_000.4, 30_000.25)).toBe("150,001");
 });
 
 describe("small amounts read with the precision of the table rows (round 10)", () => {
@@ -599,15 +605,17 @@ describe("small amounts read with the precision of the table rows (round 10)", (
     expect(formulaAmount(0.0603)).toBe("0.0603");
     expect(formulaAmount(0.06)).toBe("0.060");
     expect(formulaAmount(-1.2679)).toBe("-1.268");
-    expect(formulaAmount(24.4)).toBe("24");
-    expect(formulaAmount(6424.4)).toBe("6,424");
+    expect(formulaAmount(24.4)).toBe("24.40");
+    expect(formulaAmount(6424.4)).toBe("6,424.4");
+    expect(formulaAmount(16424.4)).toBe("16,424");
   });
 
   test("BRN C10T12: the FVA share formula substitutes the total the share was computed from", () => {
     const html = renderToStaticMarkup(
       <IndicatorCalculationDisclosure step={4} row={{ FVA: 0.5598, gross_exports: 1.3783 }} />,
     );
-    expect(html).toContain("= 0.560 / 1.378 = <b>40.615%</b>");
+    // Round 12: "0.560 / 1.378" gives 40.639%, not the 40.615% shown; the operands take one more digit.
+    expect(html).toContain("= 0.5598 / 1.3783 = <b>40.615%</b>");
     expect(html).not.toContain("/ 1 =");
   });
 
@@ -634,7 +642,7 @@ describe("small amounts read with the precision of the table rows (round 10)", (
     );
     expect(html).toContain('<td class="dt-val">1.274</td>');
     expect(html).toContain('<td class="dt-val">0.563</td>');
-    expect(html).toContain('<td class="dt-val">1,235</td>');
+    expect(html).toContain('<td class="dt-val">1,234.5</td>');
   });
 
   test("a negative industry total is explained as negative, not as too small", async () => {
@@ -679,11 +687,50 @@ describe("small amounts read with the precision of the table rows (round 10)", (
       await waitFor(() => expect(view.container.textContent).toContain("总出口 = 1.378"));
       const text = view.container.textContent ?? "";
       expect(text).toContain("6 项相加 = 1.378");
-      expect(text).toContain("= 0.560 / 1.378 = 40.615%");
+      expect(text).toContain("= 0.5598 / 1.3783 = 40.615%");
       expect(text).not.toContain("总出口 = 1（");
     } finally {
       countryRequest.mockRestore();
       industryRequest.mockRestore();
     }
+  });
+});
+
+describe("steps 2–3: the shown numbers check by hand (round 12)", () => {
+  /** Parse "1,234.5" back into the number it shows. */
+  const shown = (text: string) => Number(text.replace(/,/g, ""));
+  const checks = (numerator: number, denominator: number) => {
+    const { numerator: n, denominator: d, percent } = ratioOperands(numerator, denominator);
+    expect(`${((shown(n) / shown(d)) * 100).toFixed(3)}%`).toBe(percent);
+    expect(percent).toBe(`${((numerator / denominator) * 100).toFixed(3)}%`);
+    return `${n} / ${d} = ${percent}`;
+  };
+
+  test("amounts below 1,000 keep two decimals, below 10,000 one, so 15 / 100 no longer reads 15.415%", () => {
+    expect(fmt(15.3999, "amount")).toBe("15.40");
+    expect(fmt(99.906, "amount")).toBe("99.91");
+    expect(fmt(379.2699, "amount")).toBe("379.27");
+    expect(fmt(3829.7215, "amount")).toBe("3,829.7");
+    expect(fmt(426596.9, "amount")).toBe("426,597");
+  });
+
+  test("real rows: the formula operands divide to the percentage shown", () => {
+    // BRN B05_06 2020 (step 2): was "379 / 3,830 = 9.903%".
+    expect(checks(379.26986681734746, 3829.7215)).toBe("379.27 / 3,829.7 = 9.903%");
+    // LUX O 2020 (step 3): was "37 / 4,279 = 0.868%".
+    expect(checks(37.1546, 4279.3718)).toMatch(/^37\.15\d* \/ 4,279\.\d+ = 0\.868%$/);
+    // CAN 2016 (step 2): whole millions are not enough for three decimals of a percentage.
+    expect(checks(82395.44226559399, 426596.90991223184)).toBe("82,395.4 / 426,596.9 = 19.315%");
+    expect(checks(0.5598, 1.3783)).toBe("0.5598 / 1.3783 = 40.615%");
+  });
+
+  test("the sum line says what the shown rows add to when rounding makes them differ", () => {
+    // DEU 2016 (step 2): six rounded rows add to 1,260,796.6 against a total of 1,260,798.
+    const values = [924670.2, 21896.4, 9744.6, 201727.4, 62187.4, 40572.4];
+    const sum = values.reduce((a, b) => a + b, 0);
+    expect(fmt(sum, "amount")).toBe("1,260,798");
+    expect(displayedSumNote(values, sum)).toBe("（上表各项按显示值相加为 1,260,796.6，差别来自四舍五入）");
+    // Rows at two decimals beside a total of the same size add up within its last digit: no note.
+    expect(displayedSumNote([60.123, 15.3999, 23.247, 1.136], 99.9059)).toBeNull();
   });
 });

@@ -118,36 +118,76 @@ export function negativeFill(color: string): string {
   return `repeating-linear-gradient(135deg, ${color} 0 5px, #e34948 5px 8px)`;
 }
 
-/** Amounts of 10 and up read whole, as in the step 5 table and the report material line. Below 10 an amount keeps
- * three decimals, so a small total and its parts add up as shown ("0.560 / 1.378", never "0.56 / 1"); a real
- * but tiny flow reads "<0.001" rather than "0". Lengths are read to three decimals; an exact zero is "0". */
-const WHOLE_AMOUNT_FROM = 10;
+/** Decimals an amount is read to in steps 2–3 (table rows, the total, the sum line and formulas), so the shown
+ * parts add up to the shown total within its last digit: three below 10, two below 1,000 ("15.40", not "15" next to
+ * a total of "99.90"), one below 10,000 ("3,829.7") and whole millions from 10,000 up. A real but tiny flow reads
+ * "<0.001" rather than "0". Lengths are read to three decimals; an exact zero is "0". */
+export function amountDecimals(value: number): number {
+  const magnitude = Math.abs(value);
+  return magnitude < 10 ? 3 : magnitude < 1_000 ? 2 : magnitude < 10_000 ? 1 : 0;
+}
+
+function amountText(value: number, decimals: number): string {
+  return stripNegativeZero(value.toLocaleString("zh-CN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }));
+}
 
 export function fmt(v: number, unit: "amount" | "number"): string {
   if (v === 0) return "0";
   if (unit === "number") return stripNegativeZero(v.toFixed(3));
-  if (Math.abs(v) >= WHOLE_AMOUNT_FROM || Math.abs(v) < 0.0005) return formatMetric(v, "amount");
-  return stripNegativeZero(v.toFixed(3));
+  if (Math.abs(v) < 0.0005) return formatMetric(v, "amount");
+  return amountText(v, amountDecimals(v));
+}
+
+/** The number a displayed amount stands for ("3,829.7" → 3829.7); "<0.001" keeps the value itself. */
+function shownAmount(text: string, value: number): number {
+  const shown = Number(text.replace(/,/g, ""));
+  return Number.isFinite(shown) ? shown : value;
 }
 
 /** An amount written into a formula line: the table's reading ({@link fmt}), except that a value below 0.1 keeps
- * three significant digits ("0.0118", "0.000249") so the substituted arithmetic still checks by hand. */
-export function formulaAmount(value: number): string {
+ * three significant digits ("0.0118", "0.000249") so the substituted arithmetic still checks by hand. `extra`
+ * decimals are added where a ratio needs them to reproduce its percentage ({@link ratioOperands}). */
+export function formulaAmount(value: number, extra = 0): string {
   if (value === 0) return "0";
   const magnitude = Math.abs(value);
-  if (magnitude >= 0.1) return fmt(value, "amount");
-  const decimals = Math.min(20, Math.max(3, 2 - Math.floor(Math.log10(magnitude))));
+  if (magnitude >= 0.1) return extra ? amountText(value, amountDecimals(value) + extra) : fmt(value, "amount");
+  const decimals = Math.min(20, Math.max(3, 2 - Math.floor(Math.log10(magnitude))) + extra);
   // Trailing zeros beyond the third decimal add nothing ("0.0001000" → "0.0001"; "0.060" stays).
   return stripNegativeZero(value.toFixed(decimals).replace(/(\.\d{3}\d*?)0+$/, "$1"));
 }
 
-/** A two-part sum. When a part is below 10 (read to three decimals in the table) the parts are written out, so
- * the line adds up as shown: "= 2.477 + 0.867 = 3.344", never "= 9" for 5.4 + 3.3 nor "0.000" for two tiny
- * non-zero parts. Otherwise the sum reads like the table. */
+/** A share's substituted formula: the shown numerator divided by the shown denominator gives the shown percentage
+ * to its three decimals ("379.27 / 3,829.7 = 9.903%"). The operands start at the table's precision and take one
+ * more decimal at a time only where that is not yet enough (a three-decimal percentage needs about six digits). */
+export function ratioOperands(numerator: number, denominator: number): { numerator: string; denominator: string; percent: string } {
+  const percent = percentText((numerator / denominator) * 100);
+  let operands = { numerator: formulaAmount(numerator), denominator: formulaAmount(denominator) };
+  for (let extra = 0; extra <= 6; extra += 1) {
+    operands = { numerator: formulaAmount(numerator, extra), denominator: formulaAmount(denominator, extra) };
+    const shown = (shownAmount(operands.numerator, numerator) / shownAmount(operands.denominator, denominator)) * 100;
+    if (percentText(shown) === percent) break;
+  }
+  return { ...operands, percent };
+}
+
+/** A two-part sum. Unless both parts read as whole millions, the parts are written out at the table's precision,
+ * so the line adds up as shown: "= 2.477 + 0.867 = 3.344", "5,298.2 + 0.998 = 5,299.2", never "= 9" for
+ * 5.4 + 3.3 nor "0.000" for two tiny non-zero parts. */
 export function sumText(a: number, b: number): string {
-  const small = (v: number) => v !== 0 && Math.abs(v) < WHOLE_AMOUNT_FROM;
-  if (!small(a) && !small(b)) return fmt(a + b, "amount");
+  const whole = (v: number) => v === 0 || amountDecimals(v) === 0;
+  if (whole(a) && whole(b)) return fmt(a + b, "amount");
   return `${formulaAmount(a)} + ${formulaAmount(b)} = ${formulaAmount(a + b)}`;
+}
+
+/** When the rows as displayed do not add up to the displayed sum within its last digit (each row is rounded on its
+ * own), the sum line says what they add up to, so "✓ N 项相加" never contradicts the table above it. */
+export function displayedSumNote(values: readonly number[], sum: number): string | null {
+  const shown = values.map((value) => shownAmount(fmt(value, "amount"), value));
+  const total = shown.reduce((acc, value) => acc + value, 0);
+  const shownSum = shownAmount(fmt(sum, "amount"), sum);
+  if (Math.abs(total - shownSum) <= 10 ** -amountDecimals(sum) * (1 + 1e-9)) return null;
+  const decimals = Math.max(...values.map((value) => (value === 0 ? 0 : amountDecimals(value))));
+  return `（上表各项按显示值相加为 ${amountText(total, decimals)}，差别来自四舍五入）`;
 }
 
 /** A share already in percent, to three decimals as everywhere else ("11.730%"); an exact zero is "0%". */
@@ -186,6 +226,7 @@ export function IndicatorCalculationDisclosure({ step, row }: { step: number; ro
     const numerator = finiteNumber(row[numeratorKey]);
     const denominator = finiteNumber(row[denominatorKey]);
     const ratio = disclosureRatio(numerator, denominator);
+    const operands = ratio != null ? ratioOperands(numerator!, denominator!) : null;
     const title = step === 4 ? "外国增加值项占比" : "复杂 GVC 生产份额";
     const denominatorLabel = step === 4 ? "总出口" : "总增加值 SVA";
     return (
@@ -194,7 +235,7 @@ export function IndicatorCalculationDisclosure({ step, row }: { step: number; ro
         <div className="icd-title">{title}</div>
         <div className="icd-formula">{title} = {numeratorKey} / {denominatorLabel}</div>
         <div className="icd-calc">
-          = {disclosureAmount(numerator)} / {disclosureAmount(denominator)} = <b>{ratio == null ? disclosureRatioGap(numerator, denominator) : percentText(ratio * 100)}</b>
+          = {operands?.numerator ?? disclosureAmount(numerator)} / {operands?.denominator ?? disclosureAmount(denominator)} = <b>{operands?.percent ?? disclosureRatioGap(numerator, denominator)}</b>
         </div>
         <p>{step === 4
           ? "FVA 不包括外国重复计算 FDC。分母是下面六项相加得到的总出口，所以这个比例和 OECD TiVA 公布的“出口中外国增加值占比”不完全相同。"
@@ -669,6 +710,7 @@ export function DecompositionDemo({
         {model.closure != null ? (
           <div className={`decomp-identity ${model.closure ? "ok" : "bad"}`}>
             {model.closure ? "✓" : "✗"} {cfg.parts.length} 项相加 = {fmt(model.sum, cfg.unit)}，{model.closure ? "等于" : "不等于"}{cfg.totalLabel}{model.error < 1e-6 ? "" : `（差 ${model.error.toPrecision(2)}）`}
+            {cfg.unit === "amount" && displayedSumNote(model.values, model.sum)}
           </div>
         ) : negligible && zeroTotalHint ? null : (
           // A zero total is explained once, by the specific hint below.
