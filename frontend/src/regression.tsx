@@ -4,35 +4,43 @@ import { scrollIntoCourseContent } from "./content-scroll";
 import { api, ApiError } from "./api";
 import { percentagePoints } from "./format";
 import { useAsync } from "./labs";
-import { ReadingCards } from "./labs/steps/viz/reading-cards";
-import { baselineKeyOf, displayBaselineLabel, GENERATED_DATA_NOTE, lessonFor, lessonQuestion, VIZ_STEPS } from "./regression-lessons";
+import { DEFAULT_BASELINES, displayBaselineLabel, GENERATED_DATA_NOTE, lessonFor, lessonQuestion } from "./regression-lessons";
 import { nextRegressionSave } from "./regression-save";
 import { formatPValue } from "./regression-statistics";
 import {
+  BAR_UNIT_TITLES,
+  barFigures,
+  barUnitFor,
   buildRegressionVerdict,
   differenceWords,
-  INTERVAL_FIRST_MENTION,
   teachingEffect,
   chartDisplayScale,
   countUnit,
   depvarKind,
   globalInferenceIsSuppressed,
+  signed,
+  type BarEstimate,
 } from "./regression-verdict";
-import { splitPolicyCoefficients } from "./regteach";
 import type {
+  DepvarKind,
   Meta,
   QuizCompletionState,
   RegressionDesignInfo,
   RegressionOutcome,
   RegressionResponse,
+  RegressionStatus,
   Step,
   StepStateApi,
+  TeachingEstimate,
   TeachingGroupsResponse,
+  TeachingOverviewResponse,
   TeachingPanelResponse,
 } from "./types";
 import { TARIFF_IMPOSER, teachingExample, type TeachingExampleSelection } from "./teaching-example";
 import { userFacingRequestError } from "./user-facing-error";
-import { BinScatterChart, CoefForestChart, countryLabel, GroupChangeChart, sectorLabel } from "./viz";
+import { countryLabel, GroupChangeChart, sectorLabel } from "./viz";
+import { DivergingBarChart, type DivergingBarRow } from "./viz/regression/diverging-bars";
+import { NEGATIVE, POSITIVE, UNCERTAIN } from "./viz/regression/palette";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
 export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v6";
@@ -130,7 +138,12 @@ export function exampleEffect(outcome: RegressionOutcome, coef: number, x: numbe
   return sized(size, networkDigits(size), "个中心性原始单位");
 }
 
-/** The result is a coefficient plot plus short sentences: what changed, for the student's example, how sure, what not to claim. */
+const BADGE_COLORS = { negative: NEGATIVE, positive: POSITIVE, insufficient: UNCERTAIN, suppressed: UNCERTAIN } as const;
+
+/**
+ * The selected Y's reading, under the bar chart: one headline, a 方向明确／方向不确定 badge with the interval in
+ * words, then three one-liners (the step 10 example, what not to claim, the generated-data note).
+ */
 export function RegressionResultCard({ outcome, response, examples = [], exampleSaved = true, exampleYear }: {
   outcome: RegressionOutcome;
   response: RegressionResponse;
@@ -143,7 +156,6 @@ export function RegressionResultCard({ outcome, response, examples = [], example
   const verdict = buildRegressionVerdict(outcome, response);
   const lesson = lessonFor(outcome, response.design.baseline, response.design.baseline_label);
   const suppressed = verdict.state === "suppressed";
-  const display = chartDisplayScale(outcome, response.design);
   const kind = depvarKind(outcome, response.design);
   const words = differenceWords(kind);
   const directional = verdict.state === "negative" || verdict.state === "positive";
@@ -157,46 +169,24 @@ export function RegressionResultCard({ outcome, response, examples = [], example
     : `平均相差 ${verdict.effect}，但高低方向不确定`;
   // "外国增加值项占比平均低", but "GVC 位置指数 平均…" keeps a space after a Latin name.
   const metricGap = /[A-Za-z]$/.test(lesson.shortMetric) ? " " : "";
+  const badgeColor = BADGE_COLORS[verdict.state];
   return (
     <section className={`verdict-card verdict-${verdict.state}`} aria-labelledby="reg-result-title">
-      <div className="verdict-kicker">回归结果</div>
-      {/* The headline answers the step's question with the number; the direction reading follows as a sub-line. */}
       <h3 id="reg-result-title" tabIndex={-1} className="reg-plain-verdict">
         {verdict.coefficient
-          ? <>
-            <span className="reg-headline-main">关税暴露 X 每高 1 个百分点的国家×行业，{lesson.shortMetric}{metricGap}<b>{plainResult}</b></span>
-            <span className="reg-headline-interval">{suppressed ? "这次不显示 95% 区间" : `${INTERVAL_FIRST_MENTION}：${verdict.intervalShort}`}</span>
-          </>
+          ? <span className="reg-headline-main">关税暴露 X 每高 1 个百分点的国家×行业，{lesson.shortMetric}{metricGap}<b>{plainResult}</b></span>
           : "没算出 X 的估计值"}
       </h3>
-      {verdict.coefficient && <p className="reg-verdict-direction">{verdict.title}</p>}
-      <p className="muted reg-data-note" role="note">{GENERATED_DATA_NOTE}</p>
-      {verdict.coefficient && response.result.binscatter && response.result.binscatter.bins.length >= 2 && (
-        <BinScatterChart
-          bins={response.result.binscatter.bins}
-          slope={response.result.binscatter.slope * display.scale}
-          slopeUnit={countUnit(kind)}
-          slopeWords={directional ? words : undefined}
-          xLabel="X 扣掉平均水平后的高低（个百分点）"
-          yLabel={`${lesson.shortMetric}（${display.unit}）`}
-          xScale={100}
-          yScale={display.scale * 100}
-          title="回归在量什么：X 高低不同的国家×行业，Y 平均相差多少"
-        />
-      )}
       {verdict.coefficient && (
-        <CoefForestChart
-          coefs={splitPolicyCoefficients(response).policy}
-          globalStatus={response.result.status}
-          globalSupport={response.result.support}
-          scale={display.scale}
-          unit={display.unit}
-          labels={{ teaching_tariff_exposure: lesson.shortMetric }}
-          title="X 每高 1 个百分点，Y 平均相差多少"
-        />
+        <p className="reg-verdict-direction">
+          <span className="reg-direction-badge" style={{
+            display: "inline-block", marginRight: 8, padding: "1px 9px", borderRadius: 999, fontSize: 12, fontWeight: 700,
+            color: "#2a2f3a", background: `${badgeColor}26`, border: `1px solid ${badgeColor}`,
+          }}>{directional ? "方向明确" : "方向不确定"}</span>
+          <span className="reg-interval-words">{verdict.evidence}</span>
+        </p>
       )}
       <ul className="reg-result-points">
-        <li>{verdict.evidence}</li>
         {!suppressed && verdict.coefficient && examples.length > 0 && (() => {
           // Only an example with X > 0 has a conversion, and only that conversion carries the interval's open
           // direction. When no example has one, "X = 0, nothing to convert" is said once, after the list.
@@ -230,11 +220,12 @@ export function RegressionResultCard({ outcome, response, examples = [], example
               ? "换一个向美国出口的加税国家或行业（如加拿大的汽车行业）"
               : examples.length === 1 ? "换成加税的国家（如加拿大），或再选一个加税的对比国家" : "选一个加税的国家（如加拿大）"}。`}</li>;
         })()}
+        <li className="reg-caveat"><b>解释限制</b> {lesson.dontClaim}</li>
+        <li className="muted reg-data-note">{GENERATED_DATA_NOTE}</li>
       </ul>
       {verdict.warnings.length > 0 && (!suppressed || !verdict.coefficient) && (
         <ul aria-label="本次计算的限制">{verdict.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
       )}
-      <p className="reg-caveat" role="note"><b>解释限制</b>{lesson.dontClaim}</p>
     </section>
   );
 }
@@ -345,14 +336,6 @@ export function regressionRunSnapshotIdentity(saved: SavedRegressionRun): string
   });
 }
 
-
-export function RegressionRequestLoading({ designLoading }: {
-  designLoading: boolean;
-}) {
-  if (!designLoading) return null;
-  return <div className="reg-request-state muted" role="status" aria-live="polite" aria-busy="true">正在准备公式…</div>;
-}
-
 export function RegressionRequestError({ label, error, onRetry }: {
   label: string;
   error: string;
@@ -366,9 +349,72 @@ export function RegressionRequestError({ label, error, onRetry }: {
   );
 }
 
+const KINDS: readonly DepvarKind[] = ["share", "length", "position", "network"];
+const kindOf = (kind: string, outcome: RegressionOutcome): DepvarKind =>
+  (KINDS as readonly string[]).includes(kind) ? kind as DepvarKind : depvarKind(outcome);
+
+/** An overview row as a bar estimate: suppressed by the same rule as a run (status and support agree by construction). */
+function overviewEstimate(item: TeachingEstimate): BarEstimate {
+  return {
+    coef: item.coef, ci_low: item.ci_low, ci_high: item.ci_high, depvar_std: item.depvar_std,
+    suppressed: globalInferenceIsSuppressed(item.status, { status: item.status as RegressionStatus, suppress_inference: item.suppress_inference }),
+  };
+}
+
+/** A run's estimate of its X as a bar estimate (the saved or just computed run of the selected Y). */
+export function runEstimate(response: Pick<RegressionResponse, "design" | "result" | "model_snapshot">): BarEstimate {
+  const expected = response.model_snapshot?.x_columns ?? [response.design.shock_col];
+  const coefficient = response.result.coefs.find((item) => expected.includes(item.name)) ?? null;
+  return {
+    coef: coefficient?.coef ?? null, ci_low: coefficient?.ci_low ?? null, ci_high: coefficient?.ci_high ?? null,
+    depvar_std: response.result.depvar_std ?? null,
+    suppressed: globalInferenceIsSuppressed(response.result.status, response.result.support),
+  };
+}
+
 /**
- * One regression step (11–14). Each step is self-contained: it reads only its own saved run,
- * never another step's state, and shows one chart with a short reading after the run.
+ * One bar per Y of the step's family, in the overview's order (the default first). Shares are drawn in 个百分点;
+ * a family whose Ys differ in kind, or are not shares, in 个标准差 with the native value at the bar's end and
+ * the native unit under the name. The selected Y's bar uses the run itself, so it repeats the headline's numbers.
+ */
+export function familyBarRows(
+  outcome: RegressionOutcome,
+  items: TeachingEstimate[],
+  selectedKey: string | null,
+  selected?: Pick<RegressionResponse, "design" | "result" | "model_snapshot"> | null,
+): { rows: DivergingBarRow[]; unitTitle: string } {
+  const unit = barUnitFor(items.map((item) => kindOf(item.kind, outcome)));
+  const rows = items.map((item): DivergingBarRow => {
+    const kind = kindOf(item.kind, outcome);
+    const isSelected = item.key === selectedKey;
+    const figures = barFigures(isSelected && selected ? runEstimate(selected) : overviewEstimate(item), kind, unit);
+    const suppressed = isSelected && selected ? runEstimate(selected).suppressed : overviewEstimate(item).suppressed;
+    return {
+      key: item.key,
+      label: displayBaselineLabel(item.label),
+      sublabel: unit === "sd" ? countUnit(kind).replace(/^个/, "") : undefined,
+      ...figures,
+      selected: isSelected,
+      note: suppressed ? "这次的数据不够判断方向，不显示 95% 区间" : undefined,
+    };
+  });
+  return { rows, unitTitle: BAR_UNIT_TITLES[unit] };
+}
+
+/** Step 12's four forward shares add up to 100% of value added, so their four estimates add up to about 0. */
+const FORWARD_SHARES = ["1_VA_D_share", "2_VA_RT_share", "3a_VA_GVC_S_share", "3b_VA_GVC_C_share"];
+
+export function forwardShareIdentity(items: TeachingEstimate[]): string | null {
+  const coefs = FORWARD_SHARES.map((key) => items.find((item) => item.key === key)?.coef);
+  if (coefs.some((coef) => coef == null || !Number.isFinite(coef))) return null;
+  const sum = (coefs as number[]).reduce((total, coef) => total + coef, 0);
+  return `纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（${Math.abs(sum) < 0.005 ? "0.00" : signed(sum, 2)}）。`;
+}
+
+/**
+ * One regression step (11–14). Each step is self-contained: it reads only its own saved run. One button runs the
+ * step's default Y and draws a bar for every Y of the family; clicking a bar runs that Y, which becomes the
+ * headline and the saved report material.
  */
 export function RegressionRunLab({ step, meta, state, getStep }: {
   step: Step;
@@ -381,15 +427,12 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   // The button names the step's regression ("计算贸易流回归"), as the step title does.
   const runName = step.title.split("：")[0] || "回归";
   if (!outcome) return <div className="error-box">当前回归步骤缺少 regression_outcome 配置。</div>;
-  // Which same-family indicator calibrates Y: null is the step's fixed default. It starts from the saved
-  // run (so a refresh shows the Y the student last ran) until the student picks another one.
-  const [baseline, setBaseline] = useState<string | null>(null);
-  const baselineChosen = useRef(false);
-  const [baselineNotice, setBaselineNotice] = useState<string | null>(null);
   const [result, setResult] = useState<RegressionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [replacedAfterSubmit, setReplacedAfterSubmit] = useState(false);
+  // The bars are fetched with the first run (or with a restored one), never before.
+  const [overviewWanted, setOverviewWanted] = useState(false);
   // A 429 carries Retry-After: the retry button waits it out with a visible countdown.
   const [retryAt, setRetryAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -403,38 +446,17 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
     return () => window.clearInterval(timer);
   }, [retryAt]);
   const retryWait = retryAt == null ? 0 : Math.max(0, Math.ceil((retryAt - now) / 1000));
-  const runButtonRef = useRef<HTMLButtonElement>(null);
-  const baselineSelectRef = useRef<HTMLSelectElement>(null);
   const mountedRef = useRef(true);
   const runningRef = useRef(false);
   const runController = useRef<AbortController | null>(null);
   const verdictAnchorRef = useRef<HTMLDivElement>(null);
   const scrollToVerdictAfterRun = useRef(false);
 
-  const designRequestKey = `regression-design:${outcome}:${baseline ?? "default"}`;
-  const designQuery = useAsync<RegressionDesignInfo>(
-    () => api.regressionDesign(outcome, baseline),
-    [designRequestKey],
-    { requestKey: designRequestKey },
-  );
-  const design = designQuery.status === "success" ? designQuery.data : null;
-
   // Before the run: the taxed vs untaxed comparison that the regression then quantifies.
   const groupsQuery = useAsync<TeachingGroupsResponse>(() => api.teachingGroups(), ["teaching-groups"]);
   const groups = groupsQuery.status === "success" ? groupsQuery.data : null;
   const baselineOptions = groups?.baselines?.[outcome] ?? [];
-  const defaultBaseline = baselineOptions.find((option) => option.default)?.key ?? null;
-  const lesson = lessonFor(outcome, baseline, baselineOptions.find((option) => option.key === baseline)?.label);
-  const usesDefault = baseline == null || baseline === defaultBaseline;
-  // A saved baseline the current release does not offer falls back to the fixed Y, with a note.
-  const baselineOffered = baseline == null || baselineOptions.length === 0 || baselineOptions.some((option) => option.key === baseline);
-  useEffect(() => {
-    if (baselineOffered) return;
-    setBaselineNotice(`上次算的 Y（${displayBaselineLabel(savedRun?.design?.baseline_label) || lesson.shortMetric}）在当前课程数据里没有，已换回本步默认指标，请重新计算。`);
-    setBaseline(null);
-    setResult(null);
-  }, [baselineOffered]);
-  const groupSeries = usesDefault ? groups?.outcomes[outcome] : groups?.series?.[outcome]?.[baseline];
+  const defaultKey = baselineOptions.find((option) => option.default)?.key ?? DEFAULT_BASELINES[outcome];
 
   // After the run: the estimate converted to the example(s) followed from step 10 (one country or two).
   const stepTen = getStep?.<TeachingExampleSelection & { teaching_observation?: unknown }>(10);
@@ -465,50 +487,42 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
     };
   }, []);
 
-  // 会话异步到达：刷新或换设备后恢复本步上次算出的结果，而不是空白面板。
+  // 会话异步到达：刷新或换设备后恢复本步上次算出的结果（也就是报告材料里的那个 Y），而不是空白面板。
   const savedRun = state.data?.run;
   const savedRunIdentity = savedRun ? regressionRunSnapshotIdentity(savedRun) : null;
-  const savedBaseline = savedRun?.design?.baseline ?? null;
+  const savedUsable = savedRun?.model_snapshot?.version === TEACHING_MODEL_VERSION && Boolean(savedRun.variable_catalog);
+  const savedKey = savedRun?.design?.baseline ?? defaultKey;
+  // A saved Y the current release does not offer is not shown as a result; the step starts again from its default.
+  const groupsSettled = groupsQuery.status === "success" || groupsQuery.status === "error";
+  const savedOffered = baselineOptions.length === 0 || baselineOptions.some((option) => option.key === savedKey);
   useEffect(() => {
-    if (baselineChosen.current || savedRun?.model_snapshot?.version !== TEACHING_MODEL_VERSION || !savedBaseline) return;
-    setBaseline((current) => current ?? savedBaseline);
-  }, [savedBaseline, savedRunIdentity]);
-  // Without a saved run, Y starts as the indicator the student recorded in the matching step 6-9, when
-  // this family offers it; so steps 11-14 follow steps 6-9 one to one.
-  const priorData = getStep?.<{ metric?: string; indicator_selection?: { metric?: string } }>(VIZ_STEPS[outcome]);
-  const priorKey = baselineKeyOf(priorData?.indicator_selection?.metric ?? priorData?.metric);
-  useEffect(() => {
-    if (baselineChosen.current || savedRun || !priorKey || !baselineOptions.length) return;
-    if (baselineOptions.some((option) => option.key === priorKey)) setBaseline((current) => current ?? (priorKey === defaultBaseline ? null : priorKey));
-  }, [priorKey, baselineOptions.length, defaultBaseline, savedRunIdentity]);
-  useEffect(() => {
-    if (
-      running || runningRef.current || result
-      || savedRun?.model_snapshot?.version !== TEACHING_MODEL_VERSION
-      || !savedRun.variable_catalog
-      || (savedBaseline ?? defaultBaseline) !== (baseline ?? defaultBaseline)
-    ) return;
-    setResult(savedRegressionResponse(savedRun));
-  }, [result, running, savedRunIdentity, baseline, defaultBaseline]);
+    if (running || runningRef.current || result || !savedUsable || !groupsSettled || !savedOffered) return;
+    setResult(savedRegressionResponse(savedRun!));
+  }, [result, running, savedRunIdentity, groupsSettled, savedOffered]);
+  const staleSavedY = savedUsable && groupsSettled && !savedOffered && !result;
 
-  // The Y of the run the report uses, so switching Y without running again says so (the card would just vanish).
-  const savedRunY = savedRun?.model_snapshot?.version === TEACHING_MODEL_VERSION
-    ? (() => {
-      const key = savedBaseline ?? defaultBaseline;
-      const label = savedRun.design?.baseline_label ?? baselineOptions.find((option) => option.key === key)?.label ?? lessonFor(outcome, null).shortMetric;
-      return { key, label };
-    })()
-    : null;
+  // The Y shown and saved: the last run's, else the step's default (never another step's choice).
+  const selectedKey = result?.design.baseline ?? defaultKey;
+  const selectedOption = baselineOptions.find((option) => option.key === selectedKey);
+  const lesson = lessonFor(outcome, selectedKey, result?.design.baseline_label ?? selectedOption?.label);
+  const overviewQuery = useAsync<TeachingOverviewResponse>(
+    () => api.teachingOverview(),
+    ["teaching-overview"],
+    { enabled: overviewWanted || Boolean(result) },
+  );
+  const overviewItems = overviewQuery.status === "success" ? overviewQuery.data?.outcomes[outcome] ?? [] : [];
 
-  const run = async () => {
-    if (runningRef.current || !design) return;
+  /** Run one Y (null: the default) with the step's single model; the response replaces the saved material. */
+  const run = async (key: string | null, fromButton: boolean) => {
+    if (runningRef.current) return;
     runningRef.current = true;
     const controller = new AbortController();
     runController.current = controller;
     setRunning(true);
+    setOverviewWanted(true);
     setError(null);
     try {
-      const response = await api.runRegression(outcome, controller.signal, baseline);
+      const response = await api.runRegression(outcome, controller.signal, key == null || key === defaultKey ? null : key);
       if (!mountedRef.current) return;
       if (response.model_snapshot?.version !== TEACHING_MODEL_VERSION || !response.variable_catalog) {
         throw new Error(`页面版本已更新，结果没有保存。请刷新页面后再点“计算${runName}”`);
@@ -522,7 +536,8 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         run: saved.run,
         ...(saved.qualified_run ? { qualified_run: saved.qualified_run } : {}),
       });
-      scrollToVerdictAfterRun.current = true;
+      // A bar click keeps keyboard focus on the bars; only the button moves on to the answer.
+      scrollToVerdictAfterRun.current = fromButton;
       // After the report was submitted, this run has already replaced the saved material: the notice says so.
       if (state.materialLocked) setReplacedAfterSubmit(true);
       setResult(response);
@@ -541,7 +556,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
     }
   };
 
-  // 只在学生点运行之后滚到结论；会话恢复不滚动。
+  // 只在学生点运行按钮之后滚到结论；会话恢复和点条形图都不滚动。
   useEffect(() => {
     if (!result || !scrollToVerdictAfterRun.current) return;
     scrollToVerdictAfterRun.current = false;
@@ -556,130 +571,25 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
     return () => window.cancelAnimationFrame(frame);
   }, [result]);
 
+  const bars = result && overviewItems.length > 0 ? familyBarRows(outcome, overviewItems, selectedKey, result) : null;
+  const identity = outcome === "production" && bars ? forwardShareIdentity(overviewItems) : null;
+  const latinGap = /^[A-Za-z]/.test(lesson.shortMetric) ? " " : "";
+
   return (
     <div className="reg-workbench">
       <section className="reg-run-card">
-        <span className="reg-section-step">本步回归（模型固定，只换 Y）</span>
-        <h3>{lessonQuestion(outcome, baseline)}</h3>
-        {/* The step title names the default Y; a student who switched Y sees that here, with a way back. */}
-        {!usesDefault && baselineOptions.length > 1 && (
-          <p className="reg-y-pill" role="status">
-            <span>当前 Y：{displayBaselineLabel(baselineOptions.find((option) => option.key === baseline)?.label) || lesson.shortMetric}（不是本步默认）</span>
-            <button type="button" className="link-button" disabled={running} onClick={() => {
-              baselineChosen.current = true;
-              setBaselineNotice(null);
-              setBaseline(null);
-              setResult(null);
-              setError(null);
-              // The button removes itself: move keyboard focus to the Y select it just reset (which stays
-              // mounted) before it goes, so focus never falls to <body>.
-              baselineSelectRef.current?.focus();
-            }}>恢复默认（{displayBaselineLabel(baselineOptions.find((option) => option.default)?.label) || lessonFor(outcome, null).shortMetric}）</button>
-          </p>
+        <h3>{lessonQuestion(outcome, selectedKey)}</h3>
+        {staleSavedY && (
+          <p className="reg-boundary" role="status">上次算的 Y（{displayBaselineLabel(savedRun?.design?.baseline_label) || "—"}）在当前课程数据里没有，已换回本步默认指标，请重新计算。</p>
         )}
-        {outcome !== "trade" && <p className="muted">方法与步骤 11 相同，这次 Y 换成{/^[A-Za-z]/.test(lesson.shortMetric) ? " " : ""}{lesson.shortMetric}。</p>}
-        <p className="reg-step-focus"><b>本步重点</b> · {lesson.learnThis}</p>
-        {/* Said before the run as well (the result card repeats it), so the Y is never read as OECD data first. */}
+        {/* Said before the run (the result card repeats it), so the Y is never read as OECD data first. */}
         {!result && <p className="muted reg-data-note reg-data-note-before" role="note">{GENERATED_DATA_NOTE}</p>}
-        {depvarKind(outcome, design) === "network" && (
-          <p className="muted" role="note">这里的 Y 是按真实网络指标的排名校准生成的教学数据，单位是“中心性原始单位”，不是步骤 5、9 的百万美元，不能和那两步的数值直接比较。</p>
-        )}
-        {baselineNotice && <p className="reg-boundary" role="status">{baselineNotice}</p>}
-        {baselineOptions.length > 1 && (
-          <div className="reg-baseline-select">
-            <label className="model-control"><span className="model-control-label">结果指标 Y</span>
-              <select
-                ref={baselineSelectRef}
-                aria-label="结果指标 Y"
-                value={baseline ?? defaultBaseline ?? ""}
-                disabled={running}
-                onChange={(event) => {
-                  baselineChosen.current = true;
-                  setBaselineNotice(null);
-                  const next = event.target.value;
-                  setBaseline(next === defaultBaseline ? null : next);
-                  setResult(null);
-                  setError(null);
-                }}
-              >
-                {baselineOptions.map((option) => (
-                  <option key={option.key} value={option.key}>{displayBaselineLabel(option.label)}{option.default ? "（本步默认）" : ""}</option>
-                ))}
-              </select>
-            </label>
-            <span className="muted">只能换成同一类的另一个指标；X、样本和模型都不变。</span>
-          </div>
-        )}
-        {groups && groupSeries && (() => {
-          const display = chartDisplayScale(outcome, design);
-          // display.scale converts β to "per 1 percentage point of X"; the chart and the cards show Y levels,
-          // which need ×100 for shares (percentage points) and ×1 for lengths and centrality.
-          const levelScale = display.scale * 100;
-          const change = (series: { year: number; change: number }[], year: number) => series.find((point) => point.year === year)?.change ?? null;
-          const preYears = groups.years.filter((year) => year < groups.policy_year);
-          const lastYear = groups.years.at(-1)!;
-          const gapAt = (year: number) => {
-            const a = change(groupSeries.taxed, year), b = change(groupSeries.untaxed, year);
-            return a == null || b == null ? null : (a - b) * levelScale;
-          };
-          const preGaps = preYears.map(gapAt).filter((value): value is number => value != null);
-          const preGap = preGaps.length ? preGaps.reduce((sum, value) => sum + value, 0) / preGaps.length : null;
-          const postGap = gapAt(lastYear);
-          const coefficient = result?.result.coefs[0]?.coef;
-          const estimate0 = coefficient != null && groups.mean_exposure_taxed != null ? coefficient * groups.mean_exposure_taxed : null;
-          const kind = depvarKind(outcome, design);
-          // Network Y ranges from closeness (~0.01) to weighted degree (thousands), so its decimals follow
-          // the largest gap shown; a fixed 0 decimals printed closeness gaps as "0".
-          const shown = [preGap, postGap, estimate0 == null ? null : estimate0 * levelScale].filter((value): value is number => value != null && Number.isFinite(value));
-          const digits = kind === "network" ? networkDigits(Math.max(0, ...shown.map(Math.abs))) : kind === "position" ? 4 : kind === "length" ? 3 : 2;
-          const tiny = 0.5 * 10 ** -digits;
-          const fmt = (value: number) => `${value > 0 ? "+" : ""}${value.toFixed(digits)} ${countUnit(kind)}`;
-          const estimate = result && coefficient != null && groups.mean_exposure_taxed != null && !globalInferenceIsSuppressed(result.result.status, result.result.support)
-            ? { gap: coefficient * groups.mean_exposure_taxed, label: `回归估计的差距 ${fmt(coefficient * groups.mean_exposure_taxed * levelScale)}` }
-            : null;
-          // The weak Y's interval includes 0: the gap's sign is not settled, as the verdict above says.
-          const coefStat = result?.result.coefs[0];
-          const estimateUncertain = coefStat?.ci_low != null && coefStat.ci_high != null && coefStat.ci_low <= 0 && coefStat.ci_high >= 0;
-          return <div className="reg-group-figure">
-            <GroupChangeChart
-              years={groups.years}
-              policyYear={groups.policy_year}
-              taxed={groupSeries.taxed}
-              untaxed={groupSeries.untaxed}
-              scale={levelScale}
-              unit={display.unit ?? lesson.unit}
-              title={`加税前后：两组${/^[A-Za-z]/.test(lesson.shortMetric) ? " " : ""}${lesson.shortMetric}的平均变化`}
-              estimate={estimate && { ...estimate, uncertain: estimateUncertain }}
-            />
-            <ReadingCards label="两组读图" cards={[
-              { eyebrow: `加税前（${groups.years[0]}–${groups.policy_year - 1}）`, big: preGap == null ? "缺失" : Math.abs(preGap) < tiny ? "两组差不多" : `两组相差 ${fmt(preGap)}`, small: "每条线都减去了本组加税前的平均水平，所以起点都接近 0" },
-              { eyebrow: `加税后（${lastYear}）`, big: postGap == null ? "缺失" : Math.abs(postGap) < tiny ? "两组差不多" : `加税组比未加税组${postGap < 0 ? "低" : "高"} ${fmt(Math.abs(postGap)).replace(/^\+/, "")}`, small: `${groups.sample.taxed_countries} 国加税、${groups.sample.untaxed_countries} 国未加税的平均值` },
-              {
-                eyebrow: "回归要算的",
-                big: estimate ? `估计的差距 ${fmt(estimate.gap * levelScale)}${estimateUncertain ? "（方向不确定）" : ""}` : "两条线分开多远",
-                small: estimate
-                  ? "= 估计值 × 加税组的平均 X（图上虚线标出的那段）。左边是两组平均值直接相减；这里按每个国家×行业自己的 X 算，还扣掉了各自的平均水平和每年的共同变化，所以两个数接近但不相同。"
-                  : "回归把这段距离换算成“X 每高 1 个百分点，Y 平均相差多少”",
-              },
-            ]} />
-            {design && <div className="reg-equation"><span className="reg-section-step">公式</span><DesignEquation design={design} /></div>}
-          </div>;
-        })()}
-        {groupsQuery.status === "error" && groupsQuery.error && (
-          <RegressionRequestError label="分组对比图" error={groupsQuery.error} onRetry={groupsQuery.retry} />
-        )}
-        <RegressionRequestLoading designLoading={designQuery.status === "loading"} />
-        {designQuery.status === "error" && designQuery.error && (
-          <RegressionRequestError label="公式" error={designQuery.error} onRetry={designQuery.retry} />
-        )}
         {/* Once a result exists, recalculating is a secondary action; it replaces saved material. */}
         <button
-          ref={runButtonRef}
           className={result && !error ? "run-btn secondary" : "run-btn"}
-          onClick={() => { if (!running && retryWait === 0) void run(); }}
+          onClick={() => { if (!running && retryWait === 0) void run(result ? selectedKey : null, true); }}
           // aria-disabled while running keeps keyboard focus on the button instead of dropping it to the page.
           aria-disabled={running || retryWait > 0}
-          disabled={designQuery.status !== "success" || !design}
         >
           {running ? "正在计算…"
             : retryWait > 0 ? `重试（${retryWait} 秒后）`
@@ -689,17 +599,46 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         </button>
         {/* Mounted before it has text, so screen readers announce the change. */}
         <span className={running ? "muted reg-inline-status" : "sr-only"} role="status" aria-live="polite">{running ? "正在计算…" : ""}</span>
-        {!running && !baselineNotice && savedRunY && savedRunY.key !== (baseline ?? defaultBaseline) && (
-          <p className="reg-boundary" role="status">
-            报告材料里保存的仍是上次算出的 Y（{displayBaselineLabel(savedRunY.label)}）；点上面的“计算{runName}”后，才会换成{/^[A-Za-z]/.test(lesson.shortMetric) ? " " : ""}{lesson.shortMetric}。
-          </p>
-        )}
         {!running && savedRun && state.materialLocked && (
           <p className="reg-rerun-warning" role="note">
             <b>报告已提交</b>{replacedAfterSubmit
               ? "报告材料里保存的结果已换成这次算出的结果；请到步骤 15 更新报告，并重新提交给老师。"
-              : "重新计算会替换报告材料里保存的结果；之后要到步骤 15 更新报告，并重新提交给老师。"}
+              : "重新计算或点另一条，会替换报告材料里保存的结果；之后要到步骤 15 更新报告，并重新提交给老师。"}
           </p>
+        )}
+        {groups && (() => {
+          const series = selectedKey === defaultKey ? groups.outcomes[outcome] : groups.series?.[outcome]?.[selectedKey];
+          if (!series) return null;
+          const kind = result ? depvarKind(outcome, result.design) : kindOf(selectedOption?.kind ?? "", outcome);
+          const display = chartDisplayScale(outcome, { depvar_kind: kind });
+          // display.scale converts β to "per 1 percentage point of X"; the chart shows Y levels, which need ×100
+          // for shares (percentage points) and ×1 for lengths and centrality.
+          const levelScale = display.scale * 100;
+          const coefficient = result ? runEstimate(result) : null;
+          const gap = coefficient?.coef != null && groups.mean_exposure_taxed != null && !coefficient.suppressed
+            ? coefficient.coef * groups.mean_exposure_taxed : null;
+          // Network Y ranges from closeness (~0.01) to weighted degree (thousands), so its decimals follow the gap.
+          const digits = kind === "network" ? networkDigits(Math.abs((gap ?? 0) * levelScale)) : kind === "position" ? 4 : kind === "length" ? 3 : 2;
+          const shown = (gap ?? 0) * levelScale;
+          // The weak Y's interval includes 0: the gap's sign is not settled, as the verdict says.
+          const uncertain = coefficient?.ci_low != null && coefficient.ci_high != null && coefficient.ci_low <= 0 && coefficient.ci_high >= 0;
+          return (
+            <div className="reg-group-figure">
+              <GroupChangeChart
+                years={groups.years}
+                policyYear={groups.policy_year}
+                taxed={series.taxed}
+                untaxed={series.untaxed}
+                scale={levelScale}
+                unit={display.unit ?? lesson.unit}
+                title={`加税前后：两组${latinGap}${lesson.shortMetric}的平均变化`}
+                estimate={gap == null ? null : { gap, label: `回归估计的差距 ${shown > 0 ? "+" : ""}${shown.toFixed(digits)} ${countUnit(kind)}`, uncertain }}
+              />
+            </div>
+          );
+        })()}
+        {groupsQuery.status === "error" && groupsQuery.error && (
+          <RegressionRequestError label="分组对比图" error={groupsQuery.error} onRetry={groupsQuery.retry} />
         )}
       </section>
 
@@ -710,8 +649,26 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         <div className={error ? "reg-results reg-results-stale" : "reg-results"}>
           {error && <p className="reg-stale-note" role="note">这次计算没有成功；下面仍是上次保存的结果。</p>}
           <div ref={verdictAnchorRef} className="verdict-anchor">
+            {bars ? (
+              <div className="reg-family-bars">
+                <DivergingBarChart
+                  rows={bars.rows}
+                  unitTitle={bars.unitTitle}
+                  title={`本类 ${bars.rows.length} 个 Y · 点一条，换成它并保存`}
+                  onSelect={(key) => { if (key !== selectedKey) void run(key, false); }}
+                  disabled={running}
+                />
+                {identity && <p className="muted reg-identity-note">{identity}</p>}
+              </div>
+            ) : overviewQuery.status === "error" && overviewQuery.error
+              ? <RegressionRequestError label="条形图" error={overviewQuery.error} onRetry={overviewQuery.retry} />
+              : overviewQuery.status === "loading" && <div className="reg-request-state muted" role="status" aria-busy="true">正在画本类各个 Y 的条形图…</div>}
             <RegressionResultCard outcome={outcome} response={result} examples={examples} exampleSaved={exampleSaved} exampleYear={lastYear} />
           </div>
+          <details className="technical-details">
+            <summary>模型设定</summary>
+            <DesignEquation design={result.design} />
+          </details>
           <details className="technical-details">
             <summary>详细数字（可选）</summary>
             <RegressionCoefficientTable response={result} />

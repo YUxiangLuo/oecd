@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
-  buildRegressionVerdict, chartDisplayScale, REGRESSION_STATUS_LABELS, regressionStatusLabel,
+  barFigures, barUnitFor, buildRegressionVerdict, chartDisplayScale, REGRESSION_STATUS_LABELS, regressionStatusLabel,
+  standardizedEffect,
 } from "./regression-verdict";
 import type { CoefStat, RegressionOutcome, RegressionResponse, TreatmentSupport } from "./types";
 
@@ -124,5 +125,48 @@ describe("network size in standard deviations (same digits as the report)", () =
     const large = network(-4590, -6000, -3000, 100);
     expect(large.effect).toContain("（幅度约 0.46 个标准差，");
     expect(large.interval).toContain("约 [-0.60, -0.30] 个标准差");
+  });
+});
+
+describe("bars repeat the headline's numbers", () => {
+  const estimate = (coef: number, low: number | null, high: number | null, std: number | null = 0.1, suppressed = false) =>
+    ({ coef, ci_low: low, ci_high: high, depvar_std: std, suppressed });
+
+  test("a family of shares is drawn in 个百分点; any other family in 个标准差", () => {
+    expect(barUnitFor(["share", "share"])).toBe("points");
+    expect(barUnitFor(["length", "length", "position"])).toBe("sd");
+    expect(barUnitFor(["network", "network"])).toBe("sd");
+  });
+
+  test("a share bar is the headline's signed number and interval", () => {
+    const bar = barFigures(estimate(-0.5493, -0.5711, -0.5274), "share", "points");
+    expect(bar).toEqual({ value: -0.5493, low: -0.5711, high: -0.5274, uncertain: false, valueLabel: "-0.55", intervalLabel: "[-0.57, -0.53] 个百分点" });
+    const headline = buildRegressionVerdict("trade", response("trade", coefficient(-0.5493, -0.5711, -0.5274)));
+    expect(headline.effect).toBe(`${bar.valueLabel} 个百分点`);
+    expect(headline.interval).toBe(bar.intervalLabel);
+    // The weak Y: 3 decimals, and an interval that includes 0 is uncertain.
+    const weak = barFigures(estimate(0.00752, -0.0112, 0.0262), "share", "points");
+    expect(weak.valueLabel).toBe("+0.008");
+    expect(weak.uncertain).toBe(true);
+  });
+
+  test("a network bar is its size in standard deviations, labelled with the native value as the headline gives it", () => {
+    expect(standardizedEffect(-4010.70, 856)).toBeCloseTo(-0.04685, 5);
+    const bar = barFigures(estimate(-4010.70, -4109.84, -3911.56, 856), "network", "sd");
+    expect(bar.valueLabel).toBe("-40.11（0.047 个标准差）");
+    expect(bar.intervalLabel).toBe("[-0.048, -0.046] 个标准差");
+    expect(bar.value).toBeCloseTo(-0.04685, 5);
+    const data = response("network", coefficient(-4010.70, -4109.84, -3911.56));
+    data.result.depvar_std = 856;
+    expect(buildRegressionVerdict("network", data).effect).toMatch(/^-40\.11 个中心性原始单位（幅度约 0\.047 个标准差/);
+    // Step 15 mixes units, so the native value names its unit.
+    expect(barFigures(estimate(-0.5493, -0.5711, -0.5274, 0.05), "share", "sd", true).valueLabel).toBe("-0.55 个百分点（0.110 个标准差）");
+    expect(barFigures(estimate(-1.8143, -1.9, -1.7, 0.4), "length", "sd", true).valueLabel).toBe("-0.018 个长度单位（0.045 个标准差）");
+  });
+
+  test("suppressed inference or a missing interval draws no whisker and reads 方向不确定", () => {
+    const suppressed = barFigures(estimate(-0.5, -0.6, -0.4, 0.1, true), "share", "points");
+    expect([suppressed.low, suppressed.high, suppressed.uncertain, suppressed.intervalLabel]).toEqual([null, null, true, "—"]);
+    expect(barFigures(estimate(-0.5, null, null), "length", "sd").uncertain).toBe(true);
   });
 });

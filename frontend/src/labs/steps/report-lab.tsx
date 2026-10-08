@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, isApiErrorStatus } from "../../api";
-import { RegressionEvidenceMatrix, RegressionFamilyPanels, type SiblingStepData } from "../../regression-teach";
+import { RegressionEvidenceMatrix, RegressionSummaryBars, type SiblingStepData } from "../../regression-teach";
 import { scrollIntoCourseContent } from "../../content-scroll";
 import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-lazy";
 import { ReportOutro } from "../../report-outro";
@@ -678,8 +678,8 @@ export function ReportLab({
       </section>
       {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} flash={gateFlash} />}
       <details className="report-reference"><summary>查看已保存的四项回归结果</summary>
-        <p className="muted">四个 Y 的单位不同，每张图各用自己的轴；只比较方向和区间是否包含 0。</p>
-        <RegressionFamilyPanels getStep={getStep} />
+        <p className="muted">四个 Y 的单位不同，条长都换算成标准差；条末先写各自单位的值。</p>
+        <RegressionSummaryBars getStep={getStep} />
         <RegressionEvidenceMatrix getStep={getStep} />
         <p className="muted">按你的例子换算的结果在步骤 11–14；步骤 6–9 的图表读数会自动写进报告。这里只列出已保存的结果，结论要你自己写。</p>
       </details>

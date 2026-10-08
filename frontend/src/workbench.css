@@ -55,15 +55,6 @@
 .reg-inline-status { display: inline-block; margin-left: 10px; }
 .metric-facts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .metric-facts span { display: inline-flex; gap: 5px; padding: 5px 8px; background: #fff; border: 1px solid #e3e4ee; border-radius: 7px; font-size: 11.5px; }
-.reg-variable-plain-grid {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin: 10px 0;
-}
-.reg-variable-plain-grid > div {
-  display: grid; gap: 4px; min-width: 0; padding: 10px 12px;
-  border: 1px solid #dcdff0; border-radius: 9px; background: #f8f8ff;
-}
-.reg-variable-plain-grid b { color: #35328d; font-size: 12px; }
-.reg-variable-plain-grid span { color: #4f586a; font-size: 11.5px; line-height: 1.55; }
 /* Cards keep at least ~150px so a title or unit does not break mid-word ("位置指数单/位"). */
 .comparison-summary {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 10px 0 18px;
@@ -115,21 +106,13 @@
 .reg-plain-verdict .reg-headline-main b { color: #2b2f9e; }
 .reg-plain-verdict .reg-headline-interval { display: block; margin-top: 3px; color: #4f586b; font-size: 13px; font-weight: 600; }
 .verdict-card p.reg-verdict-direction { margin: -4px 0 10px; color: #3a4050; font-size: 13px; font-weight: 700; }
-.verdict-card p.reg-caveat {
+.verdict-card .reg-caveat {
   margin: 12px 0 0; padding: 9px 12px; border: 1px solid #ecd9a9; border-left: 4px solid #d99a2b;
   border-radius: 8px; background: #fff8e8; color: #5c4618; font-size: 12.5px;
 }
 .reg-caveat b { margin-right: 8px; color: #8a5b12; }
 .model-eq sub { font-size: .72em; }
 .model-eq-terms { display: grid; gap: 3px; margin: 0 0 8px; padding-left: 18px; color: #394258; font-size: 12px; line-height: 1.6; }
-.reg-y-pill {
-  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 8px; padding: 4px 6px 4px 12px;
-  border: 1px solid #e8c77b; border-radius: 999px; background: #fff8e8; color: #6b450b; font-size: 12px; font-weight: 600;
-}
-.reg-y-pill button {
-  border: 0; background: transparent; padding: 2px 6px; font: inherit; color: #4b47e0; cursor: pointer; text-decoration: underline;
-}
-.reg-y-pill button:disabled { opacity: .5; cursor: default; }
 .reg-rerun-warning {
   margin: 10px 0 0; padding: 8px 11px; border: 1px solid #e8c77b; border-left: 4px solid #d99a2b;
   border-radius: 8px; background: #fff8e8; color: #6b450b; font-size: 12px; line-height: 1.6;
@@ -137,7 +120,6 @@
 .reg-rerun-warning b { margin-right: 8px; }
 .reg-stale-note { margin: 0 0 8px; padding: 7px 10px; border-radius: 7px; background: #fff0db; color: #8b4f00; font-size: 12px; font-weight: 700; }
 .reg-results-stale .verdict-anchor { opacity: .62; }
-.verdict-card .coef-plot { margin: 4px 0 2px; }
 .stale-result { margin: 8px 0; padding: 7px 9px; border-radius: 7px; background: #fff0db; color: #8b4f00; font-weight: 700; font-size: 11.5px; }
 .reg-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .reg-section-heading h3 { margin: 4px 0; }
@@ -341,10 +323,45 @@
 .teaching-example-summary li { padding: 7px 10px; border: 1px solid #e3e4ee; border-radius: 8px; background: #fff; font-size: 12px; color: #4a5265; }
 .teaching-example-summary b { margin-right: 6px; color: #2a3040; }
 .teaching-example-hint { margin: -4px 0 12px; padding: 8px 12px; border-radius: 8px; background: #fff8e8; color: #7a5300; font-size: 12.5px; }
-.reg-step-focus { margin: 4px 0 8px; color: #394258; font-size: 12.5px; line-height: 1.65; }
-.reg-step-focus b { margin-right: 6px; color: #4b47e0; }
+/* 步骤 10：全部样本的四个数字卡、75 国关税暴露条形图（viz/regression/country-exposure.tsx） */
+.teaching-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 10px 0 6px; padding: 0; list-style: none; }
+.teaching-tiles li { min-width: 0; padding: 10px 12px; border: 1px solid #e3e5ee; border-radius: 10px; background: #fafbfe; }
+.teaching-tiles b { display: block; color: #1b1f2b; font-size: 21px; line-height: 1.2; font-variant-numeric: tabular-nums; word-break: keep-all; }
+.teaching-tiles span { display: block; margin-top: 2px; color: #5a6274; font-size: 11.5px; line-height: 1.45; }
+.teaching-tiles li.taxed { border-top: 3px solid #d6731f; }
+.teaching-tiles li.untaxed { border-top: 3px solid #6b7487; }
+.teaching-tiles li.imposer b { font-size: 17px; }
+.teaching-one-line { margin: 4px 0 0; color: #5a6274; font-size: 12px; line-height: 1.6; }
+.teaching-scenario { margin: 6px 0 10px; padding: 10px 12px; border-left: 3px solid #d6731f; background: #fff7ef; color: #3a4050; font-size: 13.5px; line-height: 1.7; border-radius: 6px; }
+.country-exposure { margin: 8px 0 0; }
+.country-exposure-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 8px; color: #4a5265; font-size: 11.5px; }
+.country-exposure-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.country-exposure-legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; }
+.country-exposure-legend i.line { height: 3px; width: 14px; border-radius: 2px; }
+.country-exposure-badge {
+  display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-right: 3px;
+  border-radius: 50%; background: #1f2430; color: #fff; font-size: 9.5px; font-weight: 800;
+}
+.country-exposure-bar { cursor: default; outline: none; }
+.country-exposure-untaxed { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; align-items: start; margin: 10px 0 0; padding-top: 9px; border-top: 1px dashed #dde1ea; }
+.country-exposure-untaxed > b { display: inline-flex; align-items: center; gap: 6px; padding-top: 3px; color: #3a4050; font-size: 12px; white-space: nowrap; }
+.country-exposure-untaxed > b i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
+.country-exposure-codes { display: flex; flex-wrap: wrap; gap: 4px; }
+.country-exposure-codes > span {
+  display: inline-flex; align-items: center; padding: 2px 6px; border: 1px solid #d5d9e2; border-bottom: 3px solid #6b7487;
+  border-radius: 5px; background: #fff; color: #4a5265; font-size: 11px; font-variant-numeric: tabular-nums;
+}
+.country-exposure-codes > span.selected { border-color: #1f2430; color: #1b1f2b; font-weight: 800; }
+.country-exposure-codes > span:focus-visible { outline: 2px solid #4b47e0; outline-offset: 1px; }
+.country-exposure-note { margin: 8px 0 0; color: #5a6274; font-size: 11.5px; }
+.country-exposure-table > summary { cursor: pointer; color: #4b47e0; font-size: 11.5px; font-weight: 700; }
+.country-exposure-table table { margin-top: 6px; }
+.teaching-x-card { margin: 12px 0 0; padding: 11px 14px; border: 1px solid #dcdff0; border-radius: 10px; background: #f8f8ff; }
+.teaching-x-card > b { display: block; color: #35328d; font-size: 12.5px; }
+.teaching-x-card > p { margin: 4px 0 0; color: #3f4759; font-size: 12.5px; line-height: 1.6; }
+.teaching-x-card .teaching-x-formula { font-size: 15px; color: #1b1f2b; font-variant-numeric: tabular-nums; }
+@media (max-width: 900px) { .teaching-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .reg-group-figure { margin: 10px 0 12px; }
-.reg-group-figure > p { margin: 6px 0 0; font-size: 11.5px; line-height: 1.6; }
 
 /* ---- 图表悬停读数层（viz/hover.tsx）：所有数值同时在图下读数表可得，提示只做增强 ---- */
 .hover-wrap { position: relative; }
@@ -456,13 +473,9 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 .butterfly-value { font-size: 11.5px; font-variant-numeric: tabular-nums; color: #374151; }
 .controls-sep { color: #9aa3b5; margin: 0 2px; }
 /* Each panel is a 640-wide chart: narrower than ~620px its 11px text shrinks below 10px, so two panels share a row only on very wide screens. */
-.reg-family-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(620px, 100%), 1fr)); gap: 12px; margin: 10px 0 14px; }
 .reg-family-missing { padding: 14px; border: 1px dashed #d7dae2; border-radius: 12px; font-size: 12px; }
-.reg-equation { margin-top: 12px; }
 
 /* Steps 11–14: same-family Y choice above the group chart. */
-.reg-baseline-select { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 6px 0 10px; }
-.reg-baseline-select .muted { font-size: 12px; }
 
 /* 贸易伙伴: the diagram's key above it, and the region legend for the partner circles' outline colour. */
 .ego-network-key { margin: 0 0 4px; color: #596173; font-size: 11.5px; line-height: 1.5; }
@@ -475,3 +488,8 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 .add-country button[aria-disabled="true"] { opacity: .5; cursor: default; }
 /* Ranked industry rows bleed 8px into their row padding; keep them inside the bordered box. */
 .industry-ranking-box { padding: 4px 12px; }
+
+/* Steps 11–15 result bars (diverging-bars.tsx) and the lines around them. */
+.reg-family-bars, .reg-summary-bars { margin: 10px 0 6px; }
+.reg-identity-note { margin: 2px 0 10px; font-size: 12px; line-height: 1.6; }
+.verdict-card p.reg-verdict-direction .reg-interval-words { color: #4f586b; font-weight: 500; font-size: 12.5px; }

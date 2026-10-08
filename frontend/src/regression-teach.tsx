@@ -4,9 +4,9 @@ import {
   lessonFor,
   REGRESSION_FAMILIES,
 } from "./regression-lessons";
-import { buildRegressionVerdict, chartDisplayScale } from "./regression-verdict";
+import { BAR_UNIT_TITLES, barFigures, buildRegressionVerdict, depvarKind, globalInferenceIsSuppressed } from "./regression-verdict";
 import type { RegressionOutcome, RegressionResponse } from "./types";
-import { CoefForestChart } from "./viz";
+import { DivergingBarChart, type DivergingBarRow } from "./viz/regression/diverging-bars";
 
 interface SavedRegression {
   design?: RegressionResponse["design"];
@@ -52,27 +52,43 @@ export function familyVerdict(
   return verdictFromSaved(outcome, familyRun(outcome, getStep));
 }
 
-/** The four saved estimates side by side, each on its own axis because their units differ. */
-export function RegressionFamilyPanels({ getStep }: { getStep?: (step: number) => SiblingStepData | undefined }) {
+/**
+ * The four saved estimates as four bars on one axis. Their units differ, so each bar is the standardized size
+ * ((β × 0.01) / sd(Y): Y's gap in standard deviations per 1 percentage point of X), and its end gives the native
+ * value with its unit and the size ("-0.55 个百分点（0.12 个标准差）"). Each bar is the step's SAVED run, as in the report.
+ */
+export function regressionSummaryRows(getStep?: (step: number) => SiblingStepData | undefined): { rows: DivergingBarRow[]; missing: string[] } {
+  const rows: DivergingBarRow[] = [];
+  const missing: string[] = [];
+  for (const family of REGRESSION_FAMILIES) {
+    const run = familyRun(family.outcome, getStep);
+    if (!run?.design || !run.result) {
+      missing.push(`步骤 ${family.step} · ${family.family}`);
+      continue;
+    }
+    const coefficient = run.result.coefs[0] ?? null;
+    const suppressed = globalInferenceIsSuppressed(run.result.status, run.result.support);
+    const figures = barFigures({
+      coef: coefficient?.coef ?? null, ci_low: coefficient?.ci_low ?? null, ci_high: coefficient?.ci_high ?? null,
+      depvar_std: run.result.depvar_std ?? null, suppressed,
+    }, depvarKind(family.outcome, run.design), "sd", true);
+    rows.push({
+      key: family.outcome,
+      label: lessonFor(family.outcome, run.design.baseline, run.design.baseline_label).shortMetric,
+      sublabel: `步骤 ${family.step} · ${family.family}`,
+      ...figures,
+      note: suppressed ? "这次的数据不够判断方向，不显示 95% 区间" : undefined,
+    });
+  }
+  return { rows, missing };
+}
+
+export function RegressionSummaryBars({ getStep }: { getStep?: (step: number) => SiblingStepData | undefined }) {
+  const { rows, missing } = regressionSummaryRows(getStep);
   return (
-    <div className="reg-family-panels">
-      {REGRESSION_FAMILIES.map((family) => {
-        const run = familyRun(family.outcome, getStep);
-        const coefficient = run?.result?.coefs[0];
-        const display = chartDisplayScale(family.outcome, run?.design);
-        return run?.result && coefficient ? (
-          <CoefForestChart
-            key={family.outcome}
-            coefs={[coefficient]}
-            globalStatus={run.result.status}
-            globalSupport={run.result.support}
-            scale={display.scale}
-            unit={display.unit}
-            labels={{ teaching_tariff_exposure: lessonFor(family.outcome, run.design?.baseline, run.design?.baseline_label).shortMetric }}
-            title={`步骤 ${family.step} · ${family.family}`}
-          />
-        ) : <div key={family.outcome} className="muted reg-family-missing">步骤 {family.step} · {family.family}：还没计算</div>;
-      })}
+    <div className="reg-summary-bars">
+      {rows.length > 0 && <DivergingBarChart rows={rows} unitTitle={BAR_UNIT_TITLES.sd} title="四步保存的结果（都换算成标准差）" />}
+      {missing.length > 0 && <p className="muted reg-family-missing">{missing.join("、")}：还没计算</p>}
     </div>
   );
 }

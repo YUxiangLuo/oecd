@@ -11,6 +11,7 @@ import type { IndicatorSchema, Meta, StepStateApi } from "../../../types";
 import { cjkSpace } from "../../../format";
 import { countryLabel } from "../../../viz";
 import { fieldLabel, fmtField, useAsync } from "../../shared";
+import { DEFAULT_MARK } from "../viz/indicator-model";
 import { keepFocusNear } from "../../../a11y";
 import { userFacingRequestError } from "../../../user-facing-error";
 import {
@@ -127,7 +128,7 @@ export function AutoMaterialStatus({ meta, state, schema, first, second, metric,
         </span>}
       <label className="auto-material-partner">对比国家
         <select value={second} onChange={(event) => onSecond(event.target.value)}>
-          {meta.countries.filter((code) => code !== first).map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
+          {meta.countries.filter((code) => code !== first).map((code) => <option key={code} value={code}>{countryLabel(code)}{code === autoComparisonCountries(meta, first)[1] ? DEFAULT_MARK : ""}</option>)}
         </select>
       </label>
       {state.materialLocked

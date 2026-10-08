@@ -4,11 +4,14 @@ import { MATERIAL_LOCKED_NOTE } from "../../step-task-card";
 import { api } from "../../api";
 import { ScrollableRegion } from "../../a11y";
 import { userFacingRequestError } from "../../user-facing-error";
-import type { Meta, QuizCompletionState, Step, StepStateApi, TeachingGroupsResponse, TeachingPanelResponse } from "../../types";
+import type {
+  Meta, QuizCompletionState, Step, StepStateApi, TeachingCountriesResponse, TeachingGroupsResponse, TeachingPanelResponse,
+} from "../../types";
 import { TARIFF_IMPOSER, teachingExample } from "../../teaching-example";
 import { GENERATED_DATA_NOTE } from "../../regression-lessons";
 import { percentagePoints } from "../../format";
 import { countryLabel, sectorLabel } from "../../viz";
+import { CountryExposureChart } from "../../viz/regression/country-exposure";
 import { useAsync } from "../shared";
 import { IndicatorTrendChart } from "./viz/indicator-charts";
 
@@ -32,7 +35,18 @@ export interface ShockStepState extends QuizCompletionState, Record<string, unkn
   };
 }
 
-/** 步骤 10 只介绍四个后续回归共同使用的关税暴露 X。 */
+/**
+ * The one worked X = w × τ on step 10, when the followed example is not a taxed country: the default taxed country
+ * (CAN, else the most exposed one) with its industries' mean, since τ is the same for all its industries and so
+ * mean X = mean w × τ.
+ */
+export function fallbackWorkedCountry(data: TeachingCountriesResponse | undefined, preferred = "CAN") {
+  const taxed = data?.countries.filter((row) => row.taxed && row.mean_exposure > 0) ?? [];
+  const row = taxed.find((item) => item.country === preferred) ?? taxed[0];
+  if (!row || !data?.tariff_rate) return undefined;
+  return { ...row, mean_w: row.mean_exposure / data.tariff_rate };
+}
+
 /**
  * What the two-country gap in step 10 means. X = w × τ is 0 before the tariff for everyone, so after it:
  * one taxed and one untaxed → the gap is the taxed country's X; both taxed → the gap comes from their
@@ -120,7 +134,9 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
   const inheritedIndustry = useRef(followStepNine && example.industry === priorIndustry);
   const groups = useAsync<TeachingGroupsResponse>(() => api.teachingGroups(), ["teaching-groups"]);
   const sample = groups.status === "success" ? groups.data?.sample : undefined;
-  const policyYear = groups.status === "success" ? groups.data?.policy_year : undefined;
+  // The whole sample comes first: every country's X in the last year, before any example.
+  const overviewQuery = useAsync<TeachingCountriesResponse>(() => api.teachingCountries(), ["teaching-countries"]);
+  const overview = overviewQuery.status === "success" ? overviewQuery.data ?? undefined : undefined;
   const selectedCountries = [first, second].filter(Boolean);
   const years = [...meta.years].sort((a, b) => a - b);
   const requestKey = `teaching-series:${selectedCountries.join(",")}:${industry}`;
@@ -224,12 +240,72 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
   const otherMissing = missing.filter((country) => !isImposer(country));
   const bothTaxed = lastRows.length === 2 && lastRows.every((row) => row.teaching_tariff_rate_tau > 0);
 
+  // The worked X = w × τ: the followed example when it is a taxed country, else CAN's mean over its industries.
+  const workedExample = exampleRow && complete && exampleRow.teaching_tariff_rate_tau > 0 && !isImposer(exampleRow.country)
+    ? exampleRow
+    : undefined;
+  const workedCountry = workedExample ? undefined : fallbackWorkedCountry(overview);
+  const taxedCount = overview?.taxed_countries ?? sample?.taxed_countries;
+  const sampleRows = sample?.rows ?? (overview ? overview.entities * years.length : undefined);
+
   return <div className="shock-workbench">
     <section className="reg-run-card">
-      <span className="reg-section-step">先看一个例子</span>
-      <h3>关税暴露 X 怎样随年份变化？</h3>
+      <span className="reg-section-step">全部样本</span>
+      <h3>关税暴露 X：哪些国家被加税，暴露有多大？</h3>
       <p className="muted teaching-data-note" role="note">{GENERATED_DATA_NOTE}</p>
-      <p>选一个国家和一个行业；再选一个对比国家，就能看到加税与未加税的差别。默认国家是加拿大和墨西哥：两国出口都很依赖美国，但只有加拿大被加税。在本步选行业之前，行业沿用你在步骤 9 最后看的行业（没有记录时为汽车行业 C29）；汽车行业是最典型的例子。步骤 11–14 会把回归结果换算到你选的例子上。</p>
+      {overviewQuery.status === "loading" && <div className="reg-request-state" role="status">正在读取全部国家的关税暴露…</div>}
+      {overviewQuery.status === "error" && <div className="error-box" role="alert">{userFacingRequestError(overviewQuery.error, "全部国家的关税暴露读取失败")} <button className="secondary" onClick={overviewQuery.retry}>重试</button></div>}
+      {overview && <>
+        {/* The whole scenario is centred on one market: say so before any number or example. */}
+        <p className="teaching-scenario">
+          <b>情景以美国为中心：</b>{countryLabel(overview.market)}{overview.policy_year ? `从 ${overview.policy_year} 年起` : ""}对 {overview.taxed_countries} 个国家的商品加征 {rate(overview.tariff_rate)} 关税，其余 {overview.untaxed_countries} 个国家未被加税。关税暴露 X 衡量一个国家×行业的出口有多依赖美国市场：X = 首年对美出口份额 w × 加征税率 τ。
+        </p>
+        <ul className="teaching-tiles" aria-label="全部样本的加税设定">
+          <li className="taxed"><b>{overview.taxed_countries} 国</b><span>被美国加税</span></li>
+          <li className="untaxed"><b>{overview.untaxed_countries} 国</b><span>未被加税（X 始终为 0）</span></li>
+          <li className="imposer"><b>{countryLabel(overview.market)}</b><span>加征关税的一方（不在样本中）</span></li>
+          <li><b>{rate(overview.tariff_rate)}</b><span>{overview.policy_year ? `${overview.policy_year} 年起的税率（此前为 0）` : "加征税率"}</span></li>
+        </ul>
+        <p className="teaching-one-line">
+          回归样本：{overview.countries.length} 国的 {overview.entities.toLocaleString("zh-CN")} 个国家×行业{sampleRows ? ` × ${years.length} 年 = ${sampleRows.toLocaleString("zh-CN")} 条记录` : ""}。下图是每个国家 {overview.year} 年各行业的平均 X。
+        </p>
+        <CountryExposureChart data={overview} highlight={selectedCountries} />
+      </>}
+      {workedExample && (
+        <div className="teaching-x-card" role="group" aria-label="用所选例子算一次 X">
+          <b>算一次：X = w × τ</b>
+          <p>
+            {countryLabel(workedExample.country)} · {sectorLabel(industry)} · {workedExample.year} 年：{" "}
+            <span className="teaching-x-formula">X = {pct(workedExample.teaching_export_share_w)} × {rate(workedExample.teaching_tariff_rate_tau)} = <b>{xPoints(workedExample.teaching_tariff_exposure)} 个百分点</b></span>
+            {workedExample.teaching_tariff_exposure === 0 ? "（加税了，但 w = 0，所以 X 仍是 0）" : bothTaxed ? "（税率相同时，对美出口份额 w 不同，X 也不同）" : ""}
+          </p>
+          <p className="muted">w = 首年（{years[0]} 年）对美出口份额 {pct(workedExample.teaching_export_share_w)}，之后各年不变；τ = 加征税率。</p>
+        </div>
+      )}
+      {workedCountry && overview && (
+        <div className="teaching-x-card" role="group" aria-label="用加税国家算一次 X">
+          <b>算一次：X = w × τ</b>
+          <p>
+            {countryLabel(workedCountry.country)} · {overview.year} 年 · {workedCountry.industries} 个行业平均：{" "}
+            <span className="teaching-x-formula">X = {pct(workedCountry.mean_w)} × {rate(overview.tariff_rate)} = <b>{xPoints(workedCountry.mean_exposure)} 个百分点</b></span>
+          </p>
+          {exampleRow && complete && (
+            <p className="muted">
+              {isImposer(exampleRow.country)
+                ? "你的例子是美国：它是加征关税的一方，X 记为 0 只是定义"
+                : `你的例子 ${countryLabel(exampleRow.country)} 未被加税，X 一直是 0`}，所以这里用 {countryLabel(workedCountry.country)} 算。
+            </p>
+          )}
+          <p className="muted">w = 首年（{years[0]} 年）对美出口份额，之后各年不变；同一国家各行业的 τ 相同，所以平均 X = 平均 w × τ。</p>
+        </div>
+      )}
+      <p className="teaching-one-line">步骤 11–14 用每个国家×行业的 X 对照四类指标 Y，读“X 每高 1 个百分点，Y 平均相差多少”。</p>
+    </section>
+    <section className="reg-run-card">
+      <span className="reg-section-step">跟踪一个例子（可选）</span>
+      <p className="teaching-example-lead">
+        看 X 在加税那年怎样跳起来。默认的加拿大是{taxedCount ? ` ${taxedCount} 个` : ""}加税国家之一，对比的墨西哥未加税；行业沿用步骤 9 最后看的行业。步骤 11–14 会把回归结果换算到你选的例子上。
+      </p>
       <div className="controls" role="group" aria-label="跟随的例子">
         <label className="model-control"><span className="model-control-label">国家 A</span>
           <select value={first} onChange={(event) => {
@@ -340,36 +416,6 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
           )}
           digits={chartDigits}
         />
-        {exampleRow && (
-          <div className="reg-variable-plain-grid" role="group" aria-label="用所选例子算一次 X">
-            <div>
-              <b>算一次：X = w × τ</b>
-              <span>
-                {countryLabel(exampleRow.country)} · {sectorLabel(industry)} · {exampleRow.year} 年：首年对美出口份额 w = {pct(exampleRow.teaching_export_share_w)}，加征税率 τ = {rate(exampleRow.teaching_tariff_rate_tau)}，所以{" "}
-                X = {pct(exampleRow.teaching_export_share_w)} × {rate(exampleRow.teaching_tariff_rate_tau)} = <b>{xPoints(exampleRow.teaching_tariff_exposure)} 个百分点</b>。
-                {isImposer(exampleRow.country)
-                  ? "美国是加征关税的一方，X 记为 0 只是定义。"
-                  : exampleRow.teaching_tariff_rate_tau > 0
-                  ? exampleRow.teaching_tariff_exposure === 0 ? "加税了，但 w = 0，所以 X 仍是 0。"
-                    // Only when both are taxed: the same rate, so their X differ through w alone.
-                    : bothTaxed ? "税率相同时，对美出口份额 w 不同，X 也不同。" : ""
-                  : "这个国家未被加税，所以 X 一直是 0。"}
-              </span>
-            </div>
-            <div>
-              <b>后面四步用它做什么</b>
-              <span>用每个国家×行业的 X 去对照贸易、生产、长度、网络四个指标（Y），看 X 较高的国家×行业 Y 平均高还是低；结果都按“X 每高 1 个百分点，Y 平均相差多少”来读。</span>
-            </div>
-          </div>
-        )}
-        <p className="reg-boundary" role="note">
-          {policyYear
-            ? `设定：${years[0]}–${policyYear - 1} 年税率为 0；从 ${policyYear} 年起，加税国家统一加征 25%，未加税国家仍为 0。w 用首年（${years[0]} 年）的值，之后各年固定不变。`
-            : "设定：前两年税率为 0；之后加税国家统一加征 25%，未加税国家仍为 0。w 用首年的值，之后各年固定不变。"}
-        </p>
-        {sample && <p className="muted" role="note">
-          后续回归使用全部 {sample.entities.toLocaleString("zh-CN")} 个国家×行业 × 5 年 = {sample.rows.toLocaleString("zh-CN")} 条记录，覆盖 {sample.countries} 个国家（{sample.taxed_countries} 国加税、{sample.untaxed_countries} 国未加税）；你选的{selectedCountries.length === 2 ? "两个例子只是其中两个国家×行业（各 5 条记录）" : "例子只是其中一个国家×行业（5 条记录）"}。
-        </p>}
       </section>
       <details className="technical-details">
         <summary>逐年读数 · {rows.length} 条</summary>
