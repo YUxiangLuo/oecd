@@ -28,14 +28,16 @@ export const ScopeCard = forwardRef<HTMLDivElement, { items: ScopeItem[]; note?:
         );
         return (
           <span key={`${item.label}-${index}`} className="scope-item">
-            {index > 0 && <i aria-hidden="true" className="scope-sep">·</i>}
             {item.onJump ? (
               <button type="button" className="scope-chip" onClick={item.onJump} title={`修改${item.label}`}>
                 {body}
+                <span className="sr-only">（修改）</span>
               </button>
             ) : (
               <span className="scope-chip scope-chip-static">{body}</span>
             )}
+            {/* After the chip, so a wrapped line never starts with the separator. */}
+            {index < items.length - 1 && <i aria-hidden="true" className="scope-sep">·</i>}
           </span>
         );
       })}

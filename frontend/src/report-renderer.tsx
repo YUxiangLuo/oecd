@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ScrollableRegion } from "./a11y";
 import { niceDomain } from "./viz/nice-ticks";
+import { stripNegativeZero } from "./format";
 
 type ChartItem = { label: string; value: number };
 /** A bar may name the series it belongs to (e.g. a country); bars of one group share a colour.
@@ -188,7 +189,28 @@ const fmt = (value: number) => {
   return value.toFixed(3).replace(/\.0+$|(?<=\.[0-9]*)0+$/, "");
 };
 
-const GROUP_COLORS = ["#4b47e0", "#e0812e", "#198a78", "#7b4ab5"];
+/** The reading unit of a chart from its axis label, as the report builder writes it ("…（%）" for shares). */
+const chartUnit = (label?: string) => ((label ?? "").endsWith("（%）") ? "%" : label ?? "");
+const readingDigits = (value: number, unit: string) => {
+  const abs = Math.abs(value);
+  return value === 0
+    || (unit === "百万美元" && abs >= 1)
+    || unit === "连接数" || unit === "路径长度"
+    || (unit === "未归一化介数" && abs >= 1)
+    ? 0
+    : 3;
+};
+/** Bar readings match the page cards: whole millions for amounts, three fixed decimals otherwise. */
+const reading = (value: number, unit: string) => {
+  const digits = readingDigits(value, unit);
+  return stripNegativeZero(value.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits }));
+};
+/** Axis ticks: the same digits with trailing zeros trimmed. */
+const tickReading = (value: number, unit: string) =>
+  stripNegativeZero(value.toLocaleString("zh-CN", { maximumFractionDigits: readingDigits(value, unit) }));
+
+// Step 6 records up to five economies: five distinct colours, so the fifth never repeats the first.
+const GROUP_COLORS = ["#4b47e0", "#e0812e", "#198a78", "#7b4ab5", "#c2417a"];
 const REFERENCE_COLOR = "#8a8f9c";
 
 /** Approximate SVG text width: CJK glyphs take about one em, Latin about 0.6 em. */
@@ -230,6 +252,7 @@ function BarChart({ chart }: { chart: Extract<ReportChart, { type: "bar" }> }) {
     cursor += barH;
   });
   const H = cursor + m.b;
+  const unit = chartUnit(chart.y_label ?? chart.x_label);
   const values = chart.items.map((item) => item.value);
   const min = Math.min(0, ...values);
   const max = Math.max(0, ...values);
@@ -273,9 +296,9 @@ function BarChart({ chart }: { chart: Extract<ReportChart, { type: "bar" }> }) {
             <g key={`${item.group ?? ""}-${item.label}-${i}`}>
               {first && <text x={m.l - 10} y={labelY} textAnchor="end" fontSize={12} fill="#4b5563">{item.label}</text>}
               <rect x={left} y={y} width={width} height={barH} rx={4} fill={fill(item)} fillOpacity={0.82}>
-                {item.group && <title>{`${item.group} · ${item.label}：${fmt(item.value)}`}</title>}
+                {item.group && <title>{`${item.group} · ${item.label}：${reading(item.value, unit)}`}</title>}
               </rect>
-              <text x={item.value < 0 ? left - 6 : left + width + 6} y={y + 13} textAnchor={item.value < 0 ? "end" : "start"} fontSize={11} fill="#596173">{fmt(item.value)}</text>
+              <text x={item.value < 0 ? left - 6 : left + width + 6} y={y + 13} textAnchor={item.value < 0 ? "end" : "start"} fontSize={11} fill="#596173">{reading(item.value, unit)}</text>
             </g>
           );
         })}
@@ -444,6 +467,7 @@ function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> })
   const x = (label: string) => m.l + (labels.length === 1 ? plotW / 2 : labels.indexOf(label) / (labels.length - 1) * plotW);
   const y = (value: number) => m.t + (max - value) / (max - min) * plotH;
   const ticks = axis.ticks;
+  const unit = chartUnit(chart.y_label);
 
   return (
     <ReportFigure title={chart.title ?? "历年趋势"}>
@@ -451,7 +475,7 @@ function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> })
         {ticks.map((tick) => (
           <g key={tick}>
             <line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke="#e5e7ed" />
-            <text x={m.l - 8} y={y(tick) + 4} textAnchor="end" fontSize={10} fill="#5f6677">{fmt(tick)}</text>
+            <text x={m.l - 8} y={y(tick) + 4} textAnchor="end" fontSize={10} fill="#5f6677">{tickReading(tick, unit)}</text>
           </g>
         ))}
         {chart.series.map((series, seriesIndex) => {
@@ -484,9 +508,11 @@ function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> })
 }
 
 function ReportFigure({ title, children }: { title: string; children: ReactNode }) {
+  // Printing: a figure is kept on one page by `.report-figure` print rules (capped height), and its caption
+  // stays with the chart; a chart taller than a page is scaled down instead of leaving blank pages.
   return (
-    <figure style={{ margin: "18px 0", padding: "14px 16px", border: "1px solid #e7e9f0", borderRadius: 12, breakInside: "avoid" }}>
-      <figcaption style={{ fontSize: 13, fontWeight: 700, color: "#303747", marginBottom: 6 }}>{title}</figcaption>
+    <figure className="report-figure" style={{ margin: "18px 0", padding: "14px 16px", border: "1px solid #e7e9f0", borderRadius: 12, breakInside: "avoid" }}>
+      <figcaption style={{ fontSize: 13, fontWeight: 700, color: "#303747", marginBottom: 6, breakAfter: "avoid" }}>{title}</figcaption>
       {children}
     </figure>
   );
@@ -580,10 +606,10 @@ export function ReportMarkdown({ markdown, className = "report-md" }: { markdown
               <table className="data-table" {...props}>{children}</table>
             </ScrollableRegion>
           ),
-          h1: ({ children, ...props }) => <h1 style={{ breakAfter: "avoid" }} {...props}>{children}</h1>,
-          h2: ({ children, ...props }) => <h2 style={{ breakAfter: "avoid", marginTop: 24 }} {...props}>{children}</h2>,
-          h3: ({ children, ...props }) => <h3 style={{ breakAfter: "avoid", marginTop: 20 }} {...props}>{children}</h3>,
-          blockquote: ({ children, ...props }) => (
+          h1: ({ node: _node, children, ...props }) => <h1 style={{ breakAfter: "avoid" }} {...props}>{children}</h1>,
+          h2: ({ node: _node, children, ...props }) => <h2 style={{ breakAfter: "avoid", marginTop: 24 }} {...props}>{children}</h2>,
+          h3: ({ node: _node, children, ...props }) => <h3 style={{ breakAfter: "avoid", marginTop: 20 }} {...props}>{children}</h3>,
+          blockquote: ({ node: _node, children, ...props }) => (
             <blockquote style={{ margin: "14px 0", padding: "8px 14px", borderLeft: "3px solid #4b47e0", background: "#f7f8fb", color: "#596173" }} {...props}>{children}</blockquote>
           ),
           // 提交内容会在教师端打开；禁用 Markdown 图片，避免自动请求学生指定的外部跟踪 URL。

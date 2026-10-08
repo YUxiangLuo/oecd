@@ -45,9 +45,10 @@ type Lens = "heat" | "network";
 export const STEP10_DEFAULT_LENS: Lens = "heat";
 const STEP10_LENS_KEYS: Lens[] = ["heat", "network"];
 
-function IndustryHeatTable({ meta, initialYear, drill, heatSort, heatCoverage, onDrill, onSort, onCoverage }: {
+function IndustryHeatTable({ meta, year, onYear, drill, heatSort, heatCoverage, onDrill, onSort, onCoverage }: {
   meta: Meta;
-  initialYear: number;
+  year: number;
+  onYear: (year: number) => void;
   drill: string;
   heatSort: HeatSortMetric;
   heatCoverage: HeatCoverage;
@@ -55,7 +56,6 @@ function IndustryHeatTable({ meta, initialYear, drill, heatSort, heatCoverage, o
   onSort: (metric: HeatSortMetric) => void;
   onCoverage: (coverage: HeatCoverage) => void;
 }) {
-  const [year, setYear] = useState(initialYear);
   const { data: schema } = useAsync(() => api.indicatorSchema(), []);
   const requestKey = observationRequestKey(meta, year, "country-industry", drill) ?? `missing-release:${year}:country-industry:${drill}`;
   const pageQuery = useAsync<IndustryPage>(() => api.industryIndicatorsAll(year, drill), [year, drill], { enabled: Boolean(drill), requestKey });
@@ -70,11 +70,11 @@ function IndustryHeatTable({ meta, initialYear, drill, heatSort, heatCoverage, o
       note="指标在完整的全球国家×行业网络上计算，选择国家只改变显示哪些行。介数没有做边阈值检验，只作探索性参考。"
     >
       <div className="controls" style={{ marginBottom: 12 }}>
-        <YearSelect years={meta.years} year={year} onChange={setYear} />
+        <YearSelect years={meta.years} year={year} onChange={onYear} />
         <LabeledControl label="下钻国家">
           {(id) => (
             <select id={id} value={drill} onChange={(e) => onDrill(e.target.value)}>
-              {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
+              {meta.countries.filter((c) => c !== "ROW").map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
             </select>
           )}
         </LabeledControl>
@@ -108,7 +108,7 @@ function IndustryHeatTable({ meta, initialYear, drill, heatSort, heatCoverage, o
 }
 
 export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
-  const { year, setYear, pickCountries, schema } = useVizLab(meta, step, state, STEP10_DEFAULT_LENS, STEP10_LENS_KEYS);
+  const { pickCountries, schema } = useVizLab(meta, step, state, STEP10_DEFAULT_LENS, STEP10_LENS_KEYS);
   const observations = (state.data?.observations ?? []).filter((item) => item.source === "explicit-network-trend" || item.source === "explicit-network-ranking");
   const fallbackDrill = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
   // The heat table follows country A ([A, B] in compared) unless the student picked a country in a modal.
@@ -159,10 +159,10 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
           state.save({ compared: countries, metric: records[0]?.metric, observations: records });
         }}
         extraLenses={[{ key: "partners", label: "贸易伙伴" }]}
-        renderExtra={(_key, countries) => <TradePartners meta={meta} countries={countries} year={year} onYear={setYear} />}
-        renderTable={() => (
+        renderExtra={(_key, countries, trendYear, onTrendYear) => <TradePartners meta={meta} countries={countries} year={trendYear} onYear={onTrendYear} />}
+        renderTable={(trendYear, onTrendYear) => (
           <IndustryHeatTable
-            meta={meta} initialYear={year} drill={drill} heatSort={heatSort} heatCoverage={heatCoverage}
+            meta={meta} year={trendYear} onYear={onTrendYear} drill={drill} heatSort={heatSort} heatCoverage={heatCoverage}
             onDrill={inspectCountry} onSort={changeHeatSort} onCoverage={changeHeatCoverage}
           />
         )}

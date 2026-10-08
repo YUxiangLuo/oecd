@@ -3,8 +3,16 @@ import { niceDomain } from "./nice-ticks";
 
 describe("niceDomain", () => {
   test("rounds a share axis to readable steps instead of max ÷ 4", () => {
-    expect(niceDomain(0, 12.5).ticks).toEqual([0, 5, 10, 15]);
+    expect(niceDomain(0, 12.5).ticks).toEqual([0, 2.5, 5, 7.5, 10, 12.5]);
     expect(niceDomain(0, 54.22).ticks).toEqual([0, 20, 40, 60]);
+  });
+
+  test("a tiny negative value costs one small step below zero, not half the range", () => {
+    const { lo, hi } = niceDomain(-0.003, 1.03);
+    expect(lo).toBeGreaterThanOrEqual(-0.2);
+    expect(hi).toBeLessThanOrEqual(1.2);
+    expect(lo).toBeLessThanOrEqual(-0.003);
+    expect(hi).toBeGreaterThanOrEqual(1.03);
   });
 
   test("covers the data and keeps non-negative data at or above zero", () => {

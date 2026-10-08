@@ -175,7 +175,7 @@ export function TradePartners({ meta, countries, year, onYear }: {
       <p className="muted" id="region-matrix-note">
         国家级贸易网络接近完全图：几乎每两个经济体之间都有贸易，所以介数这类不看流量的中心性在国家层面没有区分度；本步的网络指标因此在国家×行业网络上计算。这里只看三样可读的信息：主要伙伴、买卖方向、区域内与区域间的流向。
       </p>
-      <div className="comparison-facets">
+      <div className={`comparison-facets${countries.length > 2 ? " comparison-facets--stacked" : ""}`}>
         {countries.map((country, index) => {
           const partners = current.partners[country] ?? [];
           return (

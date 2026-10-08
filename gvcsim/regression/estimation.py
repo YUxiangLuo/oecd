@@ -110,6 +110,17 @@ def binned_scatter(x: np.ndarray, y: np.ndarray, slope: float, bins: int = BINSC
     return {"bins": points, "slope": float(slope), "transform": "twoway_demeaned"}
 
 
+_FE_DIMENSION_LABELS = {"entity_id": "国家–行业单元", "country": "国家", "year": "年份"}
+
+
+def two_way_note(entity: str, time: str) -> str:
+    """The estimator note shown to students (report and page), in course wording rather than column names."""
+    return (
+        f"双向固定效应（{_FE_DIMENSION_LABELS.get(entity, entity)} + {_FE_DIMENSION_LABELS.get(time, time)}），"
+        "组内变换后 OLS"
+    )
+
+
 def within_ols(model: PreparedModel, prepared=None) -> RegressionResult:
     y, X, names, dropped = prepared or demean_and_prune(model)
     beta = np.linalg.lstsq(X, y, rcond=None)[0]
@@ -151,7 +162,7 @@ def within_ols(model: PreparedModel, prepared=None) -> RegressionResult:
     )
     if model.support and model.support.suppress_inference:
         coefs = [coef.without_inference() for coef in coefs]
-    notes = [*model.notes, f"双向固定效应({model.entity} + {model.time}),within 变换后 OLS"]
+    notes = [*model.notes, two_way_note(model.entity, model.time)]
     if effects.components > 1:
         notes.append(
             f"实体—年份二部图有 {effects.components} 个连通分量；固定效应秩 {effects.rank}，CR1 残差自由度 {df}；政策系数仍为各分量共同斜率。"

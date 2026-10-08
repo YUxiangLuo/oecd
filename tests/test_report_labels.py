@@ -31,4 +31,6 @@ def test_chart_readings_state_changes_in_the_chart_unit():
     assert _reading(11.73, "%") == "11.730%"
     assert _change(2807184.244, "百万美元") == "+2,807,184 百万美元"
     assert _change(-0.108, "长度单位") == "-0.108"
-    assert _change(-267.931, "未归一化介数") == "-267.931"
+    # Betweenness counts paths: whole numbers, as on the page.
+    assert _change(-267.931, "未归一化介数") == "-268"
+    assert _reading(0, "%") == "0%"

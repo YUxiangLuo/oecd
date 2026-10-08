@@ -244,7 +244,13 @@ export const materialKey = (rows: VizObservation[]) =>
 
 /** Amounts are millions of USD: whole millions read better than three decimals, as in the report. */
 export const readingDigits = (value: number, unit: string) =>
-  unit === "百万美元" && Math.abs(value) >= 1 ? 0 : 3;
+  value === 0
+  || (unit === "百万美元" && Math.abs(value) >= 1)
+  // Counts and path lengths are whole numbers; unnormalised betweenness (a path count) reads as a whole number from 1 up.
+  || unit === "连接数" || unit === "路径长度"
+  || (unit === "未归一化介数" && Math.abs(value) >= 1)
+    ? 0
+    : 3;
 
 export function changeReading(
   start: number,

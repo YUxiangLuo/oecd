@@ -1,7 +1,7 @@
 import { countryLabel, sectorLabel } from "../../../viz";
 import { CAT } from "../../../viz/shared";
 import { ScrollableRegion } from "../../../a11y";
-import { fmtDb } from "../../shared";
+import { indicatorNumber } from "./indicator-charts";
 import { NO_RANK, rankText } from "./indicator-model";
 import type { Row } from "./scaffold";
 
@@ -54,7 +54,7 @@ export function NetworkRanking({ rows, countries, unit, onIndustry, reference = 
             {global && <span data-global-median style={{ position: "absolute", top: -3, bottom: -3, left: `${global.median / scale * 100}%`, borderLeft: "2px solid #6b7385" }} />}
           </div>
           <span style={{ textAlign: "right", fontSize: 12, fontVariantNumeric: "tabular-nums" }}>
-            {value === null ? "缺失" : fmtDb(value)}
+            {indicatorNumber(value, unit)}
             {(() => {
               const countryRank = global?.ranks?.[countries[index]];
               if (!global || countryRank == null) return null;
@@ -63,7 +63,7 @@ export function NetworkRanking({ rows, countries, unit, onIndustry, reference = 
             })()}
           </span>
         </div>)}</div>
-        {global && <span className="sr-only">{sectorLabel(row.industry)} 全球中位数 {fmtDb(global.median)}</span>}
+        {global && <span className="sr-only">{sectorLabel(row.industry)} 全球中位数 {indicatorNumber(global.median, unit)}</span>}
       </div>;
       })}
     </ScrollableRegion>

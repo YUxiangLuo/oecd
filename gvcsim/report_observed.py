@@ -14,6 +14,8 @@ from gvcsim.report_common import (
     _list_values,
     _safe,
     _signed,
+    reading_digits,
+    reading_number,
 )
 from gvcsim.report_gate import (
     _indicator_material_complete,
@@ -117,9 +119,7 @@ def _chart_unit(chart: dict[str, Any]) -> str:
 
 def _reading(value: float, unit: str) -> str:
     """A chart reading in the page's fixed precision: whole millions for amounts, three decimals otherwise."""
-    if unit == "百万美元" and abs(value) >= 1:
-        return f"{value:,.0f}"
-    return f"{value:,.3f}%" if unit == "%" else f"{value:,.3f}"
+    return f"{reading_number(value, unit)}%" if unit == "%" else reading_number(value, unit)
 
 
 def _change(delta: float, unit: str) -> str:
@@ -129,7 +129,7 @@ def _change(delta: float, unit: str) -> str:
         return f"{_signed(delta, 3)} 个百分点"
     if unit == "百万美元":
         return f"{_signed(delta, 0 if abs(delta) >= 1 else 3)} 百万美元"
-    return _signed(delta, 3)
+    return _signed(delta, reading_digits(delta, unit) if delta else 3)
 
 
 def _item_label(item: dict[str, Any]) -> str:
@@ -351,10 +351,13 @@ def _rank_reading(context: dict[str, Any], countries: list[str]) -> str:
     for country in countries:
         if country not in first["ranks"] or country not in last["ranks"]:
             continue
+        first_rank, last_rank = rank(first, country), rank(last, country)
         parts.append(
-            f"{country_label(country)}{rank(last, country)}"
+            f"{country_label(country)}{last_rank}"
             if years[0] == years[-1]
-            else f"{country_label(country)}从{rank(first, country)}变为{rank(last, country)}"
+            else f"{country_label(country)} {years[0]} 年与 {years[-1]} 年均为{last_rank}"
+            if first_rank == last_rank
+            else f"{country_label(country)}从{first_rank}变为{last_rank}"
         )
     if not parts:
         return ""

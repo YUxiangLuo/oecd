@@ -34,8 +34,8 @@ describe("Steps 6-9 chart semantic data equivalents", () => {
     );
     expect(html).toContain("查看测试份额排序图表数据表");
     expect(html).toContain("测试份额排序图表所绘制的完整数据");
-    expect(html).toContain('<th scope="row">BBB</th><td>50.00%</td>');
-    expect(html).toContain('<th scope="row">AAA</th><td>25.00%</td>');
+    expect(html).toContain('<th scope="row">BBB</th><td>50.000%</td>');
+    expect(html).toContain('<th scope="row">AAA</th><td>25.000%</td>');
     expect(html).not.toContain("tabindex=\"0\" aria-label=\"AAA");
   });
 
@@ -51,7 +51,7 @@ describe("Steps 6-9 chart semantic data equivalents", () => {
     expect(html.match(/data-selected="true"/g)).toHaveLength(1);
     expect(html).toContain(`color:${RANK_HIGHLIGHT_TEXT}`);
     expect(contrastOnWhite(RANK_HIGHLIGHT_TEXT)).toBeGreaterThanOrEqual(4.5);
-    expect(html).toContain('<th scope="row">SELECTED</th><td>-1.000</td>');
+    expect(html).toContain('<th scope="row">SELECTED</th><td>-1</td>');
   });
 
   test("scatter table contains every plotted entity and both exact coordinates", () => {
@@ -112,7 +112,7 @@ describe("Steps 6-9 chart semantic data equivalents", () => {
     );
     expect(html.match(/data-selected="true"/g)).toHaveLength(1);
     expect(html.match(/>OUT</g)).toHaveLength(2);
-    expect(html).toContain('<th scope="row">OUT</th><td>1.000</td>');
+    expect(html).toContain('<th scope="row">OUT</th><td>1</td>');
     expect(html).toContain("Top 15 + 已选国家");
   });
 

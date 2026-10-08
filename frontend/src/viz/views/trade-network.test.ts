@@ -128,8 +128,8 @@ describe("network threshold semantics", () => {
     expect(html).toContain('r="14.5"');
     expect(html).toContain("GVC 生产份额 —（该指标不可用）");
     expect(html).toContain("双向贸易加权度 —（该指标不可用）");
-    expect(html).toContain("GVC 生产份额 40.00%");
-    expect(html).not.toContain("GVC 生产份额 0.00%");
+    expect(html).toContain("GVC 生产份额 40.000%");
+    expect(html).not.toContain("GVC 生产份额 0%");
     expect(html).not.toContain("双向贸易加权度 0");
   });
 
@@ -139,7 +139,7 @@ describe("network threshold semantics", () => {
     expect(finiteNetworkMetric(Number.POSITIVE_INFINITY)).toBeNull();
     expect(finiteNetworkMetric(0)).toBe(0);
     expect(networkMetricDisplay(null, "pct")).toBe("—（该指标不可用）");
-    expect(networkMetricDisplay(0, "pct")).toBe("0.00%");
+    expect(networkMetricDisplay(0, "pct")).toBe("0%");
     expect(networkMetricDisplay(125, "amount")).toBe("125");
   });
 

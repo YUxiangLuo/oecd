@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, cast
 
+from gvcsim.regression.estimation import two_way_note
 from gvcsim.regression.validity import CLUSTER_INTERVAL_NOTE
 from gvcsim.report_common import (
     _KIND_DIMENSIONS,
@@ -26,11 +28,26 @@ from gvcsim.report_common import (
     _safe,
     _setting_value,
     _summary_design_limit,
+    reading_number,
 )
 from gvcsim.report_gate import _indicator_material_complete, _step_data, _valid_indicator_observations
-from gvcsim.report_labels import country_label, sector_label
+from gvcsim.report_labels import DB_TABLE_NAMES, FINAL_DEMAND_NAMES, country_label, sector_label
 from gvcsim.report_observed import _viewed_shock_event_sources
 from gvcsim.report_saved_run import _result_is_reportable, _result_is_qualified
+
+
+def _entity_label(item: dict[str, Any]) -> str:
+    """An observation's economy (and industry) by name, as on the pages: "CHN 中国 · C29 汽车及零部件"."""
+    country = item.get("country")
+    if not country:
+        return str(item.get("entity", "—"))
+    industry = item.get("industry")
+    return f"{country_label(str(country))} · {sector_label(str(industry))}" if industry else country_label(str(country))
+
+
+def _rate(percent: float) -> str:
+    """A tariff rate as set (10%, 7.5%), without padding zeros."""
+    return f"{percent:.2f}".rstrip("0").rstrip(".")
 
 
 def _experiment_sections(session: dict[str, Any]) -> list[str]:
@@ -60,15 +77,28 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
         captured = True
         lines.extend(("### 步骤 1 · OECD ICIO 数据浏览", ""))
         if source_slice:
+
+            def slice_value(key: str, value: Any) -> str:
+                text = str(value)
+                if key == "table":
+                    return DB_TABLE_NAMES.get(text, text)
+                if key in ("row_country", "col_country"):
+                    return country_label(text)
+                if key == "col_sector" and text in FINAL_DEMAND_NAMES:
+                    return FINAL_DEMAND_NAMES[text]
+                if key in ("row_sector", "col_sector"):
+                    return sector_label(text)
+                return text
+
             selection = "；".join(
-                f"{label}={_safe(source_slice.get(key, '—'))}"
+                f"{label}：{_safe(slice_value(key, source_slice[key]))}"
                 for key, label in (
                     ("year", "年份"),
                     ("table", "表"),
                     ("row_country", "供给国"),
                     ("row_sector", "供给行业"),
-                    ("col_country", "使用/需求国"),
-                    ("col_sector", "使用行业/最终需求"),
+                    ("col_country", "使用／需求国"),
+                    ("col_sector", "使用行业／最终需求"),
                 )
                 if source_slice.get(key) not in (None, "")
             )
@@ -176,11 +206,11 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                 if item.get("unit") == "%" and isinstance(observation_value, (int, float)):
                     observation_value *= 100
                 lines.append(
-                    f"| {_safe(item.get('entity', item.get('country', '—')))} | "
+                    f"| {_safe(_entity_label(item))} | "
                     f"{_safe(item.get('year', '—'))} | "
                     f"{_STUDENT_METRIC_LABELS.get(str(item.get('metric')), _safe(item.get('metric', '—')))} | "
                     f"{_safe(item.get('unit', '—'))} | "
-                    f"{_number(observation_value) if isinstance(observation_value, (int, float)) else _safe(observation_value)} |"
+                    f"{reading_number(float(observation_value), str(item.get('unit') or '')) if isinstance(observation_value, (int, float)) and not isinstance(observation_value, bool) else _safe(observation_value)} |"
                 )
         elif compared:
             lines.append("- 本步仅保存比较对象，未记录代表指标数值。")
@@ -197,7 +227,13 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                     f"- 两国趋势示例：{'、'.join(_safe(country_label(str(value))) for value in shock.get('compared', []))} · "
                     f"{_safe(sector_label(str(shock.get('teaching_industry'))))} · 全部可用年份"
                     if isinstance(shock.get("compared"), list) and len(shock["compared"]) == 2
-                    else f"- 查看对象：{_safe(shock.get('teaching_country'))} · {_safe(shock.get('teaching_year'))}"
+                    else f"- 查看对象：{_safe(country_label(str(shock.get('teaching_country'))))}"
+                    + (
+                        f" · {_safe(sector_label(str(shock.get('teaching_industry'))))}"
+                        if shock.get("teaching_industry")
+                        else ""
+                    )
+                    + f" · {_safe(shock.get('teaching_year'))}"
                 ),
                 f"- 数据版本：{_safe(shock.get('teaching_panel_version'))}",
                 "- X = 首年销往美国的出口份额 × 税率。",
@@ -210,9 +246,10 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                     f"- 自动保存的代表行：{_safe(country_label(str(teaching_observation.get('country'))))} · "
                     f"{_safe(sector_label(str(teaching_observation.get('industry'))))} · {_safe(teaching_observation.get('year'))}",
                     # X is read in percentage points throughout steps 10–14, so print it the same way here.
-                    f"- w={_number(float(teaching_observation['teaching_export_share_w']) * 100)}%；"
-                    f"τ={_number(float(teaching_observation['teaching_tariff_rate_tau']) * 100)}%；"
-                    f"X=w×τ={_number(round(float(teaching_observation['teaching_tariff_exposure']) * 100, 2))} 个百分点",
+                    # Same precision as step 10's table: w and X to two decimals, the tariff rate as set.
+                    f"- w={float(teaching_observation['teaching_export_share_w']) * 100:.2f}%；"
+                    f"τ={_rate(float(teaching_observation['teaching_tariff_rate_tau']) * 100)}%；"
+                    f"X=w×τ={float(teaching_observation['teaching_tariff_exposure']) * 100:.2f} 个百分点",
                 )
             )
         lines.append("")
@@ -462,7 +499,7 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
                 f"| 证据判断 | **{evidence}** |",
                 f"| 设计状态 | {_STATUS_LABELS.get(status, _STATUS_LABELS['unknown'])} |",
                 "",
-                f"- **可以支持的表述：** {interpretation}",
+                f"- **可以支持的表述**：{interpretation}",
             )
         )
         lines.append(
@@ -614,7 +651,17 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
                     "- **统计推断已抑制**：下表点估计仅说明计算输出；不得把缺失的 p 值或置信区间解释为无效应，也不得据此形成方向性结论。"
                 )
             lines.extend(_technical_estimate_tables(design, result, suppressed=suppressed))
-            notes = [_safe(note) for note in _list_values(result.get("notes"))]
+            # Runs saved before the wording change carry "双向固定效应(entity_id + year),within 变换后 OLS".
+            notes = [
+                _safe(
+                    re.sub(
+                        r"^双向固定效应\((\S+) \+ (\S+)\),within 变换后 OLS$",
+                        lambda match: two_way_note(match.group(1), match.group(2)),
+                        str(note),
+                    )
+                )
+                for note in _list_values(result.get("notes"))
+            ]
             if notes:
                 lines.extend(("", "方法与限制："))
                 lines.extend(f"- {note}" for note in notes)
@@ -663,6 +710,11 @@ def _qc_release_summary(qc: Any) -> dict[str, Any]:
     return summary
 
 
+def _qc_display_name(name: str) -> str:
+    """QC check names are stored as written in the QC contract (half-width brackets); print them in report style."""
+    return name.replace("(", "（").replace(")", "）")
+
+
 def _qc_disclosure_section(summary: dict[str, Any], integrity: Any) -> list[str]:
     status = integrity.get("status") if isinstance(integrity, dict) else "unknown"
     lines = [
@@ -673,7 +725,7 @@ def _qc_disclosure_section(summary: dict[str, Any], integrity: Any) -> list[str]
     ]
     for key, label in (("fatal", "非阻断诊断发现"), ("warning", "警告"), ("disclosure", "补充披露")):
         if summary[key]:
-            lines.append(f"- {label}：{'、'.join(summary[key])}")
+            lines.append(f"- {label}：{'、'.join(_qc_display_name(str(name)) for name in summary[key])}")
     lines.append("")
     return lines
 

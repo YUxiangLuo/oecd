@@ -94,7 +94,7 @@ describe("indicator table semantics", () => {
     expect(html.match(/scope="row"/g)).toHaveLength(1);
     expect(html).toContain('aria-label="国家 CHN 中国；行业 A');
     expect(html).toMatch(/<th[^>]*scope="row"[^>]*style="position:sticky;left:0;z-index:2;background:#fff"[^>]*>CHN<\/th>/);
-    expect(html).toContain("-12.5");
+    expect(html).toContain("-13");
     expect(html).toContain("外国增加值 ⓘ");
   });
 });

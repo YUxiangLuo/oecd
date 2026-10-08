@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from gvcsim.report_labels import country_label
+
 from gvcsim import (
     artifacts,
     config,
@@ -767,7 +769,7 @@ def test_step_nine_accepts_one_to_five_economies(countries):
     assert not any(item["step"] == 9 for item in check_material_gate(session))
     text = "\n".join(teaching_report._experiment_sections(session))
     section = text.split("### 步骤 9", 1)[1]
-    assert all(f"{country}·C26" in section for country in countries)
+    assert all(f"{country_label(country)} · C26 计算机电子光学" in section for country in countries)
 
 
 def test_report_draws_one_series_per_saved_economy():
@@ -857,7 +859,8 @@ def test_indicator_report_formats_percentages_without_changing_saved_values():
         item.update(metric="FVA_share", unit="%", value=0.237)
     text = "\n".join(teaching_report._experiment_sections(session))
     section = text.split("### 步骤 6", 1)[1].split("### 步骤 7", 1)[0]
-    assert "| 外国增加值项占比 | % | 23.7 |" in section
+    assert "| 外国增加值项占比 | % | 23.700 |" in section
+    assert "| CHN 中国 | 2020 |" in section
     assert "wrong-level-metric" not in section
     assert "unrelated-browse" not in section
     assert "1999" not in section
@@ -870,8 +873,8 @@ def test_table_comparison_report_formats_saved_ratio_as_a_percentage():
     text = "\n".join(teaching_report._experiment_sections(session))
     section = text.split("### 步骤 2", 1)[1].split("### 步骤 3", 1)[0]
 
-    assert "| CHN | 2020 | 外国增加值项占比 | % | 20 |" in section
-    assert "| USA | 2020 | 外国增加值项占比 | % | 10 |" in section
+    assert "| CHN 中国 | 2020 | 外国增加值项占比 | % | 20.000 |" in section
+    assert "| USA 美国 | 2020 | 外国增加值项占比 | % | 10.000 |" in section
     assert "| % | 0.2 |" not in section
 
 
@@ -983,7 +986,7 @@ def test_report_ranking_extrema_use_all_saved_industries(step):
     section = "\n".join(report_observed._observed_evidence_section(session)).split(f"### 步骤 {step}", 1)[1]
     section = section.split("### 步骤", 1)[0]
     assert "最高为 USA 美国 · S7（99.000%）" in section
-    assert "最低为 CHN 中国 · S8、USA 美国 · S8（0.000%）" in section
+    assert "最低为 CHN 中国 · S8、USA 美国 · S8（0%）" in section
     # All 18 readings fit; bars are coloured by country and grouped under one industry label.
     assert "条读数" not in section.split("```gvcsim-chart", 1)[0]
     chart = json.loads(section.split("```gvcsim-chart\n", 1)[1].split("\n```", 1)[0])
@@ -1166,14 +1169,16 @@ def test_report_preserves_two_country_industry_trend_years(tmp_path, monkeypatch
     assert '"type":"line"' in markdown
     assert '"label":"CHN 中国","points":[{"label":"2016","value":31.0},{"label":"2020","value":44.0}]' in markdown
     assert "C26 计算机电子光学" in section
-    change = "+13 百万美元" if unit == "百万美元" else "+13.000"
-    start, end = ("31", "44") if unit == "百万美元" else ("31.000", "44.000")
+    # Amounts and (unnormalised) betweenness read as whole numbers, as on the page; other units keep three decimals.
+    whole = unit in ("百万美元", "未归一化介数")
+    change = "+13 百万美元" if unit == "百万美元" else "+13" if whole else "+13.000"
+    start, end = ("31", "44") if whole else ("31.000", "44.000")
     assert f"CHN 中国 从 2016 年 {start} 变为 2020 年 {end}（{change}）" in markdown
     for expected in (
-        f"| CHN·C26 | 2016 | {label}",
-        f"| CHN·C26 | 2020 | {label}",
-        f"| USA·C26 | 2016 | {label}",
-        f"| USA·C26 | 2020 | {label}",
+        f"| CHN 中国 · C26 计算机电子光学 | 2016 | {label}",
+        f"| CHN 中国 · C26 计算机电子光学 | 2020 | {label}",
+        f"| USA 美国 · C26 计算机电子光学 | 2016 | {label}",
+        f"| USA 美国 · C26 计算机电子光学 | 2020 | {label}",
     ):
         assert expected in markdown
 
@@ -1226,7 +1231,7 @@ def test_report_prints_automatically_saved_teaching_row(tmp_path, monkeypatch):
     markdown = build(_complete(), "同学").markdown
 
     assert "自动保存的代表行：CHN 中国 · s1 · 2019" in markdown
-    assert "w=20%；τ=10%；X=w×τ=2 个百分点" in markdown
+    assert "w=20.00%；τ=10%；X=w×τ=2.00 个百分点" in markdown
     assert markdown.index("## 真实指标比较") < markdown.index("## 关键证据摘要")
     charts = [json.loads(block.split("\n```", 1)[0]) for block in markdown.split("```gvcsim-chart\n")[1:]]
     assert [chart["type"] for chart in charts].count("coefficient") == 4
@@ -1468,8 +1473,8 @@ def test_report_carries_release_qc_disclosures(tmp_path, monkeypatch):
     report = build(_complete(), "同学")
     assert report.provenance["qc"]["years"]["2020"]["requires_disclosure"] is True
     assert "## 数据完整性与诊断披露" in report.markdown
-    assert "警告：因子投入与派生指标定义域(VA/TLS)" in report.markdown
-    assert "补充披露：维度一致性与索引对齐(Z/Y/A/L/x/OUT)" in report.markdown
+    assert "警告：因子投入与派生指标定义域（VA/TLS）" in report.markdown
+    assert "补充披露：维度一致性与索引对齐（Z/Y/A/L/x/OUT）" in report.markdown
 
 
 def test_report_discloses_output_economic_warnings_without_blocking_publication(tmp_path, monkeypatch):
@@ -1579,12 +1584,12 @@ def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, mo
 
     report = build(session, "同学")
 
-    assert "CHN_D01T02(行·供给方) → USA_D01T02(列·使用方) = 228.1 百万美元" in report.markdown
+    assert "CHN 中国·D01T02（行·供给方） → USA 美国·D01T02（列·使用方） = 228.07 百万美元" in report.markdown
     assert "×" not in report.markdown.split("记录的单元格")[1].split("\n")[0]
-    assert "年份=2020" in report.markdown
-    assert "表=z" in report.markdown
+    assert "年份：2020" in report.markdown
+    assert "表：中间投入 Z" in report.markdown
     assert "比较对象：CHN 中国、USA 美国" in report.markdown
-    assert "| CHN | 2020 | 复杂 GVC 生产份额 | 比例 | 0.12 |" in report.markdown
+    assert "| CHN 中国 | 2020 | 复杂 GVC 生产份额 | 比例 | 0.120 |" in report.markdown
     assert "仅用于探索定位，不限定下游回归样本" in report.markdown
     assert "按所选冲击类型汇总该类型全部已编码事件" in report.markdown
     assert "当前目录无法确认来源状态" in report.markdown
@@ -1653,8 +1658,8 @@ def test_report_binds_step1_cell_to_the_slice_it_was_captured_from(tmp_path, mon
 
     markdown = build(session, "同学").markdown
 
-    assert "年份=2020" in markdown
-    assert "表=z" in markdown
+    assert "年份：2020" in markdown
+    assert "表：中间投入 Z" in markdown
     assert "表=y" not in markdown.split("### 步骤 1")[1].split("###")[0]
     assert "年份=2019" not in markdown.split("### 步骤 1")[1].split("###")[0]
 
@@ -1674,12 +1679,12 @@ def test_report_says_when_the_step1_cell_was_recorded_by_default(tmp_path, monke
     }
     session["steps"]["1"]["data"]["observation"] = {**observation, "auto": True}
     step1 = build(session, "同学").markdown
-    assert "- 记录的单元格（系统默认记录，学生未另选）：CHN_D01T02(行·供给方)" in step1
+    assert "- 记录的单元格（系统默认记录，学生未另选）：CHN 中国·D01T02（行·供给方）" in step1
     assert all(item["step"] != 1 for item in check_material_gate(session))
 
     session["steps"]["1"]["data"]["observation"] = observation
     step1 = build(session, "同学").markdown
-    assert "- 记录的单元格：CHN_D01T02(行·供给方)" in step1
+    assert "- 记录的单元格：CHN 中国·D01T02（行·供给方）" in step1
     assert "系统默认记录" not in step1
 
 
@@ -1688,13 +1693,19 @@ def test_report_observation_reading_states_supply_direction_per_table():
     y_obs = {"row": "CHN_D01T02", "column": "USA_HFCE", "value": 1.5, "table": "y"}
     accounts_obs = {"row": "CHN_D01T02", "column": "VA", "value": 1.5, "table": "accounts"}
     legacy_obs = {"row": "CHN_D01T02", "column": "USA_C10T12", "value": 1.5}
-    assert teaching_report._observation_reading(z_obs) == "CHN_D01T02(行·供给方) → USA_C10T12(列·使用方) = 1.5 百万美元"
-    assert teaching_report._observation_reading(y_obs) == "CHN_D01T02(行·供给方) → USA_HFCE(列·最终需求) = 1.5 百万美元"
-    assert teaching_report._observation_reading(accounts_obs) == "CHN_D01T02 的 VA = 1.5 百万美元"
+    assert (
+        teaching_report._observation_reading(z_obs)
+        == "CHN 中国·D01T02（行·供给方） → USA 美国·C10T12 食品饮料烟草（列·使用方） = 1.5 百万美元"
+    )
+    assert (
+        teaching_report._observation_reading(y_obs)
+        == "CHN 中国·D01T02（行·供给方） → USA 美国·居民最终消费支出（列·最终需求） = 1.5 百万美元"
+    )
+    assert teaching_report._observation_reading(accounts_obs) == "CHN 中国·D01T02 的 VA（增加值） = 1.5 百万美元"
     # 旧会话里没有 table 字段时按中间投入 Z 的读法兜底。
     assert (
         teaching_report._observation_reading(legacy_obs)
-        == "CHN_D01T02(行·供给方) → USA_C10T12(列·使用方) = 1.5 百万美元"
+        == "CHN 中国·D01T02（行·供给方） → USA 美国·C10T12 食品饮料烟草（列·使用方） = 1.5 百万美元"
     )
 
 
@@ -1863,7 +1874,10 @@ def test_country_level_trend_and_same_year_charts_show_the_global_median(tmp_pat
     assert "两国" not in chart["title"] and "全球中位数" in chart["title"]
     section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 8", 1)[1]
     section = section.split("### 步骤 9", 1)[0]
-    assert "在 5 个经济体中（从高到低），CHN 中国从第 3 位变为第 3 位；USA 美国从第 2 位变为第 2 位" in section
+    assert (
+        "在 5 个经济体中（从高到低），CHN 中国 2016 年与 2020 年均为第 3 位；USA 美国 2016 年与 2020 年均为第 2 位"
+        in section
+    )
     assert '"_context"' not in section and '"reference":true' in section
 
     # Same-year comparison: the two countries plus a median bar, read with their ranks.
@@ -1921,7 +1935,8 @@ def test_step9_report_reads_the_industry_against_the_same_industry_worldwide(tmp
     assert "全球中位数" in trend["title"]
     section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 9", 1)[1]
     assert (
-        "在 4 个经济体的同一行业中（从高到低），CHN 中国从第 1 位变为第 1 位；USA 美国从第 2 位变为第 2 位" in section
+        "在 4 个经济体的同一行业中（从高到低），CHN 中国 2016 年与 2020 年均为第 1 位；USA 美国 2016 年与 2020 年均为第 2 位"
+        in section
     )
 
     # Ranking: each industry's pair of bars is followed by that industry's global median.
@@ -1952,8 +1967,8 @@ def test_step9_report_reads_the_industry_against_the_same_industry_worldwide(tmp
     section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 9", 1)[1]
     # Extremes are read among the saved countries only, never the median bars.
     assert (
-        "最高为 CHN 中国 · C27 电气设备（154.000）" in section
-        and "最低为 USA 美国 · C26 计算机电子光学（44.000）" in section
+        "最高为 CHN 中国 · C27 电气设备（154）" in section
+        and "最低为 USA 美国 · C26 计算机电子光学（44）" in section
     )
 
 

@@ -15,7 +15,7 @@ SECTOR_NAMES: dict[str, str] = {
     "C26": "计算机电子光学", "C27": "电气设备", "C28": "机械设备", "C29": "汽车及零部件", "C30": "其他运输设备",
     "C31T33": "家具及其他制造", "D": "电力燃气", "E": "供水与废弃物", "F": "建筑", "G": "批发零售",
     "H49": "陆路运输", "H50": "水路运输", "H51": "航空运输", "H52": "仓储与运输辅助", "H53": "邮政快递",
-    "I": "住宿餐饮", "J58T60": "出版影视广播", "J61": "电信", "J62_63": "IT与信息服务", "K": "金融保险",
+    "I": "住宿餐饮", "J58T60": "出版影视广播", "J61": "电信", "J62_63": "IT 与信息服务", "K": "金融保险",
     "L": "房地产", "M": "专业科技服务", "N": "行政与支持服务", "O": "公共管理与国防", "P": "教育",
     "Q": "卫生与社会工作", "R": "文体娱乐", "S": "其他服务", "T": "家庭自用生产",
 }
@@ -52,3 +52,30 @@ def sector_label(code: str) -> str:
     """Display name such as "C26 计算机电子光学"; unknown codes are returned unchanged."""
     name = SECTOR_NAMES.get(code)
     return f"{code} {name}" if name else code
+
+
+# Step 1 (frontend ``FD_NAMES`` / ``DB_TABLES`` in labs/steps/db-lab.tsx): Y columns and table names.
+FINAL_DEMAND_NAMES: dict[str, str] = {
+    "HFCE": "居民最终消费支出",
+    "NPISH": "为居民服务的非营利机构消费",
+    "GGFC": "政府最终消费支出",
+    "GFCF": "固定资本形成总额（投资）",
+    "INVNT": "存货变化",
+    "DPABR": "居民境外直接购买（出境旅行等消费）",
+}
+DB_TABLE_NAMES: dict[str, str] = {"z": "中间投入 Z", "y": "最终需求 Y", "accounts": "账户项"}
+
+
+def country_sector_label(code: str) -> str:
+    """A step 1 row/column code such as "CHN_D01T02" as "CHN 中国·D01T02 农林牧业"; unknown codes unchanged."""
+    country, separator, rest = code.partition("_")
+    if not separator or country not in COUNTRY_NAMES or not rest:
+        return code
+    return f"{country_label(country)}·{sector_label(rest)}"
+
+
+def final_demand_label(code: str) -> str:
+    """A Y column such as "USA_HFCE" as "USA 美国·居民最终消费支出"; unknown codes unchanged."""
+    country, separator, category = code.rpartition("_")
+    name = FINAL_DEMAND_NAMES.get(category)
+    return f"{country_label(country)}·{name}" if separator and country and name else code

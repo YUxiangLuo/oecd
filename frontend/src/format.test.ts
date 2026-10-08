@@ -3,11 +3,14 @@ import { formatMetric } from "./format";
 
 describe("formatMetric", () => {
   test("uses one precision contract for percentages, amounts and scalar metrics", () => {
-    expect(formatMetric(0.12345, "pct")).toBe("12.35%");
-    // Million-USD amounts: whole numbers from 1,000 up, two fixed decimals below.
+    expect(formatMetric(0.12345, "pct")).toBe("12.345%");
+    // Million-USD amounts: whole millions from 1 up, three decimals below (as on the step 6–9 cards).
     expect(formatMetric(1234.567, "amount")).toBe("1,235");
-    expect(formatMetric(62.4, "amount")).toBe("62.40");
+    expect(formatMetric(62.4, "amount")).toBe("62");
+    expect(formatMetric(0.4567, "amount")).toBe("0.457");
     expect(formatMetric(1.2, "number")).toBe("1.200");
+    // Whole counts (degree, eccentricity) carry no decimals.
+    expect(formatMetric(43, "number")).toBe("43");
   });
 
   test("shows large dimensionless metrics as grouped integers instead of x.000", () => {
@@ -27,9 +30,9 @@ describe("formatMetric", () => {
   test("normalizes negative zero and tiny negatives that round to zero", () => {
     expect(formatMetric(-0, "amount")).toBe("0");
     expect(formatMetric(-1e-13, "amount")).toBe("0");
-    expect(formatMetric(-1e-9, "pct")).toBe("0.00%");
+    expect(formatMetric(-1e-9, "pct")).toBe("0.000%");
     expect(formatMetric(-1e-9, "number")).toBe("0.000");
     // 真正的负数不受影响
-    expect(formatMetric(-0.5, "amount")).toBe("-0.50");
+    expect(formatMetric(-0.5, "amount")).toBe("-0.500");
   });
 });

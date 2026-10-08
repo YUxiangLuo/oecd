@@ -924,6 +924,13 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   }
   .report-md .data-table thead { display: table-header-group; }
   .report-md .data-table tr { break-inside: avoid; }
+  /* A chart taller than a page (a long industry ranking) is scaled to fit one page, keeping its caption,
+     instead of being pushed to the next page and split there (which left near-blank pages). The SVG keeps
+     its aspect ratio inside the capped box. */
+  .report-md .report-figure { break-inside: avoid; }
+  .report-md .report-figure svg { max-height: 225mm; }
+  /* The report body is focused on open; its focus ring is application UI, not part of the printed report. */
+  *:focus, *:focus-visible { outline: none !important; box-shadow: none !important; }
 }
 
 /* 图表下方的当前指标一句话定义。 */

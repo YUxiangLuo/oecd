@@ -9,6 +9,7 @@ from gvcsim import evidence
 from gvcsim.indicator_schema import INDICATOR_SCHEMA
 from gvcsim.regression.design import CONTROL_MODE_LABELS, GRANULARITY_LABELS, METHOD_LABELS, PRICE_MODE_LABELS
 from gvcsim.regression.teaching import X_COLUMN
+from gvcsim.report_labels import country_sector_label, final_demand_label
 from gvcsim.steps import STEPS
 
 REFLECTION_TEXT_LIMIT = 2400
@@ -189,24 +190,59 @@ def _number(value: Any, *, p_value: bool = False) -> str:
     return f"{numeric:.4g}"
 
 
+def reading_digits(value: float, unit: str) -> int:
+    """Decimals of a reading, as on the pages (frontend ``readingDigits``): whole millions for amounts, whole
+    counts and path lengths, three decimals otherwise; an exact zero reads "0"."""
+    if (
+        value == 0
+        or (unit == "百万美元" and abs(value) >= 1)
+        or unit in ("连接数", "路径长度")
+        or (unit == "未归一化介数" and abs(value) >= 1)
+    ):
+        return 0
+    return 3
+
+
+def reading_number(value: float, unit: str) -> str:
+    """A reading's number in the page's fixed precision (shares are passed already multiplied by 100)."""
+    digits = reading_digits(value, unit)
+    text = f"{value:,.{digits}f}"
+    return text[1:] if text.startswith("-") and float(text.replace(",", "")) == 0 else text
+
+
+def _db_amount(value: float) -> str:
+    """A step 1 cell as the step 1 table shows it (frontend ``fmtDb``): up to two decimals, more for small flows."""
+    if value == 0:
+        return "0"
+    magnitude = abs(value)
+    digits = 4 if magnitude < 1 else 3 if magnitude < 10 else 2
+    text = f"{value:,.{digits}f}".rstrip("0").rstrip(".")
+    return "0" if text in ("-0", "") else text
+
+
+_ACCOUNT_NAMES = {"TLS": "产品税减补贴", "VA": "增加值", "OUT": "总产出"}
+
+
 def _observation_reading(observation: dict[str, Any]) -> str:
     """步骤 1 观察值的完整读法:把无方向的「行 × 列 = 值」写成带供给方向的句子,
-    避免报告读者把行(供给方)误读成使用方——与前端表格的方向标注一致。"""
-    row = _safe(observation.get("row", "—"))
-    column = _safe(observation.get("column", "—"))
+    避免报告读者把行(供给方)误读成使用方——与前端表格的方向标注和名称一致。"""
+    row_code = str(observation.get("row", "—"))
+    column_code = str(observation.get("column", "—"))
+    row = _safe(country_sector_label(row_code))
     raw_value = observation.get("value", "—")
     # Every ICIO cell (Z, Y and the VA/TLS/OUT accounts) is in million USD, as the step 1 table says.
     value = (
-        f"{_number(raw_value)} 百万美元"
-        if isinstance(raw_value, (int, float)) and not isinstance(raw_value, bool)
+        f"{_db_amount(float(raw_value))} 百万美元"
+        if isinstance(raw_value, (int, float)) and not isinstance(raw_value, bool) and math.isfinite(float(raw_value))
         else _safe(raw_value)
     )
     table = str(observation.get("table") or "z")
     if table == "y":
-        return f"{row}(行·供给方) → {column}(列·最终需求) = {value}"
+        return f"{row}（行·供给方） → {_safe(final_demand_label(column_code))}（列·最终需求） = {value}"
     if table == "accounts":
-        return f"{row} 的 {column} = {value}"
-    return f"{row}(行·供给方) → {column}(列·使用方) = {value}"
+        account = _ACCOUNT_NAMES.get(column_code)
+        return f"{row} 的 {_safe(column_code)}{f'（{account}）' if account else ''} = {value}"
+    return f"{row}（行·供给方） → {_safe(country_sector_label(column_code))}（列·使用方） = {value}"
 
 
 def _count(value: Any) -> str:
@@ -310,15 +346,29 @@ def _natural_effect(
         )
     elif kind == "network":
         sd = result.get("depvar_std")
-        relative = effect / float(sd) if isinstance(sd, (int, float)) and float(sd) > 0 else None
+        positive_sd = float(sd) if isinstance(sd, (int, float)) and float(sd) > 0 else None
         effect_text = f"{_signed(effect, 2)} 个中心性原始单位"
-        if relative is not None:
-            effect_text += f"（约 {_signed(relative, 2)} 个样本标准差）"
-        interval = f"[{_signed(ci[0] * increment, 2)}, {_signed(ci[1] * increment, 2)}] 个原始单位" if ci else "—"
+        if positive_sd is not None:
+            effect_text += f"（约 {_signed(effect / positive_sd, 2)} 个样本标准差）"
+        interval = (
+            f"[{_signed(ci[0] * increment, 2)}, {_signed(ci[1] * increment, 2)}] 个中心性原始单位"
+            + (
+                f"（约 [{_signed(ci[0] * increment / positive_sd, 2)}, {_signed(ci[1] * increment / positive_sd, 2)}]"
+                " 个样本标准差）"
+                if positive_sd is not None
+                else ""
+            )
+            if ci
+            else "—"
+        )
     else:
         unit = "位置指数单位" if kind == "position" else "长度单位"
         digits = 4 if kind == "position" else 3
         effect_text = f"{_signed(effect, digits)} 个{unit}"
+        mean = result.get("depvar_mean")
+        # As on the page: a length effect is also read against the sample mean length.
+        if kind == "length" and isinstance(mean, (int, float)) and math.isfinite(mean) and abs(float(mean)) > 1e-12:
+            effect_text += f"（约为样本均值的 {_signed(effect / abs(float(mean)) * 100, 2)}%）"
         interval = (
             f"[{_signed(ci[0] * increment, digits)}, {_signed(ci[1] * increment, digits)}] 个{unit}" if ci else "—"
         )
