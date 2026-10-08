@@ -534,7 +534,7 @@ test("restored graded receipt is available without submitting again; outdated ex
     fireEvent.click(screen.getByRole("button", { name: "查看提交回执与实验总结" }));
     const dialog = screen.getByRole("dialog", { name: "报告已评阅" });
     expect(within(dialog).getByText("已评阅 · 93 分")).toBeTruthy();
-    expect(within(dialog).getByText("教师评语：证据链完整")).toBeTruthy();
+    expect(within(dialog).getByRole("region", { name: "教师评语" }).textContent).toBe("教师评语：证据链完整");
     const receipt = within(dialog).getByRole("region", { name: "报告提交回执" });
     expect(within(receipt).getByText(/后续修改尚未纳入这份报告/)).toBeTruthy();
     expect(within(receipt).getByText(/重新生成会清除当前评分与评语/)).toBeTruthy();

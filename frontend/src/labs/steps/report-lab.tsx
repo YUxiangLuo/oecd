@@ -184,8 +184,8 @@ export function ReportStatus({ report }: { report: ClassroomReport }) {
   if (report.state === "pending") return <span className="muted">提交于 {fmtTime(report.submitted_at)} · 等待教师评阅</span>;
   return (
     <div>
-      <span className="muted">已评阅 · {report.score} 分 · {fmtTime(report.graded_at)}</span>
-      {report.feedback?.trim() && <p className="muted report-feedback">教师评语：{report.feedback}</p>}
+      <b className="report-grade">已评阅 · {report.score} 分</b><span className="muted"> · {fmtTime(report.graded_at)}</span>
+      {report.feedback?.trim() && <div className="report-feedback" tabIndex={0} role="region" aria-label="教师评语"><b>教师评语：</b>{report.feedback}</div>}
     </div>
   );
 }
@@ -265,6 +265,7 @@ export function ReportLab({
   const [printing, setPrinting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outro, setOutro] = useState<ClassroomReport | null>(null);
+  const statusCardRef = useRef<HTMLElement>(null);
   // An in-page confirmation (not window.confirm) before a graded report is replaced; resolves with the answer.
   const [confirmRegenerate, setConfirmRegenerate] = useState<((ok: boolean) => void) | null>(null);
   const askRegenerate = () => new Promise<boolean>((resolve) => setConfirmRegenerate(() => resolve));
@@ -348,7 +349,11 @@ export function ReportLab({
         clearToasts();
         setOutro(finalReport);
       }
-      else showToast("报告草稿已生成，请预览后提交");
+      else {
+        showToast("报告草稿已生成，请预览后提交");
+        // The generate button is disabled while busy and the page changes under it: continue at the new status.
+        window.requestAnimationFrame(() => statusCardRef.current?.focus({ preventScroll: false }));
+      }
     } catch (cause) {
       const requestError = cause as Error & { blocked?: ReportGateItem[] };
       if (requestError.blocked) {
@@ -416,7 +421,7 @@ export function ReportLab({
         <ol>
           <li><b>1 · 检查实验材料</b><span>{state.syncConflict ? "另一处已更新记录，请先点页面顶部的“载入服务器版本”" : state.syncError ? "保存失败，请先重试保存" : reportGate == null || sessionStatus !== "ready" ? "正在核对服务器记录" : sessionUnsynced || sessionSyncing ? "保存后将重新核对材料" : materialMissing.length || globalMissing ? `${[materialMissing.length ? `第 1–14 步中 ${materialMissing.length} 个步骤还有 ${materialMissing.reduce((count, item) => count + item.missing.length, 0)} 项待补齐` : null, globalMissing ? `${globalMissing} 项全局条件未满足` : null].filter(Boolean).join("，")}，见下方入口` : "已保存材料与理解题已齐"}</span></li>
           <li><b>2 · 写下自己的分析</b><span>{writtenCount} / 3 段达到最低字数 · 内容仍需自己核对</span></li>
-          <li><b>3 · 提交给老师</b><span>{report && report.state !== "draft" && reportOutdated ? "报告需更新：之后的修改还没交给老师，请重新生成并提交" : report?.state === "pending" ? "已提交，等待评阅" : report?.state === "graded" ? "已评阅，可查看反馈" : report ? "已有草稿，尚未提交" : "生成报告不等于提交"}</span></li>
+          <li><b>3 · 提交给老师</b><span>{report && report.state !== "draft" && reportOutdated ? "报告需更新：之后的修改还没交给老师，请重新生成并提交" : report?.state === "pending" ? "已提交，等待评阅" : report?.state === "graded" ? <a href="#report-status-card" onClick={(event) => { event.preventDefault(); statusCardRef.current?.scrollIntoView?.({ block: "center" }); statusCardRef.current?.focus({ preventScroll: true }); }}>已评阅，查看分数与评语</a> : report ? "已有草稿，尚未提交" : "生成报告不等于提交"}</span></li>
         </ol>
       </section>
       {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} />}
@@ -524,7 +529,7 @@ export function ReportLab({
 
       {report ? (
         <>
-          <section className="submit-card"><ReportStatus report={report} /></section>
+          <section className="submit-card" id="report-status-card" ref={statusCardRef} tabIndex={-1} aria-label="报告状态"><ReportStatus report={report} /></section>
           <div className="report-body" tabIndex={-1} aria-label="报告正文"><ReportMarkdown markdown={report.markdown} /></div>
         </>
       ) : (

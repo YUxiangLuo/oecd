@@ -179,8 +179,11 @@ test("one economy alone records against the same-industry reference", async () =
   await waitFor(() => expect(save.mock.calls.at(-1)![0]).toEqual(["CHN"]));
   expect(save.mock.calls.at(-1)![1].every((item) => item.country === "CHN")).toBe(true);
   // A second comparison country can be added; the scope card lists all three.
+  // Choosing in the add control only stages the country; 添加 commits it.
   fireEvent.change(screen.getByLabelText("对比国家 B"), { target: { value: "USA" } });
+  fireEvent.click(screen.getByRole("button", { name: "添加" }));
   fireEvent.change(screen.getByLabelText("再加一个对比国家"), { target: { value: "DEU" } });
+  fireEvent.click(screen.getByRole("button", { name: "添加" }));
   await waitFor(() => expect(save.mock.calls.at(-1)![0]).toEqual(["CHN", "USA", "DEU"]));
   expect(screen.getByLabelText("当前比较口径").textContent).toContain("CHN 中国、USA 美国、DEU 德国");
 });

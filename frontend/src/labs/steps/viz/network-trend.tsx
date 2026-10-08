@@ -8,6 +8,7 @@ import { HEAT_EVIDENCE_METRIC } from "../../../viz/views/network-heat";
 import { AsyncStateMessage, useAsync } from "../../shared";
 import { currentReleaseId, LensNav, type Row, type VizObservation } from "./scaffold";
 import { IndicatorTrendChart, indicatorNumber } from "./indicator-charts";
+import { AddCountryControl } from "./add-country";
 import { QuadrantScatter } from "../../../viz";
 import { Butterfly } from "./theme-charts";
 import { COMPARISON_LETTERS, defaultComparison, defaultEntities, MAX_ENTITIES, type YearDistribution } from "./indicator-model";
@@ -65,6 +66,8 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   const recordable = view === "trend" || view === "ranking";
   // Picking an industry in the ranking unmounts the clicked button; move focus to the new scope line.
   const scopeRef = useRef<HTMLDivElement>(null);
+  const firstRef = useRef<HTMLSelectElement>(null);
+  const addRef = useRef<HTMLSelectElement>(null);
   const [focusScope, setFocusScope] = useState(false);
   useEffect(() => {
     if (!focusScope) return;
@@ -148,7 +151,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   return <section className="reg-section-card" aria-label="行业网络指标趋势">
     <h3>行业的网络位置怎样变化？在全部经济体的同一行业中处于什么位置？</h3>
     <div className="controls" role="group" aria-label="比较对象">
-      <LabeledControl label="国家 A">{(id) => <select id={id} name="network-country-a" value={first} onChange={(event) => {
+      <LabeledControl label="国家 A">{(id) => <select id={id} ref={firstRef} name="network-country-a" value={first} onChange={(event) => {
         const next = event.target.value;
         // Choosing a comparison country as A swaps it with the old A rather than dropping it.
         setOthers(others.map((country) => (country === next ? first : country)));
@@ -156,21 +159,27 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       }}>{countries.map((country) => <option key={country} value={country}>{countryLabel(country)}</option>)}</select>}</LabeledControl>
       {others.map((country, index) => (
         <LabeledControl key={index} label={`对比国家 ${COMPARISON_LETTERS[index]}`}>{(id) => (
-          <select id={id} name={index ? undefined : "network-country-b"} value={country} onChange={(event) => setOthers(
-            event.target.value ? others.map((item, at) => (at === index ? event.target.value : item)) : others.filter((_, at) => at !== index),
-          )}>
+          <select id={id} name={index ? undefined : "network-country-b"} value={country} onChange={(event) => {
+            if (event.target.value) { setOthers(others.map((item, at) => (at === index ? event.target.value : item))); return; }
+            // 移除 unmounts this select; keep keyboard focus on the comparison controls.
+            setOthers(others.filter((_, at) => at !== index));
+            window.requestAnimationFrame(() => (addRef.current ?? firstRef.current)?.focus());
+          }}>
             <option value="">{index ? "移除" : "不选对比国家"}</option>
             {countries.filter((candidate) => candidate === country || !selected.includes(candidate)).map((candidate) => <option key={candidate} value={candidate}>{countryLabel(candidate)}</option>)}
           </select>
         )}</LabeledControl>
       ))}
       {selected.length < MAX_ENTITIES && (
-        <LabeledControl label={others.length ? "再加一个对比国家" : "对比国家 B"}>{(id) => (
-          <select id={id} name={others.length ? undefined : "network-country-b"} value="" onChange={(event) => event.target.value && setOthers([...others, event.target.value])}>
-            <option value="">{others.length ? "添加…" : "不选对比国家"}</option>
-            {countries.filter((candidate) => !selected.includes(candidate)).map((candidate) => <option key={candidate} value={candidate}>{countryLabel(candidate)}</option>)}
-          </select>
-        )}</LabeledControl>
+        <AddCountryControl
+          ref={addRef}
+          label={others.length ? "再加一个对比国家" : "对比国家 B"}
+          emptyLabel={others.length ? "选择国家…" : "不选对比国家"}
+          name={others.length ? undefined : "network-country-b"}
+          candidates={countries.filter((candidate) => !selected.includes(candidate))}
+          onAdd={(country) => setOthers([...others, country])}
+          focusAfterAdd={() => (addRef.current ?? firstRef.current)?.focus()}
+        />
       )}
     </div>
     <LensNav

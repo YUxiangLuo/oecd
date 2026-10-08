@@ -44,6 +44,7 @@ import {
   indicatorNumber,
 } from "./indicator-charts";
 import { ScopeCard } from "./scope-card";
+import { AddCountryControl } from "./add-country";
 import { comparisonCards, compositionCards, industryCards, positioningCards, ReadingCards, segmentCards } from "./reading-cards";
 import { Dumbbell, IndustryDotPlot, StackedAreaFacets } from "./theme-charts";
 import { CAT } from "../../../viz/shared";
@@ -108,6 +109,8 @@ export function IndicatorExplorer({
   const selectOthers = (others: string[]) => select({ others, second: others[0] ?? "" });
   // The sticky scope card jumps to the control that changes each part of the scope.
   const entityRef = useRef<HTMLSelectElement>(null);
+  const addRef = useRef<HTMLSelectElement>(null);
+
   const rangeRef = useRef<HTMLSelectElement>(null);
   const metricRef = useRef<HTMLSelectElement>(null);
   const yearRef = useRef<HTMLSelectElement>(null);
@@ -469,11 +472,15 @@ export function IndicatorExplorer({
               <select
                 id={id}
                 value={country}
-                onChange={(e) => selectOthers(
-                  e.target.value
-                    ? others.map((item, at) => (at === index ? e.target.value : item))
-                    : others.filter((_, at) => at !== index),
-                )}
+                onChange={(e) => {
+                  if (!e.target.value) {
+                    // 移除 unmounts this select; keep keyboard focus on the comparison controls.
+                    selectOthers(others.filter((_, at) => at !== index));
+                    window.requestAnimationFrame(() => (addRef.current ?? entityRef.current)?.focus());
+                    return;
+                  }
+                  selectOthers(others.map((item, at) => (at === index ? e.target.value : item)));
+                }}
               >
                 <option value="">{index ? "移除" : "不选对比国家"}</option>
                 {countries
@@ -488,24 +495,14 @@ export function IndicatorExplorer({
           </LabeledControl>
         ))}
         {selected.length < MAX_ENTITIES && (
-          <LabeledControl label={others.length ? "再加一个对比国家" : "对比国家 B"}>
-            {(id) => (
-              <select
-                id={id}
-                value=""
-                onChange={(e) => e.target.value && selectOthers([...others, e.target.value])}
-              >
-                <option value="">{others.length ? "添加…" : "不选对比国家"}</option>
-                {countries
-                  .filter((candidate) => !selected.includes(candidate))
-                  .map((candidate) => (
-                    <option key={candidate} value={candidate}>
-                      {countryLabel(candidate)}
-                    </option>
-                  ))}
-              </select>
-            )}
-          </LabeledControl>
+          <AddCountryControl
+            ref={addRef}
+            label={others.length ? "再加一个对比国家" : "对比国家 B"}
+            emptyLabel={others.length ? "选择国家…" : "不选对比国家"}
+            candidates={countries.filter((candidate) => !selected.includes(candidate))}
+            onAdd={(country) => selectOthers([...others, country])}
+            focusAfterAdd={() => (addRef.current ?? entityRef.current)?.focus()}
+          />
         )}
       </div>
       <LensNav

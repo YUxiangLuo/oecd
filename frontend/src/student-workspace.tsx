@@ -18,6 +18,7 @@ import { QuizPanel, type QuizDraftStore } from "./step-quiz";
 import {
   focusStepPrimaryAction,
   materialStatusForStep,
+  reportMaterialStatus,
   stepPrimaryActionLabel,
   STEP_MATERIAL_ACTION_ID,
   STEP_PRIMARY_ACTION_ID,
@@ -153,8 +154,9 @@ export function StudentWorkspace({
   const presentationCompletion = session.completion;
   const presentationCompletedSteps = completedSteps;
   const mainContentId = stepMainContentId(step.n);
-  const materialStatus = materialStatusForStep(step.n, session.materialGate,
-    session.unsynced || session.syncing, Boolean(session.syncError));
+  const materialStatus = step.lab === "rep"
+    ? reportMaterialStatus(session.reportGate, session.unsynced || session.syncing, Boolean(session.syncError))
+    : materialStatusForStep(step.n, session.materialGate, session.unsynced || session.syncing, Boolean(session.syncError));
   const currentComparison = session.getStep<{ compared?: string[] }>(step.n)?.compared ?? [];
   // Steps 3–9 record their comparison as soon as they open, so a step visited for the first time starts
   // from the comparison used in the latest earlier step instead of the default CHN/USA. Once the step saves

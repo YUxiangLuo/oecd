@@ -375,8 +375,8 @@ button.butterfly-label:hover { text-decoration: underline; }
 button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text-decoration: underline; outline: 2px solid #4b47e0; outline-offset: 2px; border-radius: 4px; }
 .butterfly-value { font-size: 11.5px; font-variant-numeric: tabular-nums; color: #374151; }
 .controls-sep { color: #9aa3b5; margin: 0 2px; }
-/* Each panel is a 640-wide chart: below ~420px its 11px text shrank to ~8px, so narrow rows take one panel. */
-.reg-family-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 12px; margin: 10px 0 14px; }
+/* Each panel is a 640-wide chart: narrower than ~620px its 11px text shrinks below 10px, so two panels share a row only on very wide screens. */
+.reg-family-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(620px, 100%), 1fr)); gap: 12px; margin: 10px 0 14px; }
 .reg-family-missing { padding: 14px; border: 1px dashed #d7dae2; border-radius: 12px; font-size: 12px; }
 .reg-equation { margin-top: 12px; }
 
@@ -388,3 +388,7 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 .partner-region-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 4px 0 8px; font-size: 11.5px; color: #596173; }
 .partner-region-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .partner-region-legend i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; background: #fff; }
+
+/* Add-a-comparison-country control: the select stages a choice, the button commits it. */
+.add-country { display: inline-flex; align-items: center; gap: 6px; }
+.add-country button[aria-disabled="true"] { opacity: .5; cursor: default; }

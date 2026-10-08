@@ -243,3 +243,11 @@ describe("parseReportChart", () => {
     expect(html).toContain("横线 = 标称 95% 近似区间");
   });
 });
+
+test("react-markdown's node prop never reaches the DOM", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { createElement } = await import("react");
+  const { ReportMarkdown } = await import("./report-renderer");
+  const html = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: "# 标题\n\n数据版本 `step10-tariff-teaching-v5`\n\n```\nplain\n```\n\n> 引用" }));
+  expect(html).not.toContain("node=");
+});

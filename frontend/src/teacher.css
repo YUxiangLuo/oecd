@@ -113,8 +113,10 @@
 }
 .modal-card { background: #fff; border-radius: 16px; box-shadow: 0 20px 60px rgba(20,20,60,0.25); }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #eef0f5; }
-.modal-head b { font-size: 15px; }
-.modal-x { border: none !important; background: none !important; font-size: 20px; line-height: 1; color: var(--text-muted); padding: 0 !important; }
+.modal-head { gap: 12px; }
+/* Long names (e.g. a semester name without spaces) wrap inside the dialog instead of pushing × outside it. */
+.modal-head b { font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
+.modal-x { flex: none;  border: none !important; background: none !important; font-size: 20px; line-height: 1; color: var(--text-muted); padding: 0 !important; }
 .modal-body { padding: 18px 20px 20px; }
 .modal-msg { margin: 0 0 4px; font-size: 13px; line-height: 1.7; color: #3a4050; }
 .modal-form { display: flex; flex-direction: column; }

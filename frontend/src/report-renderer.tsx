@@ -529,7 +529,9 @@ function ReportCode({ className, children, ...props }: ComponentPropsWithoutRef<
     if (chart?.type === "event-study") return <EventChart chart={chart} />;
     if (chart?.type === "line") return <LineChart chart={chart} />;
   }
-  return <code className={className} {...props}>{children}</code>;
+  // react-markdown passes its HAST `node`; it must not reach the DOM as node="[object Object]".
+  const { node: _node, ...domProps } = props as typeof props & { node?: unknown };
+  return <code className={className} {...domProps}>{children}</code>;
 }
 
 function ReportPre({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
@@ -549,7 +551,8 @@ function ReportPre({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
       if (chart?.type === "line") return <LineChart chart={chart} />;
     }
   }
-  return <pre {...props}>{children}</pre>;
+  const { node: _node, ...domProps } = props as typeof props & { node?: unknown };
+  return <pre {...domProps}>{children}</pre>;
 }
 
 // Minimal HAST shape: this transformer only reads headings/text and names tables.

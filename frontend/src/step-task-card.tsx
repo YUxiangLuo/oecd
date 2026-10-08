@@ -29,6 +29,19 @@ export function materialStatusForStep(
   return materialGate.some((item) => item.step === step) ? "missing" : "ready";
 }
 
+/** Step 15's chip covers everything the report needs (steps 1–14 material and quizzes plus the analysis),
+ * the same list as the gate card below it, so the two never disagree. */
+export function reportMaterialStatus(
+  reportGate: Array<{ step: number }> | null,
+  saving = false,
+  saveFailed = false,
+): StepMaterialStatus {
+  if (saveFailed) return "unsynced";
+  if (reportGate === null) return "checking";
+  if (saving) return "saving";
+  return reportGate.length ? "missing" : "ready";
+}
+
 export function focusStepPrimaryAction(content: HTMLElement | null, targetId = STEP_PRIMARY_ACTION_ID): boolean {
   const target = content?.querySelector<HTMLElement>(`#${targetId}`) ?? null;
   if (!content || !target) return false;

@@ -955,7 +955,12 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .sync-problem--compact span { flex: 1; min-width: 0; }
 .sync-problem--compact button { flex: none; }
 /* Teacher feedback keeps its paragraphs and list lines on the step 15 status line too. */
-.report-feedback { white-space: pre-wrap; }
+/* Teacher feedback can be up to 4000 characters: a readable card that scrolls instead of one grey block. */
+.report-feedback {
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto;
+  margin: 8px 0; padding: 10px 12px; border: 1px solid #e3e6f0; border-radius: 9px; background: #f8faff;
+  color: #2b3240; font-size: 13px; line-height: 1.7;
+}
 /* The step 1 caption sits at the table's left edge, not centred over a table thousands of pixels wide. */
 .db-table caption { text-align: left; position: sticky; left: 0; padding: 8px 12px; }
 
@@ -966,3 +971,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .boot-failure-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 [data-focus-anchor]:focus { outline: none; }
 .fullscreen-panel-surface:focus { outline: none; }
+
+.report-grade { color: #1b7a4a; font-size: 14px; }
+.submit-card:focus { outline: none; }
+.submit-card:focus-visible { box-shadow: 0 0 0 2px #4b47e0; }

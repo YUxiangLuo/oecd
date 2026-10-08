@@ -1,4 +1,4 @@
-import { useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { api } from "./api";
 import { Modal } from "./teacher/ui";
 import { userFacingRequestError } from "./user-facing-error";
@@ -33,6 +33,9 @@ export function AccountPasswordModal({
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Like the other dialogs: a refused change moves focus to the reason.
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
 
   const close = () => {
     if (!busy) onClose();
@@ -76,7 +79,6 @@ export function AccountPasswordModal({
           id="account-current-password"
           type="password"
           autoComplete="current-password"
-          maxLength={256}
           value={currentPassword}
           onChange={(event) => setCurrentPassword(event.target.value)}
         />
@@ -87,7 +89,6 @@ export function AccountPasswordModal({
           type="password"
           autoComplete="new-password"
           minLength={12}
-          maxLength={256}
           value={newPassword}
           onChange={(event) => setNewPassword(event.target.value)}
         />
@@ -99,12 +100,11 @@ export function AccountPasswordModal({
           type="password"
           autoComplete="new-password"
           minLength={12}
-          maxLength={256}
           value={confirmation}
           onChange={(event) => setConfirmation(event.target.value)}
         />
 
-        {error && <div className="error-box account-password-error" role="alert">{error}</div>}
+        {error && <div ref={errorRef} tabIndex={-1} className="error-box account-password-error" role="alert">{error}</div>}
         <div className="modal-actions">
           <button type="button" disabled={busy} onClick={close}>取消</button>
           <button className="primary" type="submit" disabled={busy}>

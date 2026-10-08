@@ -459,6 +459,7 @@ describe("material of one to five economies (design doc 4.1)", () => {
       fireEvent.click(view.getByRole("button", { name: "历年变化" }));
       await waitFor(() => expect(view.saves.at(-1)?.compared).toEqual(["CHN", "USA"]));
       fireEvent.change(view.getByLabelText("再加一个对比国家"), { target: { value: "DEU" } });
+      fireEvent.click(view.getByRole("button", { name: "添加" }));
       await waitFor(() => expect(view.saves.at(-1)?.compared).toEqual(["CHN", "USA", "DEU"]));
       expect(view.getByLabelText("对比国家 C")).toBeTruthy();
       expect(view.container.querySelectorAll("[data-series-group]")).toHaveLength(3);

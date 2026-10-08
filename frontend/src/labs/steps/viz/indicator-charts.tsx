@@ -8,10 +8,17 @@ import { stripNegativeZero } from "../../../format";
 import type { Row } from "./scaffold";
 
 /** Axis ticks: round values, trailing zeros trimmed ("10%", "1.5"). */
-export const indicatorTick = (value: number | null, unit: string) =>
-  value === null
-    ? "缺失"
-    : stripNegativeZero(`${(unit === "%" ? value * 100 : value).toLocaleString("zh-CN", { maximumFractionDigits: readingDigits(value, unit) })}${unit === "%" ? "%" : ""}`);
+export const indicatorTick = (value: number | null, unit: string) => {
+  if (value === null) return "缺失";
+  const shown = unit === "%" ? value * 100 : value;
+  const digits = readingDigits(value, unit);
+  // A tick that is not zero must not read "0" (tiny exposures): keep two significant digits instead.
+  const tooSmall = shown !== 0 && Math.abs(shown) < 0.5 * 10 ** -digits;
+  const text = tooSmall
+    ? String(Number(shown.toPrecision(2)))
+    : shown.toLocaleString("zh-CN", { maximumFractionDigits: digits });
+  return stripNegativeZero(`${text}${unit === "%" ? "%" : ""}`);
+};
 
 /** Readings in labels, tables and tooltips keep fixed decimals, so values side by side line up
  * ("11.730%" next to "15.613%", not "11.73%"); an exact zero reads "0". */
@@ -273,10 +280,10 @@ export function IndicatorTrendChart({
   // otherwise a band around 4 production stages collapses into a sliver. Position ratios keep 1 in view.
   const positionRatio = metric === "GVCPs" || metric === "Pos_TPL";
   const zeroBased = unit === "%" || unit === "百万美元";
-  const axis = niceDomain(
-    zeroBased ? Math.min(0, ...values) : Math.min(...values, positionRatio ? 1 : Infinity),
-    zeroBased ? Math.max(0, ...values) : Math.max(...values, positionRatio ? 1 : -Infinity),
-  );
+  const rawHigh = zeroBased ? Math.max(0, ...values) : Math.max(...values, positionRatio ? 1 : -Infinity);
+  const rawLow = zeroBased ? Math.min(0, ...values) : Math.min(...values, positionRatio ? 1 : Infinity);
+  // An all-zero share series (e.g. an untaxed country's X) gets a small 0–1% axis, not 0–100%.
+  const axis = niceDomain(rawLow, rawLow === 0 && rawHigh === 0 && unit === "%" ? 0.01 : rawHigh);
   const lo = axis.lo;
   const extent = axis.hi - lo || 1;
   const y = (value: number) => 250 - ((value - lo) / extent) * 210;

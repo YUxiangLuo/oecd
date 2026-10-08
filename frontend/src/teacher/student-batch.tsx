@@ -68,6 +68,8 @@ export function StudentBatchModal({ semesters, initialClassId, onClose, onCreate
   const [downloaded, setDownloaded] = useState(false);
   const [done, setDone] = useState(false);
   const [attempted, setAttempted] = useState(false);
+  // The server refused the creation: nothing was created and the downloaded list is void.
+  const [refused, setRefused] = useState(false);
   const errorRef = useModalErrorFocus(error || null);
   const statusRef = useRef<HTMLParagraphElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -102,7 +104,7 @@ export function StudentBatchModal({ semesters, initialClassId, onClose, onCreate
   };
   const backToEdit = () => {
     focusAfterSwitch.current = "text";
-    setAccounts(null); setError("");
+    setAccounts(null); setError(""); setRefused(false);
   };
   const download = () => {
     if (!accounts) return;
@@ -118,11 +120,14 @@ export function StudentBatchModal({ semesters, initialClassId, onClose, onCreate
     try {
       await api.classroom.createStudentBatch({ class_id: Number(classId), students: accounts, preview: false });
       setDone(true); onCreated();
+      // The 确认创建 button is gone; the status line says what happened next.
+      window.requestAnimationFrame(() => statusRef.current?.focus());
     } catch (cause) {
       if (refusedByServer(cause)) {
         // The server answered: nothing was created, so the roster can be fixed and previewed again.
         setAttempted(false);
-        setError(userFacingRequestError(cause, "创建失败"));
+        setRefused(true);
+        setError(`${userFacingRequestError(cause, "创建失败")}\n刚才下载的账号清单作废；返回修改后重新预览会生成新的初始密码，请重新下载。`);
       } else {
         const message = userFacingRequestError(cause, "创建失败");
         const end = /[。！？.!?]$/.test(message) ? "" : "。";
@@ -144,14 +149,15 @@ export function StudentBatchModal({ semesters, initialClassId, onClose, onCreate
         <LabeledControl label="学生名单">{(id) => <textarea ref={textRef} id={id} rows={8} disabled={busy} value={text} onChange={(e) => setText(e.target.value)} placeholder={"学号\t姓名\n2026001\t张三\n2026002\t李四"} />}</LabeledControl>
       </> : <>
         <p ref={statusRef} role="status" tabIndex={-1}>{done
-          ? `已添加 ${accounts.length} 名学生。请按已下载的账号清单逐人发放账号，并提醒学生登录后修改密码。`
+          ? `已添加 ${accounts.length} 名学生。请按最后一次下载的账号清单逐人发放账号，并提醒学生登录后修改密码。`
+          : refused ? `共 ${accounts.length} 人，均未创建；请返回修改。`
           : `共 ${accounts.length} 人${existing.length ? `，${existing.length} 个学号已被使用（作为账号或其他学生的学号），请返回修改名单` : "，可以创建"}。已有账号不会被修改或重新分班。`}</p>
         <ScrollableRegion label="学生名单预览" className="table-wrap" style={{ maxHeight: 240, flexShrink: 0 }}>
           <table className="data-table"><thead><tr><th>学号 / 用户名</th><th>姓名</th><th>状态</th></tr></thead>
-            <tbody>{accounts.map((row) => <tr key={row.username}><td>{row.username}</td><td>{row.display_name}</td><td>{done ? "已创建" : existing.includes(row.username) ? "学号已被使用" : "待创建"}</td></tr>)}</tbody>
+            <tbody>{accounts.map((row) => <tr key={row.username}><td>{row.username}</td><td>{row.display_name}</td><td>{done ? "已创建" : refused ? "未创建" : existing.includes(row.username) ? "学号已被使用" : "待创建"}</td></tr>)}</tbody>
           </table>
         </ScrollableRegion>
-        {!existing.length && <>
+        {!existing.length && !refused && <>
           {!done && <p>清单含初始密码，请先下载保存。逐人发放账号，不要将整份清单发到群里。</p>}
           <button disabled={busy} onClick={download}>{done ? "再次下载账号清单" : "下载账号清单"}</button>
           <p className="muted batch-download-hint">清单是用制表符分隔的文本文件，可用记事本直接打开；若用 Excel 打开，请在导入时把学号列设为“文本”，否则学号开头的 0 可能被去掉。</p>
@@ -162,7 +168,7 @@ export function StudentBatchModal({ semesters, initialClassId, onClose, onCreate
         <button disabled={busy} onClick={close}>{done ? "完成" : "取消"}</button>
         {accounts && !done && !attempted && <button disabled={busy} onClick={backToEdit}>返回修改</button>}
         {!accounts ? <button className="primary" disabled={busy} onClick={() => void preview()}>{busy ? "校验中…" : "预览名单"}</button>
-          : !done && <button className="primary" disabled={busy || !!existing.length || !downloaded} onClick={() => void submit()}>{busy ? "创建中…" : "确认创建"}</button>}
+          : !done && <button className="primary" disabled={busy || !!existing.length || !downloaded || refused} onClick={() => void submit()}>{busy ? "创建中…" : "确认创建"}</button>}
       </div>
     </div>
   </Modal>;
