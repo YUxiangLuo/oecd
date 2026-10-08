@@ -284,13 +284,22 @@ export function ReportLab({
   useEffect(() => {
     if (!revealPreviewAfterDraft.current || report?.state !== "draft") return;
     revealPreviewAfterDraft.current = false;
-    window.requestAnimationFrame(() => {
+    // The first draft renders through a lazy chunk: until the report article is in place the page is too short
+    // to scroll the preview to the top (the scroll would be capped), so wait for it (at most about a second).
+    let frames = 0;
+    const reveal = () => {
       const preview = previewRef.current;
       if (!preview) return;
+      if (!preview.querySelector("article") && frames++ < 60) {
+        window.requestAnimationFrame(reveal);
+        return;
+      }
       const reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       scrollIntoCourseContent(preview, reduced ? "auto" : "smooth");
       preview.focus({ preventScroll: true });
-    });
+    };
+    // Not cancelled when the report object is replaced again (a session sync): the reveal still happens once.
+    window.requestAnimationFrame(reveal);
   }, [report]);
   // An in-page confirmation (not window.confirm) before a graded report is replaced; resolves with the answer.
   const [confirmRegenerate, setConfirmRegenerate] = useState<((ok: boolean) => void) | null>(null);

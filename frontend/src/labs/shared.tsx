@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { keepFocusNear, LabeledControl } from "../a11y";
 import { formatMetric, stripNegativeZero } from "../format";
 import type { IndicatorSchema } from "../types";
+import { userFacingRequestError } from "../user-facing-error";
 
 export function fmtField(v: string | number | null, key: string, schema?: IndicatorSchema | null) {
   if (typeof v !== "number") return v ?? "—";
@@ -149,7 +150,7 @@ export function AsyncStateMessage({
   return (
     <div className="error-box async-error" role="alert">
       {/* Messages that already say what failed ("对象 A 的分解加载失败：…") are not prefixed again. */}
-      <span>{error && error.includes("失败") ? error : `数据加载失败：${error ?? "未知错误"}`}</span>
+      <span>{error && error.includes("失败") ? error : userFacingRequestError(error, "数据加载失败")}</span>
       <button type="button" className="secondary" onClick={(event) => { const button = event.currentTarget; onRetry(); keepFocusNear(button); }}>重试</button>
     </div>
   );

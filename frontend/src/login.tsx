@@ -247,7 +247,9 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
 
   // Someone else at this computer: forget the remembered account and ask the server for an idle one.
   const switchToIdleStudent = () => {
+    // Forget both memories of the previous student: the browser's and this tab's, so a reload does not bring it back.
     try { localStorage.removeItem(LAST_DEMO_STUDENT_KEY); } catch { /* nothing remembered to forget */ }
+    try { sessionStorage.removeItem("gvcsim_signed_in_username"); } catch { /* nothing remembered to forget */ }
     const selection = pickDemoStudent();
     edited.current = false;
     setPreviousDemoStudent(null);

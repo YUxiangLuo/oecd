@@ -275,6 +275,7 @@ describe("demo-mode login UI source behavior", () => {
   test("someone else at the computer can drop the remembered account for an idle one", async () => {
     const suggestion = spyOn(api, "demoStudent").mockResolvedValue({ username: "student09" });
     localStorage.setItem(LAST_DEMO_STUDENT_KEY, "student07");
+    sessionStorage.setItem("gvcsim_signed_in_username", "student07");
     try {
       await withDemoEnv("1", async () => {
         render(<LoginPage onLogin={() => {}} />);
@@ -283,6 +284,8 @@ describe("demo-mode login UI source behavior", () => {
         await waitFor(() => expect(inputValue("login-user")).toBe("student09"));
         expect(inputValue("login-pass")).toBe("gvclab2026-09");
         expect(localStorage.getItem(LAST_DEMO_STUDENT_KEY)).toBeNull();
+        // This tab's memory goes too, so a reload does not offer the previous student again.
+        expect(sessionStorage.getItem("gvcsim_signed_in_username")).toBeNull();
         expect(document.querySelector(".login-hint")?.textContent).toContain("已为你预填一个空闲的演示学生账号");
         expect(screen.getByRole("button", { name: /学生身份/ }).textContent).toContain("自动分配一个空闲的演示账号");
       });
