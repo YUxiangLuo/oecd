@@ -35,7 +35,7 @@ import { userFacingRequestError } from "./user-facing-error";
 import { BinScatterChart, CoefForestChart, countryLabel, GroupChangeChart, sectorLabel } from "./viz";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
-export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v5";
+export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v6";
 
 /** Reveal a freshly calculated verdict inside the course's scroll container (see content-scroll.ts). */
 export const scrollRegressionVerdict = scrollIntoCourseContent;

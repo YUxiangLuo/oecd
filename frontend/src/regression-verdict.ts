@@ -118,7 +118,7 @@ function naturalScale(
     };
   }
   const mean = response.result.depvar_mean;
-  // A position index is centred near zero, so "relative to the sample mean" would mislead; lengths keep it.
+  // A position index is a ratio around 1; its change is read in its own units, not "relative to the sample mean".
   const relative = kind === "length" && typeof mean === "number" && Number.isFinite(mean) && Math.abs(mean) > 1e-12
     ? (effect / Math.abs(mean)) * 100 : null;
   const unit = KIND_UNITS[kind];
