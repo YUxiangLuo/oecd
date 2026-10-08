@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, isApiErrorStatus } from "../../api";
 import { RegressionEvidenceMatrix, RegressionFamilyPanels, type SiblingStepData } from "../../regression-teach";
 import { scrollIntoCourseContent } from "../../content-scroll";
@@ -21,8 +21,10 @@ interface ReportReflectionState extends Record<string, unknown> {
 
 export const REFLECTION_MAX_LENGTH = 2400;
 
-export function reflectionCountLabel(length: number, min: number, max = REFLECTION_MAX_LENGTH): string {
-  if (length >= max) return `已写 ${max} / ${max} 字 · 已达上限`;
+/** `atLimit`: the field is full by the server's count (code points), which a few emoji can reach before the
+ * shown count does. */
+export function reflectionCountLabel(length: number, min: number, max = REFLECTION_MAX_LENGTH, atLimit = false): string {
+  if (length >= max || atLimit) return `已写 ${Math.min(length, max)} / ${max} 字 · 已达上限`;
   return length >= min
     ? `已写 ${length} / ${max} 字 · 已达最低 ${min} 字`
     : `已写 ${length} / ${max} 字 · 最低 ${min} 字`;
@@ -208,10 +210,79 @@ export function reportGenerateLabel(report: ClassroomReport | null) {
   return report.state === "pending" || report.state === "graded" ? "重新生成并提交" : "重新生成草稿";
 }
 
-/** Characters as the server counts them (Python ``len`` of the whitespace-collapsed text): code points, so an
- * emoji is one character, not two UTF-16 units. */
+const graphemeSegmenter = typeof Intl !== "undefined" && typeof Intl.Segmenter === "function"
+  ? new Intl.Segmenter("zh", { granularity: "grapheme" })
+  : null;
+
+/** What a reader sees as one character: a family emoji or a letter with an accent is one (code points where
+ * the browser has no Intl.Segmenter). */
+export function graphemes(text: string): string[] {
+  return graphemeSegmenter ? Array.from(graphemeSegmenter.segment(text), (part) => part.segment) : [...text];
+}
+
+/** Code points: what the server's 2,400 limit counts (Python ``len``). */
+export function codePointLength(text: string): number {
+  let count = 0;
+  for (const _ of text) count += 1;
+  return count;
+}
+
+/** The written length shown and checked against the minimum: whitespace runs count as one space, and each
+ * visible character (a family emoji included) counts as one. The server counts code points, which is never
+ * fewer, so a field the page counts as long enough is long enough on the server too. */
 export function reflectionLength(text: string): number {
-  return [...text.trim().split(/\s+/).join(" ")].length;
+  return graphemes(text.trim().split(/\s+/).join(" ")).length;
+}
+
+const isLowSurrogate = (code: number) => code >= 0xdc00 && code <= 0xdfff;
+
+/**
+ * Keep a change within the limit without touching the student's own text: when the new value is too long,
+ * only the newly inserted part (at the caret) is shortened, at whole characters, and the text before and after
+ * it stays as it was. `caret` is the textarea's caret right after the change (the end of the insertion).
+ */
+export function limitInsertion(
+  previous: string,
+  next: string,
+  caret: number | null,
+  max = REFLECTION_MAX_LENGTH,
+): { value: string; caret: number; cut: boolean } {
+  const end = caret ?? next.length;
+  if (codePointLength(next) <= max) return { value: next, caret: end, cut: false };
+  // Split the new value into unchanged head, insertion and unchanged tail, for a given tail length.
+  const split = (tail: number) => {
+    const oldHead = previous.slice(0, previous.length - tail);
+    const newHead = next.slice(0, next.length - tail);
+    let head = 0;
+    while (head < oldHead.length && head < newHead.length && oldHead[head] === newHead[head]) head += 1;
+    return { prefix: head, suffix: tail, removed: previous.length - head - tail };
+  };
+  // The longest common tail; with repeated characters the caret (the end of the insertion) places the
+  // insertion more exactly, unless it implies replacing more of the old text (a caret the browser moved).
+  let common = 0;
+  while (common < previous.length && common < next.length
+    && previous[previous.length - 1 - common] === next[next.length - 1 - common]) common += 1;
+  let chosen = split(common);
+  if (caret != null && caret >= 0 && caret <= next.length && next.length - caret <= common) {
+    const byCaret = split(next.length - caret);
+    if (byCaret.removed <= chosen.removed) chosen = byCaret;
+  }
+  let { prefix, suffix } = chosen;
+  // Never split a surrogate pair between the kept text and the insertion.
+  while (prefix > 0 && isLowSurrogate(next.charCodeAt(prefix))) prefix -= 1;
+  while (suffix > 0 && isLowSurrogate(next.charCodeAt(next.length - suffix))) suffix -= 1;
+  const before = next.slice(0, prefix);
+  const after = next.slice(next.length - suffix);
+  const inserted = next.slice(prefix, next.length - suffix);
+  let room = max - codePointLength(before) - codePointLength(after);
+  let kept = "";
+  for (const part of graphemes(inserted)) {
+    const size = codePointLength(part);
+    if (size > room) break;
+    kept += part;
+    room -= size;
+  }
+  return { value: before + kept + after, caret: before.length + kept.length, cut: true };
 }
 
 export function reportWaitLabel(
@@ -331,6 +402,18 @@ export function ReportLab({
   const writtenCount = REFLECTION_FIELDS.filter((field) => reflectionLength(String(reflection[field.key] ?? "")) >= field.min).length;
   // A paste beyond the limit is cut by the browser; say so instead of losing the end silently.
   const [pasteCut, setPasteCut] = useState<string | null>(null);
+  // A shortened insertion re-renders the field with a value the browser did not type, which puts the caret at
+  // the end; put it back right after the kept part of the insertion.
+  const caretAfterCut = useRef<{ key: string; value: string; caret: number } | null>(null);
+  const reflectionRoot = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const pending = caretAfterCut.current;
+    if (!pending) return;
+    const field = reflectionRoot.current?.querySelector<HTMLTextAreaElement>(`textarea[data-report-field="${pending.key}"]`);
+    if (!field || field.value !== pending.value) return;
+    caretAfterCut.current = null;
+    field.setSelectionRange(pending.caret, pending.caret);
+  });
   const [attemptedIncomplete, setAttemptedIncomplete] = useState(false);
   // Same split as the gate summary below: steps 1–14, plus global conditions (step 0) counted apart.
   const materialMissing = visibleBlocked.filter((item) => item.step > 0 && item.step < 15);
@@ -495,7 +578,7 @@ export function ReportLab({
           <h3 id={REPORT_REFLECTION_TITLE_ID} tabIndex={-1}>回答三个问题</h3>
           <p>写清研究对象、主要结果和仍不能确定的内容。引用具体数字，并说明结论限制。</p>
         </div>
-        <div className="report-reflection-fields">
+        <div className="report-reflection-fields" ref={reflectionRoot}>
           <div className="report-writing-checklist" role="note">
             <b>写作自检（字数达标不等于论证完整）</b>
             <span>① 点名比较对象　② 引用具体数字　③ 解释方向与区间　④ 说明不能推出什么</span>
@@ -507,10 +590,11 @@ export function ReportLab({
             const short = length < field.min;
             return (
               <label key={field.key}>
-                <span><b>{index + 1}. {field.label}</b><small id={countId}>{reflectionCountLabel(length, field.min)}</small></span>
+                <span><b>{index + 1}. {field.label}</b><small id={countId}>{reflectionCountLabel(length, field.min, REFLECTION_MAX_LENGTH, codePointLength(value) >= REFLECTION_MAX_LENGTH)}</small></span>
                 <small id={`report-hint-${field.key}`} className="report-writing-hint">{field.prompt}</small>
                 <textarea
                   aria-label={field.label}
+                  data-report-field={field.key}
                   aria-describedby={`report-hint-${field.key} ${countId}${pasteCut === field.key ? ` report-paste-${field.key}` : ""}`}
                   aria-invalid={attemptedIncomplete && short ? true : undefined}
                   value={value}
@@ -519,11 +603,13 @@ export function ReportLab({
                   data-report-reflection-incomplete={length < field.min ? "true" : undefined}
                   disabled={busy}
                   onChange={(event) => {
-                    // The limit counts characters as the server and the counter do (an emoji is one), which a
-                    // maxLength attribute (UTF-16 units) would not; text beyond it is cut and the cut is said.
-                    const characters = [...event.target.value];
-                    if (characters.length > REFLECTION_MAX_LENGTH) {
-                      state.save({ [field.key]: characters.slice(0, REFLECTION_MAX_LENGTH).join("") });
+                    // The limit counts code points as the server does, which a maxLength attribute (UTF-16
+                    // units) would not. Only the newly pasted or typed part is shortened, at the caret; the
+                    // student's existing text is never cut, and the cut is said.
+                    const limited = limitInsertion(value, event.target.value, event.target.selectionEnd);
+                    if (limited.cut) {
+                      caretAfterCut.current = { key: field.key, value: limited.value, caret: limited.caret };
+                      state.save({ [field.key]: limited.value });
                       setPasteCut(field.key);
                       return;
                     }
@@ -533,7 +619,7 @@ export function ReportLab({
                 />
                 {pasteCut === field.key && (
                   <small id={`report-paste-${field.key}`} className="report-writing-hint" role="status">
-                    内容超过 {REFLECTION_MAX_LENGTH} 字上限，超出的部分没有保留；请精简后再补充。
+                    超过 {REFLECTION_MAX_LENGTH} 字上限：刚粘贴或输入的文字有一部分没有保留，原有文字没有改动。请精简后再补充。
                   </small>
                 )}
               </label>

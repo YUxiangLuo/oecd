@@ -18,7 +18,11 @@ import {
   reportWaitLabel,
   summarizeReportGate,
   reflectionLength,
+  limitInsertion,
+  codePointLength,
+  REFLECTION_MAX_LENGTH,
 } from "./report-lab";
+import { useState } from "react";
 
 afterEach(cleanup);
 
@@ -606,9 +610,73 @@ test("each report state shows one action group in the submit panel, without dupl
   current.unmount();
 });
 
-test("analysis length counts characters as the server does: an emoji is one character", () => {
+test("analysis length counts what a reader sees as one character: an emoji, even a family emoji, is one", () => {
   expect(reflectionLength("  贸易 😀\n\n分析  ")).toBe(7);
   expect(reflectionLength("😀😀")).toBe(2);
+  expect(reflectionLength("👨‍👩‍👧")).toBe(1);
+  expect(reflectionLength("é")).toBe(1);
+});
+
+describe("the 2,400 limit shortens only the inserted text", () => {
+  const ending = "结尾十个字很重要啊";
+  const original = "甲".repeat(REFLECTION_MAX_LENGTH - 1 - ending.length) + ending;
+
+  test("an insert at the start keeps the student's ending and cuts the insertion", () => {
+    expect(codePointLength(original)).toBe(REFLECTION_MAX_LENGTH - 1);
+    const pasted = "插".repeat(18);
+    const result = limitInsertion(original, pasted + original, pasted.length);
+    expect(result.cut).toBe(true);
+    expect(result.value).toBe("插" + original);
+    expect(result.value.endsWith(ending)).toBe(true);
+    expect(result.caret).toBe(1);
+    expect(codePointLength(result.value)).toBe(REFLECTION_MAX_LENGTH);
+  });
+
+  test("an insert in the middle keeps both sides and the caret lands after the kept part", () => {
+    const at = 100;
+    const next = original.slice(0, at) + "中间插入" + original.slice(at);
+    const result = limitInsertion(original, next, at + 4);
+    expect(result.value).toBe(original.slice(0, at) + "中" + original.slice(at));
+    expect(result.caret).toBe(at + 1);
+  });
+
+  test("an append at the end is cut at whole characters, never inside an emoji", () => {
+    const base = "甲".repeat(REFLECTION_MAX_LENGTH - 3);
+    const next = base + "😀👨‍👩‍👧乙";
+    const result = limitInsertion(base, next, next.length);
+    // 😀 is one code point; the family emoji is five, which no longer fits, so it is dropped whole.
+    expect(result.value).toBe(base + "😀");
+    expect(codePointLength(result.value)).toBeLessThanOrEqual(REFLECTION_MAX_LENGTH);
+  });
+
+  test("a paste over a selection replaces the selection and is cut, the text around it stays", () => {
+    const next = original.slice(0, 10) + "替".repeat(30) + original.slice(20);
+    const result = limitInsertion(original, next, 40);
+    expect(result.value).toBe(original.slice(0, 10) + "替".repeat(11) + original.slice(20));
+  });
+
+  test("a change within the limit is kept as typed; without a caret the common tail is used", () => {
+    expect(limitInsertion("abc", "abXc", 3)).toEqual({ value: "abXc", caret: 3, cut: false });
+    const result = limitInsertion(original, "新新" + original, null);
+    expect(result.value).toBe("新" + original);
+  });
+
+  test("the field keeps the ending, says the pasted part was cut and puts the caret after it", async () => {
+    function Harness() {
+      const [data, setData] = useState<Record<string, unknown>>({ limitations: original });
+      return <ReportLab {...finishProps} state={{ ...finishProps.state, data, save: (patch) => setData((value) => ({ ...value, ...patch })) }} />;
+    }
+    render(<Harness />);
+    const field = screen.getByRole("textbox", { name: "局限与反思" }) as HTMLTextAreaElement;
+    const next = "粘贴".repeat(9) + original;
+    // happy-dom leaves the caret at the end after a programmatic change: the common tail still decides.
+    act(() => { fireEvent.change(field, { target: { value: next } }); });
+    expect(field.value).toBe("粘" + original);
+    expect(field.value.endsWith(ending)).toBe(true);
+    expect(field.selectionStart).toBe(1);
+    expect(screen.getByText(/刚粘贴或输入的文字有一部分没有保留，原有文字没有改动/)).toBeTruthy();
+    expect(screen.getByText(/已写 2400 \/ 2400 字 · 已达上限/)).toBeTruthy();
+  });
 });
 
 test("in a save conflict the report actions ask for the server version, not a retry", () => {
