@@ -512,7 +512,11 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
             "_context": {"references": {str(selected_years[0]): same_year_reference}},
         }
     # Bars spanning several industries are the "行业排名" view, ordered by country A (steps 6–9).
-    if (source == "explicit-network-ranking" or by_industry) and single_metric and countries:
+    # A ranking saved for one industry is the saved countries against that industry's global median.
+    if source == "explicit-network-ranking" and len(selected_industries) == 1 and single_metric and countries:
+        has_median = any(_is_reference_item(item) for item in items)
+        name = f"{scope}{metric_label}：所选国家" + ("与同行业全球中位数" if has_median else "比较")
+    elif (source == "explicit-network-ranking" or by_industry) and single_metric and countries:
         name = f"{scope}{metric_label}行业排名（按 {country_label(countries[0])} 降序）"
     elif single_metric:
         name = f"{scope}{metric_label}国家比较"

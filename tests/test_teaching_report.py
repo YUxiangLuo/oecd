@@ -2022,6 +2022,7 @@ def test_step9_report_reads_the_industry_against_the_same_industry_worldwide(tmp
         ("C26 计算机电子光学", "全球中位数（同行业，4 个经济体）"),
     ]
     assert single["items"][2]["value"] == pytest.approx(39.0)
+    assert single["title"] == "步骤 9 · 网络指标可视化：2020 年 · C26 计算机电子光学 · 介数：所选国家与同行业全球中位数"
     section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 9", 1)[1]
     assert "全球中位数（同行业，4 个经济体）为 39" in section
 
