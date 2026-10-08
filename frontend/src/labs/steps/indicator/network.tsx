@@ -52,7 +52,7 @@ export function NetworkIndicatorStep({ meta, step: _step, state }: { meta: Meta;
           onYear={controls.setYear} onCountry={controls.setCountry} onPage={controls.setPage}
         />
         <AutoMaterialStatus meta={meta} state={state} schema={schema.data} {...auto} onSecond={controls.setPartner} where="上方表格所选国家"
-          note="报告记录的是国家整体的加权总度 = 该国对外出口 + 进口（含最终品，不含国内流量），和上表的行业数值算法不同，不要直接比较。" />
+          note="报告记录的是国家整体的加权总度：该国全部出口 + 进口，中间品和最终品都算在内（不含国内流量）。上表的行业数值只算中间品流量，两者不能直接比较。" />
       </section>
     </div>
   );

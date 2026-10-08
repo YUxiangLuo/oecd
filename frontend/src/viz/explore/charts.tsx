@@ -194,6 +194,16 @@ export function placeScatterLabels(
   }).filter((label): label is NonNullable<typeof label> => label !== null);
 }
 
+/** A tick label centred on its tick unless that would cut it at the SVG edge ("10,000,000" at the right end
+ *  of a log axis): then it ends (or starts) at the tick, so no label is clipped at any rendered width. */
+export function xTickAnchor(x: number, text: string, width: number): "start" | "middle" | "end" {
+  // Digits and separators are about 6 units wide at 10.5px; a CJK character (万/亿) about 10.5.
+  const half = [...text].reduce((sum, char) => sum + (/[\u3000-\u9fff]/.test(char) ? 10.5 : 6.2), 0) / 2;
+  if (x + half > width - 2) return "end";
+  if (x - half < 2) return "start";
+  return "middle";
+}
+
 /** 象限散点图:两条参考线(默认中位数)把平面切成四象限,四角标注角色。
  *  步6「定位图」(外国增加值项占比×跨境生产占比)等双指标比较。 */
 /** A highlighted economy's path through the years on the scatter (phase 2 定位图 轨迹). */
@@ -255,9 +265,11 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
             <text x={m.l - 8} y={py(t) + 4} textAnchor="end" fontSize="10.5" fill="#5f6677">{fmtAxis(t, yFormat)}</text>
           </g>
         ))}
-        {xAxis.ticks.map((t, i) => (
-          <text key={`x${i}`} x={log ? px(10 ** t) : px(t)} y={H - m.b + 18} textAnchor="middle" fontSize="10.5" fill="#5f6677">{fmtAxis(log ? 10 ** t : t, xFormat)}</text>
-        ))}
+        {xAxis.ticks.map((t, i) => {
+          const x = log ? px(10 ** t) : px(t);
+          const text = fmtAxis(log ? 10 ** t : t, xFormat);
+          return <text key={`x${i}`} x={x} y={H - m.b + 18} textAnchor={xTickAnchor(x, text, W)} fontSize="10.5" fill="#5f6677">{text}</text>;
+        })}
         {/* 象限参考线(中位数) */}
         <line x1={px(xRef)} y1={m.t} x2={px(xRef)} y2={H - m.b} stroke="#c8ccd6" strokeWidth={1} strokeDasharray="4 4" />
         <line x1={m.l} y1={py(yRef)} x2={W - m.r} y2={py(yRef)} stroke="#c8ccd6" strokeWidth={1} strokeDasharray="4 4" />

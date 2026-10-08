@@ -74,9 +74,12 @@
 .comparison-summary span, .comparison-summary small { display: block; color: #616b7d; font-size: 10.5px; line-height: 1.4; word-break: keep-all; overflow-wrap: anywhere; }
 .comparison-summary b { display: block; margin: 4px 0 3px; color: #293342; font-size: 13px; line-height: 1.35; word-break: keep-all; overflow-wrap: anywhere; }
 .comparison-facets { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
-.comparison-facets--stacked { grid-template-columns: minmax(0, 760px); }
-/* One economy alone does not stretch its chart across the whole page. */
-.comparison-facets > .comparison-facet:only-child { max-width: 760px; }
+.comparison-facets--stacked { grid-template-columns: minmax(0, 760px); justify-content: center; }
+/* Butterfly bars and the partner diagram need about 440px each: two side by side at 1280, stacked at 1024,
+   so the bars never collapse to hairlines and the diagram's node labels stay at least 10px. */
+.comparison-facets--roomy { grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); }
+/* One economy alone does not stretch its chart across the whole page; it is centred, not left-heavy. */
+.comparison-facets > .comparison-facet:only-child { width: 100%; max-width: 760px; justify-self: center; }
 .comparison-facet { min-width: 0; padding: 11px; border: 1px solid #e1e5ee; border-radius: 10px; background: #fbfcff; }
 .comparison-facet h4 { margin: 0 0 8px; }
 .technical-details > summary { cursor: pointer; color: #4b47e0; font-weight: 700; }
@@ -427,10 +430,13 @@ button.dot-plot-label:hover, button.dot-plot-label:focus-visible { text-decorati
 .dot-plot-track i.dot.dot--ring { width: 17px; height: 17px; margin-left: -8.5px; margin-top: -8.5px; background: transparent; border-width: 2.5px; border-style: solid; box-shadow: none; }
 .dot-plot-track i.link { height: 3px; margin-top: -1.5px; background: #c8ccd6; border-radius: 2px; }
 .dot-plot-values { display: flex; justify-content: flex-end; gap: 8px; white-space: nowrap; font-size: 11.5px; font-variant-numeric: tabular-nums; padding-left: 8px; }
-.butterfly-head, .butterfly-row { display: grid; grid-template-columns: 72px minmax(0, 1fr) 150px minmax(0, 1fr) 72px; align-items: center; gap: 6px; }
-.butterfly-head { font-size: 11.5px; font-weight: 700; margin-bottom: 6px; }
-.butterfly-head span:first-child { grid-column: 1 / 3; }
-.butterfly-head span:last-child { grid-column: 4 / 6; text-align: right; }
+/* The bar tracks keep at least 56px; the value and label columns give way first. */
+.butterfly-row { display: grid; grid-template-columns: minmax(52px, 72px) minmax(56px, 1fr) minmax(96px, 140px) minmax(56px, 1fr) minmax(52px, 72px); align-items: center; gap: 6px; }
+/* Each column title stays on one line; in a very narrow panel the right one moves to its own line. */
+.butterfly-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; font-size: 11.5px; font-weight: 700; margin-bottom: 6px; }
+.butterfly-head span { white-space: nowrap; }
+.butterfly-head span:empty { display: none; }
+.butterfly-head span:last-child { margin-left: auto; text-align: right; }
 .butterfly-row { min-height: 26px; border-radius: 6px; padding: 1px 0; }
 .butterfly-row[data-hovered], .butterfly-row:focus-visible { background: #f4f6fb; outline: none; }
 .butterfly-row:focus-visible { box-shadow: inset 0 0 0 2px #4b47e0; }
@@ -453,7 +459,8 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 .reg-baseline-select { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 6px 0 10px; }
 .reg-baseline-select .muted { font-size: 12px; }
 
-/* 贸易伙伴: region legend for the partner circles' outline colour. */
+/* 贸易伙伴: the diagram's key above it, and the region legend for the partner circles' outline colour. */
+.ego-network-key { margin: 0 0 4px; color: #596173; font-size: 11.5px; line-height: 1.5; }
 .partner-region-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 4px 0 8px; font-size: 11.5px; color: #596173; }
 .partner-region-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .partner-region-legend i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; background: #fff; }
