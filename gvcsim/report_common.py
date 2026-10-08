@@ -304,8 +304,9 @@ def _natural_effect(
         sd = result.get("depvar_std")
         positive_sd = float(sd) if isinstance(sd, (int, float)) and float(sd) > 0 else None
         effect_text = f"{_signed(effect, 2)} 个中心性原始单位"
+        # Unsigned, as on the page ("平均下降 39.70 …（幅度约 0.05 个标准差）"): the number before it carries the sign.
         if positive_sd is not None:
-            effect_text += f"（约 {_signed(effect / positive_sd, 2)} 个标准差）"
+            effect_text += f"（幅度约 {_signed(effect / positive_sd, 2)[1:]} 个标准差）"
         interval = (
             f"[{_signed(ci[0] * increment, 2)}, {_signed(ci[1] * increment, 2)}] 个中心性原始单位"
             + (
@@ -322,9 +323,10 @@ def _natural_effect(
         digits = 4 if kind == "position" else 3
         effect_text = f"{_signed(effect, digits)} 个{unit}"
         mean = result.get("depvar_mean")
-        # As on the page: a length effect is also read against the sample mean length.
+        # As on the page: a length effect is also read against the sample mean length, as an unsigned size
+        # ("幅度约为样本均值的 0.46%"); the number before it carries the sign.
         if kind == "length" and isinstance(mean, (int, float)) and math.isfinite(mean) and abs(float(mean)) > 1e-12:
-            effect_text += f"（约为样本均值的 {_signed(effect / abs(float(mean)) * 100, 2)}%）"
+            effect_text += f"（幅度约为样本均值的 {_signed(effect / abs(float(mean)) * 100, 2)[1:]}%）"
         interval = (
             f"[{_signed(ci[0] * increment, digits)}, {_signed(ci[1] * increment, digits)}] 个{unit}" if ci else "—"
         )

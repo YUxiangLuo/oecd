@@ -429,6 +429,24 @@ test("draft generation keeps toast feedback when no outro is shown", async () =>
   } finally { generate.mockRestore(); }
 });
 
+test("a generated draft brings the preview into view and focuses it", async () => {
+  const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("draft"));
+  try {
+    const view = render(<ReportLab {...finishProps} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "只生成草稿（不提交）" })); });
+    // The parent renders the new draft; the page then continues at the preview, not at the buttons.
+    view.rerender(<ReportLab {...finishProps} report={report("draft")} />);
+    await act(async () => { await new Promise((resolve) => requestAnimationFrame(() => resolve(null))); });
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("报告正文");
+  } finally { generate.mockRestore(); }
+});
+
+test("a restored draft does not move focus to the preview", async () => {
+  render(<ReportLab {...finishProps} report={report("draft")} />);
+  await act(async () => { await new Promise((resolve) => requestAnimationFrame(() => resolve(null))); });
+  expect(document.activeElement?.getAttribute("aria-label")).not.toBe("报告正文");
+});
+
 test("failed submission retains generated draft and never opens a success outro", async () => {
   const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("draft"));
   const submit = spyOn(api.classroom, "submitReport").mockRejectedValue(new Error("网络中断"));

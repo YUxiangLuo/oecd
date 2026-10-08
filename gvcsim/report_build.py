@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 
 from typing import Any
@@ -15,7 +16,7 @@ from gvcsim.data.citations import (
     report_source_label,
     validate_data_sources,
 )
-from gvcsim.regression.teaching import VERSION as TEACHING_VERSION, X_COLUMN
+from gvcsim.regression.teaching import GENERATED_DATA_NOTE, VERSION as TEACHING_VERSION, X_COLUMN
 from gvcsim.session import SESSION_VERSION
 from gvcsim.report_common import ReportGateError, TeachingReport, _safe
 from gvcsim.report_gate import check_gate
@@ -113,6 +114,11 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
     disclosures = report_source_disclosures(data_sources)
     # The regressions use no macro controls; that line is provenance, not method.
     provenance_disclosures = [line for line in disclosures if line.startswith("- 宏观控制变量")]
+    # The citation line names the generator as a module path ("生成器 gvcsim.data.controls.build_controls@2.0.0");
+    # the report keeps only its version, as for the other versions listed under "报告溯源".
+    provenance_lines = [
+        re.sub(r"（生成器 [^@（）]*@([^（）]+)）", r"（生成程序版本 `\1`）", line) for line in provenance_disclosures
+    ]
     body_disclosures = [line for line in disclosures if line not in provenance_disclosures]
     lines = [
         "# GVC 指标与关税实验报告",
@@ -121,7 +127,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "",
         f"> **指标部分（步骤 1–9）**：覆盖 {years[0]}–{years[-1]}，数据来源：{_safe(source)}。",
         "",
-        "> **关税回归部分（步骤 10–14）**：X = 首年对美出口份额 w × 加征税率 τ（单位：个百分点）。",
+        f"> **关税回归部分（步骤 10–14）**：{GENERATED_DATA_NOTE}X = 首年对美出口份额 w × 加征税率 τ（单位：个百分点）。",
         "",
         "> 步骤 11–14 用同一个模型：扣掉每个国家×行业自己的平均水平和每年的共同变化后，看 Y 怎样随 X 变化"
         "（双向固定效应，TWFE），不加控制变量。估计值和区间描述的是 X 与 Y 的关联；四个 Y 单位不同，数字不能互相比大小。",
@@ -135,7 +141,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         *_qc_disclosure_section(qc_summary, integrity_metadata),
         "## 数据与方法说明",
         "",
-        "- 指标算法：总出口按 WWZ 方法（王直、魏尚进、祝坤福）拆成国内增加值、外国增加值、重复计算三类，另加按 OECD ICIO 账户计算的产品税减补贴（taxsub，它不是关税）。外国增加值项占比的分子不含外国重复计算（FDC），分母是这六项相加得到的总出口，所以和 OECD TiVA 公布的“出口中外国增加值占比”不完全相同。生产分解和生产长度按 WWYZ 方法（王直、魏尚进、余心玎、祝坤福）计算。",
+        "- 指标算法：总出口按 WWZ 方法（王直、魏尚进、祝坤福）拆成国内增加值出口、返回国内的增加值、国内重复计算、外国增加值、外国重复计算五项（归为国内增加值、外国增加值、重复计算三类），另加按 OECD ICIO 账户计算的产品税减补贴（taxsub，它不是关税），共六项。外国增加值项占比的分子不含外国重复计算（FDC），分母是这六项相加得到的总出口，所以和 OECD TiVA 公布的“出口中外国增加值占比”不完全相同。生产分解和生产长度按 WWYZ 方法（王直、魏尚进、余心玎、祝坤福）计算。",
         "- 网络算法：保留全部有向的正流量连接，包括自环（行业卖给自己的部分）。加权总度（买入 + 卖出）= 加权入度 + 加权出度，"
         "自环在买入和卖出两侧各算一次，所以它不是去重后的贸易额。路径指标只看连接、不看金额。"
         "特征向量中心性（软件近似）按 Gephi 软件的算法计算，和教科书的标准算法结果不完全相同。",
@@ -157,7 +163,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "5. Wang, Wei, Yu & Zhu, *Measures of Participation in Global Value Chains and Global Business Cycles*, NBER w23222, https://www.nber.org/papers/w23222",
         "6. Wang, Wei, Yu & Zhu, *Characterizing Global Value Chains: Production Length and Upstreamness*, NBER w23261, https://www.nber.org/papers/w23261",
         "7. Brandes (2001), *A Faster Algorithm for Betweenness Centrality*, https://doi.org/10.1080/0022250X.2001.9990249",
-        "8. Gephi issue #2145, *Eigenvector centrality wrong?*, https://github.com/gephi/gephi/issues/2145",
+        "8. Gephi 软件特征向量中心性实现说明（Gephi 项目讨论 #2145），https://github.com/gephi/gephi/issues/2145",
         "9. Wasserstein & Lazar (2016), *The ASA Statement on p-Values*, https://doi.org/10.1080/00031305.2016.1154108",
         "10. Cameron & Miller (2015), *A Practitioner’s Guide to Cluster-Robust Inference*, https://doi.org/10.3368/jhr.50.2.317",
         "",
@@ -168,9 +174,9 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "以下信息供老师核对数据和记录版本，读报告时可以略过。",
         "",
         f"- 指标数据版本：`{_safe(metadata.get('release_id') or '—')}`",
-        f"- 关税回归数据版本：`{TEACHING_VERSION}`；X 的列名：`{X_COLUMN}`",
+        f"- 关税回归数据版本：`{TEACHING_VERSION}`；X 在数据中的字段名：`{X_COLUMN}`",
         f"- 会话摘要：`{fingerprint}`",
-        *provenance_disclosures,
+        *provenance_lines,
         "",
     ]
     markdown = "\n".join(lines)

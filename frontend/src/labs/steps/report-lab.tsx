@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, isApiErrorStatus } from "../../api";
 import { RegressionEvidenceMatrix, RegressionFamilyPanels, type SiblingStepData } from "../../regression-teach";
+import { scrollIntoCourseContent } from "../../content-scroll";
 import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-lazy";
 import { ReportOutro } from "../../report-outro";
 import { clearToasts, showToast } from "../../toast";
@@ -276,6 +277,21 @@ export function ReportLab({
   const [error, setError] = useState<string | null>(null);
   const [outro, setOutro] = useState<ClassroomReport | null>(null);
   const statusCardRef = useRef<HTMLElement>(null);
+  // After "只生成草稿（不提交）" the page continues at the draft preview (scrolled to and focused), once the
+  // parent has rendered the new report; a session restore does not move the page.
+  const previewRef = useRef<HTMLDivElement>(null);
+  const revealPreviewAfterDraft = useRef(false);
+  useEffect(() => {
+    if (!revealPreviewAfterDraft.current || report?.state !== "draft") return;
+    revealPreviewAfterDraft.current = false;
+    window.requestAnimationFrame(() => {
+      const preview = previewRef.current;
+      if (!preview) return;
+      const reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      scrollIntoCourseContent(preview, reduced ? "auto" : "smooth");
+      preview.focus({ preventScroll: true });
+    });
+  }, [report]);
   // An in-page confirmation (not window.confirm) before a graded report is replaced; resolves with the answer.
   const [confirmRegenerate, setConfirmRegenerate] = useState<((ok: boolean) => void) | null>(null);
   const askRegenerate = () => new Promise<boolean>((resolve) => setConfirmRegenerate(() => resolve));
@@ -371,6 +387,7 @@ export function ReportLab({
       // Bind replacement to the report the student saw (and, if graded, confirmed).
       const response = await api.classroom.generateReport(report?.updated_at ?? null);
       generated = true;
+      revealPreviewAfterDraft.current = !submitAfter;
       onReportChanged(response);
       let finalReport = response.report;
       if (submitAfter && response.report.state === "draft") {
@@ -385,8 +402,6 @@ export function ReportLab({
       }
       else {
         showToast("报告草稿已生成，请预览后提交");
-        // The generate button is disabled while busy and the page changes under it: continue at the new status.
-        window.requestAnimationFrame(() => statusCardRef.current?.focus({ preventScroll: false }));
       }
     } catch (cause) {
       const requestError = cause as Error & { blocked?: ReportGateItem[] };
@@ -569,7 +584,7 @@ export function ReportLab({
       {error && <div className="error-box" role="alert">{error}</div>}
 
       {report ? (
-        <div className="report-body" tabIndex={-1} aria-label="报告正文"><ReportMarkdown markdown={report.markdown} /></div>
+        <div className="report-body" ref={previewRef} tabIndex={-1} aria-label="报告正文"><ReportMarkdown markdown={report.markdown} /></div>
       ) : (
         <p className="muted">可以先只生成草稿看看，再提交。区间包含 0、或者没算出估计值的结果，也要写进报告。</p>
       )}

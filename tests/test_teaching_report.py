@@ -56,6 +56,16 @@ def test_report_small_effects_match_card_precision(outcome, coef, low, high, eff
     assert rendered_interval == interval
 
 
+def test_report_length_effect_states_its_size_against_the_mean_unsigned_as_on_the_page():
+    _, effect, _ = teaching_report._natural_effect(
+        "length",
+        {"method": "twfe_intensity", "depvar_kind": "length"},
+        {"status": "ok", "depvar_mean": 3.95},
+        {"name": "teaching_tariff_exposure", "coef": -1.8186, "ci_low": -1.9, "ci_high": -1.7},
+    )
+    assert effect == "-0.018 个长度单位（幅度约为样本均值的 0.46%）"
+
+
 def test_report_tiny_nonzero_numbers_and_standardized_effect_preserve_sign():
     assert float(teaching_report._signed(1e-30, 3)) > 0
     assert float(teaching_report._signed(-1e-30, 3)) < 0
@@ -65,7 +75,8 @@ def test_report_tiny_nonzero_numbers_and_standardized_effect_preserve_sign():
         {"status": "ok", "depvar_std": 2000},
         {"name": "tariff_shock", "coef": -690.746, "ci_low": -15099, "ci_high": 13718},
     )
-    assert "约 -0.0035 个标准差" in effect
+    # The standard-deviation size is unsigned (the leading estimate carries the sign) but never rounds to 0.
+    assert effect.startswith("-6.91 个中心性原始单位") and "幅度约 0.0035 个标准差" in effect
 
 
 @pytest.mark.parametrize(
@@ -2001,6 +2012,19 @@ def test_step9_report_reads_the_industry_against_the_same_industry_worldwide(tmp
     assert (
         "最高为 CHN 中国 · C27 电气设备（154）" in section and "最低为 USA 美国 · C26 计算机电子光学（44）" in section
     )
+
+    # A ranking saved for one industry also gets that industry's global median, as the section intro says.
+    data["observations"] = [item for item in data["observations"] if item["industry"] == "C26"]
+    (single,) = teaching_report._observed_charts(data, 9, data["observations"])
+    assert [(item["label"], item.get("group")) for item in single["items"]] == [
+        ("C26 计算机电子光学", "CHN 中国"),
+        ("C26 计算机电子光学", "USA 美国"),
+        ("C26 计算机电子光学", "全球中位数（同行业，4 个经济体）"),
+    ]
+    assert single["items"][2]["value"] == pytest.approx(39.0)
+    assert single["title"] == "步骤 9 · 网络指标可视化：2020 年 · C26 计算机电子光学 · 介数：所选国家与同行业全球中位数"
+    section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 9", 1)[1]
+    assert "全球中位数（同行业，4 个经济体）为 39" in section
 
 
 def test_step9_long_ranking_is_cut_at_an_industry_and_counts_only_saved_readings(tmp_path, monkeypatch):

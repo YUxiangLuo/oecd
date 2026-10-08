@@ -221,8 +221,25 @@ function textWidth(text: string, size: number) {
   return [...text].reduce((width, char) => width + (/[⺀-￿]/.test(char) ? size : size * 0.6), 0);
 }
 
+// The charts are drawn 720 units wide and shown at the report column's width (about 0.75× on screen and in
+// print), so text sizes are chosen to render at 10px or more: axis text 14 units, row labels 15 units.
+const AXIS_FONT = 14;
+const LABEL_FONT = 15;
+/** Centre of the rotated y-axis unit ("百万美元"), left of the tick labels. */
+const Y_UNIT_X = 12;
+
+/** Left margin that fits the widest y tick label to the right of the rotated unit, so the two never overlap. */
+function yAxisLeft(ticks: string[], minimum: number) {
+  const widest = Math.max(0, ...ticks.map((tick) => textWidth(tick, AXIS_FONT)));
+  return Math.max(minimum, Math.ceil(Y_UNIT_X + AXIS_FONT / 2 + 8 + widest + 8));
+}
+
+function YUnitLabel({ text, middle }: { text: string; middle: number }) {
+  return <text x={Y_UNIT_X} y={middle} textAnchor="middle" dominantBaseline="central" fontSize={AXIS_FONT} fill="#5f6677" transform={`rotate(-90 ${Y_UNIT_X} ${middle})`}>{text}</text>;
+}
+
 /** Lay legend entries left to right, wrapping to a new row when the next entry would not fit. */
-function legendLayout(labels: string[], left: number, right: number, size = 11) {
+function legendLayout(labels: string[], left: number, right: number, size = AXIS_FONT) {
   let x = left;
   let row = 0;
   const positions = labels.map((label) => {
@@ -240,11 +257,12 @@ function legendLayout(labels: string[], left: number, right: number, size = 11) 
 
 function BarChart({ chart }: { chart: Extract<ReportChart, { type: "bar" }> }) {
   const W = 720;
-  const barH = 18;
+  const barH = 20;
   const groups = [...new Set(chart.items.flatMap((item) => (item.group ? [item.group] : [])))];
   const grouped = groups.length > 0;
   const legend = legendLayout(groups, 220, W - 20);
-  const m = { l: 220, r: 62, t: 14 + legend.rows * 20, b: 36 };
+  // The right margin leaves room for a value such as "4,583,517" after the longest bar.
+  const m = { l: 220, r: 96, t: 16 + legend.rows * 24, b: 40 };
   // Grouped bars that share a label (e.g. one industry, two countries) sit together under one label.
   const rows: { y: number; first: boolean }[] = [];
   let cursor = m.t;
@@ -280,11 +298,11 @@ function BarChart({ chart }: { chart: Extract<ReportChart, { type: "bar" }> }) {
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "指标条形图"} style={{ width: "100%", height: "auto" }}>
         {groups.map((group, index) => {
           const position = legend.positions[index];
-          const y = 6 + position.row * 20;
+          const y = 6 + position.row * 24;
           return (
             <g key={group}>
-              <rect x={position.x} y={y} width={16} height={10} rx={2} fill={groupColor(group)} fillOpacity={0.82} />
-              <text x={position.x + 22} y={y + 9} fontSize={11} fill="#4b5563">{group}</text>
+              <rect x={position.x} y={y + 1} width={16} height={12} rx={2} fill={groupColor(group)} fillOpacity={0.82} />
+              <text x={position.x + 22} y={y + 12} fontSize={AXIS_FONT} fill="#4b5563">{group}</text>
             </g>
           );
         })}
@@ -297,15 +315,15 @@ function BarChart({ chart }: { chart: Extract<ReportChart, { type: "bar" }> }) {
           const labelY = first ? (y + rows[runEnd(i)].y + barH) / 2 + 4 : 0;
           return (
             <g key={`${item.group ?? ""}-${item.label}-${i}`}>
-              {first && <text x={m.l - 10} y={labelY} textAnchor="end" fontSize={12} fill="#4b5563">{item.label}</text>}
+              {first && <text x={m.l - 10} y={labelY} textAnchor="end" fontSize={LABEL_FONT} fill="#4b5563">{item.label}</text>}
               <rect x={left} y={y} width={width} height={barH} rx={4} fill={fill(item)} fillOpacity={0.82}>
                 {item.group && <title>{`${item.group} · ${item.label}：${reading(item.value, unit)}`}</title>}
               </rect>
-              <text x={item.value < 0 ? left - 6 : left + width + 6} y={y + 13} textAnchor={item.value < 0 ? "end" : "start"} fontSize={11} fill="#596173">{reading(item.value, unit)}</text>
+              <text x={item.value < 0 ? left - 6 : left + width + 6} y={y + 15} textAnchor={item.value < 0 ? "end" : "start"} fontSize={AXIS_FONT} fill="#596173">{reading(item.value, unit)}</text>
             </g>
           );
         })}
-        {(chart.y_label || chart.x_label) && <text x={m.l + plotW / 2} y={H - 8} textAnchor="middle" fontSize={11} fill="#5f6677">{chart.y_label ?? chart.x_label}</text>}
+        {(chart.y_label || chart.x_label) && <text x={m.l + plotW / 2} y={H - 8} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{chart.y_label ?? chart.x_label}</text>}
       </svg>
     </ReportFigure>
   );
@@ -322,28 +340,29 @@ function symmetricTicks(maxAbs: number): number[] {
 
 /** Binned scatter as on the step pages: bin means of the within-transformed Y against X and the fitted line. */
 function BinscatterChart({ chart }: { chart: Extract<ReportChart, { type: "binscatter" }> }) {
-  const W = 720, H = 320, m = { l: 70, r: 24, t: 18, b: 50 };
+  const W = 720, H = 330;
   const xs = chart.points.map((point) => point.x), ys = chart.points.map((point) => point.y);
   // Round axis bounds and ticks, as on the step pages, so the labels read as plain numbers.
   const xAxis = niceDomain(Math.min(0, ...xs), Math.max(0, ...xs));
   const fitted = [xAxis.lo * chart.slope, xAxis.hi * chart.slope];
   const yAxis = niceDomain(Math.min(0, ...ys, ...fitted), Math.max(0, ...ys, ...fitted));
-  const x = (value: number) => m.l + ((value - xAxis.lo) / (xAxis.hi - xAxis.lo || 1)) * (W - m.l - m.r);
-  const y = (value: number) => H - m.b - ((value - yAxis.lo) / (yAxis.hi - yAxis.lo || 1)) * (H - m.t - m.b);
   const digits = (lo: number, hi: number) => Math.max(0, Math.min(4, 2 - Math.floor(Math.log10(Math.max(hi - lo, 1e-9) / 4))));
   // Ticks are round values: trailing zeros trimmed ("-0.1", not "-0.1000").
   const trimmed = (value: number, places: number) => { const text = String(Number(value.toFixed(places))); return text === "-0" ? "0" : text; };
   const fx = (value: number) => trimmed(value, digits(xAxis.lo, xAxis.hi)), fy = (value: number) => trimmed(value, digits(yAxis.lo, yAxis.hi));
+  const m = { l: yAxisLeft(yAxis.ticks.map(fy), 70), r: 24, t: 18, b: 54 };
+  const x = (value: number) => m.l + ((value - xAxis.lo) / (xAxis.hi - xAxis.lo || 1)) * (W - m.l - m.r);
+  const y = (value: number) => H - m.b - ((value - yAxis.lo) / (yAxis.hi - yAxis.lo || 1)) * (H - m.t - m.b);
   return (
     <ReportFigure title={chart.title ?? "分箱散点图"}>
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>把全部记录按 X 从小到大分成 {chart.points.length} 组，每个点是一组的平均值。X 和 Y 都先扣掉了每个国家×行业自己的平均水平和每年的共同变化。直线的斜率就是估计值（X 每增加 1 个百分点时 Y 的平均变化）。</div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "分箱散点图"} style={{ width: "100%", height: "auto" }}>
-        {yAxis.ticks.map((tick) => <g key={`y${tick}`}><line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke="#eef0f4" /><text x={m.l - 8} y={y(tick) + 4} textAnchor="end" fontSize={11} fill="#5f6677">{fy(tick)}</text></g>)}
-        {xAxis.ticks.map((tick) => <g key={`x${tick}`}><line x1={x(tick)} x2={x(tick)} y1={m.t} y2={H - m.b} stroke="#eef0f4" /><text x={x(tick)} y={H - m.b + 16} textAnchor="middle" fontSize={11} fill="#5f6677">{fx(tick)}</text></g>)}
+        {yAxis.ticks.map((tick) => <g key={`y${tick}`}><line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke="#eef0f4" /><text x={m.l - 8} y={y(tick) + 5} textAnchor="end" fontSize={AXIS_FONT} fill="#5f6677">{fy(tick)}</text></g>)}
+        {xAxis.ticks.map((tick) => <g key={`x${tick}`}><line x1={x(tick)} x2={x(tick)} y1={m.t} y2={H - m.b} stroke="#eef0f4" /><text x={x(tick)} y={H - m.b + 18} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{fx(tick)}</text></g>)}
         <line x1={x(0)} x2={x(0)} y1={m.t} y2={H - m.b} stroke="#9aa3b5" strokeDasharray="4 3" />
         <line x1={m.l} x2={W - m.r} y1={y(0)} y2={y(0)} stroke="#9aa3b5" strokeDasharray="4 3" />
-        {chart.x_label && <text x={m.l + (W - m.l - m.r) / 2} y={H - 8} textAnchor="middle" fontSize={11} fill="#5f6677">{chart.x_label}</text>}
-        {chart.y_label && <text x={14} y={(m.t + H - m.b) / 2} textAnchor="middle" fontSize={11} fill="#5f6677" transform={`rotate(-90 14 ${(m.t + H - m.b) / 2})`}>{chart.y_label}</text>}
+        {chart.x_label && <text x={m.l + (W - m.l - m.r) / 2} y={H - 8} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{chart.x_label}</text>}
+        {chart.y_label && <YUnitLabel text={chart.y_label} middle={(m.t + H - m.b) / 2} />}
         <line x1={x(xAxis.lo)} y1={y(fitted[0])} x2={x(xAxis.hi)} y2={y(fitted[1])} stroke="#2a2f3a" strokeWidth={2.2} />
         {chart.points.map((point, index) => <circle key={index} cx={x(point.x)} cy={y(point.y)} r={5} fill="#216cc0" stroke="#fff" strokeWidth={1.5} />)}
       </svg>
@@ -355,7 +374,7 @@ function BinscatterChart({ chart }: { chart: Extract<ReportChart, { type: "binsc
 function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coefficient" }> }) {
   const W = 720;
   const rowH = 64;
-  const m = { l: 170, r: 30, t: 16, b: 46 };
+  const m = { l: 210, r: 30, t: 16, b: 52 };
   const H = m.t + chart.items.length * rowH + m.b;
   const plotW = W - m.l - m.r;
   const hasCi = chart.items.some((item) => item.ci_low != null && item.ci_high != null);
@@ -383,17 +402,17 @@ function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coef
         {ticks.map((tickValue) => (
           <g key={tickValue}>
             {tickValue !== 0 && <line x1={x(tickValue)} x2={x(tickValue)} y1={m.t} y2={H - m.b} stroke="#eef0f4" />}
-            <text x={x(tickValue)} y={H - m.b + 16} textAnchor="middle" fontSize={11} fill="#5f6677">{tick(tickValue)}</text>
+            <text x={x(tickValue)} y={H - m.b + 18} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{tick(tickValue)}</text>
           </g>
         ))}
         <line x1={m.l} x2={W - m.r} y1={H - m.b} y2={H - m.b} stroke="#d7dae2" />
-        {chart.x_label && <text x={m.l + plotW / 2} y={H - 8} textAnchor="middle" fontSize={11} fill="#5f6677">{chart.x_label}</text>}
+        {chart.x_label && <text x={m.l + plotW / 2} y={H - 8} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{chart.x_label}</text>}
         {chart.items.map((item, index) => {
           const color = !hasCi ? "#b6bac6" : "#2a2f3a";
           const labelAt = Math.min(Math.max(x(item.value), m.l + 24), W - m.r - 24);
           return (
             <g key={`${item.label}-${index}`}>
-              <text x={m.l - 12} y={y(index) + 4} textAnchor="end" fontSize={12} fill="#3a4050">{item.label}</text>
+              <text x={m.l - 12} y={y(index) + 5} textAnchor="end" fontSize={LABEL_FONT} fill="#3a4050">{item.label}</text>
               {item.ci_low != null && item.ci_high != null && (
                 <g stroke={color} strokeWidth={1.8}>
                   <line x1={x(item.ci_low)} x2={x(item.ci_high)} y1={y(index)} y2={y(index)} />
@@ -402,7 +421,7 @@ function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coef
                 </g>
               )}
               <circle cx={x(item.value)} cy={y(index)} r={6.5} fill={color} stroke="#fff" strokeWidth={2} />
-              <text x={labelAt} y={y(index) - 21} textAnchor="middle" fontSize={11.5} fontWeight={700} fill="#2a2f3a">
+              <text x={labelAt} y={y(index) - 18} textAnchor="middle" fontSize={AXIS_FONT} fontWeight={700} fill="#2a2f3a">
                 {value(item.value)}
                 {item.ci_low != null && item.ci_high != null ? `  [${value(item.ci_low)}, ${value(item.ci_high)}]` : ""}
               </text>
@@ -417,14 +436,14 @@ function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coef
 
 function EventChart({ chart }: { chart: Extract<ReportChart, { type: "event-study" }> }) {
   const W = 720;
-  const H = 280;
-  const m = { l: 66, r: 26, t: 22, b: 46 };
+  const H = 290;
   const intervals = chart.points.map((point) => ({
     ...point,
     lo: point.ci_low ?? point.value - 1.96 * (point.se ?? 0),
     hi: point.ci_high ?? point.value + 1.96 * (point.se ?? 0),
   }));
   const extent = Math.max(...intervals.flatMap((point) => [Math.abs(point.lo), Math.abs(point.hi)]), 1e-6) * 1.12;
+  const m = { l: yAxisLeft([-extent, 0, extent].map(fmt), 66), r: 26, t: 22, b: 52 };
   const plotW = W - m.l - m.r;
   const plotH = H - m.t - m.b;
   const x = (i: number) => m.l + ((i + 0.5) / intervals.length) * plotW;
@@ -436,18 +455,18 @@ function EventChart({ chart }: { chart: Extract<ReportChart, { type: "event-stud
         {[-extent, 0, extent].map((tick) => (
           <g key={tick}>
             <line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke={tick === 0 ? "#b9bec9" : "#eceef3"} />
-            <text x={m.l - 8} y={y(tick) + 4} textAnchor="end" fontSize={10} fill="#5f6677">{fmt(tick)}</text>
+            <text x={m.l - 8} y={y(tick) + 5} textAnchor="end" fontSize={AXIS_FONT} fill="#5f6677">{fmt(tick)}</text>
           </g>
         ))}
         {intervals.map((point, i) => (
           <g key={`${point.label}-${i}`}>
             <line x1={x(i)} x2={x(i)} y1={y(point.lo)} y2={y(point.hi)} stroke="#7773df" strokeWidth={2} />
             <circle cx={x(i)} cy={y(point.value)} r={5} fill="#4b47e0" stroke="#fff" strokeWidth={2} />
-            <text x={x(i)} y={H - m.b + 18} textAnchor="middle" fontSize={11} fill="#596173">{point.label}</text>
+            <text x={x(i)} y={H - m.b + 20} textAnchor="middle" fontSize={AXIS_FONT} fill="#596173">{point.label}</text>
           </g>
         ))}
-        {chart.y_label && <text x={14} y={m.t + plotH / 2} textAnchor="middle" fontSize={11} fill="#5f6677" transform={`rotate(-90 14 ${m.t + plotH / 2})`}>{chart.y_label}</text>}
-        {chart.x_label && <text x={m.l + plotW / 2} y={H - 7} textAnchor="middle" fontSize={11} fill="#5f6677">{chart.x_label}</text>}
+        {chart.y_label && <YUnitLabel text={chart.y_label} middle={m.t + plotH / 2} />}
+        {chart.x_label && <text x={m.l + plotW / 2} y={H - 7} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{chart.x_label}</text>}
       </svg>
     </ReportFigure>
   );
@@ -455,9 +474,6 @@ function EventChart({ chart }: { chart: Extract<ReportChart, { type: "event-stud
 
 function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> }) {
   const W = 720;
-  const legend = legendLayout(chart.series.map((series) => series.label), 68, W - 26);
-  const m = { l: 68, r: 26, t: 24 + legend.rows * 18, b: 48 };
-  const H = 292 + legend.rows * 18;
   const colors = [...GROUP_COLORS, "#c2417a", "#657000", "#3274a1"];
   const labels = [...new Set(chart.series.flatMap((series) => series.points.map((point) => point.label)))];
   const values = chart.series.flatMap((series) => series.points.map((point) => point.value));
@@ -466,6 +482,12 @@ function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> })
   const padding = (rawMax - rawMin || Math.max(Math.abs(rawMax), 1)) * 0.12;
   // Non-negative series (amounts, shares, lengths) must not get a negative axis tick from padding.
   const axis = niceDomain(rawMin >= 0 ? Math.max(0, rawMin - padding) : rawMin - padding, rawMax + padding, 3);
+  const unit = chartUnit(chart.y_label);
+  // The left margin fits the widest tick ("4,500,000") to the right of the rotated unit ("百万美元").
+  const left = yAxisLeft(axis.ticks.map((tick) => tickReading(tick, unit)), 68);
+  const legend = legendLayout(chart.series.map((series) => series.label), left, W - 26);
+  const m = { l: left, r: 26, t: 28 + legend.rows * 22, b: 52 };
+  const H = 300 + legend.rows * 22;
   const min = axis.lo;
   const max = axis.hi;
   const plotW = W - m.l - m.r;
@@ -473,7 +495,6 @@ function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> })
   const x = (label: string) => m.l + (labels.length === 1 ? plotW / 2 : labels.indexOf(label) / (labels.length - 1) * plotW);
   const y = (value: number) => m.t + (max - value) / (max - min) * plotH;
   const ticks = axis.ticks;
-  const unit = chartUnit(chart.y_label);
 
   return (
     <ReportFigure title={chart.title ?? "历年趋势"}>
@@ -481,7 +502,7 @@ function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> })
         {ticks.map((tick) => (
           <g key={tick}>
             <line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke="#e5e7ed" />
-            <text x={m.l - 8} y={y(tick) + 4} textAnchor="end" fontSize={10} fill="#5f6677">{tickReading(tick, unit)}</text>
+            <text x={m.l - 8} y={y(tick) + 5} textAnchor="end" fontSize={AXIS_FONT} fill="#5f6677">{tickReading(tick, unit)}</text>
           </g>
         ))}
         {chart.series.map((series, seriesIndex) => {
@@ -500,14 +521,14 @@ function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> })
                 strokeLinejoin="round"
               />
               {series.points.map((point) => <circle key={point.label} cx={x(point.label)} cy={y(point.value)} r={reference ? 2.5 : 4} fill={color} stroke="#fff" strokeWidth={1.5} />)}
-              <line x1={legend.positions[seriesIndex].x} x2={legend.positions[seriesIndex].x + 18} y1={14 + legend.positions[seriesIndex].row * 18} y2={14 + legend.positions[seriesIndex].row * 18} stroke={color} strokeWidth={reference ? 2 : 3} strokeDasharray={reference ? "5 3" : undefined} />
-              <text x={legend.positions[seriesIndex].x + 24} y={18 + legend.positions[seriesIndex].row * 18} fontSize={11} fill="#4b5563">{series.label}</text>
+              <line x1={legend.positions[seriesIndex].x} x2={legend.positions[seriesIndex].x + 18} y1={14 + legend.positions[seriesIndex].row * 22} y2={14 + legend.positions[seriesIndex].row * 22} stroke={color} strokeWidth={reference ? 2 : 3} strokeDasharray={reference ? "5 3" : undefined} />
+              <text x={legend.positions[seriesIndex].x + 24} y={19 + legend.positions[seriesIndex].row * 22} fontSize={AXIS_FONT} fill="#4b5563">{series.label}</text>
             </g>
           );
         })}
-        {labels.map((label) => <text key={label} x={x(label)} y={H - m.b + 18} textAnchor="middle" fontSize={10} fill="#596173">{label}</text>)}
-        {chart.y_label && <text x={14} y={m.t + plotH / 2} textAnchor="middle" fontSize={11} fill="#5f6677" transform={`rotate(-90 14 ${m.t + plotH / 2})`}>{chart.y_label}</text>}
-        {chart.x_label && <text x={m.l + plotW / 2} y={H - 7} textAnchor="middle" fontSize={11} fill="#5f6677">{chart.x_label}</text>}
+        {labels.map((label) => <text key={label} x={x(label)} y={H - m.b + 20} textAnchor="middle" fontSize={AXIS_FONT} fill="#596173">{label}</text>)}
+        {chart.y_label && <YUnitLabel text={chart.y_label} middle={m.t + plotH / 2} />}
+        {chart.x_label && <text x={m.l + plotW / 2} y={H - 7} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{chart.x_label}</text>}
       </svg>
     </ReportFigure>
   );

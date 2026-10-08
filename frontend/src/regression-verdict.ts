@@ -103,7 +103,8 @@ function naturalScale(
     return {
       // Point and interval in standard deviations use the same decimals (the interval may need three).
       // A standard deviation is the typical gap in Y between country×industry records.
-      effect: `${signed(effect, 2)} 个中心性原始单位${standardized == null ? "" : `（约 ${signed(standardized, sdDigits)} 个标准差，标准差即 Y 的典型差距）`}`,
+      // Unsigned, as in the report ("幅度约 0.05 个标准差"): the number before it carries the sign.
+      effect: `${signed(effect, 2)} 个中心性原始单位${standardized == null ? "" : `（幅度约 ${signed(standardized, sdDigits).replace(/^[+−-]/, "")} 个标准差，标准差即 Y 的典型差距）`}`,
       interval: hasCi ? `${intervalShort}${standardizedInterval}` : "—",
       intervalShort,
     };
@@ -116,7 +117,8 @@ function naturalScale(
   const digits = kind === "position" ? 4 : 3;
   const interval = hasCi ? `[${signed(ciLow, digits)}, ${signed(ciHigh, digits)}] 个${unit}` : "—";
   return {
-    effect: `${signed(effect, digits)} 个${unit}${relative == null ? "" : `（约为样本均值的 ${signed(relative, 2)}%）`}`,
+    // The size against the mean is unsigned, as in the report: the number before it carries the sign.
+    effect: `${signed(effect, digits)} 个${unit}${relative == null ? "" : `（幅度约为样本均值的 ${signed(relative, 2).replace(/^[+−-]/, "")}%）`}`,
     interval,
     intervalShort: interval,
   };
