@@ -102,6 +102,20 @@ export function useModalErrorFocus(error: string | null) {
   return errorRef;
 }
 
+/**
+ * After a form error, put focus back in the field it is about (so the teacher can correct it straight away);
+ * an error not tied to a field goes to the error box, as useModalErrorFocus does. `field` changes with each
+ * error. Runs after the render that re-enables the field (it was disabled while saving).
+ */
+export function useFieldErrorFocus(error: string | null, fieldRef: RefObject<HTMLElement | null> | null) {
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!error) return;
+    (fieldRef?.current ?? errorRef.current)?.focus();
+  }, [error, fieldRef]);
+  return errorRef;
+}
+
 /** A list that failed to load: Chinese copy for transport errors (not the browser's "Failed to fetch") and a retry. */
 export function LoadFailure({ what, error, onRetry }: { what: string; error: string; onRetry: () => void }) {
   return (
