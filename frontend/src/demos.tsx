@@ -1210,7 +1210,7 @@ export function NetworkCentralityDemo() {
             <>
               <div className="ndp-formula">介数 = Σ σₛₜ(v) / σₛₜ（σₛₜ：s 到 t 的最短路线条数；σₛₜ(v)：其中经过 v 的条数）</div>
               <div className="ndp-calc">
-                = {betweennessPairs.length > 0 && betweennessPairs.length <= 8
+                = {betweennessPairs.length > 1 && betweennessPairs.length <= 8
                   ? <>{betweennessPairs.map((pair) => pairShareText(pair).split(" = ").at(-1)).join(" + ")} = </>
                   : betweennessPairs.length > 8 ? <>下表 {betweennessPairs.length} 对之和 = </> : null}
                 <b>{networkDemoMetricText(C.bet[sel], "betweenness")}</b>
