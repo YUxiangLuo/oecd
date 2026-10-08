@@ -1325,7 +1325,7 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert "模拟" not in report.markdown.split("## 关键证据摘要")[0]
     disclosure = report.provenance["simulation_contract"]["source_filter_disclosure"]
     assert f"首年共有 {disclosure['source_baseline_rows']} 个国家×行业" in report.markdown
-    assert f"其中 {disclosure['excluded_source_baseline_rows']} 个缺少必要数据被剔除" in report.markdown
+    assert f"其中 {disclosure['excluded_source_baseline_rows']} 个没有进入样本：美国是加征关税的一方" in report.markdown
     assert f"剩下 {disclosure['published_entities']} 个用于四项回归" in report.markdown
     assert "预设" not in report.markdown
     assert (

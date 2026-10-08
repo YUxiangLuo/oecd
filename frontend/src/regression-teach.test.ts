@@ -97,7 +97,7 @@ describe("student-first regression reading", () => {
     expect(html).toContain("还没计算");
     expect(html).toContain("四个 Y 的单位不同，数字不能比大小");
     expect(html).not.toMatch(/TWFE|处理前|标称/);
-    expect(html).toContain("-0.02 个百分点");
+    expect(html).toContain("-0.020 个百分点");
     expect(html).not.toContain("</b><span>百分点</span>");
     // The column names the association, as the step pages do.
     expect(html).toContain("<th>X 每高 1 个百分点，Y 平均相差</th>");

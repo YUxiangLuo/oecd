@@ -187,6 +187,11 @@ def _count(value: Any) -> str:
     return _number(value)
 
 
+def _share_digits(points: float) -> int:
+    """As on the page: 0.005–0.1 point gets 3 decimals ("+0.008", not "+0.01"); smaller ones fall back in _signed."""
+    return 3 if 0.005 <= abs(points) < 0.1 else 2
+
+
 def _signed(value: float, digits: int) -> str:
     rounded = f"{value:+,.{digits}f}"
     # Match the result card (toPrecision(2)): a small nonzero estimate/CI endpoint is not zero, and keeps
@@ -297,9 +302,12 @@ def _natural_effect(
     effect_label = "关税暴露 X 每高 1 个百分点，Y 平均相差"
     kind = _depvar_kind(outcome, design)
     if kind == "share":
-        effect_text = f"{_signed(effect * 100, 2)} 个百分点"
+        share_digits = _share_digits(effect * 100)
+        effect_text = f"{_signed(effect * 100, share_digits)} 个百分点"
         interval = (
-            f"[{_signed(ci[0] * increment * 100, 2)}, {_signed(ci[1] * increment * 100, 2)}] 个百分点" if ci else "—"
+            f"[{_signed(ci[0] * increment * 100, share_digits)}, {_signed(ci[1] * increment * 100, share_digits)}] 个百分点"
+            if ci
+            else "—"
         )
     elif kind == "network":
         sd = result.get("depvar_std")
@@ -308,12 +316,17 @@ def _natural_effect(
         # Unsigned, as on the page ("平均下降 39.70 …（幅度约 0.05 个标准差）"): the number before it carries the sign.
         if positive_sd is not None:
             effect_text += f"（幅度约 {_signed(effect / positive_sd, 2)[1:]} 个标准差）"
+        sd_bounds = (ci[0] * increment / positive_sd, ci[1] * increment / positive_sd) if ci and positive_sd else None
+        # A narrow interval would print as "[-0.05, -0.05]" at 2 decimals; add digits until the ends differ.
+        sd_digits = next(
+            (d for d in (2, 3, 4) if sd_bounds and _signed(sd_bounds[0], d) != _signed(sd_bounds[1], d)), 4
+        )
         interval = (
             f"[{_signed(ci[0] * increment, 2)}, {_signed(ci[1] * increment, 2)}] 个中心性原始单位"
             + (
-                f"（约 [{_signed(ci[0] * increment / positive_sd, 2)}, {_signed(ci[1] * increment / positive_sd, 2)}]"
+                f"（约 [{_signed(sd_bounds[0], sd_digits)}, {_signed(sd_bounds[1], sd_digits)}]"
                 " 个标准差）"
-                if positive_sd is not None
+                if sd_bounds is not None
                 else ""
             )
             if ci
@@ -357,7 +370,7 @@ def _effect_size(outcome: str, design: dict[str, Any] | None, coefficient: dict[
     effect = abs(float(coefficient["coef"]) * 0.01)
     kind = _depvar_kind(outcome, design or {})
     if kind == "share":
-        return f"{_signed(effect * 100, 2)[1:]} 个百分点"
+        return f"{_signed(effect * 100, _share_digits(effect * 100))[1:]} 个百分点"
     if kind == "network":
         return f"{_signed(effect, 2)[1:]} 个中心性原始单位"
     if kind == "position":

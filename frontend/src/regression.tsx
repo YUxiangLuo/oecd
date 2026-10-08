@@ -43,7 +43,7 @@ export const scrollRegressionVerdict = scrollIntoCourseContent;
 /** The saved design's sample rule in plain words; the stored text (a data contract) is kept as is. */
 export function sampleFilterLabel(filter: string | undefined): string {
   if (!filter) return "—";
-  if (/^排除 ROW/.test(filter)) return "不含 ROW（OECD 把其他国家合在一起的“世界其他地区”）";
+  if (/^排除 ROW/.test(filter)) return "不含 ROW（OECD 把其他国家合在一起的“世界其他地区”）和美国（加征关税的一方）";
   return filter.replace("(", "（").replace(")", "）");
 }
 
@@ -624,6 +624,9 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
           const estimate = result && coefficient != null && groups.mean_exposure_taxed != null && !globalInferenceIsSuppressed(result.result.status, result.result.support)
             ? { gap: coefficient * groups.mean_exposure_taxed, label: `回归估计的差距 ${fmt(coefficient * groups.mean_exposure_taxed * levelScale)}` }
             : null;
+          // The weak Y's interval includes 0: the gap's sign is not settled, as the verdict above says.
+          const coefStat = result?.result.coefs[0];
+          const estimateUncertain = coefStat?.ci_low != null && coefStat.ci_high != null && coefStat.ci_low <= 0 && coefStat.ci_high >= 0;
           return <div className="reg-group-figure">
             <GroupChangeChart
               years={groups.years}
@@ -640,7 +643,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
               { eyebrow: `加税后（${lastYear}）`, big: postGap == null ? "缺失" : Math.abs(postGap) < tiny ? "两组差不多" : `加税组比未加税组${postGap < 0 ? "低" : "高"} ${fmt(Math.abs(postGap)).replace(/^\+/, "")}`, small: `${groups.sample.taxed_countries} 国加税、${groups.sample.untaxed_countries} 国未加税的平均值` },
               {
                 eyebrow: "回归要算的",
-                big: estimate ? `估计的差距 ${fmt(estimate.gap * levelScale)}` : "两条线分开多远",
+                big: estimate ? `估计的差距 ${fmt(estimate.gap * levelScale)}${estimateUncertain ? "（方向不确定）" : ""}` : "两条线分开多远",
                 small: estimate
                   ? "= 估计值 × 加税组的平均 X（图上虚线标出的那段）。左边是两组平均值直接相减；这里按每个国家×行业自己的 X 算，还扣掉了各自的平均水平和每年的共同变化，所以两个数接近但不相同。"
                   : "回归把这段距离换算成“X 每增加 1 个百分点，Y 平均变多少”",

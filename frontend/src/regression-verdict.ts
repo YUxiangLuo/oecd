@@ -82,8 +82,14 @@ export function chartDisplayScale(outcome: RegressionOutcome, design?: { depvar_
 export function teachingEffect(outcome: RegressionOutcome, beta: number, design?: { depvar_kind?: string } | null): string {
   const kind = depvarKind(outcome, design);
   const { scale } = chartDisplayScale(outcome, design);
-  return `${signed(beta * scale, kind === "position" ? 4 : kind === "length" ? 3 : 2)} ${countUnit(kind)}`;
+  return `${signed(beta * scale, kind === "position" ? 4 : kind === "length" ? 3 : shareDigits(beta * scale))} ${countUnit(kind)}`;
 }
+
+/**
+ * Shares print with 2 decimals; an estimate between 0.005 and 0.1 point gets 3, so "+0.0075" is not shown as
+ * "+0.01". Smaller ones already fall back to 2 significant digits in signed().
+ */
+export const shareDigits = (pointsEstimate: number) => (Math.abs(pointsEstimate) >= 0.005 && Math.abs(pointsEstimate) < 0.1 ? 3 : 2);
 
 function naturalScale(
   outcome: RegressionOutcome,
@@ -96,8 +102,9 @@ function naturalScale(
   const ciHigh = (coefficient.ci_high ?? 0) * 0.01;
   const kind = depvarKind(outcome, response.design);
   if (kind === "share") {
-    const interval = hasCi ? `[${signed(ciLow * 100, 2)}, ${signed(ciHigh * 100, 2)}] 个百分点` : "—";
-    return { effect: `${signed(effect * 100, 2)} 个百分点`, interval, intervalShort: interval };
+    const digits = shareDigits(effect * 100);
+    const interval = hasCi ? `[${signed(ciLow * 100, digits)}, ${signed(ciHigh * 100, digits)}] 个百分点` : "—";
+    return { effect: `${signed(effect * 100, digits)} 个百分点`, interval, intervalShort: interval };
   }
   if (kind === "network") {
     const sd = response.result.depvar_std;

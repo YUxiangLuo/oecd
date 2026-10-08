@@ -201,7 +201,9 @@ export function BinScatterChart({ bins, slope, slopeUnit, slopeWords, xLabel, yL
   const lineEnd = y(fitted[1]);
   const corners = [m.t + 12, H - m.b - 6];
   const slopeLabelY = Math.abs(corners[0] - lineEnd) >= Math.abs(corners[1] - lineEnd) ? corners[0] : corners[1];
-  const slopeText = Math.abs(slope) >= 100 ? slope.toFixed(0) : Math.abs(slope) >= 0.1 ? slope.toFixed(2) : slope.toPrecision(2);
+  // Between 0.005 and 0.1 a share headline prints 3 decimals ("+0.008"); smaller slopes keep 2 significant digits.
+  const slopeText = Math.abs(slope) >= 100 ? slope.toFixed(0) : Math.abs(slope) >= 0.1 ? slope.toFixed(2)
+    : Math.abs(slope) >= 0.005 ? slope.toFixed(3) : slope.toPrecision(2);
   // An association across records, as in the result headline: "X 每高 1 个百分点，Y 平均低 0.55 个百分点".
   const slopeReading = slopeWords && slope !== 0
     ? `平均${slope < 0 ? slopeWords.lower : slopeWords.higher} ${slopeText.replace(/^-/, "")}`

@@ -475,7 +475,8 @@ def _teaching_sample_lines(source_filter: dict[str, Any] | None) -> list[str]:
         "### 回归用的国家×行业",
         "",
         f"- 首年共有 {_count(source_filter.get('source_baseline_rows'))} 个国家×行业（不含“世界其他地区”ROW），"
-        f"其中 {_count(source_filter.get('excluded_source_baseline_rows'))} 个缺少必要数据被剔除，"
+        f"其中 {_count(source_filter.get('excluded_source_baseline_rows'))} 个没有进入样本："
+        "美国是加征关税的一方，它的各行业按设计不在样本中；其余是缺少必要数据被剔除的。"
         f"剩下 {_count(source_filter.get('published_entities'))} 个用于四项回归。",
         # Two different stages: this one builds the sample; each run's "计算时再剔除" checks it again.
         "- 上面的剔除在准备关税数据时就已完成。下面每步回归里的“计算时再剔除 n 条”是计算前对这份样本再检查一遍、"
@@ -575,16 +576,16 @@ def _technical_support_lines(design: dict[str, Any], result: dict[str, Any], sup
                 if support.get("treated_clusters") is not None
                 else ""
             )
-            support_bits.append(f"受关税影响的国家×行业 {_count(support['treated_entities'])} 个{countries}")
+            support_bits.append(f"X 大于 0 的国家×行业 {_count(support['treated_entities'])} 个{countries}")
         if support.get("untreated_entities") is not None:
             countries = (
-                f"（其中 {_count(support['untreated_clusters'])} 个国家完全没受影响）"
+                f"（含 {_count(support['untreated_clusters'])} 个国家的全部行业）"
                 if support.get("untreated_clusters") is not None
                 else ""
             )
-            support_bits.append(f"没受影响的 {_count(support['untreated_entities'])} 个{countries}")
+            support_bits.append(f"X 始终为 0 的 {_count(support['untreated_entities'])} 个{countries}")
         if support_bits:
-            lines.append(f"- 受影响情况：{'；'.join(support_bits)}。")
+            lines.append(f"- 加税情况：{'；'.join(support_bits)}。")
 
     return lines
 
