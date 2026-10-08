@@ -202,6 +202,9 @@ export function StudentBatchModal({ semesters, initialClassId, onClose, onCreate
     setTimeout(() => URL.revokeObjectURL(url), 1000); setDownloaded(true);
   };
   const createLabel = `创建 ${accounts?.length ?? 0} 个账号`;
+  // The list is created all at once or not at all: with a used 学号 nothing can be created, so the disabled
+  // button says why instead of promising accounts.
+  const blockedLabel = refused ? "没有创建，请返回修改" : existing.length ? `${existing.length} 个学号已被使用，无法创建` : null;
   const submit = async () => {
     if (!accounts || busy) return;
     setBusy(true); setError(""); setAttempted(true);
@@ -263,7 +266,7 @@ export function StudentBatchModal({ semesters, initialClassId, onClose, onCreate
         <button disabled={busy} onClick={close}>{done ? "完成" : "取消"}</button>
         {accounts && !done && !attempted && <button disabled={busy} onClick={backToEdit}>返回修改</button>}
         {!accounts ? <button className="primary" disabled={busy} onClick={() => void preview()}>{busy ? "正在预览…" : "预览名单"}</button>
-          : !done && <button className="primary" disabled={busy || !!existing.length || !downloaded || refused} onClick={() => void submit()}>{busy ? "创建中…" : createLabel}</button>}
+          : !done && <button className="primary" disabled={busy || !!existing.length || !downloaded || refused} onClick={() => void submit()}>{busy ? "创建中…" : blockedLabel ?? createLabel}</button>}
       </div>
     </div>
   </Modal>;

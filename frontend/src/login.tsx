@@ -20,6 +20,19 @@ export const DEMO_STUDENT_COUNT = 50;
 const SEEN_DEMO_STUDENTS_KEY = "gvcsim_seen_demo_students";
 // The account the server last suggested to this tab: a reload asks for it back instead of holding another.
 const DEMO_SUGGESTION_KEY = "gvcsim_demo_suggestion";
+// Demo builds: the demo student this browser last signed in as (never the teacher). A new tab, or a return from
+// the teacher identity, offers it again, so the student's progress does not seem lost.
+export const LAST_DEMO_STUDENT_KEY = "gvcsim_last_demo_student";
+
+function readStorage(storage: () => Storage, key: string): string | null {
+  try { return storage().getItem(key); } catch { return null; }
+}
+
+/** Remembers a demo student sign-in in this browser; other accounts (the teacher, real accounts) are not kept. */
+export function rememberDemoStudent(username: string): void {
+  if (!isDemoStudentUsername(username)) return;
+  try { localStorage.setItem(LAST_DEMO_STUDENT_KEY, username); } catch { /* storage refused: a new tab gets a fresh suggestion */ }
+}
 
 export interface DemoStudentCredential {
   username: string;
@@ -101,15 +114,16 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
   // 又能连同基础口令和整组凭证一起消除。
   const demoPassword = demoMode ? import.meta.env.VITE_DEMO_PASSWORD || "gvclab2026" : "";
   const demoStudents = demoMode ? demoStudentCredentials(demoPassword) : [];
-  // The demo student this tab used last: after 退出登录, the same person gets the same account back instead of
-  // the next one in the rotation (which someone else may be using).
-  const [previousDemoStudent] = useState(() => {
+  // The demo student used last: in this tab, else in this browser (another tab, or before switching to the
+  // teacher identity). The same person gets the same account back instead of the next one in the rotation.
+  // It is their own account, so the server (which only suggests idle accounts) is not asked.
+  const [previousDemoStudent, setPreviousDemoStudent] = useState(() => {
     if (!demoMode || returningUsername) return null;
-    const previous = sessionStorage.getItem("gvcsim_signed_in_username");
+    const inTab = readStorage(() => sessionStorage, "gvcsim_signed_in_username");
+    const previous = isDemoStudentUsername(inTab ?? "") ? inTab : readStorage(() => localStorage, LAST_DEMO_STUDENT_KEY);
     return demoStudents.find((student) => student.username === previous) ?? null;
   });
-  const [initialDemoSelection] = useState(() => {
-    if (!demoMode || returningUsername || previousDemoStudent) return null;
+  const pickDemoStudent = () => {
     let seen: string[] = [];
     try {
       const stored = JSON.parse(sessionStorage.getItem(SEEN_DEMO_STUDENTS_KEY) ?? "[]");
@@ -118,7 +132,9 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
       // Restricted or malformed storage still gets a usable random credential; rotation history is unavailable.
     }
     return chooseDemoStudent(demoStudents, seen);
-  });
+  };
+  const [initialDemoSelection, setInitialDemoSelection] = useState(() =>
+    !demoMode || returningUsername || previousDemoStudent ? null : pickDemoStudent());
   // 演示构建从 50 组学生凭证中选一组;非演示构建仍是空表单。
   const [demoStudent, setDemoStudent] = useState(previousDemoStudent ?? initialDemoSelection?.student ?? null);
   const [username, setUsername] = useState(returningUsername || demoStudent?.username || "");
@@ -229,6 +245,21 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
     }
   }, [demoMode, initialDemoSelection]);
 
+  // Someone else at this computer: forget the remembered account and ask the server for an idle one.
+  const switchToIdleStudent = () => {
+    try { localStorage.removeItem(LAST_DEMO_STUDENT_KEY); } catch { /* nothing remembered to forget */ }
+    const selection = pickDemoStudent();
+    edited.current = false;
+    setPreviousDemoStudent(null);
+    setConfirmedStudent(null);
+    setDemoStudent(selection.student);
+    setUsername(selection.student.username);
+    setPassword(selection.student.password);
+    setSuggestion("pending");
+    setInitialDemoSelection(selection);
+    clearError();
+  };
+
   // Signing in with the unconfirmed local pick could land on a classmate's account: wait for the server first.
   const awaitingSuggestion = suggestion === "pending" && !edited.current && demoStudent != null && username === demoStudent.username;
 
@@ -237,7 +268,9 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
     ...(demoStudent ? [{
       ...demoStudent,
       label: "学生身份",
-      note: suggestion === "confirmed" && (confirmedStudent === null || demoStudent.username === confirmedStudent)
+      note: previousDemoStudent && demoStudent.username === previousDemoStudent.username
+        ? "上次在这台电脑用的演示账号"
+        : suggestion === "confirmed" && (confirmedStudent === null || demoStudent.username === confirmedStudent)
         ? "自动分配一个空闲的演示账号"
         : suggestion === "pending" ? "正在分配空闲账号…" : "账号可能有同学在用",
     }] : []),
@@ -255,7 +288,9 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
     setError(null);
     try {
       keepError.current = false;
-      onLogin(await api.login(username, password));
+      const response = await api.login(username, password);
+      if (demoMode) rememberDemoStudent(response.user.username);
+      onLogin(response);
     } catch (err) {
       keepError.current = isApiErrorStatus(err, 429);
       setError(userFacingRequestError(err, "登录失败"));
@@ -350,13 +385,18 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
               ? <>演示账号都在使用中。请稍后刷新页面，或向老师要账号。<br /></>
               : username === "teacher"
                 ? <>当前预填的是教师演示账号，用于学生管理与报告评阅。上方可切换回学生身份。<br /></>
+              : previousDemoStudent && username === previousDemoStudent.username
+                ? <>已为你预填上次在这台电脑用过的演示学生账号，之前的进度都在。在这台电脑的浏览器里再次登录，仍是这个账号。{" "}
+                  <button type="button" className="login-hint-link" onClick={switchToIdleStudent}>不是你的？换一个空闲账号</button><br /></>
+              : previousDemoStudent
+                ? <>这不是上次在这台电脑用的账号。点上方“学生身份”可换回。<br /></>
               : suggestion === "failed"
                 ? <>暂时无法分配空闲账号，当前预填的账号可能有同学在用。请稍后刷新页面，或向老师要账号。<br /></>
                 : suggestion === "pending"
                   ? <>正在分配空闲的演示账号…<br /></>
                   : confirmedStudent !== null && username !== confirmedStudent
                     ? <>这不是系统分配的账号。点上方“学生身份”可换回。<br /></>
-                    : <>已为你预填一个空闲的演示学生账号。退出登录后在本页再次登录，仍是这个账号。<br /></>)}
+                    : <>已为你预填一个空闲的演示学生账号。在这台电脑的浏览器里再次登录，仍是这个账号。<br /></>)}
             登录用于区分每位同学的实验记录。刷新页面不会丢失进度。
           </div>
         </form>

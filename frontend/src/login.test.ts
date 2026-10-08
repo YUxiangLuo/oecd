@@ -15,5 +15,8 @@ describe("login course map", () => {
     expect(html).not.toContain("真实指标");
     expect(html).not.toContain("76 个具名经济体");
     expect(html).not.toContain("OECD ICIO 2023 版");
+    // Outside the demo build there is no demo account to remember or offer again.
+    expect(html).not.toContain("这台电脑");
+    expect(html).not.toContain("演示学生账号");
   });
 });

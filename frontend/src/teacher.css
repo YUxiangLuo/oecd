@@ -17,9 +17,9 @@
 .teacher-nav-item.active { background: #edecfd; box-shadow: inset 2px 0 0 #4b47e0; }
 .teacher-nav-ic {
   flex: none; width: 30px; height: 30px; border-radius: 8px; background: #f0f1f6;
-  display: flex; align-items: center; justify-content: center; font-size: 15px;
+  display: flex; align-items: center; justify-content: center; font-size: 15px; color: #6a7186;
 }
-.teacher-nav-item.active .teacher-nav-ic { background: #fff; }
+.teacher-nav-item.active .teacher-nav-ic { background: #fff; color: #4b47e0; }
 .teacher-nav-text { display: flex; flex-direction: column; min-width: 0; }
 .teacher-nav-label { font-size: 13px; font-weight: 600; color: #3a4050; }
 .teacher-nav-item.active .teacher-nav-label { color: #2c2a6b; }
@@ -327,6 +327,12 @@
   flex: 1 1 auto; min-height: 72px; overflow-y: auto; overscroll-behavior: contain;
   padding: 12px 18px; scrollbar-gutter: stable;
 }
+/* Scroll cue: while more of the rubric or the 评语 box is below, the bottom edge fades out. The strip sits after
+   the content, so once scrolled to the end it covers only empty space and the fade disappears. */
+.grade-panel-body::after {
+  content: ""; display: block; position: sticky; bottom: 0; height: 30px; margin-bottom: -12px;
+  background: linear-gradient(rgba(255, 255, 255, 0), #fff 80%); pointer-events: none;
+}
 .grade-panel-foot {
   flex: none; max-height: 70%; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
   padding: 12px 18px 14px; border-top: 1px solid #eef0f5; background: #fff;
@@ -368,6 +374,9 @@
 /* Long names wrap in the teacher tables instead of pushing every other column out of view. */
 .teacher-main .data-table td.student-name-cell { white-space: normal; min-width: 8.5em; max-width: 12em; overflow-wrap: anywhere; }
 .th-hint { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
+/* 最近操作／最近登录: date and time; only the date in narrow windows (full time in the tooltip). */
+.time-cell .time-date { display: none; }
+.teacher-first-step { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 14px; }
 .batch-download-hint { margin: 8px 0 0; font-size: 12px; line-height: 1.6; }
 
 /* Reserve no space when idle: the refresh note appears only while a reload is in flight. */
@@ -395,9 +404,22 @@
     position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
     clip: rect(0 0 0 0); white-space: nowrap; border: 0;
   }
-  .teacher-nav-item .nav-badge { position: absolute; top: 2px; right: 2px; margin: 0; }
+  /* The 47px item holds a 28px icon (x 9.5–37.5); the small badge sits right of it (x 38–54, reaching into the
+     nav's own padding), so it never covers the icon. */
+  .teacher-nav-ic { width: 28px; height: 28px; }
+  .teacher-nav-item .nav-badge {
+    position: absolute; top: 2px; right: -7px; margin: 0; min-width: 16px; height: 16px; padding: 0 4px;
+    font-size: 10px; box-shadow: 0 0 0 2px #fff;
+  }
+  /* The student table drops the time of day and tightens its cells, so 最近登录 ends left of the sticky 操作 column. */
+  .student-table-scroll .data-table th, .student-table-scroll .data-table td { padding-left: 8px; padding-right: 8px; }
+  .student-table-scroll .class-memberships { min-width: 120px; }
   .dash-header { padding: 16px 20px 12px; }
   .teacher-content { padding: 16px 20px 32px; }
   .grade-split { grid-template-columns: minmax(0, 1fr) 288px; gap: 14px; }
   .search-input { min-width: 200px; }
+}
+@media (max-width: 1400px) {
+  .time-cell .time-full { display: none; }
+  .time-cell .time-date { display: inline; }
 }

@@ -11,6 +11,11 @@ import { showToast } from "../toast";
 import { EmptyState, LoadFailure, Modal, SearchInput, StatusPill, Toolbar, useFieldErrorFocus, useModalErrorFocus, useRefetchOnVisible } from "./ui";
 
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
+/** A time cell: date and time, or only the date in narrow windows (teacher.css), so the columns after it stay in view. */
+function TimeCell({ value }: { value: string | null | undefined }) {
+  if (!value) return <>—</>;
+  return <><span className="time-full">{fmtTime(value)}</span><span className="time-date" title={fmtTime(value)}>{value.slice(0, 10)}</span></>;
+}
 // No maxLength on password fields: a pasted longer password would be cut silently (it is masked) and the
 // handed-out password would not work. studentFieldError says so instead.
 export const PASSWORD_MAX_LENGTH = 256;
@@ -18,6 +23,9 @@ export const PASSWORD_INPUT_PROPS = { type: "password", autoComplete: "new-passw
 export const VALID_ACTIVITY_HINT = "最近一次保存实验记录、生成或提交报告的时间（仅登录或浏览不计）";
 export const DEMO_PASSWORD_HINT = "演示账号不能修改密码。要演示改密码，请新建一个学生账号。";
 export const RESET_PASSWORD_NOTE = "保存后该学生要用新密码重新登录，请把新密码告诉他。";
+export const FIRST_STEP_HINT = "还没有学期和班级：先到“学期与班级”新建学期和班级，再把学生分进班级。";
+export const STARTED_HINT = "保存过实验记录、生成过报告草稿或完成过步骤、但还没提交报告的学生；完成进度是 0/15 也算已开始";
+export const NOT_STARTED_HINT = "还没有保存过实验记录，也没有生成报告的学生（只登录或浏览不算开始）";
 
 export async function settleModalSubmission(
   operation: () => Promise<void>,
@@ -148,8 +156,8 @@ export function summarizeStudents(students: readonly StudentRow[]): StudentSumma
 export function StudentSummaryBar({ summary }: { summary: StudentSummary }) {
   const items: [string, string | number, string?][] = [
     ["共", `${summary.total} 人`],
-    ["未开始", summary.notStarted],
-    ["进行中", summary.inProgress],
+    ["未开始", summary.notStarted, NOT_STARTED_HINT],
+    ["已开始（未提交）", summary.inProgress, STARTED_HINT],
     ["已提交待评阅", summary.pending],
     ["已评阅", summary.graded],
     ["平均分", summary.averageScore ?? "—", "已评阅报告的平均分"],
@@ -272,9 +280,19 @@ function markHiddenColumns(region: HTMLElement | null | undefined) {
   region.dataset.moreRight = region.scrollLeft + region.clientWidth < region.scrollWidth - 1 - gutter ? "true" : "false";
 }
 
-export function StudentsTab({ onOpenReport }: {
+/** What the enrollment toast says: the class the student is now in, or that they left the semester's class. */
+export function enrollmentToast(student: StudentRow, semesters: readonly AcademicSemester[], termId: number, classId: number | null): string {
+  const semester = semesters.find((item) => item.id === termId);
+  const group = semester?.classes.find((item) => item.id === classId);
+  if (!group) return `已把 ${student.display_name} 移出${semester ? `“${semester.name}”的` : ""}班级`;
+  return `已把 ${student.display_name} 分到“${semester!.name} · ${group.name}”`;
+}
+
+export function StudentsTab({ onOpenReport, onGoToSemesters }: {
   /** Open a submitted report in 报告评阅; `queue` is the table's submitted reports in their current order. */
   onOpenReport?: (accountId: number, queue: number[]) => void;
+  /** Switch to 学期与班级, where the first semester and classes are made. */
+  onGoToSemesters?: () => void;
 } = {}) {
   const activityHintId = useId();
   const [refresh, setRefresh] = useState(0);
@@ -333,6 +351,11 @@ export function StudentsTab({ onOpenReport }: {
 
   return (
     <div>
+      {/* First visit: the table lists everyone as 未分班; say what to do first and where. */}
+      {academic && semesters.length === 0 && <div className="tipbox teacher-first-step" role="note">
+        <span>{FIRST_STEP_HINT}</span>
+        {onGoToSemesters && <button type="button" className="sm" onClick={onGoToSemesters}>去“学期与班级”</button>}
+      </div>}
       <Toolbar>
         <SearchInput value={query} onChange={setQuery} placeholder="搜索姓名、用户名或学号" />
         <AcademicFilters
@@ -374,8 +397,8 @@ export function StudentsTab({ onOpenReport }: {
                   </td>
                   <td><ReportStateCell student={student} onOpen={onOpenReport && (() => onOpenReport(student.id, submitted))} /></td>
                   <td>{student.score ?? "—"}</td>
-                  <td>{fmtTime(student.last_valid_activity)}</td>
-                  <td>{fmtTime(student.last_login_at)}</td>
+                  <td className="time-cell"><TimeCell value={student.last_valid_activity} /></td>
+                  <td className="time-cell"><TimeCell value={student.last_login_at} /></td>
                   <td>
                     <StudentRowMenu student={student} onPick={(type, picked) => setModal({ type, student: picked })} />
                   </td>
@@ -401,7 +424,10 @@ export function StudentsTab({ onOpenReport }: {
           student={modal.student}
           semesters={semesters}
           onClose={() => setModal(null)}
-          onSubmit={(termId, nextClassId) => run(api.classroom.setEnrollment(modal.student.id, termId, nextClassId))}
+          onSubmit={async (termId, nextClassId) => {
+            await run(api.classroom.setEnrollment(modal.student.id, termId, nextClassId));
+            showToast(enrollmentToast(modal.student, semesters, termId, nextClassId));
+          }}
         />
       )}
       {modal && (modal.type === "name" || modal.type === "student_no" || modal.type === "password") && (
@@ -415,7 +441,12 @@ export function StudentsTab({ onOpenReport }: {
           required={modal.type !== "student_no"}
           maxLength={modal.type === "name" ? STUDENT_NAME_MAX_LENGTH : modal.type === "student_no" ? STUDENT_NO_MAX_LENGTH : undefined}
           onClose={() => setModal(null)}
-          onSubmit={(value) => run(api.classroom.updateStudent(modal.student.id, { [modal.type === "name" ? "display_name" : modal.type]: value }))}
+          onSubmit={async (value) => {
+            await run(api.classroom.updateStudent(modal.student.id, { [modal.type === "name" ? "display_name" : modal.type]: value }));
+            showToast(modal.type === "name" ? `已把 ${modal.student.display_name} 的姓名改为“${value}”`
+              : modal.type === "student_no" ? (value ? `已把 ${modal.student.display_name} 的学号改为“${value}”` : `已清除 ${modal.student.display_name} 的学号`)
+                : `已重置 ${modal.student.display_name} 的密码`);
+          }}
         />
       )}
     </div>

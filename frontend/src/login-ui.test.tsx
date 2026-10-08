@@ -6,11 +6,16 @@ import {
   demoStudentCredentials,
   DEMO_STUDENT_COUNT,
   isDemoStudentUsername,
+  LAST_DEMO_STUDENT_KEY,
   LoginPage,
 } from "./login";
+import type { LoginResponse } from "./types";
 
 afterEach(cleanup);
-beforeEach(() => sessionStorage.clear());
+beforeEach(() => { sessionStorage.clear(); localStorage.clear(); });
+
+const loginResponse = (username: string, role: "student" | "teacher"): LoginResponse =>
+  ({ token: "t", expires_at: 0, user: { username, name: username, role } });
 
 describe("demo-mode login UI source behavior", () => {
   // 这里只验证交互。production/demo 的 Vite 常量替换、定制口令与 tree-shaking
@@ -160,6 +165,8 @@ describe("demo-mode login UI source behavior", () => {
         resolve({ username: "student07" });
         await waitFor(() => expect(inputValue("login-user")).toBe("student07"));
         expect(document.querySelector(".login-hint")?.textContent).toContain("已为你预填一个空闲的演示学生账号");
+        expect(document.querySelector(".login-hint")?.textContent).toContain("在这台电脑的浏览器里再次登录，仍是这个账号");
+        expect(document.querySelector(".login-hint")?.textContent).not.toContain("退出登录后在本页");
       });
     } finally { suggestion.mockRestore(); }
   });
@@ -207,8 +214,96 @@ describe("demo-mode login UI source behavior", () => {
       });
     } finally {
       suggestion.mockRestore();
-      sessionStorage.removeItem("gvcsim_signed_in_username");
     }
+  });
+
+  test("a demo student sign-in is remembered in the browser; a teacher sign-in is not", async () => {
+    const suggestion = spyOn(api, "demoStudent").mockResolvedValue({ username: "student07" });
+    const login = spyOn(api, "login").mockImplementation(async (username: string) =>
+      loginResponse(username, username === "teacher" ? "teacher" : "student"));
+    try {
+      await withDemoEnv("1", async () => {
+        const signedIn: string[] = [];
+        render(<LoginPage onLogin={(response) => signedIn.push(response.user.username)} />);
+        await waitFor(() => expect(inputValue("login-user")).toBe("student07"));
+        fireEvent.submit(document.querySelector("form")!);
+        await waitFor(() => expect(signedIn).toEqual(["student07"]));
+        expect(localStorage.getItem(LAST_DEMO_STUDENT_KEY)).toBe("student07");
+        cleanup();
+
+        render(<LoginPage onLogin={(response) => signedIn.push(response.user.username)} />);
+        fireEvent.click(screen.getByRole("button", { name: /教师身份/ }));
+        fireEvent.submit(document.querySelector("form")!);
+        await waitFor(() => expect(signedIn).toEqual(["student07", "teacher"]));
+        expect(localStorage.getItem(LAST_DEMO_STUDENT_KEY)).toBe("student07");
+      });
+    } finally {
+      suggestion.mockRestore();
+      login.mockRestore();
+    }
+  });
+
+  test("a new tab, or a return from the teacher identity, offers the browser's last demo student", async () => {
+    const suggestion = spyOn(api, "demoStudent").mockResolvedValue({ username: "student09" });
+    localStorage.setItem(LAST_DEMO_STUDENT_KEY, "student07");
+    // student → 退出登录 → 教师身份 → 退出登录: this tab last signed in as the teacher.
+    sessionStorage.setItem("gvcsim_signed_in_username", "teacher");
+    try {
+      await withDemoEnv("1", async () => {
+        render(<LoginPage onLogin={() => {}} />);
+        expect(inputValue("login-user")).toBe("student07");
+        expect(inputValue("login-pass")).toBe("gvclab2026-07");
+        expect(suggestion).not.toHaveBeenCalled();
+        // The chip and the hint say it is the account used before, not a freshly assigned idle one.
+        const chip = screen.getByRole("button", { name: /学生身份/ });
+        expect(chip.textContent).toContain("上次在这台电脑用的演示账号");
+        expect(chip.textContent).not.toContain("空闲");
+        const hint = document.querySelector(".login-hint")!.textContent!;
+        expect(hint).toContain("上次在这台电脑用过的演示学生账号");
+        expect(hint).toContain("在这台电脑的浏览器里再次登录，仍是这个账号");
+        expect(hint).not.toContain("一个空闲的演示学生账号");
+        expect((document.querySelector(".login-btn") as HTMLButtonElement).disabled).toBe(false);
+        // Typing another account is not passed off as the remembered one; the chip brings it back.
+        fireEvent.change(document.getElementById("login-user")!, { target: { value: "student20" } });
+        expect(document.querySelector(".login-hint")?.textContent).toContain("这不是上次在这台电脑用的账号");
+        fireEvent.click(chip);
+        expect(inputValue("login-user")).toBe("student07");
+      });
+    } finally { suggestion.mockRestore(); }
+  });
+
+  test("someone else at the computer can drop the remembered account for an idle one", async () => {
+    const suggestion = spyOn(api, "demoStudent").mockResolvedValue({ username: "student09" });
+    localStorage.setItem(LAST_DEMO_STUDENT_KEY, "student07");
+    try {
+      await withDemoEnv("1", async () => {
+        render(<LoginPage onLogin={() => {}} />);
+        expect(inputValue("login-user")).toBe("student07");
+        fireEvent.click(screen.getByRole("button", { name: "不是你的？换一个空闲账号" }));
+        await waitFor(() => expect(inputValue("login-user")).toBe("student09"));
+        expect(inputValue("login-pass")).toBe("gvclab2026-09");
+        expect(localStorage.getItem(LAST_DEMO_STUDENT_KEY)).toBeNull();
+        expect(document.querySelector(".login-hint")?.textContent).toContain("已为你预填一个空闲的演示学生账号");
+        expect(screen.getByRole("button", { name: /学生身份/ }).textContent).toContain("自动分配一个空闲的演示账号");
+      });
+    } finally { suggestion.mockRestore(); }
+  });
+
+  test("a non-demo build neither reads nor writes the remembered demo student", async () => {
+    localStorage.setItem(LAST_DEMO_STUDENT_KEY, "student07");
+    const login = spyOn(api, "login").mockResolvedValue(loginResponse("student12", "student"));
+    try {
+      await withDemoEnv(undefined, async () => {
+        render(<LoginPage onLogin={() => {}} />);
+        expect(inputValue("login-user")).toBe("");
+        expect(document.querySelector(".login-hint")?.textContent).not.toContain("这台电脑");
+        fireEvent.change(document.getElementById("login-user")!, { target: { value: "student12" } });
+        fireEvent.change(document.getElementById("login-pass")!, { target: { value: "x".repeat(12) } });
+        fireEvent.submit(document.querySelector("form")!);
+        await waitFor(() => expect(login).toHaveBeenCalled());
+        expect(localStorage.getItem(LAST_DEMO_STUDENT_KEY)).toBe("student07");
+      });
+    } finally { login.mockRestore(); }
   });
 
   test("after an expired session the form returns to that account, not another demo credential", async () => {
