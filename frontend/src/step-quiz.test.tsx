@@ -47,16 +47,30 @@ describe("QuizPanel completion", () => {
     const { rerender } = render(view("missing"));
     expect(screen.getByText("✓ 理解题已完成")).toBeTruthy();
     expect(screen.queryByText("✓ 本步已完成")).toBeNull();
-    expect(screen.getByText(/报告材料：尚未齐全/)).toBeTruthy();
+    expect(screen.getByText(/报告材料：未齐全/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "去补齐材料" }));
     expect(opened).toBe(1);
     rerender(view("saving"));
-    expect(screen.getByText(/报告材料：正在保存/)).toBeTruthy();
+    expect(screen.getByText(/报告材料：保存中/)).toBeTruthy();
     expect(screen.queryByText(/报告材料：已齐全/)).toBeNull();
     rerender(view("ready"));
     // Ready materials are already shown in the step task card, so the quiz block stays quiet.
     expect(screen.queryByText(/报告材料：/)).toBeNull();
     expect(screen.queryByRole("button", { name: "去补齐材料" })).toBeNull();
+  });
+
+  test("once done, the next step is the primary action and re-checking steps back", () => {
+    const visited: number[] = [];
+    const next = { n: 3, title: "下一题步" };
+    const { rerender } = render(<QuizPanel step={step} state={state} next={next} onNavigate={(n) => visited.push(n)} />);
+    expect(screen.getByRole("button", { name: "重新提交答案" }).className).toBe("primary");
+    expect(screen.queryByRole("button", { name: /下一步：/ })).toBeNull();
+    rerender(<QuizPanel step={step} state={{ ...state, complete: true }} next={next} onNavigate={(n) => visited.push(n)} />);
+    expect(screen.getByRole("button", { name: "重新检查答案" }).className).toBe("secondary");
+    const forward = screen.getByRole("button", { name: "下一步：下一题步 →" });
+    expect(forward.className).toContain("primary");
+    fireEvent.click(forward);
+    expect(visited).toEqual([3]);
   });
 
   test("keeps normal valid-release quiz submission available", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from "bun:test";
 
-import { api, getActiveAuthToken, setActiveAuthToken, withQuery } from "./api";
+import { api, getActiveAuthToken, requestFailedMessage, setActiveAuthToken, validationErrorMessage, withQuery } from "./api";
 import { emptySession } from "./session-store";
 import type { AuthUser } from "./types";
 
@@ -358,6 +358,47 @@ describe("unavailable server responses", () => {
     } finally {
       globalThis.fetch = originalFetch;
       setActiveAuthToken(originalToken);
+    }
+  });
+});
+
+describe("errors the server does not explain", () => {
+  test("a bare status is shown in Chinese with its code, never as English status text", async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = (async () => new Response("Not Found", { status: 404, statusText: "Not Found" })) as unknown as typeof fetch;
+      for (const operation of [() => api.login("student", "password"), () => api.steps(), () => api.classroom.submitReport()]) {
+        const error = await operation().then(() => null, (cause: Error) => cause);
+        expect(error?.message).toBe(requestFailedMessage(404));
+        expect(error?.message).toContain("代码 404");
+        expect(error?.message).not.toContain("Not Found");
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("a 422 field list surfaces its first error", async () => {
+    expect(validationErrorMessage([{ loc: ["body", "new_password"], msg: "Value error, 密码不能全是空白字符", type: "value_error" }]))
+      .toBe("密码不能全是空白字符");
+    expect(validationErrorMessage([{ loc: ["body", "new_password"], msg: "String should have at least 12 characters", type: "string_too_short", ctx: { min_length: 12 } }]))
+      .toBe("新密码至少 12 个字符。");
+    expect(validationErrorMessage([{ loc: ["body", "username"], msg: "Field required", type: "missing" }])).toBe("请填写用户名。");
+    expect(validationErrorMessage([{ loc: ["body", "unknown"], msg: "Input should be a valid integer", type: "int_parsing" }])).toBeNull();
+    expect(validationErrorMessage("plain")).toBeNull();
+
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = (async () => new Response(JSON.stringify({
+        detail: [{ loc: ["body", "display_name"], msg: "String should have at most 60 characters", type: "string_too_long", ctx: { max_length: 60 } }],
+      }), { status: 422, headers: { "Content-Type": "application/json" } })) as unknown as typeof fetch;
+      await expect(api.classroom.submitReport()).rejects.toThrow("姓名不能超过 60 个字符。");
+      globalThis.fetch = (async () => new Response(JSON.stringify({ detail: [{ loc: ["query", "x"], msg: "bad", type: "x" }] }), {
+        status: 422, headers: { "Content-Type": "application/json" },
+      })) as unknown as typeof fetch;
+      await expect(api.classroom.submitReport()).rejects.toThrow("提交内容不符合要求，请检查输入后重试。");
+    } finally {
+      globalThis.fetch = originalFetch;
     }
   });
 });

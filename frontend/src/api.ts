@@ -17,6 +17,37 @@ export function getActiveAuthToken(): string | null {
   return activeAuthToken;
 }
 
+/** A failure the server did not explain: Chinese copy with the status code, never "404 Not Found". */
+export function requestFailedMessage(status: number): string {
+  return `请求失败（代码 ${status}），请刷新页面后重试；若持续出现，请联系老师或管理员。`;
+}
+
+const FIELD_NAMES: Record<string, string> = {
+  username: "用户名", password: "密码", current_password: "当前密码", new_password: "新密码",
+  name: "名称", display_name: "姓名", student_no: "学号", feedback: "评语", score: "分数",
+};
+const CJK = /[一-鿿]/;
+
+/**
+ * FastAPI's 422 detail is a list of field errors. Show the first one in Chinese: a Chinese message from a
+ * validator as is, the common length errors spelled out, anything else as the generic sentence.
+ */
+export function validationErrorMessage(detail: unknown): string | null {
+  if (!Array.isArray(detail) || detail.length === 0) return null;
+  const first = detail[0] as { loc?: unknown; msg?: unknown; type?: unknown; ctx?: Record<string, unknown> };
+  const message = typeof first?.msg === "string" ? first.msg.replace(/^Value error,\s*/, "").trim() : "";
+  if (CJK.test(message)) return message;
+  const key = Array.isArray(first?.loc) ? [...first.loc].reverse().find((part) => typeof part === "string" && part !== "body") : undefined;
+  const field = typeof key === "string" ? FIELD_NAMES[key] : undefined;
+  if (!field) return null;
+  if (first.type === "string_too_short" && first.ctx?.min_length != null) {
+    return Number(first.ctx.min_length) <= 1 ? `请填写${field}。` : `${field}至少 ${first.ctx.min_length} 个字符。`;
+  }
+  if (first.type === "string_too_long" && first.ctx?.max_length != null) return `${field}不能超过 ${first.ctx.max_length} 个字符。`;
+  if (first.type === "missing") return `请填写${field}。`;
+  return `${field}的格式不对，请检查后再试。`;
+}
+
 export class ApiError extends Error {
   status: number;
   /** 结构化 detail(如第 15 步门槛的 blocked 列表);普通字符串 detail 时为 undefined。 */
@@ -29,8 +60,8 @@ export class ApiError extends Error {
     // 直接把对象塞进 Error.message 会渲染成 "[object Object]",这里分开处理。
     const structured = typeof detail === "object" && detail !== null ? (detail as Record<string, unknown>) : null;
     const defaultMessage = status >= 500
-      ? "服务暂时不可用，请稍后重试；若持续失败，请联系老师。"
-      : status === 422 ? "提交内容不符合要求，请检查输入后重试。" : fallback;
+      ? "教学服务暂时不可用，请稍后重试；若持续失败，请联系老师或管理员。"
+      : status === 422 ? validationErrorMessage(detail) ?? "提交内容不符合要求，请检查输入后重试。" : fallback;
     super(typeof detail === "string" ? detail : (structured?.message as string) ?? defaultMessage);
     this.name = "ApiError";
     this.status = status;
@@ -139,7 +170,7 @@ async function getWithToken<T>(url: string, requestToken: string | null, fallbac
         continue;
       }
       if (resp.status === 401) notifyAuthExpired(requestToken);
-      throw new ApiError(resp.status, body?.detail, fallback ?? `${resp.status} ${resp.statusText}`, retryAfter);
+      throw new ApiError(resp.status, body?.detail, fallback ?? requestFailedMessage(resp.status), retryAfter);
     }
   }, callerSignal);
 }
@@ -161,7 +192,7 @@ async function post<T>(url: string, body?: unknown, method = "POST", callerSigna
     if (!resp.ok) {
       const payload = await resp.json().catch(() => null);
       if (resp.status === 401) notifyAuthExpired(requestToken);
-      throw new ApiError(resp.status, payload?.detail, `${resp.status} ${resp.statusText}`, retryAfterSeconds(resp));
+      throw new ApiError(resp.status, payload?.detail, requestFailedMessage(resp.status), retryAfterSeconds(resp));
     }
     return await resp.json() as T;
   }, callerSignal);
@@ -194,7 +225,7 @@ export const api = {
       });
       if (!resp.ok) {
         const payload = await resp.json().catch(() => null);
-        throw new ApiError(resp.status, payload?.detail, resp.statusText, retryAfterSeconds(resp));
+        throw new ApiError(resp.status, payload?.detail, requestFailedMessage(resp.status), retryAfterSeconds(resp));
       }
       return await resp.json() as import("./types").LoginResponse;
     }),
@@ -203,7 +234,7 @@ export const api = {
     keep ? `/api/auth/demo-student?keep=${encodeURIComponent(keep)}` : "/api/auth/demo-student",
     null, "暂时无法分配演示账号"),
   me: (token: string) =>
-    getWithToken<import("./types").AuthUser>("/api/auth/me", token, "令牌无效或已过期"),
+    getWithToken<import("./types").AuthUser>("/api/auth/me", token, "登录已失效，请重新登录。"),
   changePassword: (currentPassword: string, newPassword: string) =>
     post<{ ok: boolean; reauthenticate: boolean }>("/api/auth/password", {
       current_password: currentPassword,

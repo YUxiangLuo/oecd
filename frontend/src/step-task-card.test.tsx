@@ -56,7 +56,7 @@ describe("shared step task card", () => {
     expect(html).toContain("先运行，再判断。");
     expect(html.match(/<li>/g)).toHaveLength(3);
     expect(html).toContain("理解题：已完成");
-    expect(html).toContain("报告材料：尚未齐全");
+    expect(html).toContain("报告材料：未齐全");
     // No caveat line, jump button, rationale fold, concept, handoff or deps: only goal, tasks and status.
     expect(html).not.toContain("注意：");
     expect(html).not.toContain("区间跨零就是看不出。");
@@ -73,12 +73,12 @@ describe("shared step task card", () => {
       <StepTaskCard step={step} complete materialStatus="saving" />,
     );
     expect(saving).toContain('class="saving"');
-    expect(saving).toContain("报告材料：正在保存");
+    expect(saving).toContain("报告材料：保存中");
     const failed = renderToStaticMarkup(
       <StepTaskCard step={step} complete materialStatus="unsynced" />,
     );
-    expect(failed).toContain("报告材料：尚未保存");
-    expect(failed).not.toContain("正在保存");
+    expect(failed).toContain("报告材料：未保存");
+    expect(failed).not.toContain("保存中");
   });
 
   for (const [index, outcome] of (["trade", "production", "length", "network"] as const).entries()) {
@@ -89,7 +89,7 @@ describe("shared step task card", () => {
         concept: "原来单独展开的说明", tip: "边界", deps: [], handoff: { input: "输入", action: "运行", output: "结果" },
       };
       for (const [status, label] of [
-        ["checking", "正在检查"], ["saving", "正在保存"], ["unsynced", "尚未保存"], ["ready", "已齐全"], ["missing", "尚未齐全"],
+        ["checking", "检查中"], ["saving", "保存中"], ["unsynced", "未保存"], ["ready", "已齐全"], ["missing", "未齐全"],
       ] as const) {
         const html = renderToStaticMarkup(<StepTaskCard step={step} complete={false} materialStatus={status} />);
         const dom = new DOMParser().parseFromString(html, "text/html");
@@ -135,7 +135,7 @@ describe("shared step task card", () => {
     const label = (reportState: "draft" | "pending" | "graded") => renderToStaticMarkup(<StepTaskCard
       step={reportStep} complete materialStatus="ready" reportExists reportState={reportState}
     />);
-    expect(label("draft")).toContain('class="todo">报告：草稿未提交');
+    expect(label("draft")).toContain('class="todo">报告：草稿（未提交）');
     expect(label("pending")).toContain('class="done">报告：待评阅');
     expect(label("graded")).toContain('class="done">报告：已评阅');
   });

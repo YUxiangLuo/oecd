@@ -12,14 +12,14 @@ test("mechanism preview follows the example, the group gap and the regression", 
     />);
     fireEvent.click(view.getByRole("button", { name: "介绍页 4" }));
     expect(view.getByRole("heading", { name: "先看加税前后的差距，再用回归量化" })).toBeTruthy();
-    expect(view.getAllByText("由你选择")).toHaveLength(3);
+    expect(view.getAllByText("在步骤 10 选择")).toHaveLength(3);
     expect(view.queryByText(/中国|美国|计算机电子光学/)).toBeNull();
     expect(view.getByText("01 · 你的例子：X 只在加税后出现")).toBeTruthy();
     const chart = view.getByRole("img", { name: /五年关税暴露 X 趋势界面示意/ });
     expect(chart.textContent).toContain("2016");
     expect(chart.textContent).toContain("2020");
     expect(chart.textContent).toContain("X 示意强弱");
-    expect(view.getByText(/正式回归使用完整国家×行业面板，不限于所选两国；结果会换算回你的例子/)).toBeTruthy();
+    expect(view.getByText(/回归用的是全部国家×行业，结果会换算到你的例子上/)).toBeTruthy();
     // Country A is taxed (zero for two years, then positive); country B is untaxed (always zero).
     for (const [series, expected] of [["a", [0, 0, 1, 1, 1]], ["b", [0, 0, 0, 0, 0]]] as const) {
       const circles = [...chart.querySelectorAll(`circle.country-${series}`)];
@@ -32,14 +32,14 @@ test("mechanism preview follows the example, the group gap and the regression", 
     expect(view.getByText("指标结果")).toBeTruthy();
     expect(view.getByRole("dialog").textContent).not.toContain("模拟");
     expect(view.getByLabelText("四项结果都要汇总").querySelectorAll("span")).toHaveLength(4);
-    expect(view.getByText(/关系不显著或无法推断也要如实报告/)).toBeTruthy();
+    expect(view.getByText(/方向不确定或没算出估计值，也要如实报告/)).toBeTruthy();
     expect(view.queryByRole("slider")).toBeNull();
     expect(view.queryByText(/贸易转移|跨境收缩|替代性扩张/)).toBeNull();
     fireEvent.click(view.getByRole("button", { name: "介绍页 5" }));
-    expect(view.getByText(/第 1–10 步打开页面即自动记录；第 11–14 步点“计算…回归”按钮后自动保存/)).toBeTruthy();
+    expect(view.getByText(/步骤 1–10 打开页面即自动记录；步骤 11–14 点“计算…回归”按钮后自动保存/)).toBeTruthy();
     expect(view.queryByText(/主动保存/)).toBeNull();
-    expect(view.getByText(/生成草稿不等于提交/)).toBeTruthy();
-    expect(view.getByText(/同步成功后更新/)).toBeTruthy();
+    expect(view.getByText(/只生成草稿不算提交/)).toBeTruthy();
+    expect(view.getByText(/保存成功后更新/)).toBeTruthy();
   } finally {
     cleanup();
   }

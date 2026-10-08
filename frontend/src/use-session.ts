@@ -12,6 +12,7 @@ import type {
 } from "./types";
 
 import { userFacingRequestError } from "./user-facing-error";
+import { EDITED_DURING_RELOAD } from "./sync-problem";
 
 const SYNC_DEBOUNCE_MS = 800;
 /** This tab's copy of edits the server had not confirmed when the page was left. */
@@ -372,8 +373,8 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const syncNow = useCallback(async () => {
     if (timer.current != null) window.clearTimeout(timer.current);
     timer.current = null;
-    if (status !== "ready") throw new Error("当前无法连接教学服务，不能确认实验记录已保存");
-    if (syncConflictRef.current) throw new Error("另一个页面或另一台设备（同一账号）已保存了更新的记录，请先点“载入服务器版本”");
+    if (status !== "ready") throw new Error("暂时连不上服务器，实验记录可能还没保存。请稍后再试。");
+    if (syncConflictRef.current) throw new Error("你的账号在别处保存了更新的记录，请先点“载入服务器版本”。");
     await drain();
   }, [drain, status]);
 
@@ -448,7 +449,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     try {
       const response = await api.classroom.session();
       if (sessionRef.current !== localSnapshot) {
-        setSyncError("载入期间又有本地修改，已保留这些内容。请确认后再次点“载入并合并”。");
+        setSyncError(EDITED_DURING_RELOAD);
         return;
       }
       // Keep this page's edits the other page did not touch: the same rule as edits kept on leaving.

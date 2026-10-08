@@ -112,7 +112,7 @@ try {
   // Login page: public, nothing typed.
   let page = await signedIn(null);
   if (!onlyViz && !onlyReg) {
-  await open(page, null, `window.__find("进入实验平台")`);
+  await open(page, null, `window.__find("登录实验台")`);
   await save("00-login.png", await page.screenshot(), "none", "Public login page; demo prefill only in demo builds.");
   }
   await page.close();

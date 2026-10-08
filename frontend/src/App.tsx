@@ -11,7 +11,7 @@ import {
   writeStepHistory,
   type StepHistoryMode,
 } from "./app-state";
-import { AppBootSkeleton, TeacherWorkspace } from "./app-shell";
+import { AppBootSkeleton, NarrowWindowNotice, TeacherWorkspace } from "./app-shell";
 import { AUTH_TOKEN_KEY, api, getActiveAuthToken, isApiErrorStatus, setActiveAuthToken } from "./api";
 import { LoginPage } from "./login";
 import { resetStepScroller } from "./step-navigation";
@@ -47,6 +47,11 @@ function BootFailure({ title, message, note, primary, secondary }: {
 }
 
 export default function App() {
+  // Outside every branch, so login, failure pages and both workspaces get it alike.
+  return <><NarrowWindowNotice /><AppContent /></>;
+}
+
+function AppContent() {
   const [stepsData, setStepsData] = useState<StepsResponse | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [metaReady, setMetaReady] = useState(false);
@@ -155,8 +160,8 @@ export default function App() {
       setActiveAuthToken(null);
       if (activeToken !== null) clearAuthenticationIfCurrent(sessionStorage, activeToken);
       setAuthNotice(kept
-        ? "已退出登录。当前网络不可用：未保存的修改保留在本标签页，网络恢复后在这里重新登录即可自动保存。"
-        : "已退出登录。当前网络不可用，网络恢复后才能重新登录。");
+        ? "已退出登录。现在没有网络，未保存的修改还在本页；联网后在这里重新登录，就会自动保存。"
+        : "已退出登录。现在没有网络，联网后才能重新登录。");
       setUser(null);
     });
   }, [reloadLoggedOut, session, user]);
@@ -184,7 +189,7 @@ export default function App() {
       (error) => {
         if (getActiveAuthToken() !== token) return;
         if (isApiErrorStatus(error, 401)) reloadLoggedOut("登录已失效，请重新登录。");
-        else setAuthCheckError(userFacingRequestError(error, "暂时无法校验登录"));
+        else setAuthCheckError(userFacingRequestError(error, "暂时无法确认登录状态"));
       },
     ).finally(() => setAuthChecked(true));
   }, [reloadLoggedOut, authAttempt]);
@@ -292,7 +297,7 @@ export default function App() {
       <BootFailure
         title="暂时无法连接教学服务"
         message={authCheckError}
-        note={`登录信息已保留。网络恢复后会自动重试；服务器繁忙时请稍后手动重试。${authAttempt > 0 ? `已重试 ${authAttempt} 次，仍未成功。` : ""}`}
+        note={`登录信息已保留。网络恢复后会自动重试，也可以点下方按钮再试。${authAttempt > 0 ? `已重试 ${authAttempt} 次。` : ""}`}
         primary={{ label: "重试连接", onClick: retryAuthCheck }}
       />
     );
@@ -344,8 +349,8 @@ export default function App() {
     <BootFailure
       title="课程加载失败"
       message={fatal}
-      note={`登录信息已保留。网络恢复后会自动重试；服务器繁忙时请稍后手动重试加载课程。${bootAttempt > 0 ? `已重试 ${bootAttempt} 次，仍未成功。` : ""}`}
-      primary={{ label: "重试加载课程", onClick: retryCourse }}
+      note={`登录信息已保留。网络恢复后会自动重试，也可以点下方按钮再试。${bootAttempt > 0 ? `已重试 ${bootAttempt} 次。` : ""}`}
+      primary={{ label: "重试加载", onClick: retryCourse }}
       secondary={{ label: "退出登录", onClick: logout }}
     />
   );
@@ -355,9 +360,9 @@ export default function App() {
   if (session.status === "unavailable") return (
     <BootFailure
       title="暂时无法读取实验记录"
-      message={session.syncError ?? "读取实验记录失败：暂时无法连接教学服务"}
-      note={`你的实验记录保存在服务器上，没有丢失。读取成功后才能继续操作；网络恢复时会自动重新读取。${session.loadAttempts > 0 ? `已重试 ${session.loadAttempts} 次，仍未成功。` : ""}`}
-      primary={{ label: "重新读取实验记录", onClick: () => { recoverFocus.current = true; session.retryLoad(); } }}
+      message={session.syncError ?? "读取实验记录失败：暂时连不上服务器"}
+      note={`你的实验记录保存在服务器上，没有丢失。读取成功后才能继续；网络恢复后会自动重新读取。${session.loadAttempts > 0 ? `已重试 ${session.loadAttempts} 次。` : ""}`}
+      primary={{ label: "重试读取", onClick: () => { recoverFocus.current = true; session.retryLoad(); } }}
       secondary={{ label: "退出登录", onClick: logout }}
     />
   );

@@ -12,6 +12,7 @@ import { createPortal } from "react-dom";
 import { useDialogFocus } from "./a11y";
 import { LogoMark } from "./brand";
 import { icioDatasetName } from "./dataset-label";
+import { PRODUCT_SUMMARY } from "./login";
 import type { AuthUser, Meta, StepsResponse } from "./types";
 
 const SCENE_NAMES = ["认识实验", "数据与设定", "实验路线", "分析示例", "完成规则"];
@@ -122,7 +123,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
   const hasRestOfWorld = meta?.countries.includes("ROW") ?? false;
   const namedEconomies = meta ? meta.countries.length - Number(hasRestOfWorld) : null;
   const regionCoverage = meta
-    ? `${namedEconomies} 个经济体${hasRestOfWorld ? " + ROW 世界其他地区账户" : ""}`
+    ? `${namedEconomies} 个经济体${hasRestOfWorld ? " + 世界其他地区" : ""}`
     : "覆盖范围暂不可用";
   const datasetName = icioDatasetName(meta);
 
@@ -132,7 +133,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
     }));
   }, [stepsData]);
   const selectedStage = stages.find((s) => s.n === stage) ?? stages[0];
-  const previewYears = years.length >= 5 ? years.slice(0, 5).map(String) : ["第1年", "第2年", "第3年", "第4年", "第5年"];
+  const previewYears = years.length >= 5 ? years.slice(0, 5).map(String) : ["第 1 年", "第 2 年", "第 3 年", "第 4 年", "第 5 年"];
 
   const roleName = user.role === "teacher" ? "教师" : "学生";
 
@@ -143,7 +144,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       <h1 className="intro-title">供应链仿真系统</h1>
       <div className="intro-kicker">GVC SIMULATION LAB</div>
       <p className="intro-lede">
-        从全球生产联系，理解价值链变化。利用投入产出数据计算指标，看它们的五年变化和全球位置，再用关税数据练习读取回归，完成有依据的实验报告。
+        从全球生产联系，理解价值链变化。{PRODUCT_SUMMARY}
       </p>
       <p className="intro-boundary">{datasetName}</p>
       <div className="intro-pipeline">
@@ -160,7 +161,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       <div className="intro-stats">
         {/* 课程范围是数据事实，必须从首帧就显示最终值。数字滚动会在截图或
             快速阅读时制造“58 / 34 / 12”一类并不存在的中间口径。 */}
-        <div><div className="intro-stat-v">{namedEconomies ?? "—"}{hasRestOfWorld ? " + ROW" : ""}</div><div className="intro-stat-l">{hasRestOfWorld ? "经济体 + 世界其他地区账户" : "经济体"}</div></div>
+        <div><div className="intro-stat-v">{namedEconomies ?? "—"}</div><div className="intro-stat-l">{hasRestOfWorld ? "经济体 + 世界其他地区" : "经济体"}</div></div>
         <div><div className="intro-stat-v">{meta?.sectors.length ?? "—"}</div><div className="intro-stat-l">行业</div></div>
         <div><div className="intro-stat-v">{yearSpan}</div><div className="intro-stat-l">当前课程数据范围</div></div>
       </div>
@@ -204,7 +205,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
                 </>
               ) : <p role="status">课程数据范围暂不可用。</p>}
               <div>原始宽表还包含最终需求列与增加值、税收等账户行。</div>
-              <div>结合 VA/TLS 账户、最终需求和里昂惕夫逆矩阵，追踪增加值、税收与网络位置</div>
+              <div>结合增加值、税收和最终需求数据，用里昂惕夫逆矩阵追踪增加值的去向。</div>
             </div>
           )}
         </div>
@@ -228,13 +229,13 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
           </span>
           </button>
           <ul className="intro-card-facts">
-            <li>X 由首年销往美国的出口份额和税率算出。</li>
+            <li>X 由首年对美出口份额和加征税率算出。</li>
             <li>前两年税率为 0，加税国家后三年为 25%。</li>
-            <li>Y 是贸易、生产、长度、网络四类结果指标。</li>
+            <li>Y 是贸易流、生产、长度、网络四类结果指标。</li>
           </ul>
           {openCards.shock && (
             <div className="intro-card-body" id={shockPanelId}>
-              <p>暴露强度 X 等于首年销往美国的出口份额乘以税率；未加税国家的 X 始终为 0。步骤 11–14 用同一个 X 对四个结果指标 Y 做回归。</p>
+              <p>关税暴露 X 等于首年对美出口份额 w 乘以加征税率 τ；未加税国家的 X 始终为 0。步骤 11–14 用同一个 X 对四个结果指标 Y 做回归。</p>
             </div>
           )}
         </div>
@@ -245,7 +246,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
     <div key={2} className="intro-scene">
       <div className="intro-scene-kicker">实验路线</div>
       <h2 className="intro-h2">{stages.length === 0 ? "实验路线" : stages.length === 5 && stepsData.steps.length === 15 ? "五个阶段，十五步" : `${stages.length} 个阶段，${stepsData.steps.length} 步`}</h2>
-      <p className="intro-lede">选择阶段，了解要做的分析和留下的材料。这里仅作路线预览，不切换实验步骤。</p>
+      <p className="intro-lede">点一个阶段，看看要做什么、留下哪些报告材料。这里只是预览，不会跳转步骤。</p>
       {stages.length === 0 && <p role="status">当前课程暂无实验路线信息。</p>}
       <div className="intro-stage-tabs">
         {stages.map((st) => (
@@ -284,11 +285,11 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
     <div key={3} className="intro-scene">
       <div className="intro-scene-kicker">分析示例</div>
       <h2 className="intro-h2">先看加税前后的差距，再用回归量化</h2>
-      <p className="intro-lede">选一个例子跟着走：两个国家和一个行业（默认是加拿大与墨西哥的汽车行业）。正式回归使用完整国家×行业面板，不限于所选两国；结果会换算回你的例子。</p>
+      <p className="intro-lede">选两个国家和一个行业作例子（默认是加拿大和墨西哥的汽车业）。回归用的是全部国家×行业，结果会换算到你的例子上。</p>
       <div className="intro-preview-selection" role="group" aria-label="分析对象示意">
-        <span><small>国家 A</small>由你选择</span>
-        <span><small>国家 B</small>由你选择</span>
-        <span><small>行业</small>由你选择</span>
+        <span><small>国家 A</small>在步骤 10 选择</span>
+        <span><small>国家 B</small>在步骤 10 选择</span>
+        <span><small>行业</small>在步骤 10 选择</span>
       </div>
       <div className="intro-evidence-preview">
         <div className="intro-trend-card">
@@ -310,16 +311,16 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
         </div>
         <div className="intro-xy-card">
           <b>02 · 用回归把差距量化</b>
-          <div className="intro-xy-item"><strong>X</strong><span><b>关税暴露</b><small>解释变量：用于比较的变量</small></span></div>
+          <div className="intro-xy-item"><strong>X</strong><span><b>关税暴露</b><small>解释变量：可能带来影响的因素</small></span></div>
           <div className="intro-xy-link" aria-hidden>↓ X 每增加 1 个百分点，Y 平均变化多少？</div>
           <div className="intro-xy-item"><strong>Y</strong><span><b>指标结果</b><small>结果变量：要观察的变量</small></span></div>
         </div>
       </div>
       <div className="intro-four-results" role="group" aria-label="四项结果都要汇总">
         <b>03 · 四步各估一项，报告中汇总</b>
-        <span>出口构成</span><span>复杂生产</span><span>链条长度</span><span>网络指标</span>
+        <span>贸易流</span><span>生产</span><span>长度</span><span>网络</span>
       </div>
-      <p className="intro-note intro-preview-note">图示：国家 A 被加税，前两年 X 为零、之后为正；国家 B 未加税，X 始终为零。线条不是实际读数。关系不显著或无法推断也要如实报告。</p>
+      <p className="intro-note intro-preview-note">图示：国家 A 被加税，前两年 X 为零、之后为正；国家 B 未加税，X 始终为零。线条不是实际读数。方向不确定或没算出估计值，也要如实报告。</p>
     </div>,
 
     /* ---- 5 就绪 ---- */
@@ -335,14 +336,14 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       </p>
       {/* 进入前讲清完成规则，避免把浏览位置误认为学习进度。 */}
       <div className="intro-ready-rules">
-        <div><b>完成进度</b><p>答对本步理解题后，步骤显示“✓”；步骤 15 以生成最新报告为准。浏览过步骤，不等于已经完成。</p></div>
-        <div><b>报告材料</b><p>第 1–10 步打开页面即自动记录；第 11–14 步点“计算…回归”按钮后自动保存；第 15 步写三段分析。每步顶部显示材料是否齐全（同步成功后更新）。</p></div>
-        <div><b>报告提交</b><p>生成草稿不等于提交。复核后提交给老师，确认“等待教师评阅”；完成进度不能代替提交状态。</p></div>
+        <div><b>完成进度</b><p>答对本步理解题后，步骤显示 ✓。步骤 15 要提交报告后才显示 ✓。只浏览不算完成。</p></div>
+        <div><b>报告材料</b><p>步骤 1–10 打开页面即自动记录；步骤 11–14 点“计算…回归”按钮后自动保存；步骤 15 写三段分析。每步顶部会显示报告材料是否齐全（保存成功后更新）。</p></div>
+        <div><b>报告提交</b><p>只生成草稿不算提交。检查后提交给老师，看到“等待教师评阅”才算交了。</p></div>
       </div>
       <div className="intro-cta-row">
         <button type="button" className="intro-cta" onClick={() => onDone()}>开始实验</button>
       </div>
-      <p className="intro-note">进入实验台不会改变当前实验步骤，可随时从顶栏重新查看介绍。</p>
+      <p className="intro-note">关闭介绍不会改变当前步骤。随时可点顶栏“系统介绍”再看一遍。</p>
     </div>,
   ];
 
