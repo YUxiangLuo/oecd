@@ -359,6 +359,7 @@
 .rank-industry { align-self: center; padding: 0; border: 0; background: none; text-align: left; color: #35328d; font: inherit; font-size: 13px; }
 .rank-industry:hover, .rank-industry:focus-visible { text-decoration: underline; }
 .rank-bar { display: grid; grid-template-columns: 92px minmax(0, 1fr) 190px; align-items: center; gap: 8px; min-height: 26px; }
+.rank-bar > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rank-value { text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rank-value b { font-weight: 600; color: #1b1f2b; }
 .rank-value small { margin-left: 6px; color: #596173; font-size: 11px; }

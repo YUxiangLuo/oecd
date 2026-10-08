@@ -49,7 +49,7 @@ export function NetworkRanking({ rows, countries, unit, onIndustry, reference = 
           {rank + 1}. {sectorLabel(row.industry)} →
         </button>
         <div>{row.values.map((value, index) => <div key={countries[index]} className="rank-bar">
-          <span style={{ fontSize: 12 }}>{countryLabel(countries[index])}</span>
+          <span title={countryLabel(countries[index])} style={{ fontSize: 12 }}>{countryLabel(countries[index])}</span>
           <div style={{ position: "relative", borderLeft: "1px solid #bbc1ce", background: "#f5f6fa", height: 14 }} aria-hidden="true">
             {value !== null && <div style={{ width: `${value / scale * 100}%`, height: "100%", background: CAT[index], border: index ? "1px dashed #145840" : undefined }} />}
             {global && <span data-global-median style={{ position: "absolute", top: -3, bottom: -3, left: `${global.median / scale * 100}%`, borderLeft: "2px solid #6b7385" }} />}
