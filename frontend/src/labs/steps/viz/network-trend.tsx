@@ -159,15 +159,16 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       }}>{countries.map((country) => <option key={country} value={country}>{countryLabel(country)}</option>)}</select>}</LabeledControl>
       {others.map((country, index) => (
         <LabeledControl key={index} label={`对比国家 ${COMPARISON_LETTERS[index]}`}>{(id) => (
-          <select id={id} name={index ? undefined : "network-country-b"} value={country} onChange={(event) => {
-            if (event.target.value) { setOthers(others.map((item, at) => (at === index ? event.target.value : item))); return; }
-            // 移除 unmounts this select; keep keyboard focus on the comparison controls.
-            setOthers(others.filter((_, at) => at !== index));
-            window.requestAnimationFrame(() => (addRef.current ?? firstRef.current)?.focus());
-          }}>
-            <option value="">{index ? "移除" : "不选对比国家"}</option>
-            {countries.filter((candidate) => candidate === country || !selected.includes(candidate)).map((candidate) => <option key={candidate} value={candidate}>{countryLabel(candidate)}</option>)}
-          </select>
+          <span className="add-country">
+            <select id={id} name={index ? undefined : "network-country-b"} value={country} onChange={(event) => setOthers(others.map((item, at) => (at === index ? event.target.value : item)))}>
+              {countries.filter((candidate) => candidate === country || !selected.includes(candidate)).map((candidate) => <option key={candidate} value={candidate}>{countryLabel(candidate)}</option>)}
+            </select>
+            {/* A separate button: as the select's first option, arrow keys could remove a country unnoticed. */}
+            <button type="button" className="secondary" aria-label={`移除对比国家 ${COMPARISON_LETTERS[index]}：${countryLabel(country)}`} onClick={() => {
+              setOthers(others.filter((_, at) => at !== index));
+              window.requestAnimationFrame(() => (addRef.current ?? firstRef.current)?.focus());
+            }}>移除</button>
+          </span>
         )}</LabeledControl>
       ))}
       {selected.length < MAX_ENTITIES && (

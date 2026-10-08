@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 /** `[label, value, seriesColor?]`; a line with an empty label is the heading. */
 export type TipLine = [string, string, string?];
 
-const TIP_WIDTH = 210;
+const TIP_WIDTH = 250;
 
 export function useHoverTip() {
   const wrapRef = useRef<HTMLDivElement | null>(null);

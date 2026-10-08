@@ -136,6 +136,8 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
     demoMode && initialDemoSelection ? "pending" : "confirmed",
   );
   const [suggestionAttempt, setSuggestionAttempt] = useState(0);
+  // The student the server confirmed idle; null before it answers (or outside the suggestion flow).
+  const [confirmedStudent, setConfirmedStudent] = useState<string | null>(null);
   const userRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   // A rate-limit message carries the wait time; typing must not hide it (a retry would only hit 429 again).
@@ -189,15 +191,20 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
       } catch {
         // A reload then simply asks for a new suggestion.
       }
-      if (edited.current) return;
       if (!student && suggested !== null) return;
+      // The student chip always offers the confirmed account, even when the form already holds another choice.
       setDemoStudent(student);
+      setConfirmedStudent(student?.username ?? null);
       setNoIdleDemoStudent(!student);
+      if (edited.current) return;
       const local = initialDemoSelection.student;
       setUsername((current) => (current === local.username ? student?.username ?? "" : current));
       setPassword((current) => (current === local.password ? student?.password ?? "" : current));
-      // Nothing left to sign in with: start at the user name.
-      if (!student) window.requestAnimationFrame(() => userRef.current?.focus());
+      // Nothing left to sign in with: start at the user name; otherwise the now-enabled 登录 (Enter signs in).
+      window.requestAnimationFrame(() => {
+        if (!student) userRef.current?.focus();
+        else if (document.activeElement == null || document.activeElement === document.body) submitRef.current?.focus();
+      });
     }, () => { if (live) setSuggestion("failed"); });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -227,7 +234,7 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
     ...(demoStudent ? [{
       ...demoStudent,
       label: "学生身份",
-      note: suggestion === "confirmed"
+      note: suggestion === "confirmed" && (confirmedStudent === null || demoStudent.username === confirmedStudent)
         ? `${DEMO_STUDENT_COUNT} 个种子学生 · 分配近 1 小时无人使用的账号`
         : suggestion === "pending" ? "正在分配空闲账号…" : "未能确认空闲账号，可能有同学在用",
     }] : []),
@@ -302,8 +309,9 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
                 className={`login-role${username === a.username ? " on" : ""}`}
                 aria-pressed={username === a.username}
                 onClick={() => {
-                  // A choice made here wins over a server suggestion that arrives later.
-                  edited.current = true;
+                  // A different identity chosen here wins over a server suggestion that arrives later;
+                  // re-clicking the identity already filled in changes nothing.
+                  if (a.username !== username) edited.current = true;
                   setUsername(a.username);
                   setPassword(a.password);
                   clearError();
@@ -340,10 +348,12 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
               : username === "teacher"
                 ? <>当前预填的是教师演示账号，用于学生管理与报告评阅。上方可切换回学生身份。<br /></>
               : suggestion === "failed"
-                ? <>暂时无法确认空闲账号（网络或服务繁忙）：当前预填的是随机挑选的种子学生账号，可能有同学正在使用；网络恢复后会自动重新分配，也可以向老师索取账号。<br /></>
+                ? <>暂时无法确认空闲账号（网络或服务繁忙）：当前预填的是随机挑选的种子学生账号，可能有同学正在使用；断网时网络恢复后会自动重新分配，也可以刷新页面重试或向老师索取账号。<br /></>
                 : suggestion === "pending"
                   ? <>正在为你分配一个近 1 小时无人使用的种子学生账号…<br /></>
-                  : <>当前预填的是一个近 1 小时无人使用的种子学生账号；退出后本标签页回到原账号。上方可一键切换学生 / 教师身份。<br /></>)}
+                  : confirmedStudent !== null && username !== confirmedStudent
+                    ? <>当前填写的不是系统分配的空闲账号；点上方“学生身份”可换回分配的账号。<br /></>
+                    : <>当前预填的是一个近 1 小时无人使用的种子学生账号；退出后本标签页回到原账号。上方可一键切换学生 / 教师身份。<br /></>)}
             登录用于区分每位同学的实验记录。刷新可继续实验；退出只影响当前标签页。
           </div>
         </form>

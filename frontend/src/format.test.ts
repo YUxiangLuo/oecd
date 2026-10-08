@@ -8,6 +8,8 @@ describe("formatMetric", () => {
     expect(formatMetric(1234.567, "amount")).toBe("1,235");
     expect(formatMetric(62.4, "amount")).toBe("62");
     expect(formatMetric(0.4567, "amount")).toBe("0.457");
+    // A real but tiny flow is not an exact zero.
+    expect(formatMetric(0.0000652, "amount")).toBe("<0.001");
     expect(formatMetric(1.2, "number")).toBe("1.200");
     // Whole counts (degree, eccentricity) carry no decimals.
     expect(formatMetric(43, "number")).toBe("43");

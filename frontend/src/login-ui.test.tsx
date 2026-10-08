@@ -150,6 +150,20 @@ describe("demo-mode login UI source behavior", () => {
     } finally { suggestion.mockRestore(); }
   });
 
+  test("re-clicking the already selected student chip still takes the server's idle account", async () => {
+    let resolve: (value: { username: string | null }) => void = () => {};
+    const suggestion = spyOn(api, "demoStudent").mockImplementation(() => new Promise((done) => { resolve = done; }));
+    try {
+      await withDemoEnv("1", async () => {
+        render(<LoginPage onLogin={() => {}} />);
+        fireEvent.click(screen.getByRole("button", { name: /学生身份/ }));
+        resolve({ username: "student07" });
+        await waitFor(() => expect(inputValue("login-user")).toBe("student07"));
+        expect(document.querySelector(".login-hint")?.textContent).toContain("近 1 小时无人使用");
+      });
+    } finally { suggestion.mockRestore(); }
+  });
+
   test("a reload asks the server for the tab's earlier suggestion back", async () => {
     sessionStorage.setItem("gvcsim_demo_suggestion", "student09");
     const suggestion = spyOn(api, "demoStudent").mockResolvedValue({ username: "student09" });

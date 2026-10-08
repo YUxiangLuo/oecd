@@ -11,7 +11,9 @@ export function formatMetric(value: number, format?: string): string {
   if (value === 0) return format === "pct" ? "0%" : "0";
   if (format === "pct") return stripNegativeZero(`${(value * 100).toFixed(3)}%`);
   if (format === "amount") {
-    if (Math.abs(value) < 0.0005) return "0";
+    // Rounding noise reads 0; a real but tiny flow is not shown as an exact zero next to a non-zero share.
+    if (Math.abs(value) < 1e-9) return "0";
+    if (Math.abs(value) < 0.0005) return value > 0 ? "<0.001" : ">-0.001";
     const digits = Math.abs(value) >= 1 ? 0 : 3;
     return stripNegativeZero(value.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits }));
   }

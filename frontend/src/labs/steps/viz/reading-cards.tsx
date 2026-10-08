@@ -200,6 +200,10 @@ export function segmentCards({ rows, countries, year, industry, segments }: {
   return cards;
 }
 
+/** A level reading with its unit spelled out ("33,672 百万美元"); shares already carry "%". */
+const amountWithUnit = (value: number, unit: string) =>
+  unit === "%" || !unit ? indicatorNumber(value, unit) : `${indicatorNumber(value, unit)} ${unit}`;
+
 /** 定位行业: the observed country's top industry and, per comparison country, the industry with the widest gap. */
 export function industryCards({ groups, countries, label, unit }: {
   groups: { key: string; label: string; values: (number | null)[] }[]; countries: string[]; label: string; unit: string;
@@ -211,7 +215,7 @@ export function industryCards({ groups, countries, label, unit }: {
   const cards: ReadingCard[] = [{
     eyebrow: `${countryLabel(first)} · ${label}最高的行业`,
     big: top.label,
-    small: `${indicatorNumber(top.values[0], unit)}；按 ${countryLabel(first)} 降序，只在显示的行业中比较`,
+    small: `${amountWithUnit(top.values[0]!, unit)}；按 ${countryLabel(first)} 降序，只在显示的行业中比较`,
   }];
   others.forEach((other, offset) => {
     const index = offset + 1;
@@ -226,7 +230,7 @@ export function industryCards({ groups, countries, label, unit }: {
     cards.push({
       eyebrow: `与对比国家 ${countryLabel(other)} · 差距最大的行业`,
       big: widest.label,
-      small: `${countryLabel(first)} ${gapReading(widest.values[0]!, widest.values[index]!, unit)}（${indicatorNumber(widest.values[0], unit)} 对 ${indicatorNumber(widest.values[index], unit)}）`,
+      small: `${countryLabel(first)} ${gapReading(widest.values[0]!, widest.values[index]!, unit)}（${amountWithUnit(widest.values[0]!, unit)} 对 ${amountWithUnit(widest.values[index]!, unit)}）`,
     });
   });
   return cards;

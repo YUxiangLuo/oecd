@@ -175,7 +175,7 @@ test("one economy alone records against the same-industry reference", async () =
   render(<NetworkTrend meta={meta} initialCountry="CHN" onRecord={save} />);
   fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "betweenesscentrality" } });
   await waitFor(() => expect(save).toHaveBeenCalled());
-  fireEvent.change(screen.getByLabelText("对比国家 B"), { target: { value: "" } });
+  fireEvent.click(screen.getByRole("button", { name: /^移除对比国家 B/ }));
   await waitFor(() => expect(save.mock.calls.at(-1)![0]).toEqual(["CHN"]));
   expect(save.mock.calls.at(-1)![1].every((item) => item.country === "CHN")).toBe(true);
   // A second comparison country can be added; the scope card lists all three.

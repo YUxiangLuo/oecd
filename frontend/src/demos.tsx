@@ -64,7 +64,7 @@ const DECOMP: Record<number, DecompCfg> = {
       { key: "taxsub", label: "taxsub 税收减补贴", color: "#98a0b3", desc: "出口直接及间接所含的产品税减补贴（TLS），由 ICIO TLS 账户沿投入产出链计算。" },
     ],
     note: (_r, values) =>
-      `EXDVA 出口国内增加值合计 = DVAex + DVArt = ${fmt(values[0] + values[1], "amount")}` +
+      `EXDVA 出口国内增加值合计 = DVAex + DVArt = ${sumText(values[0], values[1])}` +
       `（WWZ 16 个明细项归并为 DVAex / DVArt / DDC / FVA / FDC 五类；taxsub 是本系统基于 OECD ICIO TLS 账户加入的扩展项，不属于 WWZ 原文分类。）`,
   },
   5: {
@@ -78,7 +78,7 @@ const DECOMP: Record<number, DecompCfg> = {
       { key: "3b_VA_GVC_C", label: "3b 复杂 GVC 生产", color: "#f4693b", desc: "增加值至少两次跨越国境。" },
     ],
     note: (_r, values) =>
-      `3_VA_GVC = 3a + 3b = ${fmt(values[2] + values[3], "amount")}；` +
+      `3_VA_GVC = 3a + 3b = ${sumText(values[2], values[3])}；` +
       `另有对称的后向分解 FGY 系列（按最终产品完成地记账），可在步骤 7 选择“（后向）”指标查看。`,
   },
   6: {
@@ -115,6 +115,12 @@ export function negativeFill(color: string): string {
 function fmt(v: number, unit: "amount" | "number"): string {
   if (v === 0) return "0";
   return unit === "amount" ? formatMetric(v, "amount") : stripNegativeZero(v.toFixed(3));
+}
+
+/** A sum read with the same precision as its parts: 0.817 + 0.468 = 1.285, not "1" (whole numbers start at 1). */
+function sumText(a: number, b: number): string {
+  const sum = a + b;
+  return Math.abs(a) < 1 || Math.abs(b) < 1 ? stripNegativeZero(sum.toFixed(3)) : fmt(sum, "amount");
 }
 
 /** A share already in percent, to three decimals as everywhere else ("11.730%"); an exact zero is "0%". */
@@ -1083,8 +1089,8 @@ export function NetworkCentralityDemo() {
                 {pathNodes.length >= 3
                   ? <>例如 {pathNodes[0]} → {pathNodes[pathNodes.length - 1]} 的无权最短路要穿过 {sel}（已高亮）。越多这类路径对经过它，拓扑介数越高；这不自动说明它是经济瓶颈。</>
                   : C.bet[sel] === 0
-                    ? <>{selNode.label}不在任何其他节点对的最短路径上，介数为 0。</>
-                    : <>{selNode.label}很少落在别人的最短路径上，介数中心性低。</>}
+                    ? <>{selNode.label}（{sel}）不在任何其他节点对的最短路径上，介数为 0。</>
+                    : <>{selNode.label}（{sel}）很少落在别人的最短路径上，介数中心性低。</>}
               </p>
             </>
           ) : (

@@ -469,28 +469,32 @@ export function IndicatorExplorer({
         {others.map((country, index) => (
           <LabeledControl key={index} label={`对比国家 ${COMPARISON_LETTERS[index]}`}>
             {(id) => (
-              <select
-                id={id}
-                value={country}
-                onChange={(e) => {
-                  if (!e.target.value) {
-                    // 移除 unmounts this select; keep keyboard focus on the comparison controls.
+              <span className="add-country">
+                <select
+                  id={id}
+                  value={country}
+                  onChange={(e) => selectOthers(others.map((item, at) => (at === index ? e.target.value : item)))}
+                >
+                  {countries
+                    .filter((candidate) => candidate === country || !selected.includes(candidate))
+                    .map((candidate) => (
+                      <option key={candidate} value={candidate}>
+                        {countryLabel(candidate)}
+                      </option>
+                    ))}
+                </select>
+                {/* A separate button: as the select's first option, arrow keys could remove a country unnoticed. */}
+                <button
+                  type="button"
+                  className="secondary"
+                  aria-label={`移除对比国家 ${COMPARISON_LETTERS[index]}：${countryLabel(country)}`}
+                  onClick={() => {
                     selectOthers(others.filter((_, at) => at !== index));
+                    // This control unmounts; keep keyboard focus on the comparison controls.
                     window.requestAnimationFrame(() => (addRef.current ?? entityRef.current)?.focus());
-                    return;
-                  }
-                  selectOthers(others.map((item, at) => (at === index ? e.target.value : item)));
-                }}
-              >
-                <option value="">{index ? "移除" : "不选对比国家"}</option>
-                {countries
-                  .filter((candidate) => candidate === country || !selected.includes(candidate))
-                  .map((candidate) => (
-                    <option key={candidate} value={candidate}>
-                      {countryLabel(candidate)}
-                    </option>
-                  ))}
-              </select>
+                  }}
+                >移除</button>
+              </span>
             )}
           </LabeledControl>
         ))}

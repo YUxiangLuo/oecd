@@ -293,7 +293,11 @@ export function StudentWorkspace({
               stageName={stageName}
               current={current}
               completedSteps={presentationCompletedSteps}
-              onNavigate={onNavigateStep}
+              onNavigate={(n) => {
+                // The footer sits below the step: after moving on, keyboard focus starts at the new step's top.
+                onNavigateStep(n);
+                window.requestAnimationFrame(() => contentRef.current?.focus({ preventScroll: true }));
+              }}
             />
           </div>
         </div>

@@ -152,7 +152,8 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .content { scroll-padding-bottom: 72px; }
 /* Containers and headings that receive focus programmatically (after a step change, a retry, opening the
    report) are not controls: no heavy browser outline on them. */
-main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus, [role="region"][tabindex="-1"]:focus { outline: none; }
+main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1"]:focus, [role="region"][tabindex="-1"]:focus, .auto-material:focus { outline: none; }
+.auto-material:focus-visible { box-shadow: 0 0 0 2px #9ec9b4; }
 .content-inner { max-width: 1180px; margin: 0 auto; }
 .step-primary-action { min-width: 0; outline: none; scroll-margin-top: 12px; }
 .step-primary-action:focus-visible { outline: 2px solid #4b47e0; outline-offset: 5px; border-radius: 10px; }
