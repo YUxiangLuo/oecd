@@ -348,7 +348,25 @@ export function reportGenerateButtonLabel(
   syncConflict = false,
 ): string {
   if (generating) return "正在生成报告…";
+  // The primary button beside this one already says the save failed; this one keeps its own action in the
+  // label, so the two never read the same.
+  const action = !report ? "生成草稿" : report.state === "draft" ? "重新生成草稿" : "重新生成";
+  if (syncConflict) return `载入服务器版本后才能${action}`;
+  if (syncError) return `重试保存后才能${action}`;
   return reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, syncError, syncConflict) ?? reportGenerateLabel(report);
+}
+
+/** The autosave state shown next to the writing area. */
+export function reportAutosaveLabel(
+  sessionStatus: SessionStatus,
+  sessionUnsynced: boolean,
+  sessionSyncing: boolean,
+  syncError: string | null = null,
+  syncConflict = false,
+): string | null {
+  if (syncConflict || syncError) return "未保存";
+  if (sessionStatus !== "ready") return null;
+  return sessionSyncing || sessionUnsynced ? "保存中…" : "已保存";
 }
 
 export function ReportLab({
@@ -461,8 +479,11 @@ export function ReportLab({
   // to the list instead (while the session is saving, the list may be out of date and the click goes through).
   const gated = visibleBlocked.length > 0 && sessionStatus === "ready" && !sessionUnsynced && !sessionSyncing;
   const gatedCount = visibleBlocked.reduce((count, item) => count + item.missing.length, 0);
+  const autosave = reportAutosaveLabel(sessionStatus, sessionUnsynced, sessionSyncing, state.syncError, Boolean(state.syncConflict));
   const generateOrShowGate = (submitAfter = false) => {
     if (gated) {
+      // Short analysis fields are marked for assistive technology at once, not only after a server refusal.
+      if (writtenCount < REFLECTION_FIELDS.length) setAttemptedIncomplete(true);
       showGate();
       return;
     }
@@ -631,8 +652,9 @@ export function ReportLab({
       <section className="report-reflection" aria-labelledby={REPORT_REFLECTION_TITLE_ID}>
         <div>
           <span className="reg-section-step">你的分析 · 自动保存</span>
+          {autosave && <small className={`report-autosave${autosave === "未保存" ? " failed" : ""}`}>{autosave}</small>}
           <h3 id={REPORT_REFLECTION_TITLE_ID} tabIndex={-1}>回答三个问题</h3>
-          <p>写清研究对象、主要结果和仍不能确定的内容。引用具体数字，并说明结论限制。</p>
+          <p>写清研究对象、主要结果和仍不能确定的内容。引用具体数字，并说明结论限制。文字按原样写进报告，“#”“**”等符号不会变成标题或粗体。</p>
         </div>
         <div className="report-reflection-fields" ref={reflectionRoot}>
           <div className="report-writing-checklist" role="note">
@@ -737,7 +759,7 @@ export function ReportLab({
       {report ? (
         <div className="report-body" ref={previewRef} tabIndex={-1} aria-label="报告正文"><ReportPrintGrade report={report} /><ReportMarkdown markdown={report.markdown} /></div>
       ) : (
-        <p className="muted">可以先只生成草稿看看，再提交。区间包含 0、或者没算出估计值的结果，也要写进报告。</p>
+        <p className="muted">{gated ? "补齐上方清单中的缺项后，可以先只生成草稿看看，再提交。" : "可以先只生成草稿看看，再提交。"}区间包含 0、或者没算出估计值的结果，也要写进报告。</p>
       )}
       {confirmRegenerate && (
         <ConfirmModal

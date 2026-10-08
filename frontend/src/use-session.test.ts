@@ -7,6 +7,8 @@ import {
   KEPT_EDITS_KEY,
   SessionSaveQueue,
   clearKeptEdits,
+  expiredLoginNotice,
+  hasKeptEdits,
   keepEdits,
   mergeKeptEdits,
   patchSessionStep,
@@ -302,5 +304,18 @@ describe("edits during conflict reload", () => {
       expect(result.current.getStep<{ research_question: string }>(15)?.research_question).toBe("server");
       expect(result.current.syncConflict).toBe(false);
     } finally { get.mockRestore(); save.mockRestore(); }
+  });
+});
+
+describe("the expired-login notice", () => {
+  test("says unsaved edits are kept when this tab holds them", () => {
+    const storage = new Map<string, string>();
+    const adapter = { getItem: (key: string) => storage.get(key) ?? null };
+    expect(hasKeptEdits(adapter)).toBe(false);
+    expect(expiredLoginNotice(false)).toBe("登录已失效，请重新登录。");
+    storage.set(KEPT_EDITS_KEY, "{}");
+    expect(hasKeptEdits(adapter)).toBe(true);
+    expect(expiredLoginNotice(true)).toContain("未保存的修改已在本页保留");
+    expect(hasKeptEdits({ getItem: () => { throw new Error("blocked"); } })).toBe(false);
   });
 });

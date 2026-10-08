@@ -60,6 +60,22 @@ export function readKeptEdits(storage: KeptStorage, username: string, releaseId:
   }
 }
 
+/** Whether this tab holds edits kept on leaving (for any account; the next login restores its own). */
+export function hasKeptEdits(storage: Pick<Storage, "getItem">): boolean {
+  try {
+    return storage.getItem(KEPT_EDITS_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** The login page's notice after an expired login; it says so when unsaved edits were kept in this tab. */
+export function expiredLoginNotice(editsKept: boolean): string {
+  return editsKept
+    ? "登录已失效，请重新登录。未保存的修改已在本页保留，用同一账号重新登录后会自动恢复。"
+    : "登录已失效，请重新登录。";
+}
+
 export function clearKeptEdits(storage: KeptStorage): void {
   storage.removeItem(KEPT_EDITS_KEY);
 }

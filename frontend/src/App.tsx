@@ -17,7 +17,7 @@ import { LoginPage } from "./login";
 import { resetStepScroller } from "./step-navigation";
 import { StudentWorkspace } from "./student-workspace";
 import type { AuthUser, Meta, StepsResponse, StepStateApi } from "./types";
-import { useSession } from "./use-session";
+import { expiredLoginNotice, hasKeptEdits, useSession } from "./use-session";
 import { userFacingRequestError } from "./user-facing-error";
 
 const APP_TITLE = "供应链仿真系统 · GVC Simulation Lab";
@@ -188,7 +188,7 @@ function AppContent() {
       (verifiedUser) => { if (getActiveAuthToken() === token) setUser(verifiedUser); },
       (error) => {
         if (getActiveAuthToken() !== token) return;
-        if (isApiErrorStatus(error, 401)) reloadLoggedOut("登录已失效，请重新登录。");
+        if (isApiErrorStatus(error, 401)) reloadLoggedOut(expiredLoginNotice(hasKeptEdits(sessionStorage)));
         else setAuthCheckError(userFacingRequestError(error, "暂时无法确认登录状态"));
       },
     ).finally(() => setAuthChecked(true));
@@ -227,8 +227,8 @@ function AppContent() {
 
   useEffect(() => {
     const expired = () => {
-      if (user?.role === "student") session.keepUnsavedEdits();
-      reloadLoggedOut("登录已失效，请重新登录。", user?.username);
+      const kept = user?.role === "student" && session.keepUnsavedEdits();
+      reloadLoggedOut(expiredLoginNotice(kept || hasKeptEdits(sessionStorage)), user?.username);
     };
     window.addEventListener("gvcsim-auth-expired", expired);
     return () => window.removeEventListener("gvcsim-auth-expired", expired);

@@ -8,6 +8,8 @@
 .report-reference { border: 1px solid #e0e3ed; border-radius: 10px; margin: 16px 0; padding: 12px 16px; }
 .report-reference > summary { cursor: pointer; color: #51458b; font-weight: 600; }
 .report-reference[open] > summary { margin-bottom: 14px; }
+.report-autosave { margin-left: 10px; color: #08723a; font-size: 12px; }
+.report-autosave.failed { color: #b42318; font-weight: 600; }
 .report-writing-hint { display: block; margin: 8px 0; color: #59647a; font-size: 12px; line-height: 1.8; }
 .report-lab .report-reflection p, .report-lab .report-reflection-fields small { font-size: 13px; color: #536078; }
 .report-submit-panel { padding: 20px; border: 1px solid #dcdfee; border-radius: 12px; margin: 18px 0; background: #f7f8fc; }

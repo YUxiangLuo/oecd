@@ -205,7 +205,10 @@ describe("step 15 report states", () => {
     expect(reportWaitLabel("ready", true, false)).toBe("正在保存实验记录…");
     expect(reportWaitLabel("ready", false, false)).toBeNull();
     expect(reportWaitLabel("ready", true, false, "session changed")).toBe("保存失败，请先重试");
-    expect(reportGenerateButtonLabel(null, false, "ready", true, false, "offline")).toBe("保存失败，请先重试");
+    // Beside the primary button's "保存失败，请先重试", the draft button keeps its own action.
+    expect(reportGenerateButtonLabel(null, false, "ready", true, false, "offline")).toBe("重试保存后才能生成草稿");
+    expect(reportGenerateButtonLabel(report("draft"), false, "ready", true, false, "offline")).toBe("重试保存后才能重新生成草稿");
+    expect(reportGenerateButtonLabel(report("pending"), false, "ready", true, false, "冲突", true)).toBe("载入服务器版本后才能重新生成");
     expect(reportGenerateButtonLabel(null, false, "loading", false, false)).toBe("正在恢复实验记录…");
     expect(reportGenerateButtonLabel(null, true, "loading", false, false)).toBe("正在生成报告…");
   });
@@ -740,6 +743,35 @@ describe("the 2,400 limit shortens only the inserted text", () => {
     expect(screen.getByText(/刚粘贴或输入的文字有一部分没有保留，原有文字没有改动/)).toBeTruthy();
     expect(screen.getByText(/已写 2400 \/ 2400 字 · 已达上限/)).toBeTruthy();
   });
+});
+
+test("offline, the two report buttons read differently", () => {
+  render(<ReportLab {...finishProps} state={{ ...finishProps.state, syncError: "网络连接中断" }} sessionUnsynced />);
+  const labels = [...document.querySelectorAll(".report-submit-panel .report-actions button")].map((button) => button.textContent);
+  expect(labels).toEqual(["保存失败，请先重试", "重试保存后才能生成草稿"]);
+  expect(screen.getByText("未保存")).toBeTruthy();
+});
+
+test("the writing area shows the autosave state and says formatting marks stay as typed", () => {
+  const { rerender } = render(<ReportLab {...finishProps} />);
+  expect(screen.getByText("已保存")).toBeTruthy();
+  expect(screen.getByText(/“#”“\*\*”等符号不会变成标题或粗体/)).toBeTruthy();
+  rerender(<ReportLab {...finishProps} sessionSyncing />);
+  expect(screen.getByText("保存中…")).toBeTruthy();
+  rerender(<ReportLab {...finishProps} sessionStatus="loading" />);
+  expect(screen.queryByText("已保存")).toBeNull();
+});
+
+test("a blocked generate click marks the short analysis fields invalid at once; the gated hint is not contradicted", () => {
+  const gate = [{ step: 8, title: "步骤 8", missing: ["记录报告材料"] }, { step: 15, title: "你的分析", missing: ["填写研究问题"] }];
+  render(<ReportLab {...finishProps} reportGate={gate} state={{ ...finishProps.state, data: { research_question: "我比较了中国和美国的外国增加值项占比" } }} />);
+  expect(screen.getByText(/补齐上方清单中的缺项后，可以先只生成草稿看看/)).toBeTruthy();
+  const field = (name: string) => screen.getByRole("textbox", { name }).getAttribute("aria-invalid");
+  expect(field("结果解释")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "生成并提交报告" }));
+  expect(field("结果解释")).toBe("true");
+  expect(field("局限与反思")).toBe("true");
+  expect(field("研究问题")).toBeNull();
 });
 
 test("in a save conflict the report actions ask for the server version, not a retry", () => {
