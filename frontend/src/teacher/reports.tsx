@@ -5,7 +5,7 @@ import { api, isApiErrorStatus } from "../api";
 import { useAsync } from "../labs/shared";
 import { ReportMarkdown } from "../report-renderer-lazy";
 import { showToast } from "../toast";
-import type { AuthUser, TeacherReport } from "../types";
+import type { AcademicSemester, AuthUser, TeacherReport } from "../types";
 import { userFacingRequestError } from "../user-facing-error";
 import { AcademicFilters, matchesAcademicFilter, enrollmentLabel } from "./academic-filter";
 import { EmptyState, LoadFailure, SearchInput, StatusPill, Toolbar, useModalErrorFocus, useRefetchOnVisible } from "./ui";
@@ -100,7 +100,7 @@ export function ReportsTab({ user, onGraded, onRefresh }: { user: AuthUser; onGr
   useRefetchOnVisible(() => setRefresh((value) => value + 1), openAccountId == null);
   // The open review comes first: a list refresh failing in the background must not unmount an unsaved review.
   if (openAccountId != null) {
-    return <ReportView accountId={openAccountId} grader={user.username} onBack={(changed) => {
+    return <ReportView accountId={openAccountId} grader={user.username} semesters={academic?.semesters ?? []} onBack={(changed) => {
       returnFocus.current = { accountId: openAccountId, afterLoad: loads };
       setOpenAccountId(null);
       setRefresh((value) => value + 1);
@@ -170,7 +170,9 @@ export function ReportsTab({ user, onGraded, onRefresh }: { user: AuthUser; onGr
 
 export type GradeDraft = { score: string; feedback: string };
 
-function ReportView({ accountId, grader, onBack }: { accountId: number; grader: string; onBack: (changed: boolean) => void }) {
+function ReportView({ accountId, grader, semesters, onBack }: {
+  accountId: number; grader: string; semesters: readonly AcademicSemester[]; onBack: (changed: boolean) => void;
+}) {
   const [refresh, setRefresh] = useState(0);
   // What the teacher had typed when a 409 asked for the latest report: carried into the reloaded view.
   const [draft, setDraft] = useState<GradeDraft | null>(null);
@@ -188,6 +190,7 @@ function ReportView({ accountId, grader, onBack }: { accountId: number; grader: 
     key={`${accountId}-${data.updated_at}`}
     data={data}
     grader={grader}
+    semesters={semesters}
     onBack={onBack}
     initialDraft={draft ?? undefined}
     onReload={(current) => {
@@ -197,9 +200,11 @@ function ReportView({ accountId, grader, onBack }: { accountId: number; grader: 
   />;
 }
 
-export function GradeView({ data, grader, onBack, onReload, initialDraft }: {
+export function GradeView({ data, grader, semesters = [], onBack, onReload, initialDraft }: {
   data: TeacherReport;
   grader: string;
+  /** Marks an archived class in the header, as the list does. */
+  semesters?: readonly AcademicSemester[];
   onBack: (changed: boolean) => void;
   onReload: (draft: GradeDraft) => void;
   /** Score and feedback typed before reloading a newer version of this report. */
@@ -274,7 +279,7 @@ export function GradeView({ data, grader, onBack, onReload, initialDraft }: {
         <button className="back-btn" disabled={saving} onClick={() => attemptLocalLeave(() => onBack(false))}>← 返回列表</button>
         <a className="review-skip" href={`#${formHeadingId}`} onClick={skipToForm}>跳到评阅表单</a>
         <h3 ref={headingRef} tabIndex={-1} className="stage-chip review-student">{data.display_name}（{data.username}）</h3>
-        <span className="muted">{data.enrollments.map((item) => `${item.term_name} · ${item.class_name}`).join("；") || "未分班"} · 提交于 {fmtTime(data.submitted_at)}</span>
+        <span className="muted">{data.enrollments.map((item) => enrollmentLabel(item, semesters)).join("；") || "未分班"} · 提交于 {fmtTime(data.submitted_at)}</span>
       </div>
       <div className="grade-split">
         <div className="grade-doc"><ReportMarkdown markdown={data.markdown} /></div>
@@ -302,7 +307,7 @@ export function GradeView({ data, grader, onBack, onReload, initialDraft }: {
             setSaveError(null);
           }} rows={8} /></label>
           {/* Not a live region: announcing the count on every keystroke drowned out typing; only the limit is announced. */}
-          <span className="muted grade-count">评语 {[...feedback].length} / 4000 字</span>
+          <span className="muted grade-count">评语 {[...feedback.trim()].length} / 4000 字</span>
           {feedbackCut && <span className="muted grade-cut" role="status">超过 4000 字上限，多出的内容没有保留。</span>}
           {saveError && <div ref={saveErrorRef} className="error-box" role="alert" tabIndex={-1}>{saveError}</div>}
           {stale && <p id={staleHintId} className="muted grade-note">{STALE_REVIEW_HINT}</p>}

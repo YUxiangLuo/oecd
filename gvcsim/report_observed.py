@@ -611,7 +611,7 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
                     )
                 ranks = _rank_reading(context, countries_saved) if context else ""
                 lines.append(
-                    f"- 自动读图：{'；'.join(changes)}。{ranks + '。' if ranks else ''}这是描述性变化，不自动构成政策效应。"
+                    f"- 自动读图：{'；'.join(changes)}。{ranks + '。' if ranks else ''}变化按未取整的原值计算，可能与两端读数之差相差末位 1。这是描述性变化，不自动构成政策效应。"
                 )
             elif context:
                 year = next(iter(context["references"]))

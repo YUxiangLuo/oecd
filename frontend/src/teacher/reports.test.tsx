@@ -361,3 +361,15 @@ test("an emptied 待评阅 list says the work is done instead of asking to chang
   expect(reportsEmptyState(3, "pending", false).title).toBe("暂无待评阅报告");
   expect(reportsEmptyState(3, "pending", true).title).toBe("没有匹配的报告");
 });
+
+test("the review header marks an archived class and the feedback counter ignores surrounding blanks", () => {
+  const enrolled: TeacherReport = { ...report, enrollments: [{ term_id: 1, term_name: "秋季", class_id: 2, class_name: "一班" }] };
+  const semesters = [{ id: 1, name: "秋季", is_active: true, student_count: 1, created_at: "2026-09-24",
+    classes: [{ id: 2, term_id: 1, name: "一班", is_active: false, student_count: 1, created_at: "2026-09-24" }] }];
+  const { container } = render(<GradeView data={enrolled} grader="teacher" semesters={semesters} onBack={() => {}} onReload={() => {}} />);
+  expect(container.querySelector(".review-topbar")?.textContent).toContain("秋季 · 一班（已归档）");
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "      " } });
+  expect(container.querySelector(".grade-count")?.textContent).toBe("评语 0 / 4000 字");
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "  很好  " } });
+  expect(container.querySelector(".grade-count")?.textContent).toBe("评语 2 / 4000 字");
+});

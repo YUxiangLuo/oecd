@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { parseReportChart, ReportMarkdown } from "./report-renderer";
+import { closeBoldBeforeCjkPunctuation, parseReportChart, ReportMarkdown } from "./report-renderer";
 
 describe("report tables", () => {
   test("isolates literal reflection text from following report headings, tables and charts", () => {
@@ -245,9 +245,15 @@ describe("parseReportChart", () => {
 });
 
 test("react-markdown's node prop never reaches the DOM", async () => {
-  const { renderToStaticMarkup } = await import("react-dom/server");
-  const { createElement } = await import("react");
   const { ReportMarkdown } = await import("./report-renderer");
   const html = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: "# 标题\n\n数据版本 `step10-tariff-teaching-v5`\n\n```\nplain\n```\n\n> 引用" }));
   expect(html).not.toContain("node=");
+});
+
+test("bold ending in Chinese punctuation renders even in reports generated before the server fix", () => {
+  const old = "- **2020 年：现价与疫情期外推限制。**本节为份额，**已闭合**。 末尾**说明。**";
+  expect(closeBoldBeforeCjkPunctuation(old)).toBe("- **2020 年：现价与疫情期外推限制**。本节为份额，**已闭合**。 末尾**说明。**");
+  const html = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: old }));
+  expect(html).not.toContain("**");
+  expect(html).toContain("<strong>2020 年：现价与疫情期外推限制</strong>。本节");
 });

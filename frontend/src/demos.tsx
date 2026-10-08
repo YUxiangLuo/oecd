@@ -117,10 +117,18 @@ function fmt(v: number, unit: "amount" | "number"): string {
   return unit === "amount" ? formatMetric(v, "amount") : stripNegativeZero(v.toFixed(3));
 }
 
-/** A sum read with the same precision as its parts: 0.817 + 0.468 = 1.285, not "1" (whole numbers start at 1). */
-function sumText(a: number, b: number): string {
-  const sum = a + b;
-  return Math.abs(a) < 1 || Math.abs(b) < 1 ? stripNegativeZero(sum.toFixed(3)) : fmt(sum, "amount");
+/** A two-part sum. When a part is below 1 (read to three decimals in the table) the parts are written out at
+ * four significant digits, so the line adds up as shown: "= 2.477 + 0.867 = 3.344", never "= 1" for
+ * 0.817 + 0.468 nor "0.000" for two tiny non-zero parts. Otherwise the sum reads like the table. */
+export function sumText(a: number, b: number): string {
+  const fractional = (v: number) => v !== 0 && Math.abs(v) < 1;
+  if (!fractional(a) && !fractional(b)) return fmt(a + b, "amount");
+  const exact = (v: number) => v === 0
+    ? "0"
+    : Math.abs(v) >= 1000
+      ? formatMetric(v, "amount")
+      : stripNegativeZero(v.toLocaleString("zh-CN", { maximumSignificantDigits: 4 }));
+  return `${exact(a)} + ${exact(b)} = ${exact(a + b)}`;
 }
 
 /** A share already in percent, to three decimals as everywhere else ("11.730%"); an exact zero is "0%". */

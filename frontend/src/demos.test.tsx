@@ -14,6 +14,7 @@ import {
   networkDemoKeyTransition,
   networkDemoNodeAccessibleName,
   nextNetworkDemoNode,
+  sumText,
   teachingNetworkCentralitySnapshot,
   teachingNetworkEdgesForNode,
   zeroTotalDecompositionHint,
@@ -433,4 +434,13 @@ describe("object B country", () => {
       industryRequest.mockRestore();
     }
   });
+});
+
+test("a merged two-part sum adds up as shown when a part is below 1", () => {
+  expect(sumText(0.817, 0.468)).toBe("0.817 + 0.468 = 1.285");
+  expect(sumText(2.4771, 0.8669)).toBe("2.477 + 0.8669 = 3.344");
+  expect(sumText(0.00021, 0.00012)).toBe("0.00021 + 0.00012 = 0.00033");
+  expect(sumText(0, 0.25)).toBe("0 + 0.25 = 0.25");
+  expect(sumText(12_345.6, 0.4)).toBe("12,346 + 0.4 = 12,346");
+  expect(sumText(5.4, 3.3)).toBe("9");
 });

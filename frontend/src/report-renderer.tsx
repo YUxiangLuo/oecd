@@ -595,6 +595,12 @@ function rehypeReportTableLabels() {
   };
 }
 
+/** CommonMark cannot close "**…。**" when a letter follows the closing "**" (punctuation before it, a letter after);
+ * reports generated before the server fix still contain that form, so move the punctuation outside the bold. */
+export function closeBoldBeforeCjkPunctuation(markdown: string): string {
+  return markdown.replace(/\*\*([^*\n]+?)([。，；：！？、）])\*\*(?=[^\s*])/g, "**$1**$2");
+}
+
 /** Shared student/teacher report body. Raw HTML is intentionally not enabled. */
 export function ReportMarkdown({ markdown, className = "report-md" }: { markdown: string; className?: string }) {
   return (
@@ -627,7 +633,7 @@ export function ReportMarkdown({ markdown, className = "report-md" }: { markdown
           img: ({ alt }) => <span className="muted">[图片已禁用{alt ? `：${alt}` : ""}]</span>,
         }}
       >
-        {markdown}
+        {closeBoldBeforeCjkPunctuation(markdown)}
       </ReactMarkdown>
     </article>
   );
