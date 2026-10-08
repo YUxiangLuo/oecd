@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { validatePasswordChange } from "./account-password";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { AccountPasswordModal, validatePasswordChange } from "./account-password";
+
+test("the form skips native validation so the Chinese messages are shown, not the browser's minLength bubble", () => {
+  const html = renderToStaticMarkup(createElement(AccountPasswordModal, { onClose: () => {}, onChanged: () => {} }));
+  expect(html).toMatch(/<form[^>]*novalidate/i);
+  expect(validatePasswordChange("old-password", "x".repeat(257), "x".repeat(257))).toBe("新密码不能超过 256 个字符");
+});
 
 describe("account password change", () => {
   test("requires the current password and a distinct 12-character replacement", () => {

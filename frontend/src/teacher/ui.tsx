@@ -1,5 +1,6 @@
-import { useId, useRef, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
 import { useDialogFocus } from "../a11y";
+import { userFacingRequestError } from "../user-facing-error";
 
 /** 教师面板共用的轻量 UI 原语:模态框 / 工具条 / 搜索框 / 状态徽标 / 空态。
  *  替代原来散落的 window.prompt / window.confirm 与常驻内联表单。 */
@@ -88,6 +89,39 @@ export function ConfirmModal({
       </div>
     </Modal>
   );
+}
+
+/** Move focus to a form error when it appears (the submit button was disabled while saving, so focus was lost). */
+export function useModalErrorFocus(error: string | null) {
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
+  return errorRef;
+}
+
+/** A list that failed to load: Chinese copy for transport errors (not the browser's "Failed to fetch") and a retry. */
+export function LoadFailure({ what, error, onRetry }: { what: string; error: string; onRetry: () => void }) {
+  return (
+    <div className="error-box async-error" role="alert">
+      <span>{userFacingRequestError(error, `${what}加载失败`)}</span>
+      <button type="button" className="secondary" onClick={onRetry}>重试</button>
+    </div>
+  );
+}
+
+/** Call `onVisible` whenever the tab becomes visible again (the teacher comes back from another tab or window). */
+export function useRefetchOnVisible(onVisible: () => void, enabled = true) {
+  const callback = useRef(onVisible);
+  callback.current = onVisible;
+  useEffect(() => {
+    if (!enabled) return;
+    const listener = () => {
+      if (document.visibilityState === "visible") callback.current();
+    };
+    document.addEventListener("visibilitychange", listener);
+    return () => document.removeEventListener("visibilitychange", listener);
+  }, [enabled]);
 }
 
 /** 页面工具条:左侧筛选/搜索,右侧操作按钮。 */

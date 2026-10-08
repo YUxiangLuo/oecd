@@ -48,6 +48,8 @@
 .academic-filters select {
   height: 34px; padding: 0 30px 0 10px; border: 1px solid #e0e3ea; border-radius: 8px;
   background: #fff; color: #4c5568; font: inherit; font-size: 12.5px;
+  /* A long semester name must not widen the toolbar past the viewport. */
+  max-width: 16em; text-overflow: ellipsis;
 }
 .academic-filters select:focus { outline: none; border-color: #4b47e0; }
 .search-input {
@@ -97,7 +99,8 @@
 .teacher-content button.danger:hover, .modal-card button.danger:hover { border-color: #e39d8c; color: #b3341f; }
 .teacher-content button.sm { padding: 5px 11px; font-size: 11.5px; }
 .teacher-content button.block, .modal-card button.block { width: 100%; padding: 10px; }
-.teacher-content button:disabled, .modal-card button:disabled { opacity: 0.5; cursor: default; }
+.teacher-content button:disabled, .modal-card button:disabled,
+.teacher-content button[aria-disabled="true"] { opacity: 0.5; cursor: default; }
 .segmented button, .search-clear { padding: 6px 14px; }
 .search-clear { border: none; }
 
@@ -156,11 +159,13 @@
 .semester-card { background: #fff; border: 1px solid #e2e4ec; border-radius: 14px; overflow: hidden; }
 .semester-card.archived { opacity: 0.76; }
 .semester-card-head { display: flex; justify-content: space-between; gap: 16px; padding: 17px 18px; border-bottom: 1px solid #eef0f5; }
-.semester-title-row { display: flex; align-items: center; gap: 9px; }
-.semester-title-row h3 { margin: 0; font-size: 16px; }
+/* Long names wrap inside the card; the action buttons keep their size and stay clickable. */
+.semester-card-title, .class-row-name { min-width: 0; overflow-wrap: anywhere; }
+.semester-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 9px; min-width: 0; }
+.semester-title-row h3 { margin: 0; font-size: 16px; min-width: 0; overflow-wrap: anywhere; }
 .semester-card-head p { margin: 4px 0 0; color: var(--text-muted); font-size: 11.5px; }
-.semester-actions { display: flex; align-items: center; gap: 6px; }
-.semester-actions > button { flex-shrink: 0; white-space: nowrap; }
+.semester-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+.semester-actions > button, .semester-archive-action > button { flex-shrink: 0; white-space: nowrap; }
 .semester-archive-action { display: grid; justify-items: end; gap: 6px; max-width: 260px; }
 .semester-archive-action .error-box { margin: 0; }
 .class-list { padding: 5px 18px; }
@@ -274,6 +279,26 @@
 .grade-rubric li b, .grade-rubric li span { display: block; }
 .grade-rubric li b { color: #3b4352; margin-bottom: 2px; }
 .grade-field input:focus, .grade-field textarea:focus { outline: none; border-color: #4b47e0; }
+
+/* Headings in the review screen keep the look of the chip / panel title they replaced. */
+.review-topbar h3.stage-chip { margin: 0; }
+.grade-side h3.panel-head { margin-top: 0; }
+.review-student:focus-visible, .grade-side h3.panel-head:focus-visible, .grade-note:focus-visible {
+  outline: 2px solid #4b47e0; outline-offset: 2px;
+}
+/* Skip link past the report to the grading form: off-screen until focused by the keyboard. */
+.review-skip { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.review-skip:focus {
+  position: static; width: auto; height: auto; overflow: visible;
+  padding: 5px 10px; border-radius: 8px; background: #edecfd; color: #2c2a6b; font-size: 12.5px; font-weight: 600;
+}
+.grade-note { margin: 0 0 12px; font-size: 12px; line-height: 1.6; }
+.grade-score-error { margin: -6px 0 12px; padding: 8px 12px; font-size: 12px; }
+.grade-field input[aria-invalid="true"] { border-color: #e39d8c; }
+/* Long names wrap in the teacher tables instead of pushing every other column out of view. */
+.teacher-main .data-table td.student-name-cell { white-space: normal; min-width: 5em; max-width: 12em; overflow-wrap: anywhere; }
+.th-hint { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
+.batch-download-hint { margin: 8px 0 0; font-size: 12px; line-height: 1.6; }
 
 /* Reserve no space when idle: the refresh note appears only while a reload is in flight. */
 .list-refreshing { margin: 0 0 4px; font-size: 11.5px; min-height: 0; }

@@ -28,7 +28,9 @@ describe("teacher student modal submission", () => {
   test("makes asynchronous modal errors programmatically focusable", async () => {
     const source = await Bun.file(new URL("./students.tsx", import.meta.url)).text();
     expect(source).toContain('role="alert" tabIndex={-1}');
-    expect(source).toContain("errorRef.current?.focus()");
+    expect(source).toContain("useModalErrorFocus(error)");
+    const ui = await Bun.file(new URL("./ui.tsx", import.meta.url)).text();
+    expect(ui).toContain("errorRef.current?.focus()");
   });
 
   test("keeps fixed demo-pool passwords out of the editable password modal", async () => {
@@ -41,7 +43,9 @@ describe("teacher student modal submission", () => {
   test("allows clearing an optional student number but not a display name", () => {
     expect(studentFieldError("", { label: "学号", required: false })).toBeNull();
     expect(studentFieldError("  ", { label: "姓名" })).toBe("姓名不能为空");
-    expect(studentFieldError("short", { label: "新密码", password: true })).toBe("密码至少 12 位");
+    expect(studentFieldError("short", { label: "新密码", password: true })).toBe("密码至少 12 个字符");
+    expect(studentFieldError("x".repeat(257), { label: "新密码", password: true })).toBe("密码不能超过 256 个字符");
+    expect(studentFieldError("x".repeat(256), { label: "新密码", password: true })).toBeNull();
     expect(studentFieldError(" ".repeat(12), { label: "新密码", password: true })).toBe("密码不能全是空格");
     expect(studentFieldError("9".repeat(41), { label: "学号", required: false, maxLength: 40 })).toBe("学号不能超过 40 个字符");
     const student = { username: "df-a", display_name: "学生", password: "long-password-1", student_no: "" };
@@ -49,6 +53,15 @@ describe("teacher student modal submission", () => {
     expect(newStudentError({ ...student, username: "a" })).toContain("2–40 位");
     expect(newStudentError({ ...student, display_name: "名".repeat(61) })).toBe("姓名不能超过 60 个字符");
     expect(newStudentError({ ...student, student_no: "9".repeat(300) })).toBe("学号不能超过 40 个字符");
+  });
+
+  test("checks names and numbers in the form the server stores them", () => {
+    // Invisible-only names are blank; zero-width characters around a username are not an error.
+    expect(studentFieldError("​‍", { label: "姓名" })).toBe("姓名不能为空");
+    // 61 characters as typed but 60 once the double space collapses, as on the server.
+    expect(studentFieldError(`名  ${"字".repeat(58)}`, { label: "姓名", maxLength: 60 })).toBeNull();
+    const student = { username: "﻿df-a​", display_name: "学生", password: "long-password-1", student_no: "" };
+    expect(newStudentError(student)).toBeNull();
   });
 
   test("closes only after a successful request", async () => {

@@ -216,9 +216,12 @@ export default function App() {
 
   // Each step gets its own tab title, so history entries and assistive tech can tell steps apart.
   const currentTitle = user?.role === "student" ? stepsData?.steps.find((item) => item.n === current)?.title : undefined;
+  const isTeacher = user?.role === "teacher";
   useEffect(() => {
+    // The teacher dashboard titles its own tabs (teacher/index.tsx); this parent effect would run after it.
+    if (isTeacher) return;
     document.title = currentTitle ? `步骤 ${current} · ${currentTitle} · ${APP_TITLE}` : APP_TITLE;
-  }, [current, currentTitle]);
+  }, [current, currentTitle, isTeacher]);
 
   if (!authChecked) return <AppBootSkeleton />;
   if (authCheckError) {

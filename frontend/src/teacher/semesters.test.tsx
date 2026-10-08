@@ -1,6 +1,6 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import type { AcademicSemester } from "../types";
 import { SemestersTab } from "./semesters";
 
@@ -45,20 +45,34 @@ for (const target of ["semester", "class"] as const) {
         await screen.findByText("测试班级");
         const scope = within(container.querySelector(target === "semester" ? ".semester-card-head" : ".class-row") as HTMLElement);
         const button = scope.getByRole("button", { name: active ? "归档" : "恢复" }) as HTMLButtonElement;
+        // Archiving a semester asks first; restoring and class changes do not.
+        const asks = target === "semester" && active;
+        const press = () => {
+          fireEvent.click(button);
+          if (!asks) return;
+          const dialog = screen.getByRole("dialog");
+          expect(dialog.textContent).toContain("已有的分班归属和学生的实验记录都会保留");
+          fireEvent.click(within(dialog).getByRole("button", { name: "归档" }));
+        };
+        press();
+        expect(screen.queryByRole("dialog")).toBeNull();
+        // aria-disabled keeps keyboard focus on the button while saving; a second press is ignored.
+        expect(button.getAttribute("aria-disabled")).toBe("true");
+        expect(button.disabled).toBe(false);
         fireEvent.click(button);
-        expect(button.disabled).toBe(true);
-        fireEvent.click(button);
+        expect(screen.queryByRole("dialog")).toBeNull();
         expect(update).toHaveBeenCalledTimes(1);
         await act(async () => { reject(new Error("Failed to fetch")); });
         expect((await scope.findByRole("alert")).textContent).toContain("网络连接中断");
-        expect(button.disabled).toBe(false);
+        expect(button.getAttribute("aria-disabled")).toBeNull();
         expect(button.textContent).toBe(active ? "归档" : "恢复");
         const changed = structuredClone(semester);
         if (target === "semester") changed.is_active = !active;
         else changed.classes[0].is_active = !active;
         list.mockResolvedValue({ semesters: [changed] });
         update.mockResolvedValue(target === "semester" ? changed : changed.classes[0]);
-        await act(async () => { fireEvent.click(button); });
+        press();
+        await act(async () => {});
         expect(update).toHaveBeenLastCalledWith(target === "semester" ? 1 : 2, { is_active: !active });
         await waitFor(() => {
           const refreshed = container.querySelector(target === "semester" ? ".semester-card-head" : ".class-row");
@@ -74,3 +88,59 @@ for (const target of ["semester", "class"] as const) {
     });
   }
 }
+
+test("an archived semester shows no class archive buttons", async () => {
+  const semester: AcademicSemester = {
+    id: 1, name: "旧学期", is_active: false, student_count: 0, created_at: "2026-09-24",
+    classes: [{ id: 2, term_id: 1, name: "旧班级", is_active: true, student_count: 0, created_at: "2026-09-24" }],
+  };
+  const list = spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [semester] });
+  try {
+    const { container } = render(<SemestersTab />);
+    await screen.findByText("旧班级");
+    const row = within(container.querySelector(".class-row") as HTMLElement);
+    expect(row.queryByRole("button", { name: "归档" })).toBeNull();
+    expect(row.getByRole("button", { name: "重命名" })).toBeTruthy();
+    expect(within(container.querySelector(".semester-card-head") as HTMLElement).getByRole("button", { name: "恢复" })).toBeTruthy();
+  } finally { list.mockRestore(); }
+});
+
+test("the name dialog normalizes the name, focuses its error and returns focus to its opener", async () => {
+  const list = spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] });
+  const create = spyOn(api.classroom, "createSemester")
+    .mockRejectedValueOnce(new ApiError(409, "学期 2026 秋 已存在", "409"))
+    .mockResolvedValue({ id: 1, name: "2026 秋", is_active: true, created_at: "2026-09-24" });
+  try {
+    render(<SemestersTab />);
+    await screen.findByText("还没有学期");
+    const opener = screen.getByRole("button", { name: "+ 新建学期" });
+    opener.focus();
+    fireEvent.click(opener);
+    const input = screen.getByLabelText("学期名称");
+    expect(document.activeElement).toBe(input);
+    fireEvent.change(input, { target: { value: " ２０２６​　 秋 " } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "保存" })); });
+    expect(create).toHaveBeenLastCalledWith("2026 秋");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe("保存失败：学期 2026 秋 已存在");
+    expect(document.activeElement).toBe(alert);
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    await act(async () => {});
+    expect(document.activeElement).toBe(opener);
+  } finally {
+    create.mockRestore();
+    list.mockRestore();
+  }
+});
+
+test("a failed load reads as Chinese and can be retried", async () => {
+  const list = spyOn(api.classroom, "semesters").mockRejectedValue(new TypeError("Failed to fetch"));
+  try {
+    render(<SemestersTab />);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("学期与班级加载失败：网络连接中断");
+    list.mockResolvedValue({ semesters: [] });
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(await screen.findByText("还没有学期")).toBeTruthy();
+  } finally { list.mockRestore(); }
+});

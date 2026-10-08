@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import type { AuthUser, TeacherReport } from "../types";
@@ -6,6 +6,7 @@ import { ReportsTab } from "./reports";
 import { SemestersTab } from "./semesters";
 import { StudentsTab } from "./students";
 import { useTeacherReviewGuard } from "./review-guard";
+import { useRefetchOnVisible } from "./ui";
 
 const NAV = [
   { key: "semesters", icon: "🗓️", label: "学期与班级", sub: "分组 · 归属" },
@@ -15,12 +16,26 @@ const NAV = [
 
 type TabKey = (typeof NAV)[number]["key"];
 
+/** Same product name as App's APP_TITLE (not imported: App imports this module). */
+const TEACHER_TITLE_SUFFIX = "教师工作台 · 供应链仿真系统 · GVC Simulation Lab";
+
+export function teacherDocumentTitle(tab: TabKey): string {
+  return `${NAV.find((item) => item.key === tab)!.label} · ${TEACHER_TITLE_SUFFIX}`;
+}
+
 export function TeacherDashboard({ user }: { user: AuthUser }) {
   const [tab, setTab] = useState<TabKey>("students");
   const [reviewBump, setReviewBump] = useState(0);
-  const { data } = useAsync<{ reports: TeacherReport[] }>(() => api.classroom.reports(), [tab, reviewBump]);
+  const { data } = useAsync<{ reports: TeacherReport[] }>(() => api.classroom.reports(), [tab, reviewBump], { keepPreviousData: true });
   const pending = (data?.reports ?? []).filter((report) => report.state === "pending").length;
   const reviewGuard = useTeacherReviewGuard();
+  // New submissions arrive while the teacher is elsewhere: recount the badge when they come back to this tab.
+  useRefetchOnVisible(() => setReviewBump((value) => value + 1));
+
+  // Each tab gets its own window title, so history entries and assistive tech can tell them apart.
+  useEffect(() => {
+    document.title = teacherDocumentTitle(tab);
+  }, [tab]);
 
   return (
     <div className="teacher-layout">
@@ -48,13 +63,15 @@ export function TeacherDashboard({ user }: { user: AuthUser }) {
           <div>
             <h2>{tab === "semesters" ? "学期与班级" : tab === "students" ? "学生与进度" : "报告评阅"}</h2>
             <p>{tab === "semesters" ? "建立教学分组并管理使用中与历史班级"
-              : tab === "students" ? "创建账号、分配班级并查看服务端判定的完成状态"
+              : tab === "students" ? "创建账号、分配班级并查看学生已完成的步骤"
                 : "按学期和班级筛选、批阅学生提交的步骤 15 实验报告"}</p>
           </div>
         </div>
         <div className="teacher-content">
           {tab === "semesters" ? <SemestersTab /> : tab === "students" ? <StudentsTab /> : (
-            <ReportsTab user={user} onGraded={() => setReviewBump((value) => value + 1)} />
+            <ReportsTab user={user}
+              onGraded={() => setReviewBump((value) => value + 1)}
+              onRefresh={() => setReviewBump((value) => value + 1)} />
           )}
         </div>
       </main>

@@ -1,6 +1,7 @@
 import { useRef, useState, type RefObject } from "react";
 import { api } from "./api";
 import { Modal } from "./teacher/ui";
+import { userFacingRequestError } from "./user-facing-error";
 
 export function validatePasswordChange(
   currentPassword: string,
@@ -50,7 +51,7 @@ export function AccountPasswordModal({
       await api.changePassword(currentPassword, newPassword);
       onChanged();
     } catch (cause) {
-      setError(String((cause as Error).message ?? cause));
+      setError(userFacingRequestError(cause, "修改失败"));
       setBusy(false);
     }
   };
@@ -63,7 +64,8 @@ export function AccountPasswordModal({
       initialFocusRef={currentPasswordRef}
       returnFocusRef={returnFocusRef}
     >
-      <form className="modal-form" onSubmit={submit}>
+      {/* noValidate: the browser's own minLength bubble would hide our Chinese messages. */}
+      <form className="modal-form" noValidate onSubmit={submit}>
         <p className="modal-msg account-password-note">
           修改成功后，当前浏览器会退出，你需要使用新密码重新登录。
         </p>
