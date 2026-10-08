@@ -16,6 +16,8 @@
 .report-submit-panel h3 { margin: 0 0 8px; }
 .report-submit-panel p { font-size: 13px; line-height: 1.7; color: #59647a; }
 .report-submit-panel button { margin-right: 10px; }
+/* The amber note on a graded report sits right above the action buttons: keep a gap between them. */
+.report-submit-panel .reg-rerun-warning { margin-bottom: 12px; }
 .report-outro .intro-title { font-size: 40px; letter-spacing: 1px; margin: 18px 0; }
 .outro-receipt { display: grid; gap: 10px; padding: 20px; margin: 22px 0; border: 1px solid #625a96; border-radius: 12px; background: #ffffff08; }
 .outro-receipt b { color: #90e0bd; font-size: 18px; }

@@ -1,5 +1,6 @@
 import { expect, mock, spyOn, test } from "bun:test";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api } from "../../api";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Meta, Step } from "../../types";
@@ -302,4 +303,72 @@ test("the USA is named as the imposing country, never as an unaffected one", asy
   series.mockRestore();
   cleanup();
   expect(stepTenGapNote([false, true], [false, true], [true, false])).toContain("美国的 X 记为 0 只是定义");
+});
+
+test("the recorded example is named on the page and follows the selection before submission", async () => {
+  const meta: Meta = { years: tenYears, countries: ["CAN", "MEX", "USA"], sectors: ["C26", "C29"] };
+  const groups = tenGroups();
+  const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.5, country === "CAN")));
+  function Harness() {
+    const [data, setData] = useState<Record<string, unknown> | undefined>(undefined);
+    return <ShockLab meta={meta} step={step} state={tenState(data, mock((patch: Record<string, unknown>) => setData((value) => ({ ...value, ...patch }))) as never)} />;
+  }
+  render(<Harness />);
+  const strip = () => document.querySelector(".teaching-example-record")!.textContent;
+  expect(strip()).toContain("已记录的例子尚未记录");
+  await waitFor(() => expect(strip()).toContain("已记录的例子CAN 加拿大 · C29 汽车及零部件（对比 MEX 墨西哥）"));
+  expect(strip()).toContain("当前例子已自动记录");
+  fireEvent.change(screen.getByRole("combobox", { name: "行业" }), { target: { value: "C26" } });
+  await waitFor(() => expect(strip()).toContain("CAN 加拿大 · C26"));
+  groups.mockRestore();
+  series.mockRestore();
+  cleanup();
+});
+
+test("after submission, switching the example asks first, then confirms and keeps focus", async () => {
+  const meta: Meta = { years: tenYears, countries: ["CAN", "MEX", "USA"], sectors: ["C26", "C29"] };
+  const groups = tenGroups();
+  const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.5, country === "CAN")));
+  const submitted = {
+    compared: ["CAN", "MEX"], teaching_industry: "C29", teaching_example_chosen: true,
+    teaching_observation: { country: "CAN", industry: "C29", year: 2020, teaching_export_share_w: 0.5, teaching_tariff_rate_tau: 0.25, teaching_tariff_exposure: 0.125, version: "step10-tariff-teaching-v5" },
+  };
+  const save = mock(() => {});
+  function Harness() {
+    const [data, setData] = useState<Record<string, unknown>>(submitted);
+    const record = (patch: Record<string, unknown>) => { save(); setData((value) => ({ ...value, ...patch })); };
+    return <ShockLab meta={meta} step={step} state={tenState(data, mock(record) as never, true)} />;
+  }
+  render(<Harness />);
+  const strip = () => document.querySelector(".teaching-example-record")!.textContent;
+  await waitFor(() => expect(strip()).toContain("当前例子就是已记录的材料。"));
+  fireEvent.change(screen.getByRole("combobox", { name: "行业" }), { target: { value: "C26" } });
+  const button = await screen.findByRole("button", { name: "改用当前例子作为报告材料（之后需在步骤 15 更新报告）" });
+  // Browsing after submission does not record: the strip still names the submitted example.
+  expect(strip()).toContain("CAN 加拿大 · C29");
+  expect(save).not.toHaveBeenCalled();
+  button.focus();
+  act(() => { fireEvent.click(button); });
+  await waitFor(() => expect(strip()).toContain("CAN 加拿大 · C26"));
+  expect(strip()).toContain("报告已提交：浏览不再自动改动报告材料。当前例子就是已记录的材料。");
+  expect(screen.queryByRole("button", { name: /改用当前例子/ })).toBeNull();
+  await waitFor(() => expect(document.activeElement).toBe(document.querySelector(".teaching-example-record")));
+  groups.mockRestore();
+  series.mockRestore();
+  cleanup();
+});
+
+test("an exact zero X reads 0 next to a tiny one, not 0.00", async () => {
+  const meta: Meta = { years: tenYears, countries: ["KHM", "MEX"], sectors: ["B07_08"] };
+  const groups = tenGroups();
+  const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, country === "KHM" ? 0.000033 : 0.4, country === "KHM")));
+  render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["KHM", "MEX"], teaching_industry: "B07_08", teaching_example_chosen: true })} />);
+  await waitFor(() => expect(screen.getByText(/算一次/)).toBeTruthy());
+  const summary = document.querySelector(".teaching-example-summary")!.textContent!;
+  expect(summary).toContain("2020 年 X = 0 个百分点");
+  expect(summary).not.toContain("X = 0.00 个百分点");
+  expect(summary).toContain("2020 年 X = 0.00083 个百分点");
+  groups.mockRestore();
+  series.mockRestore();
+  cleanup();
 });

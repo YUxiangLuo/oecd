@@ -35,7 +35,7 @@ export const FAMILY_STEPS: Record<RegressionOutcome, number> = {
 };
 
 export const REGRESSION_QUESTION =
-  "固定使用步骤 10 的关税暴露（X），观察不同结果指标（Y）怎样随它一起变化。";
+  "固定使用步骤 10 的关税暴露（X），看 X 较高的国家×行业，不同结果指标（Y）平均高还是低。";
 
 export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
   trade: {
@@ -47,7 +47,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "百分点",
     priorStep: 2,
     priorLabel: "GVC 总贸易流分解指标",
-    learnThis: "读数：用一句话说出 X 增加 1 个百分点时，Y 平均变化多少个百分点。",
+    learnThis: "读数：用一句话说出 X 每高 1 个百分点的国家×行业，Y 平均高或低多少个百分点。",
     definition: "WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 总出口的比重。",
     downMeaning: "外国增加值项占比下降：出口价值中来自国外投入的部分变小。",
     upMeaning: "外国增加值项占比上升：出口价值中来自国外投入的部分变大。",
@@ -262,7 +262,7 @@ export const REGRESSION_FAMILIES = (["trade", "production", "length", "network"]
 
 export function lessonQuestion(outcome: RegressionOutcome, baseline?: string | null): string {
   const lesson = lessonFor(outcome, baseline);
-  return `关税暴露（X）增加 1 个百分点时，${lesson.shortMetric}（Y）如何变化？`;
+  return `关税暴露（X）每高 1 个百分点的国家×行业，${lesson.shortMetric}（Y）平均相差多少？`;
 }
 
 /** The direction column of the four-step summary, in the result card's words. */
