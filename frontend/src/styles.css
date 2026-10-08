@@ -878,7 +878,7 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
 }
 
 @media print {
-  @page { margin: 14mm 12mm; }
+  @page { size: A4; margin: 14mm 12mm; }
   html, body, #root {
     width: auto !important;
     min-width: 0 !important;

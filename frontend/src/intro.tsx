@@ -285,7 +285,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
     <div key={3} className="intro-scene">
       <div className="intro-scene-kicker">分析示例</div>
       <h2 className="intro-h2">先看加税前后的差距，再用回归量化</h2>
-      <p className="intro-lede">选两个国家和一个行业作例子（默认是加拿大和墨西哥的汽车业）。回归用的是全部国家×行业，结果会换算到你的例子上。</p>
+      <p className="intro-lede">选两个国家和一个行业作例子（默认是加拿大和墨西哥，行业沿用你在步骤 9 看的行业）。回归用的是全部国家×行业，结果会换算到你的例子上。</p>
       <div className="intro-preview-selection" role="group" aria-label="分析对象示意">
         <span><small>国家 A</small>在步骤 10 选择</span>
         <span><small>国家 B</small>在步骤 10 选择</span>

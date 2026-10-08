@@ -850,8 +850,10 @@ def _plain_note(note: str) -> str:
 
 
 def _qc_display_name(name: str) -> str:
-    """QC check names are stored as written in the QC contract (half-width brackets); print them in report style."""
-    return name.replace("(", "（").replace(")", "）")
+    """QC check names are stored as written in the QC contract (half-width brackets); print them in report style,
+    with a space between Chinese and Latin letters ("原始 OUT = Z 列和 + VA + TLS")."""
+    name = name.replace("(", "（").replace(")", "）")
+    return re.sub(r"(?<=[\u4e00-\u9fff])(?=[A-Za-z])|(?<=[A-Za-z])(?=[\u4e00-\u9fff])", " ", name)
 
 
 def _qc_disclosure_section(summary: dict[str, Any], integrity: Any) -> list[str]:
@@ -866,9 +868,17 @@ def _qc_disclosure_section(summary: dict[str, Any], integrity: Any) -> list[str]
         lines.append(
             "- 下面是系统自动检查 OECD 原始数据和计算结果时发现、需要留意的项目（检查名保留系统原文）；它们没有阻止数据发布。"
         )
-    for key, label in (("fatal", "需要留意"), ("warning", "提醒"), ("disclosure", "补充说明")):
-        if summary[key]:
-            lines.append(f"- {label}：{'、'.join(_qc_display_name(str(name)) for name in summary[key])}")
+    # A check listed under a stronger severity is not repeated below it.
+    shown: set[str] = set()
+    for key, label in (
+        ("fatal", "需要留意（检查未通过，经人工确认后发布）"),
+        ("warning", "提醒（检查发现个别特殊取值，例如负的增加值；这些取值来自原始数据，已保留）"),
+        ("disclosure", "通过，附说明（检查通过，只记录了在容差内的微小偏差或特殊取值）"),
+    ):
+        names = [str(name) for name in summary[key] if str(name) not in shown]
+        shown.update(names)
+        if names:
+            lines.append(f"- {label}：{'、'.join(_qc_display_name(name) for name in names)}")
     lines.append("")
     return lines
 

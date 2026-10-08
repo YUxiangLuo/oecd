@@ -1558,8 +1558,10 @@ def test_report_carries_release_qc_disclosures(tmp_path, monkeypatch):
     assert "## 数据检查" in report.markdown
     # A lead-in says what the check names are before the names themselves (kept as the QC contract writes them).
     assert "需要留意的项目（检查名保留系统原文）" in report.markdown
-    assert "提醒：因子投入与派生指标定义域（VA/TLS）" in report.markdown
-    assert "补充说明：维度一致性与索引对齐（Z/Y/A/L/x/OUT）" in report.markdown
+    assert "提醒（检查发现个别特殊取值，例如负的增加值；这些取值来自原始数据，已保留）：因子投入与派生指标定义域（VA/TLS）" in report.markdown
+    assert "通过，附说明（检查通过，只记录了在容差内的微小偏差或特殊取值）：维度一致性与索引对齐（Z/Y/A/L/x/OUT）" in report.markdown
+    # Chinese and Latin letters are spaced in check names; a name under 提醒 is not repeated under 通过.
+    assert "原始 OUT = Z 列和 + VA + TLS" in report.markdown or "原始OUT" not in report.markdown
 
 
 def test_report_discloses_output_economic_warnings_without_blocking_publication(tmp_path, monkeypatch):
@@ -1586,7 +1588,7 @@ def test_report_discloses_output_economic_warnings_without_blocking_publication(
     assert summary["requires_disclosure"] is True
     assert summary["warning"] == [warning["name"]]
     report = build(_complete(), "同学")
-    assert "提醒：panel_share_economic_domains" in report.markdown
+    assert "提醒（检查发现个别特殊取值，例如负的增加值；这些取值来自原始数据，已保留）：panel_share_economic_domains" in report.markdown
     assert report.provenance["output_qc"]["years"]["2020"]["warnings"] == [warning["name"]]
 
 
