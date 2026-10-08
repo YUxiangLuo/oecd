@@ -55,15 +55,6 @@
 .reg-inline-status { display: inline-block; margin-left: 10px; }
 .metric-facts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .metric-facts span { display: inline-flex; gap: 5px; padding: 5px 8px; background: #fff; border: 1px solid #e3e4ee; border-radius: 7px; font-size: 11.5px; }
-.reg-variable-plain-grid {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin: 10px 0;
-}
-.reg-variable-plain-grid > div {
-  display: grid; gap: 4px; min-width: 0; padding: 10px 12px;
-  border: 1px solid #dcdff0; border-radius: 9px; background: #f8f8ff;
-}
-.reg-variable-plain-grid b { color: #35328d; font-size: 12px; }
-.reg-variable-plain-grid span { color: #4f586a; font-size: 11.5px; line-height: 1.55; }
 /* Cards keep at least ~150px so a title or unit does not break mid-word ("位置指数单/位"). */
 .comparison-summary {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 10px 0 18px;
