@@ -398,7 +398,7 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
                   ? <>正在分配空闲的演示账号…<br /></>
                   : confirmedStudent !== null && username !== confirmedStudent
                     ? <>这不是系统分配的账号。点上方“学生身份”可换回。<br /></>
-                    : <>已为你预填一个空闲的演示学生账号。在这台电脑的浏览器里再次登录，仍是这个账号。<br /></>)}
+                    : <>已为你预填一个空闲的演示学生账号。用它登录后，在这台电脑的浏览器里再次登录仍是这个账号。<br /></>)}
             登录用于区分每位同学的实验记录。刷新页面不会丢失进度。
           </div>
         </form>

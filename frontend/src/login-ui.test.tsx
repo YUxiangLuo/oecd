@@ -165,7 +165,7 @@ describe("demo-mode login UI source behavior", () => {
         resolve({ username: "student07" });
         await waitFor(() => expect(inputValue("login-user")).toBe("student07"));
         expect(document.querySelector(".login-hint")?.textContent).toContain("已为你预填一个空闲的演示学生账号");
-        expect(document.querySelector(".login-hint")?.textContent).toContain("在这台电脑的浏览器里再次登录，仍是这个账号");
+        expect(document.querySelector(".login-hint")?.textContent).toContain("用它登录后，在这台电脑的浏览器里再次登录仍是这个账号");
         expect(document.querySelector(".login-hint")?.textContent).not.toContain("退出登录后在本页");
       });
     } finally { suggestion.mockRestore(); }
