@@ -9,7 +9,8 @@ from gvcsim.steps import STAGE_NAMES, STEPS
 def test_every_existing_step_has_one_complete_handoff_without_adding_steps():
     assert [step["n"] for step in STEPS] == list(range(1, 16))
     for step in STEPS:
-        assert len(step["tasks"]) == 3
+        # Steps 11–14 (one button, one bar chart) have two actions; every other step has three.
+        assert len(step["tasks"]) == (2 if 11 <= step["n"] <= 14 else 3)
         assert all(str(value).strip() for value in step["tasks"])
         assert set(step["handoff"]) == {"input", "action", "output"}
         assert all(str(value).strip() for value in step["handoff"].values())
