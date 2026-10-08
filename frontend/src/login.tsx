@@ -282,7 +282,8 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
             autoComplete="current-password" onChange={(e) => { edited.current = true; setPassword(e.target.value); clearError(); }}
           />
           {error && <div className="error-box" role="alert" style={{ marginTop: 14, padding: "10px 14px" }}>{error}</div>}
-          <button ref={submitRef} className="login-btn" type="submit" disabled={busy}>
+          {/* With both fields prefilled (demo accounts), start on the button: Enter signs in. */}
+          <button ref={submitRef} className="login-btn" type="submit" disabled={busy} autoFocus={Boolean(username && password)}>
             {busy ? "正在登录…" : "登录"}
           </button>
           <div className="login-hint">

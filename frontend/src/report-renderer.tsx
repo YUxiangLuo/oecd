@@ -203,7 +203,8 @@ const readingDigits = (value: number, unit: string) => {
 /** Bar readings match the page cards: whole millions for amounts, three fixed decimals otherwise. */
 const reading = (value: number, unit: string) => {
   const digits = readingDigits(value, unit);
-  return stripNegativeZero(value.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits }));
+  // Shares read "11.730%" as on the page cards; other units are named on the axis.
+  return `${stripNegativeZero(value.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits }))}${unit === "%" ? "%" : ""}`;
 };
 /** Axis ticks: the same digits with trailing zeros trimmed. */
 const tickReading = (value: number, unit: string) =>
