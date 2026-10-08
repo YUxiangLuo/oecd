@@ -6,6 +6,7 @@ import { ScrollableRegion } from "../../a11y";
 import { userFacingRequestError } from "../../user-facing-error";
 import type { Meta, QuizCompletionState, Step, StepStateApi, TeachingGroupsResponse, TeachingPanelResponse } from "../../types";
 import { teachingExample } from "../../teaching-example";
+import { GENERATED_DATA_NOTE } from "../../regression-lessons";
 import { percentagePoints } from "../../format";
 import { countryLabel, sectorLabel } from "../../viz";
 import { useAsync } from "../shared";
@@ -162,6 +163,7 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
     <section className="reg-run-card">
       <span className="reg-section-step">先看一个例子</span>
       <h3>关税暴露 X 怎样随年份变化？</h3>
+      <p className="muted teaching-data-note" role="note">{GENERATED_DATA_NOTE}</p>
       <p>选一个国家和一个行业；再选一个对比国家，就能看到加税与未加税的差别。默认例子是加拿大和墨西哥的汽车行业：两国出口都很依赖美国，但只有加拿大被加税。如果你在步骤 9 只看了一个行业，这里会先用那个行业。步骤 11–14 会把回归结果换算到你选的例子上。</p>
       <div className="controls" role="group" aria-label="跟随的例子">
         <label className="model-control"><span className="model-control-label">国家 A</span>

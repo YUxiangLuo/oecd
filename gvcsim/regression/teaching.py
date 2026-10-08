@@ -26,6 +26,12 @@ SEED = 20260913
 MARKET = "USA"
 TARIFF_PATH = (0.0, 0.0, 0.25, 0.25, 0.25)
 DISCLAIMER = "课程关税实验数据集：X 与四个 Y 按课程数据契约生成，不是 OECD 发布结果。"
+# What students and readers see (step 10, the step 11–14 result card and the report); DISCLAIMER above is
+# the release contract value and stays unchanged. The frontend keeps the same sentence in regression-lessons.ts.
+GENERATED_DATA_NOTE = (
+    "关税情景与步骤 11–14 的四个 Y 由课程按设定生成（参照真实指标的量级），"
+    "用于练习读回归，不是真实关税或 OECD 发布的结果。"
+)
 # Display kinds: shares are shown in percentage points, the others in their own raw units.
 T = TypeVar("T")
 KIND_UNITS = {

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { ScrollableRegion } from "./a11y";
+import { scrollIntoCourseContent } from "./content-scroll";
 import { api, ApiError } from "./api";
 import { percentagePoints } from "./format";
 import { useAsync } from "./labs";
 import { ReadingCards } from "./labs/steps/viz/reading-cards";
-import { baselineKeyOf, displayBaselineLabel, lessonFor, lessonQuestion, VIZ_STEPS } from "./regression-lessons";
+import { baselineKeyOf, displayBaselineLabel, GENERATED_DATA_NOTE, lessonFor, lessonQuestion, VIZ_STEPS } from "./regression-lessons";
 import { nextRegressionSave } from "./regression-save";
 import { formatPValue } from "./regression-statistics";
 import {
@@ -34,24 +35,8 @@ import { BinScatterChart, CoefForestChart, countryLabel, GroupChangeChart, secto
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
 export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v5";
 
-/**
- * Keep the fixed application shell anchored to the viewport while revealing a
- * freshly calculated verdict inside the course's own scroll container.
- * `Element.scrollIntoView()` also scrolls the document in this nested layout,
- * which can move the entire 100vh application off screen.
- */
-export function scrollRegressionVerdict(target: HTMLElement | null, behavior: ScrollBehavior): void {
-  if (!target) return;
-  const scroller = target.closest<HTMLElement>(".content");
-  if (!scroller) {
-    target.scrollIntoView({ behavior, block: "start" });
-    return;
-  }
-  const top = scroller.scrollTop
-    + target.getBoundingClientRect().top
-    - scroller.getBoundingClientRect().top;
-  scroller.scrollTo({ top, left: 0, behavior });
-}
+/** Reveal a freshly calculated verdict inside the course's scroll container (see content-scroll.ts). */
+export const scrollRegressionVerdict = scrollIntoCourseContent;
 
 /** The saved design's sample rule in plain words; the stored text (a data contract) is kept as is. */
 export function sampleFilterLabel(filter: string | undefined): string {
@@ -151,9 +136,9 @@ export function RegressionResultCard({ outcome, response, examples = [], example
   const lesson = lessonFor(outcome, response.design.baseline, response.design.baseline_label);
   const suppressed = verdict.state === "suppressed";
   const display = chartDisplayScale(outcome, response.design);
-  // "平均下降 0.018 个长度单位（约为样本均值的 0.46%）": once the verb says the direction, the parenthetical
-  // conversions drop their sign too (it read as a double negative).
-  const unsignedEffect = verdict.effect.replace(/(^|的 |约 )[+−-]/g, "$1");
+  // "平均下降 0.018 个长度单位（幅度约为样本均值的 0.46%）": once the verb says the direction, the number drops
+  // its sign (it read as a double negative); the parenthetical sizes are unsigned already, as in the report.
+  const unsignedEffect = verdict.effect.replace(/^[+−-]/, "");
   const plainResult = verdict.state === "negative"
     ? `平均下降 ${unsignedEffect}`
     : verdict.state === "positive"
@@ -174,6 +159,7 @@ export function RegressionResultCard({ outcome, response, examples = [], example
           : "没算出 X 的估计值"}
       </h3>
       {verdict.coefficient && <p className="reg-verdict-direction">{verdict.title}</p>}
+      <p className="muted reg-data-note" role="note">{GENERATED_DATA_NOTE}</p>
       {verdict.coefficient && response.result.binscatter && response.result.binscatter.bins.length >= 2 && (
         <BinScatterChart
           bins={response.result.binscatter.bins}
@@ -202,20 +188,25 @@ export function RegressionResultCard({ outcome, response, examples = [], example
         {!suppressed && verdict.coefficient && examples.length > 0 && (
           <li className="reg-example-effect">{exampleSaved ? "按你在步骤 10 选的例子" : "按默认例子（步骤 10 还没有保存你的例子）"}换算{exampleYear ? `（用 ${exampleYear} 年的 X）` : ""}：{examples.map((example, index) => {
             const coef = verdict.coefficient!.coef;
+            // An association, not a tariff effect: the example's Y compared with X = 0. With X = 0 the estimate
+            // implies no X-related difference (Y still moves with the shared yearly changes).
             const text = example.x > 0
               ? (() => {
                 const effect = exampleEffect(outcome, coef, example.x, response.design);
-                // "下降 12.83" keeps a space before the number; "下降不到 0.01" does not.
-                return <>{example.label}（X = {percentagePoints(example.x)} 个百分点）Y 约{coef * example.x < 0 ? "下降" : "上升"}{effect.startsWith("不到") ? "" : " "}<b>{effect}</b></>;
+                const lower = coef * example.x < 0;
+                const word = depvarKind(outcome, response.design) === "length" ? (lower ? "短" : "长") : (lower ? "低" : "高");
+                const tiny = effect.startsWith("不到");
+                // "Y 约比 X 为 0 时低 12.83"; a change below the shown precision reads "Y 比 X 为 0 时低不到 0.01".
+                return <>{example.label} 的 X 为 {percentagePoints(example.x)} 个百分点，按估计 Y {tiny ? "" : "约"}比 X 为 0 时{word}{tiny ? "" : " "}<b>{effect}</b></>;
               })()
               : (example.tau ?? 0) > 0
-                ? <>{example.label}被加税但首年不向美国出口（w = 0，X = 0），按估计 Y 不变</>
-                : <>{example.label}未被加税（X = 0），按估计 Y 不变</>;
+                ? <>{example.label} 被加税但首年不向美国出口（w = 0），X = 0，按估计没有与 X 相关的差异</>
+                : <>{example.label} 未被加税，X = 0，按估计没有与 X 相关的差异</>;
             return <span key={example.label}>{index ? "；" : ""}{text}</span>;
           })}{verdict.state === "insufficient" ? "；但区间包含 0，这个方向本身并不确定" : ""}。
             {examples.every((example) => example.x <= 0 && !((example.tau ?? 0) > 0)) && (examples.length === 1
-              ? "你选的例子没被加税，换算结果是不变。想看换算，回步骤 10 换成加税的国家（如加拿大），或再选一个加税的对比国家。"
-              : "两个例子都没被加税，换算结果都是不变。想看换算，回步骤 10 选一个加税的国家（如加拿大）。")}</li>
+              ? "你选的例子没被加税，X = 0，换算不出与 X 相关的差异。想看换算，回步骤 10 换成加税的国家（如加拿大），或再选一个加税的对比国家。"
+              : "两个例子都没被加税，X = 0，换算不出与 X 相关的差异。想看换算，回步骤 10 选一个加税的国家（如加拿大）。")}</li>
         )}
       </ul>
       {verdict.warnings.length > 0 && (!suppressed || !verdict.coefficient) && (

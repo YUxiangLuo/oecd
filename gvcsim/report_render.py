@@ -64,6 +64,33 @@ def _rate(percent: float) -> str:
     return f"{percent:.2f}".rstrip("0").rstrip(".")
 
 
+# How each recorded unit is read, in the order the notes list them (steps 6–9).
+_UNIT_READINGS = (
+    ("百万美元", "金额为当年价格（百万美元）"),
+    ("%", "份额以百分数列示，变化按百分点解释"),
+    ("长度单位", "长度按长度单位列示（约等于平均经过的生产环节数），变化按长度单位解释"),
+    ("无量纲", "位置指数没有单位，按原值比较（大于 1 表示相对更上游）"),
+)
+_UNIT_KINDS = {"%": "份额", "长度单位": "长度", "无量纲": "位置指数"}
+_NETWORK_UNITS = {"未归一化介数", "连接数", "路径长度", "中心性单位"}
+
+
+def _unit_kinds(observations: list[dict[str, Any]]) -> str:
+    """What a section without amounts holds, from its recorded units: "份额", "长度和位置指数", "网络指标"."""
+    units = list(dict.fromkeys(str(item.get("unit") or "") for item in observations))
+    if units and all(unit in _NETWORK_UNITS for unit in units):
+        return "只看连接、不看金额的网络指标"
+    kinds = list(dict.fromkeys(_UNIT_KINDS.get(unit, "比值或指数") for unit in units))
+    return "和".join(kinds) or "比值或指数"
+
+
+def _unit_reading_note(observations: list[dict[str, Any]]) -> str:
+    """The reading note under a step 6–8 table, for the units it actually records."""
+    units = {str(item.get("unit") or "") for item in observations}
+    notes = [note for unit, note in _UNIT_READINGS if unit in units]
+    return ("；".join(notes) or "数值按所列单位解释") + "。"
+
+
 def _experiment_sections(session: dict[str, Any]) -> list[str]:
     """Render only snapshots produced by explicit student interactions."""
     lines = [
@@ -169,7 +196,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                 price_note = (
                     "金额按当年价格计，变化可能包含价格因素。"
                     if has_amounts
-                    else "本节为份额、长度或指数，不直接受价格水平影响，但仍受下述结构外推影响。"
+                    else f"本节为{_unit_kinds(observations)}，不直接受价格水平影响，但仍受下述结构外推影响。"
                 )
                 lines.append(
                     f"- **2020 年：现价与疫情期外推限制**。{price_note}"
@@ -191,7 +218,8 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                 )
                 lines.append(f"- 记录方式：{view_label}；单位：{_safe(observations[0].get('unit', '未记录'))}")
                 lines.append(
-                    "- 行业指标来自完整国家×行业中间品网络，不对应国家贸易概览的位置；加权流量为当年价格，拓扑指标不等同经济重要性。"
+                    "- 行业指标来自完整国家×行业中间品网络，不对应国家贸易概览的位置；加权流量为当年价格；"
+                    "介数等只看连接、不看金额的指标，数值高不等于经济上更重要。"
                 )
             if step in (6, 7, 8):
                 lines.append(
@@ -200,9 +228,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                     else "- 记录的图表材料（系统按学生最后查看的完整图表自动记录；指标与单位逐行列示）："
                 )
                 # The data release id is listed under "报告溯源"; the body only says how to read the numbers.
-                lines.append(
-                    "- " + ("金额为当年价格；" if has_amounts else "") + "份额以百分数列示，变化按百分点解释。"
-                )
+                lines.append(f"- {_unit_reading_note(observations)}")
             else:
                 lines.append(
                     f"- 记录的代表指标：{_STUDENT_METRIC_LABELS.get(str(metric_label), _safe(metric_label or '—'))}"
@@ -211,9 +237,11 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                     lines.append("- 数值为国家级代表指标：页面可按国家–行业浏览，报告材料统一按国家级记录。")
                 if step == 5 and metric_label == "weighted degree":
                     lines.append(
-                        "- 国家级加权总度只含国家之间的贸易（不含国内流量），不能与含国内流量的行业级数值直接比较。"
+                        "- 国家级加权总度：该国全部出口 + 进口，中间品和最终品都算在内（不含国内流量）；"
+                        "行业级数值只算中间品流量，两者不能直接比较。"
                     )
-            lines.extend(("", "| 实体 | 年份 | 指标 | 单位 | 数值 |", "|---|---:|---|---|---:|"))
+            entity_header = "国家×行业" if any(item.get("industry") for item in observations) else "国家"
+            lines.extend(("", f"| {entity_header} | 年份 | 指标 | 单位 | 数值 |", "|---|---:|---|---|---:|"))
             for item in observations:
                 observation_value = item.get("value", "—")
                 if item.get("unit") == "%" and isinstance(observation_value, (int, float)):

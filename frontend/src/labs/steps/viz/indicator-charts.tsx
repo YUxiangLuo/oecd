@@ -418,7 +418,9 @@ export function IndicatorTrendChart({
         {markYear && years.includes(markYear.year) && markYear.year > years[0] && (
           <g data-mark-year={markYear.year}>
             <line x1={x(markYear.year - (stepped ? 0 : 0.5))} x2={x(markYear.year - (stepped ? 0 : 0.5))} y1={34} y2={250} stroke="#4b5563" strokeDasharray="5 4" />
-            <text x={x(markYear.year - (stepped ? 0 : 0.5)) + 6} y={46} fontSize={12} fill="#374151">{markYear.label}</text>
+            {/* Left of the line: before the marked year the step 10 X is 0 for every country, so the top-left
+                corner is empty; to the right the taxed line jumps to the top and covered the label. */}
+            <text x={x(markYear.year - (stepped ? 0 : 0.5)) - 6} y={46} textAnchor="end" fontSize={12} fill="#374151">{markYear.label}</text>
           </g>
         )}
         {bandPath && <path d={bandPath} fill={REFERENCE_FILL} fillOpacity={0.22} stroke="none" />}

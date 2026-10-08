@@ -145,6 +145,33 @@ describe("parseReportChart", () => {
     expect(html).not.toContain("language-gvcsim-chart");
   });
 
+  test("axis text is large enough at the report's 0.75x scale and the y unit clears the widest tick", () => {
+    const chart = JSON.stringify({
+      version: 1,
+      type: "line",
+      title: "步骤 9 · 加权总度历年趋势",
+      y_label: "百万美元",
+      series: [
+        { label: "CHN 中国", points: [{ label: "2016", value: 1800000 }, { label: "2020", value: 2400000 }] },
+        { label: "USA 美国", points: [{ label: "2016", value: 1500000 }, { label: "2020", value: 1900000 }] },
+      ],
+    });
+    const html = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: `\`\`\`gvcsim-chart\n${chart}\n\`\`\`` }));
+    const dom = new DOMParser().parseFromString(html, "text/html");
+    const texts = [...dom.querySelectorAll("svg text")];
+    // 720-unit charts are shown about 540px wide: 14 units renders at about 10.5px.
+    expect(texts.every((node) => Number(node.getAttribute("font-size")) >= 14)).toBe(true);
+    const unit = texts.find((node) => node.textContent === "百万美元")!;
+    const unitRight = Number(unit.getAttribute("x")) + 14 / 2;
+    // Right-aligned y ticks ("2,500,000"): their left edge (about 0.6 em per digit or comma) must clear the unit.
+    const ticks = texts.filter((node) => node.getAttribute("text-anchor") === "end");
+    expect(ticks.length).toBeGreaterThan(1);
+    for (const tick of ticks) {
+      const left = Number(tick.getAttribute("x")) - (tick.textContent ?? "").length * 14 * 0.6;
+      expect(left).toBeGreaterThan(unitRight);
+    }
+  });
+
   test("renders a validated two-series line chart with a legend", () => {
     const chart = JSON.stringify({
       version: 1,
