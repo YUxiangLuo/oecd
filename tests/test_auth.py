@@ -137,7 +137,7 @@ def test_demo_seed_password_cannot_be_changed_by_teacher(teaching_db):
         json={"password": "student-reset-private-password"},
     )
     assert response.status_code == 409
-    assert "固定轮换口令" in response.json()["detail"]
+    assert "演示账号不能修改密码" in response.json()["detail"]
     assert client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).status_code == 200
 
 
@@ -150,7 +150,7 @@ def test_demo_seed_student_cannot_change_own_password(teaching_db):
         json={"current_password": "gvclab2026", "new_password": "student-new-private-password"},
     )
     assert response.status_code == 400
-    assert "固定轮换口令" in response.json()["detail"]
+    assert "演示账号不能修改密码" in response.json()["detail"]
     assert client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).status_code == 200
 
 

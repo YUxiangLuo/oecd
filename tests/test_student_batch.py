@@ -156,7 +156,7 @@ def test_student_number_identifies_one_student_across_create_update_and_batch(ba
         json={"username": "beta", "display_name": "乙", "password": "initial-pass-two", "student_no": "2026900"},
     )
     assert taken.status_code == 409
-    assert "学号 2026900 已被学生 alpha 使用" in taken.json()["detail"]
+    assert "学号 2026900 已被 甲（alpha）使用" in taken.json()["detail"]
     blank = client.post(
         "/api/classroom/students",
         json={"username": "gamma", "display_name": "丙", "password": "initial-pass-three"},

@@ -97,7 +97,7 @@ def create_class_group(term_id: int, name: str, teacher_username: str) -> dict[s
         if term is None:
             return None
         if not term["is_active"]:
-            raise ValueError("已归档学期不能添加班级；请先恢复学期")
+            raise ValueError("已归档学期不能新建班级，请先恢复学期")
         return c.execute(
             "INSERT INTO class_groups(term_id,name) VALUES (%s,%s) RETURNING id,term_id,name,is_active,created_at",
             (term_id, name),
@@ -153,7 +153,7 @@ def set_student_enrollment(
             if (not term["is_active"] or not class_group["is_active"]) and (
                 current is None or current["class_id"] != class_id
             ):
-                raise ValueError("不能分配到已归档的学期或班级；请先恢复教学分组")
+                raise ValueError("这个学期或班级已归档，请先在“学期与班级”里恢复")
             c.execute(
                 "INSERT INTO class_enrollments(term_id,class_id,account_id) VALUES (%s,%s,%s) "
                 "ON CONFLICT (term_id,account_id) DO UPDATE SET class_id=EXCLUDED.class_id,created_at=now()",
@@ -171,11 +171,12 @@ def _ensure_student_no_free(c: Any, student_no: str, exclude_id: int | None = No
         return
     owner = c.execute(
         # btrim: a 学号 saved with surrounding spaces before inputs were trimmed still counts as the same.
-        "SELECT username FROM accounts WHERE role='student' AND btrim(student_no)=%s AND id IS DISTINCT FROM %s LIMIT 1",
+        "SELECT username,display_name FROM accounts"
+        " WHERE role='student' AND btrim(student_no)=%s AND id IS DISTINCT FROM %s LIMIT 1",
         (student_no, exclude_id),
     ).fetchone()
     if owner is not None:
-        raise StudentNumberTaken(f"学号 {student_no} 已被学生 {owner['username']} 使用")
+        raise StudentNumberTaken(f"学号 {student_no} 已被 {owner['display_name']}（{owner['username']}）使用")
     # Same rule as the batch import (学号 doubles as the login name there): a 学号 may not be another account's
     # username. A student's own username may equal its 学号.
     account = c.execute(
@@ -183,7 +184,7 @@ def _ensure_student_no_free(c: Any, student_no: str, exclude_id: int | None = No
         (student_no, exclude_id),
     ).fetchone()
     if account is not None:
-        raise StudentNumberTaken(f"学号 {student_no} 已是账号 {account['username']} 的用户名，请换一个学号")
+        raise StudentNumberTaken(f"学号 {student_no} 和已有账号 {account['username']} 的用户名重复，请换一个学号")
 
 
 def create_student(
@@ -202,11 +203,13 @@ def create_student(
         _ensure_student_no_free(c, student_no)
         # Same rule as the batch import: a username must not be another student's 学号 either.
         owner = c.execute(
-            "SELECT username FROM accounts WHERE role='student' AND btrim(student_no)=%s LIMIT 1",
+            "SELECT username,display_name FROM accounts WHERE role='student' AND btrim(student_no)=%s LIMIT 1",
             (username,),
         ).fetchone()
         if owner is not None:
-            raise StudentNumberTaken(f"用户名 {username} 已是学生 {owner['username']} 的学号，请换一个用户名")
+            raise StudentNumberTaken(
+                f"用户名 {username} 已是 {owner['display_name']}（{owner['username']}）的学号，请换一个用户名"
+            )
         row = database._required(
             c.execute(
                 "INSERT INTO accounts(username,display_name,role,student_no,pw_salt,pw_hash)"
@@ -225,7 +228,7 @@ def create_student(
             if class_group is None:
                 raise ValueError("班级不存在")
             if not class_group["is_active"] or not class_group["term_is_active"]:
-                raise ValueError("不能分配到已归档的学期或班级；请先恢复教学分组")
+                raise ValueError("这个学期或班级已归档，请先在“学期与班级”里恢复")
             c.execute(
                 "INSERT INTO class_enrollments(term_id,class_id,account_id) VALUES (%s,%s,%s)",
                 (class_group["term_id"], class_id, row["id"]),
@@ -247,7 +250,7 @@ def create_student_batch(
             (class_id,),
         ).fetchone()
         if group is None or not group["is_active"] or not group["term_is_active"]:
-            raise ValueError("请选择未归档的学期和班级")
+            raise ValueError("这个班级已归档，请选择使用中的班级")
         # Each roster 学号 becomes both the username and the 学号, so it conflicts with an
         # existing username or with another student's 学号.
         names = [student["username"] for student in students]
@@ -261,7 +264,7 @@ def create_student_batch(
         if preview:
             return {"existing": conflicts, "created": 0}
         if conflicts:
-            raise ValueError("账号已存在，本次未添加任何学生；请返回修改名单并重新预览")
+            raise ValueError("部分学号已有账号，本次没有创建任何学生")
         for student in sorted(students, key=lambda row: row["username"]):
             database._validate_managed_password(student["password"])
             salt = secrets.token_hex(16)
@@ -314,9 +317,7 @@ def update_student(
         if "student_no" in fields:
             _ensure_student_no_free(c, fields["student_no"], account_id)
         if fields.get("password") and config.DEMO_MODE and demo_accounts.is_demo_student_username(target["username"]):
-            raise demo_accounts.DemoSeedPasswordProtected(
-                "演示种子学生使用固定轮换口令，不能由教师重置；请新建普通学生账号演示改密"
-            )
+            raise demo_accounts.DemoSeedPasswordProtected("演示账号不能修改密码；要演示改密码，请新建一个学生账号")
         row = c.execute(
             f"UPDATE accounts SET {','.join(sets)} WHERE id=%s AND role='student'"
             " RETURNING id,username,display_name,student_no,last_login_at,created_at",

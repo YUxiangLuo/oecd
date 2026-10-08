@@ -321,18 +321,18 @@ def create_semester(req: AcademicNameRequest, user: dict = Depends(require_teach
     try:
         return db.create_term(req.name, user["sub"])
     except psycopg.errors.UniqueViolation as error:
-        raise HTTPException(status_code=409, detail=f"学期 {req.name} 已存在") from error
+        raise HTTPException(status_code=409, detail=f"已有同名学期“{req.name}”，请换一个名称") from error
 
 
 @router.post("/semesters/{term_id}")
 def update_semester(term_id: int, req: AcademicUpdateRequest, user: dict = Depends(require_teacher)):
     fields = req.model_dump(exclude_unset=True)
     if not fields:
-        raise HTTPException(status_code=400, detail="没有需要更新的字段")
+        raise HTTPException(status_code=400, detail="没有需要保存的修改")
     try:
         row = db.update_term(term_id, fields, user["sub"])
     except psycopg.errors.UniqueViolation as error:
-        raise HTTPException(status_code=409, detail="学期名称已存在") from error
+        raise HTTPException(status_code=409, detail="已有同名学期，请换一个名称") from error
     if row is None:
         raise HTTPException(status_code=404, detail="学期不存在")
     return row
@@ -343,7 +343,7 @@ def create_class(req: ClassCreateRequest, user: dict = Depends(require_teacher))
     try:
         row = db.create_class_group(req.term_id, req.name, user["sub"])
     except psycopg.errors.UniqueViolation as error:
-        raise HTTPException(status_code=409, detail=f"该学期已存在班级 {req.name}") from error
+        raise HTTPException(status_code=409, detail=f"本学期已有同名班级“{req.name}”，请换一个名称") from error
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     if row is None:
@@ -355,11 +355,11 @@ def create_class(req: ClassCreateRequest, user: dict = Depends(require_teacher))
 def update_class(class_id: int, req: AcademicUpdateRequest, user: dict = Depends(require_teacher)):
     fields = req.model_dump(exclude_unset=True)
     if not fields:
-        raise HTTPException(status_code=400, detail="没有需要更新的字段")
+        raise HTTPException(status_code=400, detail="没有需要保存的修改")
     try:
         row = db.update_class_group(class_id, fields, user["sub"])
     except psycopg.errors.UniqueViolation as error:
-        raise HTTPException(status_code=409, detail="该学期已存在同名班级") from error
+        raise HTTPException(status_code=409, detail="本学期已有同名班级，请换一个名称") from error
     if row is None:
         raise HTTPException(status_code=404, detail="班级不存在")
     return row
@@ -378,7 +378,7 @@ def _strip_text(value: Any) -> Any:
 
 def _nonblank_password(value: Any) -> Any:
     if isinstance(value, str) and not value.strip():
-        raise ValueError("口令不能全是空白字符")
+        raise ValueError("密码不能全是空格")
     return value
 
 
@@ -445,7 +445,7 @@ def create_student_batch(req: StudentBatchRequest, user: dict = Depends(require_
             [student.model_dump() for student in req.students], req.class_id, user["sub"], req.preview
         )
     except psycopg.errors.UniqueViolation as error:
-        raise HTTPException(status_code=409, detail="账号已被创建，本次未添加任何学生；请重新预览名单") from error
+        raise HTTPException(status_code=409, detail="部分学号已有账号，本次没有创建任何学生") from error
     except (ValueError, PermissionError) as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
 
@@ -477,7 +477,7 @@ class StudentUpdateRequest(TextRequest):
 def update_student(account_id: int, req: StudentUpdateRequest, user: dict = Depends(require_teacher)):
     fields = req.model_dump(exclude_unset=True)
     if not fields:
-        raise HTTPException(status_code=400, detail="没有需要更新的字段")
+        raise HTTPException(status_code=400, detail="没有需要保存的修改")
     try:
         row = db.update_student(account_id, fields, user["sub"])
     except (demo_accounts.DemoSeedPasswordProtected, management.StudentNumberTaken) as error:
@@ -518,7 +518,7 @@ def reports(user: dict = Depends(require_teacher)):
 def report_detail(account_id: int, user: dict = Depends(require_teacher)):
     row = db.get_report(account_id, user["sub"])
     if row is None:
-        raise HTTPException(status_code=404, detail="报告不存在或尚未提交")
+        raise HTTPException(status_code=404, detail="这份报告不存在或还没提交，请返回列表刷新")
     return row
 
 
@@ -541,5 +541,5 @@ def grade(account_id: int, req: GradeRequest, user: dict = Depends(require_teach
     except db.ReportChanged as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     if row is None:
-        raise HTTPException(status_code=404, detail="报告不存在或尚未提交")
+        raise HTTPException(status_code=404, detail="这份报告不存在或还没提交，请返回列表刷新")
     return row
