@@ -315,7 +315,7 @@ export function IndicatorExplorer({
     const clauses = [...groups].map(([reason, sectors]) => reason
       ? `${sectors.join("、")} ${reason}，${label(metric)}无法计算（不是缺少数据）`
       : `${sectors.join("、")} 缺少数据`);
-    return `另有 ${rankHidden.length} 个行业没有画出：国家 A（${countryLabel(first)}）在这些行业没有读数，无法排序。${clauses.join("；")}。`;
+    return `另有 ${rankHidden.length} 个行业没有画出：国家 A（${countryLabel(first)}）在${rankHidden.length === 1 ? "这个行业" : "这些行业"}没有读数，无法排序。${clauses.join("；")}。`;
   })();
   const pending =
     view === "industry"

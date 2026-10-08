@@ -277,7 +277,8 @@ export function displayedSumNote(values: readonly number[], sum: number, panelDe
     const shownRows = values.map((value) => parsedAmount(amountAt(value, panelDecimals)));
     const added = shownRows.reduce((acc, value) => acc + (Number.isNaN(value) ? 0 : value), 0);
     const shownSum = parsedAmount(amountAt(sum, panelDecimals));
-    if (Number.isNaN(shownSum) || Math.abs(added - shownSum) <= 10 ** -panelDecimals * (1 + 1e-9)) return null;
+    // Strict, as the two-part lines: the shown rows either add up to the shown sum exactly or the line says so.
+    if (Number.isNaN(shownSum) || Math.abs(added - shownSum) < 10 ** -panelDecimals / 2) return null;
     return `（上表各项按显示值相加为 ${amountText(added, panelDecimals)}，差别来自四舍五入）`;
   }
   const shown = values.map((value) => shownAmount(fmt(value, "amount"), value));

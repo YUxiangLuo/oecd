@@ -630,7 +630,7 @@ describe("行业排名 with an industry that exports nothing (round 12)", () => 
       const plot = await view.findByRole("region", { name: "国内增加值出口占比行业点图" });
       await waitFor(() => expect(plot.textContent).toContain("A →"));
       expect(plot.textContent).not.toContain("O ");
-      expect(view.getByText("另有 1 个行业没有画出：国家 A（CHN 中国）在这些行业没有读数，无法排序。O 总出口为 0，国内增加值出口占比无法计算（不是缺少数据）。")).toBeTruthy();
+      expect(view.getByText("另有 1 个行业没有画出：国家 A（CHN 中国）在这个行业没有读数，无法排序。O 总出口为 0，国内增加值出口占比无法计算（不是缺少数据）。")).toBeTruthy();
     } finally { restore(); }
   });
 
