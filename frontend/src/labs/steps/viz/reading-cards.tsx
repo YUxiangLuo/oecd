@@ -215,9 +215,11 @@ export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLa
 }
 
 /** 段长度对照: which segment and side is longer for the observed economy; GVC-segment gap per comparison. */
-export function segmentCards({ rows, countries, year, industry, segments }: {
+export function segmentCards({ rows, countries, year, industry, segments, reasonFor }: {
   rows: Row[]; countries: string[]; year: number; industry: string;
   segments: { key: string; label: string; forward: string; backward: string }[];
+  /** Why a length is empty when it is undefined (the segment has no activity), as a whole clause. */
+  reasonFor?: (country: string, key: string) => string | null;
 }): ReadingCard[] {
   const unit = "长度单位";
   const [first, ...others] = countries;
@@ -228,6 +230,12 @@ export function segmentCards({ rows, countries, year, industry, segments }: {
     .reduce((best, item) => (Math.max(item.forward ?? -Infinity, item.backward ?? -Infinity) > Math.max(best.forward ?? -Infinity, best.backward ?? -Infinity) ? item : best));
   const longestSide = (longest.forward ?? -Infinity) >= (longest.backward ?? -Infinity) ? "前向" : "后向";
   const gvc = own.find((item) => item.segment.key === "gvc") ?? own[own.length - 1];
+  // An empty GVC length with its reason when it is undefined (no GVC production), so it is not called missing.
+  const gvcGap = gvc.forward === null || gvc.backward === null
+    ? [gvc.forward === null ? gvc.segment.forward : null, gvc.backward === null ? gvc.segment.backward : null]
+        .filter((key): key is string => key !== null)
+        .map((key) => ({ key, reason: reasonFor?.(first, key) ?? null }))
+    : null;
   const cards: ReadingCard[] = [
     {
       eyebrow: `${countryLabel(first)} · ${year} · 最长的一段`,
@@ -236,16 +244,20 @@ export function segmentCards({ rows, countries, year, industry, segments }: {
     },
     {
       eyebrow: `${countryLabel(first)} · ${gvc.segment.label} · 前向对后向`,
-      big: gvc.forward === null || gvc.backward === null ? "缺失" : gvc.forward > gvc.backward ? "前向更长（更偏上游）" : gvc.forward < gvc.backward ? "后向更长（更偏下游）" : "前后向相等",
-      small: gvc.forward === null || gvc.backward === null ? "缺失留空" : `${textNumber(gvc.forward, unit)} 对 ${textNumber(gvc.backward, unit)}`,
+      big: gvcGap ? (gvcGap.every((item) => item.reason) ? "无法计算" : "缺失") : gvc.forward! > gvc.backward! ? "前向更长（更偏上游）" : gvc.forward! < gvc.backward! ? "后向更长（更偏下游）" : "前后向相等",
+      small: gvcGap ? gvcGap.map((item) => item.reason ?? "缺失留空").join("；") : `${textNumber(gvc.forward, unit)} 对 ${textNumber(gvc.backward, unit)}`,
     },
   ];
   for (const other of others) {
     const value = read(other, gvc.segment.forward);
+    const reason = value === null ? reasonFor?.(other, gvc.segment.forward) ?? null : null;
+    const ownReason = gvc.forward === null ? reasonFor?.(first, gvc.segment.forward) ?? null : null;
     cards.push({
       eyebrow: `与对比国家 ${countryLabel(other)} · ${gvc.segment.label}前向`,
-      big: gvc.forward === null || value === null ? "对比国家缺失" : `${countryLabel(first)} ${gapReading(gvc.forward, value, unit)}`,
-      small: value === null ? "该国在该年没有有效读数" : `${countryLabel(other)} ${textNumber(value, unit)}；差距不代表因果关系`,
+      big: value === null ? (reason ? "对比国家无法计算" : "对比国家缺失")
+        : gvc.forward === null ? (ownReason ? `${countryLabel(first)} 无法计算` : `${countryLabel(first)} 缺失`)
+        : `${countryLabel(first)} ${gapReading(gvc.forward, value, unit)}`,
+      small: value === null ? reason ?? "该国在该年没有有效读数" : gvc.forward === null ? ownReason ?? "该国在该年没有有效读数" : `${countryLabel(other)} ${textNumber(value, unit)}；差距不代表因果关系`,
     });
   }
   return cards;

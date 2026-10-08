@@ -45,7 +45,12 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
     const negative = point.shares.filter((share) => share < 0).reduce((sum, share) => sum + share, 0);
     return [positive, negative];
   }));
-  if (!extremes.length) return <p role="status">没有可画出的历年构成，请更换国家、行业或年份（缺少的数据留空，不当作 0）。</p>;
+  // A total of 0 or below leaves that year's shares undefined, which is not missing data.
+  const nonPositive = (row: Row | undefined) => Boolean(row) && finiteValue(row![total]) && (row![total] as number) <= 0;
+  const allUndefined = facets.every((facet) => years.every((year) => nonPositive(facet.rows.find((item) => item.year === year))));
+  if (!extremes.length) return <p role="status">{allUndefined
+    ? `没有可画出的历年构成：所选年份的${totalLabel}都为 0 或为负，份额无法计算（不是缺少数据）；请换一个行业或国家。`
+    : "没有可画出的历年构成，请更换国家、行业或年份（缺少的数据留空，不当作 0）。"}</p>;
   const axis = niceDomain(Math.min(0, ...extremes), Math.max(0, ...extremes));
   const W = 420, H = 230, left = 56, right = 14, top = 14, bottom = 30;
   const x = (year: number) => left + ((year - years[0]) / Math.max(1, years.at(-1)! - years[0])) * (W - left - right);
@@ -56,7 +61,7 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
       ["", `${facet.label} · ${year}`],
       ...(point?.shares
         ? segments.map((segment, index): TipLine => [segment.name, pct(point.shares![index]), point.shares![index] < 0 ? NEGATIVE : segment.color])
-        : [["构成", "缺失", undefined] as TipLine]),
+        : [["构成", nonPositive(facet.rows.find((item) => item.year === year)) ? `无法计算（${totalLabel}为 0 或为负）` : "缺失", undefined] as TipLine]),
       ...(point?.total != null ? [[totalLabel, `${indicatorNumber(point.total, "百万美元")} 百万美元`] as TipLine] : []),
     ];
   };
@@ -237,7 +242,8 @@ export function IndustryDotPlot({ groups, countries, unit, nationals = [], label
 /* ----------------------------------------------------------------- dumbbell */
 
 export function Dumbbell({ rows, leftLabel, rightLabel, unit, title, domain }: {
-  rows: { key: string; label: string; left: number | null; right: number | null }[];
+  /** `leftReason`/`rightReason` replace "缺失" for a length that is undefined (the segment has no activity). */
+  rows: { key: string; label: string; left: number | null; right: number | null; leftReason?: string | null; rightReason?: string | null }[];
   leftLabel: string;
   rightLabel: string;
   unit: string;
@@ -248,14 +254,16 @@ export function Dumbbell({ rows, leftLabel, rightLabel, unit, title, domain }: {
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
   const [hovered, setHovered] = useState<string | null>(null);
   const values = rows.flatMap((row) => [row.left, row.right]).filter(finiteValue);
-  if (!values.length) return <p role="status">{title}没有有效读数（缺失留空）。</p>;
+  if (!values.length) return <p role="status">{rows.every((row) => row.leftReason && row.rightReason)
+    ? `${title}：各段都没有这类生产活动，长度无法计算（不是缺少数据）。`
+    : `${title}没有有效读数（缺失留空）。`}</p>;
   const axis = niceDomain(Math.min(...values, ...(domain ? [domain[0]] : [])), Math.max(...values, ...(domain ? [domain[1]] : [])));
   const px = (value: number) => ((value - axis.lo) / (axis.hi - axis.lo || 1)) * 100;
-  const reading = (value: number | null) => indicatorNumber(value, unit);
+  const reading = (value: number | null, reason?: string | null) => (value === null && reason ? reason : indicatorNumber(value, unit));
   const linesFor = (row: typeof rows[number]): TipLine[] => [
     ["", row.label],
-    [leftLabel, reading(row.left), CAT[0]],
-    [rightLabel, reading(row.right), CAT[1]],
+    [leftLabel, reading(row.left, row.leftReason), CAT[0]],
+    [rightLabel, reading(row.right, row.rightReason), CAT[1]],
     ...(finiteValue(row.left) && finiteValue(row.right)
       ? [[`${leftLabel.slice(0, 2)}−${rightLabel.slice(0, 2)}`, indicatorNumber(row.left - row.right, unit)] as TipLine]
       : []),
@@ -277,7 +285,7 @@ export function Dumbbell({ rows, leftLabel, rightLabel, unit, title, domain }: {
           tabIndex={0}
           role="group"
           // The facet title names the economy, so five facets do not read identically.
-          aria-label={`${title} · ${row.label}：${leftLabel} ${reading(row.left)}，${rightLabel} ${reading(row.right)}`}
+          aria-label={`${title} · ${row.label}：${leftLabel} ${reading(row.left, row.leftReason)}，${rightLabel} ${reading(row.right, row.rightReason)}`}
           onMouseMove={(event) => { setHovered(row.key); show(event, linesFor(row)); }}
           onMouseLeave={() => { setHovered(null); hide(); }}
           onFocus={(event) => { setHovered(row.key); showFor(event.currentTarget, linesFor(row)); }}
@@ -296,8 +304,8 @@ export function Dumbbell({ rows, leftLabel, rightLabel, unit, title, domain }: {
               : <i className="dot" style={{ left: `${px(row.right)}%`, background: CAT[1] }} />)}
           </div>
           <span className="dot-plot-values">
-            <b style={{ color: CAT[0] }}>{reading(row.left)}</b>
-            <b style={{ color: CAT[1] }}>{reading(row.right)}</b>
+            <b style={{ color: CAT[0] }}>{reading(row.left, row.leftReason)}</b>
+            <b style={{ color: CAT[1] }}>{reading(row.right, row.rightReason)}</b>
           </span>
         </div>
       ))}

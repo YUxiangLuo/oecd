@@ -110,3 +110,24 @@ test("side-by-side dumbbells given one domain draw the same axis", () => {
   expect(ticks(usa.container).every((text) => !/\.000$/.test(text ?? ""))).toBeTrue();
   expect(ticks(usa.container)).toEqual(ticks(deu.container));
 });
+
+describe("undefined values in the theme charts read as such (round 12)", () => {
+  test("段长度对照: LUX B09 has no production in any segment, so its lengths read 无法计算", () => {
+    const rows = ["纯国内段", "传统贸易段", "GVC 段"].map((label, index) => ({
+      key: String(index), label, left: null, right: null, leftReason: "无法计算", rightReason: "无法计算",
+    }));
+    const view = render(<Dumbbell title="LUX 卢森堡 段长度对照" unit="长度单位" leftLabel="前向段长度" rightLabel="后向段长度" rows={rows} />);
+    expect(view.getByRole("status").textContent).toBe("LUX 卢森堡 段长度对照：各段都没有这类生产活动，长度无法计算（不是缺少数据）。");
+    cleanup();
+    // MLT B09: a forward GVC length but no backward one.
+    const mixed = render(<Dumbbell title="MLT 马耳他 段长度对照" unit="长度单位" leftLabel="前向段长度" rightLabel="后向段长度"
+      rows={[{ key: "gvc", label: "GVC 段", left: 5.622, right: null, rightReason: "无法计算" }]} />);
+    expect(mixed.container.querySelector(".dot-plot-values")?.textContent).toBe("5.622无法计算");
+  });
+
+  test("历年构成 whose total is negative in every year says the shares are undefined", () => {
+    const rows: Row[] = [2016, 2020].map((year) => ({ country: "MLT", year, total: -1.268, DVAex: -0.6, FVA: -0.4, taxsub: -0.268 }));
+    render(<StackedAreaFacets facets={[{ key: "MLT", label: "MLT 马耳他", rows }]} years={[2016, 2020]} segments={segments} total="total" totalLabel="总增加值" />);
+    expect(screen.getByRole("status").textContent).toContain("总增加值都为 0 或为负，份额无法计算（不是缺少数据）");
+  });
+});

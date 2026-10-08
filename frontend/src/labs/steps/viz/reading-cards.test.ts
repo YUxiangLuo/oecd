@@ -1,6 +1,24 @@
 import { describe, expect, test } from "bun:test";
-import { compositionCards, gapReading, positioningCards } from "./reading-cards";
+import { compositionCards, gapReading, positioningCards, segmentCards } from "./reading-cards";
 import { textNumber } from "./indicator-charts";
+
+describe("段长度对照 cards name an undefined GVC length (round 12)", () => {
+  const segments = [{ key: "gvc", label: "GVC 段", forward: "PLv_GVC", backward: "PLy_GVC" }];
+  const reasonFor = (country: string, key: string) =>
+    key === "PLy_GVC" || country === "LUX" ? `该行业没有这类 GVC 生产，${key} 无法计算（不是缺少数据）` : null;
+
+  test("MLT B09: forward defined, backward undefined; LUX B09: neither", () => {
+    const rows = [
+      { country: "MLT", year: 2020, industry: "B09", PLv_GVC: 5.622, PLy_GVC: null },
+      { country: "LUX", year: 2020, industry: "B09", PLv_GVC: null, PLy_GVC: null },
+    ];
+    const cards = segmentCards({ rows, countries: ["MLT", "LUX"], year: 2020, industry: "B09", segments, reasonFor });
+    expect(cards[1].big).toBe("无法计算");
+    expect(cards[1].small).toBe("该行业没有这类 GVC 生产，PLy_GVC 无法计算（不是缺少数据）");
+    expect(cards[2].big).toBe("对比国家无法计算");
+    expect(JSON.stringify(cards)).not.toContain("缺失");
+  });
+});
 
 describe("amounts below 10 in reading texts keep three decimals (round 12)", () => {
   test("step 6 产品税减补贴 B05_06: a gap of 3.832 is not read as 4", () => {

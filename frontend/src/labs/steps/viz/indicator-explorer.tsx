@@ -1104,12 +1104,17 @@ export function IndicatorExplorer({
                         label: segment.label,
                         left: valuesFor(segment.forward).at(selected.indexOf(country)) ?? null,
                         right: valuesFor(segment.backward).at(selected.indexOf(country)) ?? null,
+                        leftReason: undefinedReason(country, segment.forward, year) ? "无法计算" : null,
+                        rightReason: undefinedReason(country, segment.backward, year) ? "无法计算" : null,
                       }))}
                     />
                   </section>
                 ))}
               </div>
-              <ReadingCards label="段长度读数" cards={segmentCards({ rows: scoped, countries: selected, year, industry, segments: LENGTH_SEGMENTS })} />
+              <ReadingCards label="段长度读数" cards={segmentCards({ rows: scoped, countries: selected, year, industry, segments: LENGTH_SEGMENTS, reasonFor: (country, key) => {
+                const reason = undefinedReason(country, key, year);
+                return reason ? `${reason}，${label(key)}无法计算（不是缺少数据）` : null;
+              } })} />
             </>
           )}
           {view === "structure" && (
