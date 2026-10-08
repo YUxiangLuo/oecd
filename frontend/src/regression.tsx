@@ -127,7 +127,7 @@ export function exampleEffect(outcome: RegressionOutcome, coef: number, x: numbe
   if (kind === "length") return sized(Math.abs(change), 3, "个长度单位");
   if (kind === "position") return sized(Math.abs(change), 4, "个位置指数单位");
   const size = Math.abs(change);
-  return `${size.toFixed(networkDigits(size))} 个中心性原始单位`;
+  return sized(size, networkDigits(size), "个中心性原始单位");
 }
 
 /** The result is a coefficient plot plus short sentences: what changed, for the student's example, how sure, what not to claim. */

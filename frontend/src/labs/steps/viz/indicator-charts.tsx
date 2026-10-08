@@ -169,7 +169,8 @@ export function TrendSummary({
       <div>
         <span>{countryLabel(first)} · {metricLabel ? `${metricLabel} · ` : ""}{firstYear}→{lastYear}</span>
         <b>{changeReading(start, end, unit, digits)}</b>
-        <small>{start === 0 && end === 0 ? indicatorNumber(0, unit) : `${fixedIndicatorNumber(start, unit, digits ?? smallAmountDigits(start, unit))} → ${fixedIndicatorNumber(end, unit, digits ?? smallAmountDigits(end, unit))}`}</small>
+        {/* An exact zero end reads "0" ("0 → 0.00039"), not "0.00000" at a tiny-value precision. */}
+        <small>{start === 0 && end === 0 ? indicatorNumber(0, unit) : [start, end].map((value) => (value === 0 ? indicatorNumber(0, unit) : fixedIndicatorNumber(value, unit, digits ?? smallAmountDigits(value, unit)))).join(" → ")}</small>
       </div>
       {startRank != null && endRank != null && startRef && endRef && (() => {
         const from = rankText(startRank, startRef.ties?.[first], startRef.n);

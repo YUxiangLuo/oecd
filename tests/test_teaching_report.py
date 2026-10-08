@@ -2376,3 +2376,10 @@ def test_report_network_standardized_size_uses_three_decimals_below_point_one():
         {"name": "teaching_tariff_exposure", "coef": -4590, "ci_low": -6000, "ci_high": -3000},
     )
     assert large.endswith("（幅度约 0.46 个标准差）") and large_interval.endswith("（约 [-0.60, -0.30] 个标准差）")
+
+
+def test_report_example_conversion_below_network_precision_says_so():
+    from gvcsim.report_render import _example_size
+
+    assert _example_size("network", -0.49 * 0.0000039) == "不到 0.00001 个中心性原始单位"
+    assert _example_size("network", -4000 * 0.0932) == "373 个中心性原始单位"

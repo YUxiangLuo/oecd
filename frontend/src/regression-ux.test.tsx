@@ -271,6 +271,8 @@ describe("simple regression workbench", () => {
     expect(exampleEffect("length", -1.8, 0.0932)).toBe("0.168 个长度单位");
     expect(exampleEffect("network", -4000, 0.0932)).toBe("373 个中心性原始单位");
     expect(exampleEffect("network", -2000, 0.0932)).toBe("186 个中心性原始单位");
+    // A closeness change below the shown precision says so instead of printing "-0.00000".
+    expect(exampleEffect("network", -0.49, 0.0000039)).toBe("不到 0.00001 个中心性原始单位");
     expect(exampleEffect("network", -0.5, 0.1693)).toBe("0.0847 个中心性原始单位");
     expect(exampleEffect("network", -60, 0.1)).toBe("6.00 个中心性原始单位");
     // Closeness gaps (~0.005) need decimals; a fixed 0 printed "低 0" and "估计的差距 −0".

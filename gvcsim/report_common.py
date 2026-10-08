@@ -415,7 +415,7 @@ def _evidence_reading(
         return "方向明确：X 越高，Y 越高", _association(outcome, design, coefficient, negative=False)
     return (
         "方向不确定",
-        "95% 区间包含 0：不能说“没有关联”，只能说方向还不确定。",
+        "95% 区间包含 0，不能说“没有关联”，只能说方向还不确定。",
     )
 
 

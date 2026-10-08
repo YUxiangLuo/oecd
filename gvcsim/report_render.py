@@ -464,7 +464,7 @@ def _binscatter_chart(
     chart = {
         "version": 1,
         "type": "binscatter",
-        "title": f"步骤 {step} · 回归在量什么：X 越大，Y 平均怎样变",
+        "title": f"步骤 {step} · 回归在量什么：X 高低不同的国家×行业，Y 平均相差多少",
         "x_label": "X 扣掉平均水平后的高低（个百分点）",
         "y_label": f"{label}（{unit}）",
         "points": points,
@@ -502,8 +502,9 @@ def _example_size(kind: str, change: float) -> str:
     """The unsigned Y change implied for the step 10 example, in the step's unit (frontend ``exampleEffect``)."""
     size = abs(change)
     if kind == "network":
-        return f"{size:.{_network_digits(size)}f} 个中心性原始单位"
-    digits, unit = {"share": (2, "个百分点"), "position": (4, "个位置指数单位")}.get(kind, (3, "个长度单位"))
+        digits, unit = _network_digits(size), "个中心性原始单位"
+    else:
+        digits, unit = {"share": (2, "个百分点"), "position": (4, "个位置指数单位")}.get(kind, (3, "个长度单位"))
     if kind == "share":
         size *= 100
     if 0 < size < 0.5 * 10**-digits:
@@ -729,7 +730,7 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
         "以下是你在步骤 11–14 保存的计算结果，生成报告时不会重算；同一步可能有最近一次计算和一份用于汇总表的结果。"
         "表中数字四舍五入到 4 位有效数字，很小的 p 值显示为 <0.0001，不是说概率为零。",
         "",
-        "表中的“系数”是 X 从 0 增加到 1（即 100 个百分点）时 Y 的变化；除以 100，才是正文里“X 每高 1 个百分点”的数，"
+        "表中的“系数”对应 X 相差 1（即 100 个百分点）时 Y 平均相差多少；除以 100，才是正文里“X 每高 1 个百分点”的数，"
         "表中另列一栏。贸易流和生产两步的 Y 是份额，正文又把它换成百分点（乘 100），一除一乘，两栏数字相同；"
         "长度和网络两步不做这一步，两栏相差 100 倍。",
         "",
