@@ -11,7 +11,7 @@ import type { RegressionDesignInfo, RegressionOutcome, Step, StepStateApi, Teach
 afterEach(() => { cleanup(); mock.restore(); });
 
 const step: Step = {
-  n: 11, stage: 4, lab: "reg", regression_outcome: "trade", status: "demo", title: "回归",
+  n: 11, stage: 4, lab: "reg", regression_outcome: "trade", status: "demo", title: "贸易流回归：关税与外国增加值项占比",
   goal: "", tasks: ["一", "二", "三"], concept: "", tip: "", deps: [],
   handoff: { input: "", action: "", output: "" },
 };
@@ -58,7 +58,7 @@ describe("simple regression workbench", () => {
     expect(figure.getAttribute("aria-label")).toContain("2018 年起加税");
     expect(figure.textContent).toContain("加税国家组");
     expect(figure.textContent).toContain("未加税国家组");
-    await waitFor(() => expect(screen.getByRole("button", { name: "算出这个差距（用全部 16,220 条记录）" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("button", { name: "计算贸易流回归（用全部 16,220 条记录）" })).toBeTruthy());
     expect(api.teachingSeries).toHaveBeenCalledWith(["CAN", "MEX"], "C29");
   });
 

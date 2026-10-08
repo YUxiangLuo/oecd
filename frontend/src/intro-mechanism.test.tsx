@@ -36,7 +36,7 @@ test("mechanism preview follows the example, the group gap and the regression", 
     expect(view.queryByRole("slider")).toBeNull();
     expect(view.queryByText(/贸易转移|跨境收缩|替代性扩张/)).toBeNull();
     fireEvent.click(view.getByRole("button", { name: "介绍页 5" }));
-    expect(view.getByText(/第 1–10 步打开页面即自动记录；第 11–14 步点“算出这个差距”后自动保存/)).toBeTruthy();
+    expect(view.getByText(/第 1–10 步打开页面即自动记录；第 11–14 步点“计算…回归”按钮后自动保存/)).toBeTruthy();
     expect(view.queryByText(/主动保存/)).toBeNull();
     expect(view.getByText(/生成草稿不等于提交/)).toBeTruthy();
     expect(view.getByText(/同步成功后更新/)).toBeTruthy();

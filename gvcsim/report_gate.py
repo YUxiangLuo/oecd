@@ -324,7 +324,9 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
             {
                 "step": step,
                 "title": _STEP_TITLES.get(step, ""),
-                "missing": ["请点击“算出这个差距”，结果会自动保存；无法推断时也会保存诊断结果"],
+                "missing": [
+                    f"请点击“计算{_STEP_TITLES.get(step, '').split('：')[0] or '回归'}”，结果会自动保存；无法推断时也会保存诊断结果"
+                ],
             }
         )
 

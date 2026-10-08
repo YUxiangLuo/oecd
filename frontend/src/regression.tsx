@@ -323,6 +323,8 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   getStep?: <T>(step: number) => T | undefined;
 }) {
   const outcome = step.regression_outcome;
+  // The button names the step's regression ("计算贸易流回归"), as the step title does.
+  const runName = step.title.split("：")[0] || "回归";
   if (!outcome) return <div className="error-box">当前回归步骤缺少 regression_outcome 配置。</div>;
   // Which same-family indicator calibrates Y: null is the step's fixed default. It starts from the saved
   // run (so a refresh shows the Y the student last ran) until the student picks another one.
@@ -589,7 +591,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
           aria-disabled={running || retryWait > 0}
           disabled={designQuery.status !== "success" || !design}
         >
-          {running ? "正在计算…" : result ? "重新算一次" : groups ? `算出这个差距（用全部 ${groups.sample.rows.toLocaleString("zh-CN")} 条记录）` : "算出这个差距"}
+          {running ? "正在计算…" : result ? `重新计算${runName}` : groups ? `计算${runName}（用全部 ${groups.sample.rows.toLocaleString("zh-CN")} 条记录）` : `计算${runName}`}
         </button>
         {/* Mounted before it has text, so screen readers announce the change. */}
         <span className={running ? "muted reg-inline-status" : "sr-only"} role="status" aria-live="polite">{running ? "正在估计…" : ""}</span>

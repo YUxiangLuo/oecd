@@ -673,8 +673,8 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     assert any(item["step"] == 9 and "行业历年变化或行业排名" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 9 and "自动记录" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 6 and "对比国家" in "".join(item["missing"]) for item in blocked)
-    assert any(item["step"] == 11 and "算出这个差距" in "".join(item["missing"]) for item in blocked)
-    assert any(item["step"] == 14 and "算出这个差距" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 11 and "计算贸易流回归" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 14 and "计算网络回归" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 15 and "原创" in item["title"] for item in blocked)
     assert len(blocked) == len({item["step"] for item in blocked})
     by_step = {item["step"]: item for item in blocked}
@@ -683,13 +683,13 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     assert "理解检查" in "".join(by_step[6]["missing"])
     assert "对比国家" in "".join(by_step[6]["missing"])
     assert "理解检查" in "".join(by_step[12]["missing"])
-    assert "算出这个差距" in "".join(by_step[12]["missing"])
+    assert "计算生产回归" in "".join(by_step[12]["missing"])
     assert "关税面板" in "".join(by_step[10]["missing"])
     assert check_gate(_complete()) == []
     missing_one = _complete()
     del missing_one["steps"]["14"]["data"]["run"]
     blocked_one = check_gate(missing_one)
-    assert any(item["step"] == 14 and "算出这个差距" in "".join(item["missing"]) for item in blocked_one)
+    assert any(item["step"] == 14 and "计算网络回归" in "".join(item["missing"]) for item in blocked_one)
     with pytest.raises(ReportGateError):
         build(empty_session(), "同学")
 
@@ -1357,7 +1357,7 @@ def test_malformed_only_saved_run_blocks_report(tmp_path, monkeypatch):
     session = _complete()
     session["steps"]["11"]["data"]["run"] = {"design": {"outcome": "trade"}, "result": "forged"}
     blocked = check_gate(session)
-    assert any(item["step"] == 11 and "算出这个差距" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 11 and "计算贸易流回归" in "".join(item["missing"]) for item in blocked)
     with pytest.raises(ReportGateError):
         build(session, "同学")
 
@@ -1392,7 +1392,7 @@ def test_non_inferential_saved_run_does_not_satisfy_valid_regression_gate(status
 
     blocked = check_gate(session)
 
-    assert any(item["step"] == 11 and "算出这个差距" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 11 and "计算贸易流回归" in "".join(item["missing"]) for item in blocked)
 
 
 def test_qualified_run_on_same_step_still_satisfies_gate_after_insufficient_latest(tmp_path, monkeypatch):
