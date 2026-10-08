@@ -179,8 +179,8 @@ describe("parseReportChart", () => {
     expect(html).toContain("全球中位数（76 个经济体）");
     expect(html.match(/stroke-dasharray="6 4"/g)).toHaveLength(1);
     // Countries keep the first two palette colours even though the reference series comes last.
-    expect(html).toContain('stroke="#4b47e0"');
-    expect(html).toContain('stroke="#d95f45"');
+    expect(html).toContain('stroke="#216cc0"');
+    expect(html).toContain('stroke="#1baf7a"');
   });
 
   test("colours grouped bars by country with a legend and one label per industry", () => {
@@ -201,7 +201,7 @@ describe("parseReportChart", () => {
     // Legend once per country, industry label once per pair of bars.
     expect(html.match(/>CHN 中国</g)).toHaveLength(1);
     expect(html.match(/>G 批发零售</g)).toHaveLength(1);
-    expect(new Set(html.match(/fill="#(4b47e0|e0812e)"/g))).toEqual(new Set(['fill="#4b47e0"', 'fill="#e0812e"']));
+    expect(new Set(html.match(/fill="#(216cc0|1baf7a)"/g))).toEqual(new Set(['fill="#216cc0"', 'fill="#1baf7a"']));
   });
 
   test("draws the global-median bars grey, so they never read as a third country", () => {
@@ -219,9 +219,9 @@ describe("parseReportChart", () => {
     const html = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: `\`\`\`gvcsim-chart\n${chart}\n\`\`\`` }));
     // Countries keep the first two colours; the median (bar and legend) is the reference grey.
     expect(new Set(html.match(/fill="#[0-9a-f]{6}" fill-opacity/g))).toEqual(new Set([
-      'fill="#4b47e0" fill-opacity', 'fill="#e0812e" fill-opacity', 'fill="#8a8f9c" fill-opacity',
+      'fill="#216cc0" fill-opacity', 'fill="#1baf7a" fill-opacity', 'fill="#8a8f9c" fill-opacity',
     ]));
-    expect(html).not.toContain("#198a78");
+    expect(html).not.toContain("#eda100");
   });
 
   test("accepts and renders the regression coefficient chart with its interval", () => {

@@ -35,7 +35,7 @@ describe("fixed teaching regression reading", () => {
     expect(html).toContain("平均上升 2.00 个百分点");
     expect(html).toContain("[+1.00, +3.00] 个百分点");
     expect(html).toContain("标称 95% 的近似聚类区间");
-    expect(html).toContain("不要写成「已经证明生产回流」");
+    expect(html).toContain("不要写成“已经证明生产回流”");
     expect(html).not.toMatch(/处理组|对照组|处理聚类|同时置信带|与生成时的预设关系|使用的年度记录/);
   });
 

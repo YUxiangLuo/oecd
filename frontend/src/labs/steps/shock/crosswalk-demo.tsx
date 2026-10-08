@@ -64,7 +64,7 @@ function CrosswalkContent({ selectedShockType }: { selectedShockType: string }) 
       ) : (
         <>
           <div className="tipbox crosswalk-disclaimer">
-            {data.disclaimer} 本篮子中加税商品覆盖 {pct(data.summary.demo_list_value_coverage)} 的示例贸易额；这里只解释编码转换，最终面板的维度、值域、日期与 treated 一致性在本步下方的「冲击数据质检」一并检查。
+            {data.disclaimer} 本篮子中加税商品覆盖 {pct(data.summary.demo_list_value_coverage)} 的示例贸易额；这里只解释编码转换，最终面板的维度、值域、日期与 treated 一致性在本步下方的“冲击数据质检”一并检查。
           </div>
           <p className="muted">按商品的生产活动对应行业，不能按它使用的钢材、电气部件等上游投入直接分摊。C26 示例同时保留加税芯片和未加税芯片的贸易额。</p>
           <div className="crosswalk-stats">

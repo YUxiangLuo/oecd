@@ -266,7 +266,7 @@ export function ShockPanel({
       {panel && panelStatus === "success" && panel.rows.length > 0 && panel.total <= panel.page_size && (
         <p className="shock-panel-hint">
           以上是当前口径下的全部 {panel.total} 条命中。想看这次冲击波及的完整范围,
-          可把上方的「国家 / 行业」改回“全部”。
+          可把上方的“国家 / 行业”改回“全部”。
         </p>
       )}
       </div>

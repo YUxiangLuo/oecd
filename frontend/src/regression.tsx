@@ -62,7 +62,8 @@ function DesignMeta({ design }: { design: RegressionDesignInfo }) {
       <span>观察个体：{ENTITY_LABEL[design.entity] ?? design.entity}</span>
       <span>标准误按{ENTITY_LABEL[design.cluster] ?? design.cluster}聚类</span>
       <span>模型：国家×行业与年份双向固定效应</span>
-      <span>样本：{design.sample_filter}</span>
+      {/* Saved designs keep their original text; shown here in full-width punctuation. */}
+      <span>样本：{design.sample_filter?.replace("(", "（").replace(")", "）")}</span>
       <span>暴露权重：首次处理前固定结构</span>
     </div>
   );

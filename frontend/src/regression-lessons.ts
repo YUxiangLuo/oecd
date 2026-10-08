@@ -45,7 +45,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     definition: "WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 总出口的比重。",
     downMeaning: "外国增加值项占比下降：出口价值中来自国外投入的部分变小。",
     upMeaning: "外国增加值项占比上升：出口价值中来自国外投入的部分变大。",
-    dontClaim: "不要写成「已经证明生产回流」。这一项占比下降，不能告诉我们企业是否把生产搬回国内。",
+    dontClaim: "不要写成“已经证明生产回流”。这一项占比下降，不能告诉我们企业是否把生产搬回国内。",
   },
   production: {
     outcome: "production",
@@ -60,7 +60,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     definition: "增加值经过多次跨境生产后被最终吸收的比例。",
     downMeaning: "复杂 GVC 生产份额下降：SVA 中经多次跨境生产的部分占比变小。",
     upMeaning: "复杂 GVC 生产份额上升：SVA 中经多次跨境生产的部分占比变大。",
-    dontClaim: "不要写成「复杂 GVC 生产规模缩小」。这一项是占总增加值的份额，份额下降不代表复杂 GVC 生产的绝对量减少。",
+    dontClaim: "不要写成“复杂 GVC 生产规模缩小”。这一项是占总增加值的份额，份额下降不代表复杂 GVC 生产的绝对量减少。",
   },
   length: {
     outcome: "length",
@@ -75,7 +75,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     definition: "GVC 活动诱发的累计总产出除以关联增加值。",
     downMeaning: "前向 GVC 段长度缩短：增加值到最终吸收经过的生产环节减少。",
     upMeaning: "前向 GVC 段长度延长：增加值到最终吸收经过的生产环节增加。",
-    dontClaim: "不要写成「比贸易流效应更大 / 更小」。",
+    dontClaim: "不要写成“比贸易流效应更大 / 更小”。",
   },
   network: {
     outcome: "network",
@@ -90,7 +90,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     definition: "全球国家×行业图上一个节点的加权入度加出度（自环双计）。",
     downMeaning: "加权总度下降：节点买入与卖出的总流量规模变小。",
     upMeaning: "加权总度上升：节点买入与卖出的总流量规模变大。",
-    dontClaim: "不要写成连接已经减少或脱钩，也不要拿它当「政策总效应」。",
+    dontClaim: "不要写成连接已经减少或脱钩，也不要拿它当“政策总效应”。",
   },
 };
 
@@ -113,7 +113,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "被国外最终吸收的国内增加值占 VA+TLS 账户闭合总出口的比重。",
     downMeaning: "国内增加值出口占比下降：出口价值中由本国创造的部分变小。",
     upMeaning: "国内增加值出口占比上升：出口价值中由本国创造的部分变大。",
-    dontClaim: "不要写成「已经证明生产回流」。国内增加值出口占比上升，不能告诉我们企业是否把生产搬回国内。",
+    dontClaim: "不要写成“已经证明生产回流”。国内增加值出口占比上升，不能告诉我们企业是否把生产搬回国内。",
   },
   "3_VA_GVC_share": {
     shortMetric: "前向 GVC 生产总份额",
@@ -121,7 +121,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "增加值经过至少一次跨境后被最终吸收的比例（简单加复杂）。",
     downMeaning: "前向 GVC 生产总份额下降：SVA 中与跨境生产相关的部分占比变小。",
     upMeaning: "前向 GVC 生产总份额上升：SVA 中与跨境生产相关的部分占比变大。",
-    dontClaim: "不要写成「GVC 生产规模缩小」。这一项是占总增加值的份额，份额下降不代表 GVC 相关生产的绝对量减少。",
+    dontClaim: "不要写成“GVC 生产规模缩小”。这一项是占总增加值的份额，份额下降不代表 GVC 相关生产的绝对量减少。",
   },
   "3a_VA_GVC_S_share": {
     shortMetric: "简单 GVC 生产份额",
@@ -129,7 +129,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "增加值只跨境一次就被吸收的比例。",
     downMeaning: "简单 GVC 生产份额下降：只跨境一次就被吸收的增加值占比变小。",
     upMeaning: "简单 GVC 生产份额上升：只跨境一次就被吸收的增加值占比变大。",
-    dontClaim: "不要写成「简单 GVC 生产规模缩小」。这一项是占总增加值的份额，份额下降不代表绝对量减少。",
+    dontClaim: "不要写成“简单 GVC 生产规模缩小”。这一项是占总增加值的份额，份额下降不代表绝对量减少。",
   },
   "3_FGY_GVC_share": {
     shortMetric: "后向 GVC 生产总份额",
@@ -137,7 +137,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "从最终产品端衡量 GVC 相关生产占最终品生产的比例。",
     downMeaning: "后向 GVC 生产总份额下降：最终品生产中与跨境生产相关的部分占比变小。",
     upMeaning: "后向 GVC 生产总份额上升：最终品生产中与跨境生产相关的部分占比变大。",
-    dontClaim: "不要写成「GVC 生产规模缩小」。这一项是占最终品生产的份额，份额下降不代表绝对量减少。",
+    dontClaim: "不要写成“GVC 生产规模缩小”。这一项是占最终品生产的份额，份额下降不代表绝对量减少。",
   },
   "2_VA_RT_share": {
     shortMetric: "传统贸易生产份额",
@@ -145,7 +145,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "增加值经一次出口直接被进口国吸收的比例。",
     downMeaning: "传统贸易生产份额下降：经一次出口直接被进口国吸收的增加值占比变小。",
     upMeaning: "传统贸易生产份额上升：经一次出口直接被进口国吸收的增加值占比变大。",
-    dontClaim: "不要写成「传统贸易萎缩」。这一项是占总增加值的份额，份额下降不代表绝对量减少。",
+    dontClaim: "不要写成“传统贸易萎缩”。这一项是占总增加值的份额，份额下降不代表绝对量减少。",
   },
   "1_VA_D_share": {
     shortMetric: "纯国内生产份额",
@@ -153,7 +153,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "增加值不经出口、在国内被最终吸收的比例。",
     downMeaning: "纯国内生产份额下降：不经出口、在国内被吸收的增加值占比变小。",
     upMeaning: "纯国内生产份额上升：不经出口、在国内被吸收的增加值占比变大。",
-    dontClaim: "不要写成「生产已经回流国内」。纯国内生产份额上升，不代表国内生产的绝对量增加。",
+    dontClaim: "不要写成“生产已经回流国内”。纯国内生产份额上升，不代表国内生产的绝对量增加。",
   },
   PLy_GVC: {
     shortMetric: "后向 GVC 段长度",
@@ -161,7 +161,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "从最终产品端回溯 GVC 活动的初始增加值所经过的生产长度。",
     downMeaning: "后向 GVC 段长度缩短：从最终品回溯的 GVC 生产环节减少。",
     upMeaning: "后向 GVC 段长度延长：从最终品回溯的 GVC 生产环节增加。",
-    dontClaim: "不要写成「比贸易流效应更大 / 更小」，也不要把后向长度与前向长度的系数相减。",
+    dontClaim: "不要写成“比贸易流效应更大 / 更小”，也不要把后向长度与前向长度的系数相减。",
   },
   GVCPs: {
     shortMetric: "GVC 位置指数",
@@ -170,7 +170,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "前向与后向 GVC 长度之比的位置指数，>1 表示在该口径下相对更上游。",
     downMeaning: "位置指数下降：在该口径下相对更靠下游。",
     upMeaning: "位置指数上升：在该口径下相对更上游。",
-    dontClaim: "不要写成「已经变得更上游 / 更下游」。位置指数不能与长度系数比大小。",
+    dontClaim: "不要写成“已经变得更上游 / 更下游”。位置指数不能与长度系数比大小。",
   },
   weighted_indegree: {
     shortMetric: "加权入度",
@@ -178,7 +178,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "全球国家×行业图上一个节点的加权入度，即买入侧的流量规模。",
     downMeaning: "加权入度下降：买入侧的流量规模变小。",
     upMeaning: "加权入度上升：买入侧的流量规模变大。",
-    dontClaim: "不要写成买入已经减少或脱钩，也不要拿它当「政策总效应」。",
+    dontClaim: "不要写成买入已经减少或脱钩，也不要拿它当“政策总效应”。",
   },
   weighted_outdegree: {
     shortMetric: "加权出度",
@@ -186,7 +186,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "全球国家×行业图上一个节点的加权出度，即卖出侧的流量规模。",
     downMeaning: "加权出度下降：卖出侧的流量规模变小。",
     upMeaning: "加权出度上升：卖出侧的流量规模变大。",
-    dontClaim: "不要写成卖出已经减少或脱钩，也不要拿它当「政策总效应」。",
+    dontClaim: "不要写成卖出已经减少或脱钩，也不要拿它当“政策总效应”。",
   },
   betweenesscentrality: {
     shortMetric: "网络介数",
@@ -194,7 +194,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "全球国家×行业图上的最短路径介数（全正边、二值、未归一化）。",
     downMeaning: "介数下降：在二值拓扑最短路径上的中介位置减弱。",
     upMeaning: "介数上升：在二值拓扑最短路径上的中介位置增强。",
-    dontClaim: "不要挑绝对值最大的系数当「政策总效应」，也不要写成已经脱钩。",
+    dontClaim: "不要挑绝对值最大的系数当“政策总效应”，也不要写成已经脱钩。",
   },
   closnesscentrality: {
     shortMetric: "接近中心性",
@@ -202,7 +202,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "全球国家×行业图上到其他节点最短路径距离的倒数。",
     downMeaning: "接近中心性下降：到其他节点的网络距离变远。",
     upMeaning: "接近中心性上升：到其他节点的网络距离变近。",
-    dontClaim: "不要挑绝对值最大的系数当「政策总效应」，也不要写成网络位置已经边缘化。",
+    dontClaim: "不要挑绝对值最大的系数当“政策总效应”，也不要写成网络位置已经边缘化。",
   },
 };
 

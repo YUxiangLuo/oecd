@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import { ScrollableRegion } from "./a11y";
 import { niceDomain } from "./viz/nice-ticks";
 import { stripNegativeZero } from "./format";
+import { CAT } from "./viz/shared";
 
 type ChartItem = { label: string; value: number };
 /** A bar may name the series it belongs to (e.g. a country); bars of one group share a colour.
@@ -185,7 +186,7 @@ export function parseReportChart(source: string): ReportChart | null {
 const fmt = (value: number) => {
   const abs = Math.abs(value);
   if (abs >= 1000) return value.toLocaleString("zh-CN", { maximumFractionDigits: 1 });
-  if (abs < 0.01 && value !== 0) return value.toFixed(4);
+  if (abs < 0.01 && value !== 0) return String(Number(value.toPrecision(2)));
   return value.toFixed(3).replace(/\.0+$|(?<=\.[0-9]*)0+$/, "");
 };
 
@@ -210,8 +211,9 @@ const reading = (value: number, unit: string) => {
 const tickReading = (value: number, unit: string) =>
   stripNegativeZero(value.toLocaleString("zh-CN", { maximumFractionDigits: readingDigits(value, unit) }));
 
-// Step 6 records up to five economies: five distinct colours, so the fifth never repeats the first.
-const GROUP_COLORS = ["#4b47e0", "#e0812e", "#198a78", "#7b4ab5", "#c2417a"];
+// The pages' country colours (viz/shared CAT, in selection order), so an economy keeps its colour from the
+// page to the report; five distinct colours for step 6's up to five economies.
+const GROUP_COLORS = [CAT[0], CAT[1], CAT[2], CAT[3], CAT[4]];
 const REFERENCE_COLOR = "#8a8f9c";
 
 /** Approximate SVG text width: CJK glyphs take about one em, Latin about 0.6 em. */
@@ -329,10 +331,12 @@ function BinscatterChart({ chart }: { chart: Extract<ReportChart, { type: "binsc
   const x = (value: number) => m.l + ((value - xAxis.lo) / (xAxis.hi - xAxis.lo || 1)) * (W - m.l - m.r);
   const y = (value: number) => H - m.b - ((value - yAxis.lo) / (yAxis.hi - yAxis.lo || 1)) * (H - m.t - m.b);
   const digits = (lo: number, hi: number) => Math.max(0, Math.min(4, 2 - Math.floor(Math.log10(Math.max(hi - lo, 1e-9) / 4))));
-  const fx = (value: number) => value.toFixed(digits(xAxis.lo, xAxis.hi)), fy = (value: number) => value.toFixed(digits(yAxis.lo, yAxis.hi));
+  // Ticks are round values: trailing zeros trimmed ("-0.1", not "-0.1000").
+  const trimmed = (value: number, places: number) => { const text = String(Number(value.toFixed(places))); return text === "-0" ? "0" : text; };
+  const fx = (value: number) => trimmed(value, digits(xAxis.lo, xAxis.hi)), fy = (value: number) => trimmed(value, digits(yAxis.lo, yAxis.hi));
   return (
     <ReportFigure title={chart.title ?? "分箱散点图"}>
-      <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>每个点是 X 相近的一箱单元的平均（X、Y 都已扣掉固定效应）；直线斜率为估计的 β</div>
+      <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>每个点是 X 相近的一组单元的平均（X、Y 都已扣掉各自起点和共同年份变化）；直线斜率就是 β</div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "分箱散点图"} style={{ width: "100%", height: "auto" }}>
         {yAxis.ticks.map((tick) => <g key={`y${tick}`}><line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke="#eef0f4" /><text x={m.l - 8} y={y(tick) + 4} textAnchor="end" fontSize={11} fill="#5f6677">{fy(tick)}</text></g>)}
         {xAxis.ticks.map((tick) => <g key={`x${tick}`}><line x1={x(tick)} x2={x(tick)} y1={m.t} y2={H - m.b} stroke="#eef0f4" /><text x={x(tick)} y={H - m.b + 16} textAnchor="middle" fontSize={11} fill="#5f6677">{fx(tick)}</text></g>)}
@@ -364,7 +368,8 @@ function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coef
   const x = (value: number) => m.l + ((value + extent) / (2 * extent)) * plotW;
   const y = (index: number) => m.t + (index + 0.5) * rowH;
   const decimals = Math.max(0, Math.min(4, 1 - Math.floor(Math.log10(extent / 2))));
-  const tick = (value: number) => (value === 0 ? "0" : value.toFixed(decimals));
+  // Trailing zeros trimmed on ticks ("-1.5", "-0.075"); the point values below keep fixed decimals.
+  const tick = (value: number) => (value === 0 ? "0" : String(Number(value.toFixed(decimals))));
   const value = (number: number) => number.toFixed(Math.max(2, decimals));
 
   return (
@@ -453,7 +458,7 @@ function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> })
   const legend = legendLayout(chart.series.map((series) => series.label), 68, W - 26);
   const m = { l: 68, r: 26, t: 24 + legend.rows * 18, b: 48 };
   const H = 292 + legend.rows * 18;
-  const colors = ["#4b47e0", "#d95f45", "#198a78", "#b36b00", "#7b4ab5", "#3274a1", "#657000", "#a44078"];
+  const colors = [...GROUP_COLORS, "#c2417a", "#657000", "#3274a1"];
   const labels = [...new Set(chart.series.flatMap((series) => series.points.map((point) => point.label)))];
   const values = chart.series.flatMap((series) => series.points.map((point) => point.value));
   const rawMin = Math.min(...values);

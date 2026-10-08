@@ -1126,7 +1126,7 @@ export function NetworkCentralityDemo() {
             </table>
           </ScrollableRegion>
           <div className="ndp-disclaim">
-            这是一个 7 节点的有向演示网络。真实系统保留全部正流量边和正自环，在完整的全球「国家×行业」生产网络上按同一 Gephi 口径计算。
+            这是一个 7 节点的有向演示网络。真实系统保留全部正流量边和正自环，在完整的全球“国家×行业”生产网络上按同一 Gephi 口径计算。
           </div>
         </div>
       </div>

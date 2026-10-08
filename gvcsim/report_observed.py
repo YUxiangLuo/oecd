@@ -606,7 +606,7 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
                 for series in chart["series"]:
                     first, last = series["points"][0], series["points"][-1]
                     changes.append(
-                        f"{series['label']} 从 {first['label']} 年 {_reading(first['value'], unit)} 变为 "
+                        f"{series['label']}{'' if str(series['label']).endswith('）') else ' '}从 {first['label']} 年 {_reading(first['value'], unit)} 变为 "
                         f"{last['label']} 年 {_reading(last['value'], unit)}（{_change(last['value'] - first['value'], unit)}）"
                     )
                 ranks = _rank_reading(context, countries_saved) if context else ""

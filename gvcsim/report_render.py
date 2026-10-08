@@ -45,6 +45,17 @@ def _entity_label(item: dict[str, Any]) -> str:
     return f"{country_label(str(country))} · {sector_label(str(industry))}" if industry else country_label(str(country))
 
 
+def _depvar_display(label: Any) -> str:
+    """The saved Y label as the pages show it: "加权总度", not the step 5 detail "加权总度（入+出）"."""
+    return str(label).removesuffix("（入+出）")
+
+
+def _cjk_punctuation(text: str) -> str:
+    """Saved design and estimator notes predate the full-width style: print "排除 ROW（…）", "样本过滤：…"."""
+    text = re.sub(r"(?<=[\u4e00-\u9fff]):", "：", text)
+    return re.sub(r"\(([^()]*[\u4e00-\u9fff][^()]*)\)", r"（\1）", text)
+
+
 def _rate(percent: float) -> str:
     """A tariff rate as set (10%, 7.5%), without padding zeros."""
     return f"{percent:.2f}".rstrip("0").rstrip(".")
@@ -158,7 +169,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                     else "本节为份额、长度或指数，不直接受价格水平影响，但仍受下述结构外推影响。"
                 )
                 lines.append(
-                    f"- **2020 年：现价与疫情期外推限制。** {price_note}"
+                    f"- **2020 年：现价与疫情期外推限制。**{price_note}"
                     "OECD 2023 版中部分国家的投入产出结构由此前基准表外推，疫情对行业的冲击并不均匀；"
                     "请区分价格、统计编制与实际数量或结构变化，不能仅凭该年转折判断生产调整。"
                     "参见 [OECD TiVA 2023 指南第 42 页]"
@@ -306,22 +317,21 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
         "下表列出各步实际保存的可报告结果；系数因量纲和估计对象不同不能比大小，"
         "网络 Y 的单位与份额、长度不同，不能与前三步的系数比大小。",
         "",
-        "| 步骤 | 指标 | 冲击 | 比较方式 | 估计对象与相对变化 | 标称 95% 近似区间 | 证据判断 |",
-        "|---|---|---|---|---|---|---|",
+        "| 步骤 | 指标 | 比较方式 | 估计对象与相对变化 | 标称 95% 近似区间 | 证据判断 |",
+        "|---|---|---|---|---|---|",
     ]
     designs = []
     for step, outcome in sorted(_STEP_OUTCOMES.items()):
         run = qualified.get(step)
         if run is None:
-            lines.append(f"| {step} | {_safe(_STEP_TITLES.get(step, outcome))} | — | — | — | — | 未保存可报告估计 |")
+            lines.append(f"| {step} | {_safe(_STEP_TITLES.get(step, outcome))} | — | — | — | 未保存可报告估计 |")
             continue
         design, result = run["design"], run["result"]
         designs.append((design.get("shock_type"), design.get("method"), design.get("granularity")))
         coefficient = _primary_coefficient(design, result)
         if coefficient is None or not isinstance(coefficient.get("coef"), (int, float)):
             lines.append(
-                f"| {step} | {_safe(design.get('depvar_label', outcome))} | "
-                f"{_setting_value('shock_type', design.get('shock_type'))} | "
+                f"| {step} | {_safe(_depvar_display(design.get('depvar_label', outcome)))} | "
                 f"{_setting_value('method', design.get('method'))} | — | — | 无可估计配对，诊断已记录、不能推断 |"
             )
             continue
@@ -329,11 +339,14 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
         suppressed = _global_inference_suppressed(result)
         evidence, _interpretation = _evidence_reading(outcome, coefficient, suppressed, design)
         lines.append(
-            f"| {step} | {_safe(design.get('depvar_label', outcome))} | "
-            f"{_setting_value('shock_type', design.get('shock_type'))} | "
+            f"| {step} | {_safe(_depvar_display(design.get('depvar_label', outcome)))} | "
             f"{_setting_value('method', design.get('method'))} | {_safe(effect_label)}：{effect} | {interval} | {evidence} |"
         )
     lines.append("")
+    # The shock is the same in every step; one sentence instead of a column that repeats it.
+    shocks = {design_shock for design_shock, _method, _granularity in designs}
+    if len(shocks) == 1:
+        lines.extend((f"四步的冲击都是{_setting_value('shock_type', next(iter(shocks)))}。", ""))
     if len({item for item in designs}) > 1:
         lines.extend(
             (
@@ -492,7 +505,7 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
             (
                 "| 项目 | 结果 |",
                 "|---|---|",
-                f"| 研究对象 | {_safe(design.get('depvar_label', outcome))} |",
+                f"| 研究对象 | {_safe(_depvar_display(design.get('depvar_label', outcome)))} |",
                 f"| 保存的模型 | {setting or '—'} |",
                 f"| {effect_label} | **{effect}** |",
                 f"| 标称 95% 的近似聚类区间 | {interval} |",
@@ -622,7 +635,7 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
                 (
                     heading,
                     "",
-                    f"- 因变量：{_safe(design.get('depvar_label', run['outcome']))}",
+                    f"- 因变量：{_safe(_depvar_display(design.get('depvar_label', run['outcome'])))}",
                     f"- 结果量纲：{_KIND_DIMENSIONS.get(_depvar_kind(run['outcome'], design), '原始单位')}",
                     f"- 方程：`{_safe(design.get('equation', '—'))}`",
                     f"- 设计状态：{_STATUS_LABELS.get(str(status), _STATUS_LABELS['unknown'])}；观测数：{_count(result.get('n_obs'))}",
@@ -654,10 +667,12 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
             # Runs saved before the wording change carry "双向固定效应(entity_id + year),within 变换后 OLS".
             notes = [
                 _safe(
-                    re.sub(
-                        r"^双向固定效应\((\S+) \+ (\S+)\),within 变换后 OLS$",
-                        lambda match: two_way_note(match.group(1), match.group(2)),
-                        str(note),
+                    _cjk_punctuation(
+                        re.sub(
+                            r"^双向固定效应\((\S+) \+ (\S+)\),within 变换后 OLS$",
+                            lambda match: two_way_note(match.group(1), match.group(2)),
+                            str(note),
+                        )
                     )
                 )
                 for note in _list_values(result.get("notes"))

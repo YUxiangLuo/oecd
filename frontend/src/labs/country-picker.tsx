@@ -55,7 +55,7 @@ export function CountryPicker({ countries, picked, onChange }: {
             <span className="country-picker-name">{COUNTRY_NAMES[code] ?? ""}</span>
           </label>
         ))}
-        {shown.length === 0 && <div className="muted" style={{ padding: "6px 8px" }}>没有匹配「{query}」的经济体</div>}
+        {shown.length === 0 && <div className="muted" style={{ padding: "6px 8px" }}>没有匹配“{query}”的经济体</div>}
       </div>
     </div>
   );

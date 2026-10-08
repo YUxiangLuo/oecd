@@ -338,9 +338,9 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
         minimum = _REFLECTION_MIN_LENGTHS[key]
         value = reflection.get(key)
         if not isinstance(value, str) or len(" ".join(value.split())) < minimum:
-            reflection_missing.append(f"请用自己的话填写{label}（至少 {minimum} 个字符）")
+            reflection_missing.append(f"请用自己的话填写{label}（至少 {minimum} 字）")
         if isinstance(value, str) and len(value) > REFLECTION_TEXT_LIMIT:
-            reflection_missing.append(f"{label}不能超过 {REFLECTION_TEXT_LIMIT} 个字符")
+            reflection_missing.append(f"{label}不能超过 {REFLECTION_TEXT_LIMIT} 字")
     if reflection_missing:
         blocked.append({"step": 15, "title": "原创分析与反思", "missing": reflection_missing})
     return _merge_gate_blocks(blocked)
