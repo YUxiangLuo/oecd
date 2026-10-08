@@ -55,7 +55,7 @@ export function comparisonCards({ rows, countries, metric, label, unit, year, in
 }): ReadingCard[] {
   const [first, ...others] = countries;
   const own = valueOf(rows, first, year, metric, industry);
-  if (own === null) return [{ eyebrow: `${countryLabel(first)} · ${year}`, big: "缺失", small: `${label}在该年没有有效读数（缺失不补零）` }];
+  if (own === null) return [{ eyebrow: `${countryLabel(first)} · ${year}`, big: "缺失", small: `${label}在该年没有有效读数（缺少的数据留空，不当作 0）` }];
   const cards: ReadingCard[] = [{
     eyebrow: `${countryLabel(first)} · ${year}${industry ? ` · ${sectorLabel(industry)}` : ""}`,
     big: indicatorNumber(own, unit),
@@ -105,7 +105,7 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
     const zeroTotal = valueOf(rows, first, year, composition.total, industry) === 0;
     return [zeroTotal
       ? { eyebrow: `${countryLabel(first)} · ${year}`, big: `${totalLabel}为 0`, small: "没有可分解的总量，构成份额无定义；可换一个行业或国家" }
-      : { eyebrow: `${countryLabel(first)} · ${year}`, big: "构成不完整", small: "分项或总量缺失，暂不能读出构成（缺失不补零）" }];
+      : { eyebrow: `${countryLabel(first)} · ${year}`, big: "构成不完整", small: "分项或总量缺失，暂不能读出构成（缺少的数据留空，不当作 0）" }];
   }
   const largest = ownShares.reduce((best, item) => (item.share! > best.share! ? item : best));
   const ownFocus = share(first, focus)!;
@@ -118,7 +118,7 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
     {
       eyebrow: `${countryLabel(first)} · ${focusName}`,
       big: indicatorNumber(ownFocus, "%"),
-      small: `本步重点分项占${totalLabel}的比重`,
+      small: `${focusName}占${totalLabel}的比重`,
     },
   ];
   for (const other of others) {
@@ -158,7 +158,7 @@ export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLa
     return {
       eyebrow: `${index ? "对比国家 " : ""}${countryLabel(country)}`,
       big: `${xLabel}${side(point.x, xMedian, "高于", "低于")}中位数，${yLabel}${side(point.y, yMedian, "高于", "低于")}中位数`,
-      small: `${indicatorNumber(point.x, unitOf(xFormat))} × ${indicatorNumber(point.y, unitOf(yFormat))}；中位数按图上 ${points.length} 个经济体计算`,
+      small: `横轴 ${indicatorNumber(point.x, unitOf(xFormat))}，纵轴 ${indicatorNumber(point.y, unitOf(yFormat))}；中位数按图上 ${points.length} 个经济体计算`,
     };
   });
 }
@@ -181,12 +181,12 @@ export function segmentCards({ rows, countries, year, industry, segments }: {
     {
       eyebrow: `${countryLabel(first)} · ${year} · 最长的一段`,
       big: `${longest.segment.label} · ${longestSide}`,
-      small: `${indicatorNumber(longestSide === "前向" ? longest.forward : longest.backward, unit)}；段长度不可相加，总长度是份额加权平均`,
+      small: `${indicatorNumber(longestSide === "前向" ? longest.forward : longest.backward, unit)}；三段长度不能相加，总长度是三段按增加值份额加权的平均`,
     },
     {
       eyebrow: `${countryLabel(first)} · ${gvc.segment.label} · 前向对后向`,
       big: gvc.forward === null || gvc.backward === null ? "缺失" : gvc.forward > gvc.backward ? "前向更长（更偏上游）" : gvc.forward < gvc.backward ? "后向更长（更偏下游）" : "前后向相等",
-      small: gvc.forward === null || gvc.backward === null ? "缺失不补零" : `${indicatorNumber(gvc.forward, unit)} 对 ${indicatorNumber(gvc.backward, unit)}`,
+      small: gvc.forward === null || gvc.backward === null ? "缺失留空" : `${indicatorNumber(gvc.forward, unit)} 对 ${indicatorNumber(gvc.backward, unit)}`,
     },
   ];
   for (const other of others) {
@@ -204,7 +204,7 @@ export function segmentCards({ rows, countries, year, industry, segments }: {
 const amountWithUnit = (value: number, unit: string) =>
   unit === "%" || !unit ? indicatorNumber(value, unit) : `${indicatorNumber(value, unit)} ${unit}`;
 
-/** 定位行业: the observed country's top industry and, per comparison country, the industry with the widest gap. */
+/** 行业排名: the observed country's top industry and, per comparison country, the industry with the widest gap. */
 export function industryCards({ groups, countries, label, unit }: {
   groups: { key: string; label: string; values: (number | null)[] }[]; countries: string[]; label: string; unit: string;
 }): ReadingCard[] {

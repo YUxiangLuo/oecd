@@ -142,7 +142,7 @@ describe("indicator explorer with automatic report material", () => {
     );
     // The view bar: the step's theme first and open by default, then the two views every step offers.
     expect(within(view.getByRole("group", { name: "图表视角" })).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "出口构成", "历年变化", "国家对比", "定位图", "行业结构",
+      "出口构成", "历年变化", "国家对比", "定位图", "行业排名",
     ]);
     expect(view.getByRole("button", { name: "出口构成" }).getAttribute("aria-pressed")).toBe("true");
     expect(view.queryByRole("group", { name: "补充图表" })).toBeNull();
@@ -299,7 +299,7 @@ describe("indicator explorer with automatic report material", () => {
     const view = setup();
     await view.findByRole("button", { name: "出口构成" });
     fireEvent.click(view.getByRole("button", { name: "历年变化" }));
-    const scope = view.getByLabelText("当前比较口径").textContent ?? "";
+    const scope = view.getByLabelText("当前图表范围").textContent ?? "";
     for (const part of ["CHN 中国 与 USA 美国", "国家整体", "2019–2021", "外国增加值项占比"]) expect(scope).toContain(part);
     fireEvent.click(view.getByRole("button", { name: "出口构成" }));
     await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("composition"));
@@ -319,18 +319,18 @@ describe("indicator explorer with automatic report material", () => {
         (x) => x.metric === "taxsub" && x.value < 0,
       ),
     ).toBeTrue();
-    fireEvent.click(view.getByRole("button", { name: "历年" }));
+    fireEvent.click(view.getByRole("button", { name: "历年构成" }));
     await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("evolution"));
     expect(view.getByRole("button", { name: "出口构成" }).getAttribute("aria-pressed")).toBe("true");
     expect(new Set(view.saves.at(-1)?.observations?.map((item) => item.year))).toEqual(new Set([2019, 2020, 2021]));
     view.accept();
-    expect(view.getByRole("button", { name: "历年" }).getAttribute("aria-pressed")).toBe("true");
-    fireEvent.click(view.getByRole("button", { name: "单年" }));
-    expect(view.getByLabelText("当前比较口径").textContent).toMatch(/2021.*出口构成/);
+    expect(view.getByRole("button", { name: "历年构成" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(view.getByRole("button", { name: "单年构成" }));
+    expect(view.getByLabelText("当前图表范围").textContent).toMatch(/2021.*出口构成/);
     view.unmount();
     const restored = setup(TradeVizStep, view.saves.at(-1));
     expect(restored.getByRole("button", { name: "出口构成" }).getAttribute("aria-pressed")).toBe("true");
-    expect(restored.getByRole("button", { name: "历年" }).getAttribute("aria-pressed")).toBe("true");
+    expect(restored.getByRole("button", { name: "历年构成" }).getAttribute("aria-pressed")).toBe("true");
     expect(restored.saves).toHaveLength(0);
     rows.mockRestore();
     schema.mockRestore();
@@ -344,8 +344,8 @@ describe("indicator explorer with automatic report material", () => {
     await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("composition"));
     const before = view.saves.length;
     fireEvent.click(view.getByRole("button", { name: "定位图" }));
-    expect(view.getByLabelText("当前比较口径").textContent).toContain("定位图");
-    expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("定位图只作探索，不记录材料");
+    expect(view.getByLabelText("当前图表范围").textContent).toContain("定位图");
+    expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("定位图只供探索，不记录材料");
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
     expect(view.saves).toHaveLength(before);
     rows.mockRestore();
@@ -383,7 +383,7 @@ describe("indicator explorer with automatic report material", () => {
     const view = setup(LengthVizStep);
     await view.findByRole("button", { name: "前后向位置" });
     expect(within(view.getByRole("group", { name: "图表视角" })).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "前后向位置", "历年变化", "国家对比", "段长度对照", "定位图", "行业结构", "定位行业",
+      "前后向位置", "历年变化", "国家对比", "段长度对照", "定位图", "行业结构", "行业排名",
     ]);
     fireEvent.click(view.getByRole("button", { name: "段长度对照" }));
     await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("segments"));
@@ -438,13 +438,13 @@ describe("material of one to five economies (design doc 4.1)", () => {
       const view = mount({ compared: ["CHN"] });
       await view.findByRole("button", { name: "出口构成" });
       // The carried-over single entity opens alone: no comparison select is filled, the add control is offered.
-      expect((view.getByLabelText("对比国家 B") as HTMLSelectElement).value).toBe("");
+      expect((view.getByLabelText("加一个对比国家（可选）") as HTMLSelectElement).value).toBe("");
       await waitFor(() => expect(view.saves.at(-1)?.compared).toEqual(["CHN"]));
       expect(view.saves.at(-1)!.observations!.every((item) => item.country === "CHN")).toBe(true);
       // An industry has no global reference, so one economy alone is exploration there.
       const before = view.saves.length;
       fireEvent.change(view.getByLabelText("比较范围"), { target: { value: "A" } });
-      await view.findByText(/需用国家整体口径/);
+      await view.findByText(/要把“比较范围”设为“国家整体”/);
       await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
       expect(view.saves.slice(before).every((save) => !("observations" in save))).toBe(true);
     } finally { rows.mockRestore(); industry.mockRestore(); schema.mockRestore(); }

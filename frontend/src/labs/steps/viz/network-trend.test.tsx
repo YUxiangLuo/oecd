@@ -86,7 +86,7 @@ test("renders gaps without joining them, records the complete two-country view a
   expect(germanObservations.some((item) => item.country === "DEU" && item.value === 99)).toBe(true);
   // An industry without readings never overwrites the record.
   fireEvent.change(screen.getByLabelText("行业"), { target: { value: "C27" } });
-  expect(screen.getByText("该行业没有可用的指标观测，请更换行业、指标或国家。")).toBeTruthy();
+  expect(screen.getByText("该行业没有数据，请更换行业、指标或国家。")).toBeTruthy();
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(save).toHaveBeenCalledTimes(2);
 });
@@ -101,7 +101,7 @@ test("ranking records the selected metric and displayed industries, then drills 
   mockReference();
   const save = mock(() => {});
   render(<NetworkTrend meta={meta} initialCountry="CHN" onRecord={save} />);
-  fireEvent.click(screen.getByRole("button", { name: "国家对比" }));
+  fireEvent.click(screen.getByRole("button", { name: "行业排名" }));
   await screen.findByRole("region", { name: "行业排名条形图" });
   // Each industry shows its global median on both bars, and country A's rank in that industry worldwide.
   await waitFor(() => expect(document.querySelectorAll("[data-global-median]")).toHaveLength(4));
@@ -145,7 +145,7 @@ test("the record follows the current chart, waits while a sync is in flight, and
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(save).toHaveBeenCalledTimes(1);
   rerender(<NetworkTrend {...props} observations={saved} syncError="offline" />);
-  expect(screen.getByRole("alert").textContent).toContain("尚未成功同步");
+  expect(screen.getByRole("alert").textContent).toContain("还没保存成功");
   fireEvent.click(screen.getByRole("button", { name: "重试同步" }));
   expect(retry).toHaveBeenCalledTimes(1);
   await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
@@ -180,10 +180,10 @@ test("one economy alone records against the same-industry reference", async () =
   expect(save.mock.calls.at(-1)![1].every((item) => item.country === "CHN")).toBe(true);
   // A second comparison country can be added; the scope card lists all three.
   // Choosing in the add control only stages the country; 添加 commits it.
-  fireEvent.change(screen.getByLabelText("对比国家 B"), { target: { value: "USA" } });
+  fireEvent.change(screen.getByLabelText("加一个对比国家（可选）"), { target: { value: "USA" } });
   fireEvent.click(screen.getByRole("button", { name: "添加" }));
   fireEvent.change(screen.getByLabelText("再加一个对比国家"), { target: { value: "DEU" } });
   fireEvent.click(screen.getByRole("button", { name: "添加" }));
   await waitFor(() => expect(save.mock.calls.at(-1)![0]).toEqual(["CHN", "USA", "DEU"]));
-  expect(screen.getByLabelText("当前比较口径").textContent).toContain("CHN 中国、USA 美国、DEU 德国");
+  expect(screen.getByLabelText("当前图表范围").textContent).toContain("CHN 中国、USA 美国、DEU 德国");
 });

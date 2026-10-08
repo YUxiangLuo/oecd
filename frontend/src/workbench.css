@@ -322,8 +322,9 @@
   /* .content has 20px top padding; stick at its edge so no strip of scrolled content shows above. */
   /* Above chart marks (dot plots stack their dots up to z-index 10) so they never draw over the bar. */
   position: sticky; top: -20px; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px;
-  margin: 0 0 12px; padding: 7px 12px; background: rgba(255, 255, 255, .96); backdrop-filter: blur(2px);
-  border: 1px solid #dfe4ee; border-radius: 10px; box-shadow: 0 2px 10px rgba(35, 39, 60, .05);
+  /* Opaque with a drop shadow: a see-through bar let chart rows and card edges ghost through as they scrolled under. */
+  margin: 0 0 12px; padding: 7px 12px; background: #fff;
+  border: 1px solid #dfe4ee; border-radius: 10px; box-shadow: 0 4px 12px rgba(35, 39, 60, .12);
 }
 .scope-card:focus { outline: none; box-shadow: 0 0 0 2px #4b47e0; }
 .scope-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
@@ -338,12 +339,37 @@
 .scope-chip span { font-size: 10.5px; line-height: 1.2; color: #616b7d; }
 .scope-chip b { font-size: 13px; line-height: 1.3; color: #293342; }
 .scope-note { flex-basis: 100%; color: #616b7d; font-size: 11px; }
+/* "报告材料已更新为：…" after an automatic replacement; the component clears it after a few seconds. */
+.scope-flash { display: inline-block; padding: 2px 8px; border-radius: 6px; background: #e8f5ee; color: #17603a; font-size: 12px; font-weight: 600; animation: scope-flash-in .25s ease-out; }
+@keyframes scope-flash-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
+/* Steps 6–9: the view bar and the mode switches under it share one segmented look (.seg in styles.css):
+   a grey track with the chosen item as a white chip. The view bar is the larger of the two; indigo fill
+   stays reserved for the page's main action. */
+.lens-nav { display: flex; flex-wrap: wrap; gap: 2px; width: fit-content; max-width: 100%; margin-bottom: 16px; padding: 3px; background: #eef0f5; border-radius: 10px; }
+.lens-nav button { padding: 7px 14px; border: 0; border-radius: 8px; background: transparent; color: #4a5061; font-size: 12.5px; font-weight: 600; }
+.lens-nav button:hover { color: #1b1f2b; }
+.lens-nav button[aria-pressed="true"] { background: #fff; color: #216cc0; font-weight: 700; box-shadow: 0 1px 4px rgba(20, 24, 40, .12); }
+.lens-nav button:focus-visible, .viz-modes .seg button:focus-visible { outline: 2px solid #4b47e0; outline-offset: 1px; }
+.viz-modes { gap: 10px; }
+.viz-modes .seg { display: inline-flex; }
+.viz-modes .seg button:not(.on):hover { color: #1b1f2b; }
+/* Step 9 行业排名: a link-style industry label (a boxed button read as a text field) and one line per country. */
+.rank-row { display: grid; grid-template-columns: minmax(140px, 28%) minmax(0, 1fr); gap: 12px; padding: 10px 6px; border-bottom: 1px solid #e7e9ef; border-radius: 6px; }
+.rank-row:hover, .rank-row:focus-within { background: #f4f6fb; }
+.rank-industry { align-self: center; padding: 0; border: 0; background: none; text-align: left; color: #35328d; font: inherit; font-size: 13px; }
+.rank-industry:hover, .rank-industry:focus-visible { text-decoration: underline; }
+.rank-bar { display: grid; grid-template-columns: 92px minmax(0, 1fr) 190px; align-items: center; gap: 8px; min-height: 26px; }
+.rank-bar > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-value { text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rank-value b { font-weight: 600; color: #1b1f2b; }
+.rank-value small { margin-left: 6px; color: #596173; font-size: 11px; }
 /* Phase 2 theme charts: stacked-area facets, industry dot plot, dumbbell, butterfly. */
 .stacked-area-legend, .dot-plot-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 8px; font-size: 12px; color: #374151; }
 .stacked-area-legend span, .dot-plot-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .stacked-area-legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; }
 .dot-plot-legend i.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
-.dot-plot-legend i.bar { display: inline-block; width: 0; height: 12px; border-left: 2px dashed #596173; }
+/* Drawn dashes: a 12px dashed border rendered as one solid bar, unlike the dashed lines in the plot. */
+.dot-plot-legend i.bar { display: inline-block; width: 2px; height: 14px; background: repeating-linear-gradient(180deg, #596173 0 3px, transparent 3px 5px); }
 .dot-plot-axis { position: relative; height: 16px; margin: 0 calc(var(--dot-values, 110px) + 6px) 2px 176px; font-size: 10.5px; color: #596173; }
 .dot-plot-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
 /* Horizontal padding so the inset focus ring does not cut through the first character or the last value. */

@@ -2,7 +2,7 @@ import { countryLabel, sectorLabel } from "../../../viz";
 import { CAT } from "../../../viz/shared";
 import { ScrollableRegion } from "../../../a11y";
 import { indicatorNumber } from "./indicator-charts";
-import { NO_RANK, rankText } from "./indicator-model";
+import { rankText } from "./indicator-model";
 import type { Row } from "./scaffold";
 
 export interface NetworkRankRow { industry: string; values: (number | null)[] }
@@ -37,29 +37,31 @@ export function NetworkRanking({ rows, countries, unit, onIndustry, reference = 
   const withReference = rows.some((row) => reference.has(row.industry));
   return <>
     <p className="muted">
-      按 {countryLabel(countries[0])} 降序，所选国家使用同一组行业、同一顺序和零起点刻度。条长与数值成比例，单位：{unit}。缺失值不补零。点击行业查看历年变化。
+      行业按 {countryLabel(countries[0])} 从高到低排列，所选国家使用同一组行业、同一顺序和从 0 开始的刻度。条长与数值成比例，单位：{unit}。缺少的数据留空，不当作 0。点击行业名查看历年变化。
       {withReference && "灰色竖线是该行业在全部经济体中的中位数；“全球第 N 位”是每个国家这一行业在全部经济体同一行业中的排名（从高到低）。"}
     </p>
     <ScrollableRegion label="行业排名条形图" className="bounded-data-table" style={{ padding: 12 }}>
       {rows.map((row, rank) => {
         const global = reference.get(row.industry);
-        return <div key={row.industry} style={{ display: "grid", gridTemplateColumns: "minmax(140px, 28%) minmax(0, 1fr)", gap: 12, padding: "10px 0", borderBottom: "1px solid #e7e9ef" }}>
-        <button className="secondary" style={{ textAlign: "left", alignSelf: "center" }} onClick={() => onIndustry(row.industry)} aria-label={`查看 ${sectorLabel(row.industry)} 的历年变化`}>
+        return <div key={row.industry} className="rank-row">
+        {/* A link-style label: the boxed secondary button read as a text field. */}
+        <button type="button" className="rank-industry" onClick={() => onIndustry(row.industry)} aria-label={`查看 ${sectorLabel(row.industry)} 的历年变化`}>
           {rank + 1}. {sectorLabel(row.industry)} →
         </button>
-        <div>{row.values.map((value, index) => <div key={countries[index]} style={{ display: "grid", gridTemplateColumns: "42px minmax(0, 1fr) 110px", alignItems: "center", gap: 8, minHeight: 26 }}>
-          <span title={countryLabel(countries[index])} style={{ fontSize: 12 }}>{countries[index]}</span>
+        <div>{row.values.map((value, index) => <div key={countries[index]} className="rank-bar">
+          <span title={countryLabel(countries[index])} style={{ fontSize: 12 }}>{countryLabel(countries[index])}</span>
           <div style={{ position: "relative", borderLeft: "1px solid #bbc1ce", background: "#f5f6fa", height: 14 }} aria-hidden="true">
             {value !== null && <div style={{ width: `${value / scale * 100}%`, height: "100%", background: CAT[index], border: index ? "1px dashed #145840" : undefined }} />}
             {global && <span data-global-median style={{ position: "absolute", top: -3, bottom: -3, left: `${global.median / scale * 100}%`, borderLeft: "2px solid #6b7385" }} />}
           </div>
-          <span style={{ textAlign: "right", fontSize: 12, fontVariantNumeric: "tabular-nums" }}>
-            {indicatorNumber(value, unit)}
+          {/* One line per country, level with its bar: the value, then its global rank. */}
+          <span className="rank-value">
+            <b>{indicatorNumber(value, unit)}</b>
             {(() => {
               const countryRank = global?.ranks?.[countries[index]];
               if (!global || countryRank == null) return null;
               const text = rankText(countryRank, global.ties?.[countries[index]], global.n);
-              return <small style={{ display: "block", color: "#596173" }}>{text ? `全球${text} / ${global.n}` : `全球${NO_RANK}（数值全部相同）`}</small>;
+              return <small>{text ? `全球${text} / ${global.n}` : "全球数值都相同，不排名"}</small>;
             })()}
           </span>
         </div>)}</div>

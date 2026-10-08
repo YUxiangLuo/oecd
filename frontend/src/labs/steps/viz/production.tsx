@@ -11,7 +11,7 @@ export const PRODUCTION_TOPIC: IndicatorTopic = {
   defaultView: "composition",
   question: "生产活动参与跨境分工的程度怎样变化？在全部经济体中处于什么位置？",
   themeLabel: "四类生产活动",
-  themeHint: "四类前向生产活动的份额加总为 100%：先看复杂 GVC 占多少、与对比国家差在哪一类，再切到“历年变化”和“国家对比”看变化与全球位置。",
+  themeHint: "四类份额加起来是 100%（有负值时除外）：先看复杂 GVC 占多少、与对比国家差在哪一类，再切到“历年变化”和“国家对比”看变化与全球位置。",
   metrics: [
     {
       key: "3b_VA_GVC_C_share",
@@ -66,29 +66,29 @@ export const PRODUCTION_TOPIC: IndicatorTopic = {
       { key: "1_VA_D", name: "纯国内", color: CAT[0] },
       { key: "2_VA_RT", name: "传统贸易", color: CAT[1] },
       { key: "3a_VA_GVC_S", name: "简单 GVC", color: CAT[2] },
-      { key: "3b_VA_GVC_C", name: "复杂 GVC", color: CAT[3] },
+      { key: "3b_VA_GVC_C", name: "复杂 GVC", color: CAT[4] },
     ],
     focus: "3b_VA_GVC_C",
-    note: "四类前向生产活动占总增加值 SVA 的份额：纯国内不跨境，传统贸易随最终品跨境，简单 GVC 经历一次中间品跨境，复杂 GVC 累计至少两次跨境。负分项以红色显示在零轴左侧。",
+    note: "四类生产活动各占本国总增加值的份额：纯国内不跨境，传统贸易随最终品跨境一次，简单 GVC 随中间品跨境一次，复杂 GVC 至少跨境两次。负分项画成红色，放在 0 的左边。",
     // The same four activities read from the final-goods side (step 7 四类生产活动 · 后向).
     alternate: {
       key: "backward",
-      label: "后向（FGY）",
-      primaryLabel: "前向（SVA）",
+      label: "后向（按最终品）",
+      primaryLabel: "前向（按增加值来源）",
       total: "FGY",
       segments: [
         { key: "1_FGY_D", name: "纯国内", color: CAT[0] },
         { key: "2_FGY_RT", name: "传统贸易", color: CAT[1] },
         { key: "3a_FGY_GVC_S", name: "简单 GVC", color: CAT[2] },
-        { key: "3b_FGY_GVC_C", name: "复杂 GVC", color: CAT[3] },
+        { key: "3b_FGY_GVC_C", name: "复杂 GVC", color: CAT[4] },
       ],
       focus: "3b_FGY_GVC_C",
-      note: "四类后向生产活动占最终品生产 FGY 的份额：从最终品回溯其增加值经历的跨境次数。前向与后向的分母不同，两侧份额不能相互比较。",
+      note: "从本国生产的最终品往回看：其中的增加值属于哪一类。分母是最终品总值，和前向不同，所以前向、后向的份额不能直接比。",
     },
   },
   axes: {
     key: "mode",
-    label: "参与方式：简单 GVC 生产份额 × 复杂 GVC 生产份额",
+    label: "简单 GVC 与复杂 GVC 生产份额",
     x: "3a_VA_GVC_S_share",
     y: "3b_VA_GVC_C_share",
     labels: ["简单与复杂均较高", "复杂份额较高", "两项均较低", "简单份额较高"],
@@ -96,17 +96,17 @@ export const PRODUCTION_TOPIC: IndicatorTopic = {
   axesOptions: [
     {
       key: "mode",
-      label: "参与方式：简单 GVC 生产份额 × 复杂 GVC 生产份额",
+      label: "简单 GVC 与复杂 GVC 生产份额",
       x: "3a_VA_GVC_S_share",
       y: "3b_VA_GVC_C_share",
       labels: ["简单与复杂均较高", "复杂份额较高", "两项均较低", "简单份额较高"],
     },
     {
       key: "side",
-      label: "供给侧与需求侧：前向 GVC 生产总份额 × 后向 GVC 生产总份额",
+      label: "前向与后向 GVC 生产总份额",
       x: "3_VA_GVC_share",
       y: "3_FGY_GVC_share",
-      labels: ["两侧参与均较高", "需求侧参与较高", "两侧均较低", "供给侧参与较高"],
+      labels: ["两向均较高", "后向较高", "两向均较低", "前向较高"],
     },
   ],
 };

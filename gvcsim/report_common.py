@@ -32,11 +32,8 @@ _STUDENT_METRIC_LABELS = {
     "1_VA_D_share": "纯国内生产份额",
     "2_VA_RT_share": "传统贸易生产份额",
     "3a_VA_GVC_S_share": "简单 GVC 生产份额",
-    # Match the label the step itself shows; without this the report printed the
-    # raw field key for step 5's network metric.
-    "weighted degree": "加权总度（入+出）",
-    # Keep the legacy schema key in provenance, but never teach its misspelling.
-    "betweenesscentrality": "网络介数（全正边二值）",
+    # Network metrics ("weighted degree" → 加权总度, "betweenesscentrality" → 介数) come from the schema
+    # labels above, so the report names them as the pages do and never prints the raw, misspelt keys.
 }
 _SHOCK_SOURCE_STATUS_LABELS = {
     "official_event_source_complete": "官方事件/日期来源完整",

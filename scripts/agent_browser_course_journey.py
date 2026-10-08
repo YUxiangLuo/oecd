@@ -93,7 +93,8 @@ def main():
                     )
                 )
                 assert "历年变化" in views, (step, views)
-                assert "国家对比" in views, (step, views)
+                # Step 9 compares countries in its 行业排名 view (each country's global rank per industry).
+                assert ("行业排名" if step == 9 else "国家对比") in views, (step, views)
             if step == 1:
                 student.run("click", "tbody tr:first-child td:first-of-type button")
                 student.run("wait", '[role="dialog"]')

@@ -114,7 +114,7 @@ export function IndicatorExplorer({
   const rangeRef = useRef<HTMLSelectElement>(null);
   const metricRef = useRef<HTMLSelectElement>(null);
   const yearRef = useRef<HTMLSelectElement>(null);
-  // Picking an industry in 定位行业/行业结构 unmounts the clicked row; focus moves to the scope line instead.
+  // Picking an industry in 行业排名/行业结构 unmounts the clicked row; focus moves to the scope line instead.
   const scopeRef = useRef<HTMLDivElement>(null);
   const [focusScope, setFocusScope] = useState(false);
   useEffect(() => {
@@ -190,7 +190,7 @@ export function IndicatorExplorer({
   );
   const rows = indicatorRows(query.data ?? [], topic);
   const field = (key: string) => topic.metrics.find((item) => item.key === key);
-  // "总出口（VA+TLS）" + unit → "总出口（VA+TLS；百万美元，对数）", not two bracket pairs.
+  // "总出口（含产品税减补贴）" + unit → "总出口（含产品税减补贴；百万美元，对数）", not two bracket pairs.
   const withUnitNote = (text: string, note: string) => text.endsWith("）") ? `${text.slice(0, -1)}；${note}）` : `${text}（${note}）`;
   const label = (key: string) =>
     field(key)?.label ?? schema.data?.fields[key]?.label ?? key;
@@ -291,11 +291,11 @@ export function IndicatorExplorer({
   // Name the actual reason the material cannot be saved instead of one catch-all sentence.
   const blockedReason =
     view === "positioning"
-      ? "定位图只作探索，不记录材料。"
+      ? "定位图只供探索，不记录材料。"
       : view === "structure"
-      ? "行业结构只作探索，不记录材料。"
+      ? "行业结构只供探索，不记录材料。"
       : selected.length < 2 && !singleAllowed
-      ? "只看一个国家时需用国家整体口径（带全球参照）才记录材料；选择了行业时请加入对比国家。"
+      ? "只选一个国家时，要把“比较范围”设为“国家整体”才会记录；看某个行业或“行业排名”时，请再加一个对比国家。"
       : query.status === "error"
         ? "当前比较的数据加载失败，请重试。"
         : query.status !== "success"
@@ -303,10 +303,10 @@ export function IndicatorExplorer({
           : timeView && chartYears.length < 2
             ? "趋势至少需要两个年份；请把起始年份和结束年份设为不同年份。"
             : !completeComposition
-              ? "构成图需要所有分项及正总量齐全；请更换国家、行业或年份。"
+              ? "构成图需要每个分项都有数据，且总量大于 0；请换国家、行业或年份。"
               : missingCountries.length
-                ? `${joinCountries(missingCountries)}在${timeView ? "所选年份范围" : ` ${year} 年`}${industry ? `（${sectorLabel(industry)}）` : ""}缺少读数（缺失不补零）；请${timeView ? "调整年份范围" : "换一个年份"}或更换比较对象。`
-                : `所选国家的读数不能配对（缺失不补零）；请${timeView ? "调整年份范围" : "换一个年份"}或更换比较对象。`;
+                ? `${joinCountries(missingCountries)}在${timeView ? "所选年份范围" : ` ${year} 年`}${industry ? `（${sectorLabel(industry)}）` : ""}缺少数据（缺少的数据留空，不当作 0）；请${timeView ? "调整年份范围" : "换一个年份"}或换国家。`
+                : `所选国家没有同一${timeView ? "组年份" : "年份"}的数据，无法放在一起比较；请${timeView ? "调整年份范围" : "换一个年份"}或换国家。`;
   const matches =
     canSave &&
     materialKey(saved) === materialKey(pending) &&
@@ -323,15 +323,6 @@ export function IndicatorExplorer({
     indicator_selection: { ...selection, view },
     material_chosen: chosen || undefined,
   });
-  // Report material follows the chart the student is looking at: every complete chart is recorded
-  // automatically, replacing the previous one. Incomplete charts never overwrite a complete record.
-  // Once the report is submitted, browsing leaves the material alone unless the student asks.
-  useEffect(() => {
-    if (!canSave || matches || state.syncing || state.materialLocked) return;
-    recordCurrent();
-    // state/selection objects change every render; pendingKey captures every meaningful change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingKey, matches, state.syncing]);
   // View bar: the step's theme first (default entry), then the two views every step must offer.
   const themeLens = topic.composition
     ? { key: "composition" as const, label: topic.themeLabel }
@@ -342,11 +333,30 @@ export function IndicatorExplorer({
     { key: "comparison", label: "国家对比" },
     ...(topic.key === "length" ? [{ key: "segments" as const, label: "段长度对照" }] : []),
     { key: "positioning", label: "定位图" },
-    // Step 6 reads its industries as a dot plot (行业结构, recorded); steps 7–8 keep the paired ranking
-    // (定位行业, recorded) and add an exploration-only 行业结构 view.
+    // The recorded industry view is 行业排名 on every step (step 6 draws it as a dot plot, steps 7–8 as paired
+    // bars); steps 7–8 add an exploration-only 行业结构 view.
     ...(topic.key === "trade" ? [] : [{ key: "structure" as const, label: "行业结构" }]),
-    { key: "industry", label: topic.key === "trade" ? "行业结构" : "定位行业" },
+    { key: "industry", label: "行业排名" },
   ];
+  // Auto-recording replaces the material without a click, so a replacement is announced next to the scope
+  // line ("报告材料已更新为：历年变化 · 10 条读数") and fades after a few seconds.
+  const [flash, setFlash] = useState("");
+  useEffect(() => {
+    if (!flash) return;
+    const timer = window.setTimeout(() => setFlash(""), 6000);
+    return () => window.clearTimeout(timer);
+  }, [flash]);
+  const viewName = lenses.find((lens) => lens.key === (composition ? "composition" : view))?.label ?? "";
+  // Report material follows the chart the student is looking at: every complete chart is recorded
+  // automatically, replacing the previous one. Incomplete charts never overwrite a complete record.
+  // Once the report is submitted, browsing leaves the material alone unless the student asks.
+  useEffect(() => {
+    if (!canSave || matches || state.syncing || state.materialLocked) return;
+    if (saved.length) setFlash(`报告材料已更新为：${viewName}${view === "evolution" ? " · 历年构成" : ""} · ${pending.length} 条读数`);
+    recordCurrent();
+    // state/selection objects change every render; pendingKey captures every meaningful change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingKey, matches, state.syncing]);
   const themeActive = composition || view === "directions";
   const valuesFor = (key: string, sector = industry) =>
     selected.map((country) => {
@@ -441,7 +451,7 @@ export function IndicatorExplorer({
   return (
     <section
       className="reg-section-card"
-      aria-label={`步骤${step.n}比较工作台`}
+      aria-label={`步骤 ${step.n} 图表比较区`}
     >
       <h3>{topic.question}</h3>
       <div className="controls" role="group" aria-label="比较对象">
@@ -501,8 +511,8 @@ export function IndicatorExplorer({
         {selected.length < MAX_ENTITIES && (
           <AddCountryControl
             ref={addRef}
-            label={others.length ? "再加一个对比国家" : "对比国家 B"}
-            emptyLabel={others.length ? "选择国家…" : "不选对比国家"}
+            label={others.length ? "再加一个对比国家" : "加一个对比国家（可选）"}
+            emptyLabel="选择国家…"
             candidates={countries.filter((candidate) => !selected.includes(candidate))}
             onAdd={(country) => selectOthers([...others, country])}
             focusAfterAdd={() => (addRef.current ?? entityRef.current)?.focus()}
@@ -515,11 +525,11 @@ export function IndicatorExplorer({
         onPick={(next) => select({ view: next === "composition" && composition ? view : next })}
       />
       {themeActive && <p className="muted lens-hint">{side === "alternate"
-        ? "后向口径：同样四类生产活动，从最终品回溯；先看复杂 GVC 占多少、与对比国家差在哪一类（分母见图下说明）。"
+        ? "后向：同样四类生产活动，从最终品往回看；先看复杂 GVC 占多少，再看与对比国家差在哪一类。"
         : topic.themeHint}</p>}
-      {view === "positioning" && <p className="muted lens-hint">定位图把全部经济体放在两项指标上，所选国家高亮，可叠加 {years[0]}→{years.at(-1)} 的轨迹；只作探索，不记录材料。</p>}
-      {view === "segments" && <p className="muted lens-hint">段长度对照：每行一段（纯国内、传统贸易、GVC），前向点与后向点用线相连，一眼看出哪一段、哪个方向更长；多国为分面。三段长度不可相加。</p>}
-      {view === "structure" && <p className="muted lens-hint">{topic.key === "production" ? "行业结构：所选国家每个行业的四类生产活动份额，按复杂 GVC 生产份额排序；多国为分面。只作探索，不记录材料。" : "行业结构：所选国家每个行业的前向与后向 GVC 段长度，等长线上方更偏上游；多国为分面。只作探索，不记录材料。"}</p>}
+      {view === "positioning" && <p className="muted lens-hint">定位图：每个点是一个经济体，横轴、纵轴各是一项指标，所选国家高亮；可勾选显示 {years[0]}→{years.at(-1)} 的轨迹。只供探索，不记录材料。</p>}
+      {view === "segments" && <p className="muted lens-hint">段长度对照：每行一段（纯国内、传统贸易、GVC），前向点和后向点用线相连，一眼看出哪一段、哪个方向更长；选了多个国家时每国一张。三段长度不能相加。</p>}
+      {view === "structure" && <p className="muted lens-hint">{topic.key === "production" ? "行业结构：所选国家每个行业的四类生产活动份额，按复杂 GVC 生产份额排序；选了多个国家时每国一张。只供探索，不记录材料。" : "行业结构：所选国家每个行业的前向与后向 GVC 段长度，等长线（前向 = 后向）上方更偏上游；选了多个国家时每国一张。只供探索，不记录材料。"}</p>}
       <div className="controls">
         {view !== "industry" && view !== "structure" && (
           <LabeledControl label="比较范围">
@@ -555,10 +565,10 @@ export function IndicatorExplorer({
                       key={category}
                       label={
                         category === "%"
-                          ? "份额（跨国比较）"
+                          ? "份额（%）"
                           : category === "百万美元"
-                            ? "金额（当年价格）"
-                            : category
+                            ? "金额（百万美元，当年价格）"
+                            : category === "长度单位" ? "长度（平均生产阶段数）" : category === "无量纲" ? "位置指数（比值）" : category
                       }
                     >
                       {topic.metrics
@@ -576,22 +586,24 @@ export function IndicatorExplorer({
           </LabeledControl>
         )}
             </div>
-      {composition && <div className="controls" role="group" aria-label={`${topic.themeLabel}时间范围`}>
-        <button className={view === "composition" ? "primary" : "secondary"} aria-pressed={view === "composition"} onClick={() => select({ view: "composition" })}>单年</button>
-        <button className={view === "evolution" ? "primary" : "secondary"} aria-pressed={view === "evolution"} onClick={() => select({ view: "evolution" })}>历年</button>
-        {topic.composition?.alternate && <span className="controls-sep" aria-hidden="true">·</span>}
+      {/* Mode switches inside the theme view are segmented controls, not primary buttons: the indigo fill stays
+          reserved for the page's one main action (下一步). */}
+      {composition && <div className="controls viz-modes">
+        <div className="seg" role="group" aria-label={`${topic.themeLabel}时间范围`}>
+          <button type="button" className={view === "composition" ? "on" : undefined} aria-pressed={view === "composition"} onClick={() => select({ view: "composition" })}>单年构成</button>
+          <button type="button" className={view === "evolution" ? "on" : undefined} aria-pressed={view === "evolution"} onClick={() => select({ view: "evolution" })}>历年构成</button>
+        </div>
         {topic.composition?.alternate && (
-          <span role="group" aria-label="构成口径" style={{ display: "inline-flex", gap: 8 }}>
-            <button className={side === "primary" ? "primary" : "secondary"} aria-pressed={side === "primary"} onClick={() => select({ composition_side: "primary" })}>{topic.composition.alternate.primaryLabel}</button>
-            <button className={side === "alternate" ? "primary" : "secondary"} aria-pressed={side === "alternate"} onClick={() => select({ composition_side: "alternate" })}>{topic.composition.alternate.label}</button>
-          </span>
+          <div className="seg" role="group" aria-label="构成方向">
+            <button type="button" className={side === "primary" ? "on" : undefined} aria-pressed={side === "primary"} onClick={() => select({ composition_side: "primary" })}>{topic.composition.alternate.primaryLabel}</button>
+            <button type="button" className={side === "alternate" ? "on" : undefined} aria-pressed={side === "alternate"} onClick={() => select({ composition_side: "alternate" })}>{topic.composition.alternate.label}</button>
+          </div>
         )}
-        {view === "composition" && <span className="controls-sep" aria-hidden="true">·</span>}
         {view === "composition" && (
-          <span role="group" aria-label="条形刻度" style={{ display: "inline-flex", gap: 8 }}>
-            <button className={amountMode ? "secondary" : "primary"} aria-pressed={!amountMode} onClick={() => setAmountMode(false)}>占比</button>
-            <button className={amountMode ? "primary" : "secondary"} aria-pressed={amountMode} onClick={() => setAmountMode(true)}>金额</button>
-          </span>
+          <div className="seg" role="group" aria-label="条形刻度">
+            <button type="button" className={amountMode ? undefined : "on"} aria-pressed={!amountMode} onClick={() => setAmountMode(false)}>占比</button>
+            <button type="button" className={amountMode ? "on" : undefined} aria-pressed={amountMode} onClick={() => setAmountMode(true)}>金额</button>
+          </div>
         )}
       </div>}
       {view === "positioning" && <div className="controls" role="group" aria-label="定位图设置">
@@ -651,7 +663,7 @@ export function IndicatorExplorer({
             </LabeledControl>
           </>
         ) : (
-          <LabeledControl label="比较年份">
+          <LabeledControl label="年份">
             {(id) => (
               <select
                 id={id}
@@ -674,7 +686,7 @@ export function IndicatorExplorer({
                 value={limit}
                 onChange={(e) => select({ limit: +e.target.value })}
               >
-                <option value={10}>Top 10（按国家 A）</option>
+                <option value={10}>前 10 个（按国家 A 排序）</option>
                 <option value={200}>全部行业</option>
               </select>
             )}
@@ -693,10 +705,11 @@ export function IndicatorExplorer({
           { label: "年份", value: timeView && start !== end ? `${start}–${end}` : String(timeView ? start : year), onJump: jump(yearRef) },
           {
             label: "指标",
-            value: composition ? `${topic.themeLabel}${side === "alternate" ? " · 后向" : ""}` : view === "directions" ? "前后向 GVC 段长度与位置" : view === "positioning" ? `定位图（横轴 ${label(axes.x)} · 纵轴 ${label(axes.y)}）` : view === "structure" ? (topic.key === "production" ? "四类生产活动 · 行业" : "前向 × 后向 GVC 段长度 · 行业") : view === "segments" ? "前后向三段长度" : label(metric),
+            value: composition ? `${topic.themeLabel}${side === "alternate" ? " · 后向" : ""}` : view === "directions" ? "前后向 GVC 段长度与位置" : view === "positioning" ? `定位图（横轴 ${label(axes.x)} · 纵轴 ${label(axes.y)}）` : view === "structure" ? (topic.key === "production" ? "四类生产活动 · 行业" : "前向与后向 GVC 段长度 · 行业") : view === "segments" ? "前后向三段长度" : label(metric),
             onJump: composition || view === "directions" || view === "positioning" || view === "structure" || view === "segments" ? undefined : jump(metricRef),
           },
         ]}
+        note={flash ? <span className="scope-flash">✓ {flash}</span> : undefined}
       />
       <div className="viz-chart">
       {!validYears ? <div className="error-box" role="alert">
@@ -774,9 +787,9 @@ export function IndicatorExplorer({
             <>
               <h4>定位图 · {industry ? `${sectorLabel(industry)} · 所选国家` : `${exploreYear} 年全部经济体`}</h4>
               <p className="muted">
-                虚线中位数只表示当前展示样本的相对高低，不代表好坏或因果关系。
+                灰色虚线是图上各经济体的中位数，只表示相对高低，不代表好坏或因果关系。
                 {axes.xScale === "log" && "横轴为对数刻度，只画出口为正的经济体。"}
-                {axes.equality && "等长线以上前向 GVC 段更长；总长度与 GVC 段不能混用。"}
+                {axes.equality && "等长线（前向 = 后向）上方：前向 GVC 段更长。注意总长度和 GVC 段长度是两个不同的指标。"}
                 {trail && "轨迹从较早年份（空心）指向最近年份（实心），灰点是当年全部经济体。"}
               </p>
               <QuadrantScatter
@@ -820,7 +833,7 @@ export function IndicatorExplorer({
               <p>
                 {activeComposition.note}
                 {view === "evolution"
-                  ? "每国一面，分项颜色与年份顺序相同，先比较各自变化，再比较国家差异。"
+                  ? "每个国家一张图，颜色和年份顺序都相同；先看各国自己的变化，再比较国家之间的差别。"
                   : amountMode ? "所选国家使用同一金额刻度，条长与总量成比例；负分项画在零轴左侧。" : "所选国家使用相同分项颜色和共同刻度；金额和份额不能混读。"}
                 {view !== "evolution" && `条形右侧的数字是${withUnitNote(label(activeComposition.total), unit(activeComposition.total))}。`}
               </p>
@@ -936,9 +949,9 @@ export function IndicatorExplorer({
           {view === "industry" && (
             <>
               <p>
-                按国家 A 的{label(metric)}降序排列，同一行业对齐对比国家。点击行业查看历年变化；图中不对各国分别排名。
+                行业按国家 A 的{label(metric)}从高到低排列，对比国家的同一行业放在同一行。点击行业名，可看它的历年变化。
               </p>
-              <ScrollableRegion className="bounded-data-table" label="行业差异">
+              <ScrollableRegion className="bounded-data-table" label="行业排名">
                 {topic.key === "trade" && unit(metric) !== "百万美元" ? (
                   <IndustryDotPlot
                     countries={selected}
@@ -970,7 +983,7 @@ export function IndicatorExplorer({
           )}
           <details className="technical-details">
             <summary>
-              核对当前图表读数 · {pending.length} 条（缺失不补零）
+              核对当前图表读数 · {pending.length} 条（缺失留空）
             </summary>
             {table(pending)}
           </details>
@@ -982,7 +995,7 @@ export function IndicatorExplorer({
         && (view === "positioning" ? [axes.x, axes.y] : [metric]).map((key) => description(key) && (
           <p key={key} className="muted viz-metric-desc">
             {label(key)}：{description(key)}
-            {field(key)?.denominator && `分母：${label(field(key)!.denominator!)}；分母不为正时份额不显示。`}
+            {field(key)?.denominator && `分母：${label(field(key)!.denominator!)}（分母为 0 或负数时不显示份额）。`}
           </p>
         ))}
       <section className="qualified-run-card" aria-label="报告材料">
@@ -998,14 +1011,14 @@ export function IndicatorExplorer({
           <button type="button" className="secondary" onClick={() => recordCurrent(true)}>{MATERIAL_LOCKED_ACTION}</button>
         )}
         {saved.length > 0 && <details>
-          <summary>核对已保存材料 · {saved.length} 条读数</summary>
+          <summary>核对已记录的材料 · {saved.length} 条读数</summary>
           <p>
             {joinCountries([...new Set(saved.map((item) => item.country))])} · {savedYearSpan(saved.map((item) => item.year))}
             {" "}· {[...new Set(saved.map((item) => item.industry ?? ""))].map((industry) => industry ? sectorLabel(industry) : "国家整体").join("、")}
           </p>
           {table(saved)}
         </details>}
-        {state.syncError ? <p role="alert">材料尚未同步成功。<button className="secondary" onClick={state.syncNow}>重试同步</button></p>
+        {state.syncError ? <p role="alert">材料还没保存成功，请重试。<button className="secondary" onClick={state.syncNow}>重试同步</button></p>
           : state.syncing && <p className="muted">正在同步实验记录…</p>}
       </section>
     </section>

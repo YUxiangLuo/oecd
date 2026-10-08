@@ -16,7 +16,6 @@ import { FullscreenPanel } from "../../../fullscreen-panel";
 import type { IndicatorSchema, Meta, QuizCompletionState, Step, StepStateApi } from "../../../types";
 import { useAsync } from "../../shared";
 import { CountryPicker } from "../../country-picker";
-import { CAT } from "../../../viz/shared";
 import type { IndicatorSelection } from "./indicator-model";
 
 export type Row = Record<string, string | number | null>;
@@ -169,14 +168,14 @@ export function ChartStory({ eyebrow, title, what, read, find, note, children }:
   what: ReactNode;   // 这张图在展示什么(轴 / 颜色 / 分段的含义)
   read: ReactNode;   // 怎么读(位置 / 方向代表什么)
   find?: ReactNode;  // 该发现什么(真实数据里的看点)
-  note?: ReactNode;  // 口径 / 提醒(小字)
+  note?: ReactNode;  // 计算范围 / 提醒(小字)
   children: ReactNode;
 }) {
   // Only "what" stays above the chart; how to read, what to try and the caveat fold into one disclosure.
   const guide: [string, ReactNode][] = [
     ["怎么读", read],
     ...(find ? ([["试着观察", find]] as [string, ReactNode][]) : []),
-    ...(note ? ([["口径提醒", note]] as [string, ReactNode][]) : []),
+    ...(note ? ([["注意", note]] as [string, ReactNode][]) : []),
   ];
   return (
     <section style={{ marginBottom: 18 }}>
@@ -209,30 +208,14 @@ export function LensNav<K extends string>({ lenses, active, onPick }: {
   active: K;
   onPick: (key: K) => void;
 }) {
+  // A segmented control (.lens-nav in workbench.css), the larger sibling of the mode switches under it.
   return (
-    <div
-      role="group"
-      aria-label="图表视角"
-      style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}
-    >
-      {lenses.map((l) => {
-        const on = l.key === active;
-        return (
-          <button
-            key={l.key}
-            type="button"
-            aria-pressed={on}
-            onClick={() => onPick(l.key)}
-            title={l.hint}
-            style={{
-              border: on ? `1.5px solid ${CAT[0]}` : "1.5px solid #e2e5ee", background: on ? "#eef4fe" : "#fff",
-              color: on ? CAT[0] : "#5a6070", borderRadius: 9, padding: "7px 14px", cursor: "pointer",
-              fontSize: 12.5, fontWeight: on ? 700 : 500, transition: "all .12s",
-            }}>
-            {l.label}
-          </button>
-        );
-      })}
+    <div role="group" aria-label="图表视角" className="lens-nav">
+      {lenses.map((l) => (
+        <button key={l.key} type="button" aria-pressed={l.key === active} onClick={() => onPick(l.key)} title={l.hint}>
+          {l.label}
+        </button>
+      ))}
     </div>
   );
 }
