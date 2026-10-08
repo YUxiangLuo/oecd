@@ -52,6 +52,8 @@ type DecompCfg = {
   /** 加权模式的权重分母(如 SVA);设置后各分项按 VA 份额加权 */
   weightTotal?: string;
   note?: (r: Row, values: number[]) => string;
+  /** What a negative part means here (the table's default names net subsidies, which fits step 2's taxsub). */
+  negativeNote?: string;
 };
 
 const DECOMP: Record<number, DecompCfg> = {
@@ -83,6 +85,7 @@ const DECOMP: Record<number, DecompCfg> = {
       { key: "3a_VA_GVC_S", label: "3a_VA_GVC_S 简单 GVC 增加值", short: "简单 GVC", color: "#e0982a", desc: "增加值随中间品跨境一次后，在国外被最终使用。" },
       { key: "3b_VA_GVC_C", label: "3b_VA_GVC_C 复杂 GVC 增加值", short: "复杂 GVC", color: "#f4693b", desc: "增加值至少两次跨越国境。" },
     ],
+    negativeNote: "负值表示这部分增加值为负（例如行业亏损），所以其他分项的比重之和可能超过 100%。",
     note: (_r, values) =>
       `GVC 合计（3_VA_GVC）= 简单 GVC + 复杂 GVC = ${sumText(values[2], values[3])}。` +
       `也可以反过来，从最终产品在哪国完成来拆分（后向分解，代码 FGY），在步骤 7 选带“（后向）”的指标查看。`,
@@ -115,25 +118,36 @@ export function negativeFill(color: string): string {
   return `repeating-linear-gradient(135deg, ${color} 0 5px, #e34948 5px 8px)`;
 }
 
-/** Same reading rule as the step 5 table and the report material line: amounts whole from 1 up and to three
- * decimals below (small flows are not shown as "0"), lengths to three decimals, an exact zero as "0". */
-function fmt(v: number, unit: "amount" | "number"): string {
+/** Amounts of 10 and up read whole, as in the step 5 table and the report material line. Below 10 an amount keeps
+ * three decimals, so a small total and its parts add up as shown ("0.560 / 1.378", never "0.56 / 1"); a real
+ * but tiny flow reads "<0.001" rather than "0". Lengths are read to three decimals; an exact zero is "0". */
+const WHOLE_AMOUNT_FROM = 10;
+
+export function fmt(v: number, unit: "amount" | "number"): string {
   if (v === 0) return "0";
-  return unit === "amount" ? formatMetric(v, "amount") : stripNegativeZero(v.toFixed(3));
+  if (unit === "number") return stripNegativeZero(v.toFixed(3));
+  if (Math.abs(v) >= WHOLE_AMOUNT_FROM || Math.abs(v) < 0.0005) return formatMetric(v, "amount");
+  return stripNegativeZero(v.toFixed(3));
 }
 
-/** A two-part sum. When a part is below 1 (read to three decimals in the table) the parts are written out at
- * four significant digits, so the line adds up as shown: "= 2.477 + 0.867 = 3.344", never "= 1" for
- * 0.817 + 0.468 nor "0.000" for two tiny non-zero parts. Otherwise the sum reads like the table. */
+/** An amount written into a formula line: the table's reading ({@link fmt}), except that a value below 0.1 keeps
+ * three significant digits ("0.0118", "0.000249") so the substituted arithmetic still checks by hand. */
+export function formulaAmount(value: number): string {
+  if (value === 0) return "0";
+  const magnitude = Math.abs(value);
+  if (magnitude >= 0.1) return fmt(value, "amount");
+  const decimals = Math.min(20, Math.max(3, 2 - Math.floor(Math.log10(magnitude))));
+  // Trailing zeros beyond the third decimal add nothing ("0.0001000" → "0.0001"; "0.060" stays).
+  return stripNegativeZero(value.toFixed(decimals).replace(/(\.\d{3}\d*?)0+$/, "$1"));
+}
+
+/** A two-part sum. When a part is below 10 (read to three decimals in the table) the parts are written out, so
+ * the line adds up as shown: "= 2.477 + 0.867 = 3.344", never "= 9" for 5.4 + 3.3 nor "0.000" for two tiny
+ * non-zero parts. Otherwise the sum reads like the table. */
 export function sumText(a: number, b: number): string {
-  const fractional = (v: number) => v !== 0 && Math.abs(v) < 1;
-  if (!fractional(a) && !fractional(b)) return fmt(a + b, "amount");
-  const exact = (v: number) => v === 0
-    ? "0"
-    : Math.abs(v) >= 1000
-      ? formatMetric(v, "amount")
-      : stripNegativeZero(v.toLocaleString("zh-CN", { maximumSignificantDigits: 4 }));
-  return `${exact(a)} + ${exact(b)} = ${exact(a + b)}`;
+  const small = (v: number) => v !== 0 && Math.abs(v) < WHOLE_AMOUNT_FROM;
+  if (!small(a) && !small(b)) return fmt(a + b, "amount");
+  return `${formulaAmount(a)} + ${formulaAmount(b)} = ${formulaAmount(a + b)}`;
 }
 
 /** A share already in percent, to three decimals as everywhere else ("11.730%"); an exact zero is "0%". */
@@ -141,14 +155,10 @@ function percentText(percent: number): string {
   return percent === 0 ? "0%" : `${stripNegativeZero(percent.toFixed(3))}%`;
 }
 
+/** The same digits as the decomposition table beside it; a tiny operand keeps three significant digits so the
+ * substituted formula never reads "0 / 0". */
 function disclosureAmount(value: number | null): string {
-  if (value == null) return "—";
-  // The same digits as the decomposition table beside it for amounts from 1 up; a small operand keeps three
-  // significant digits so the substituted formula never reads "0 / 0".
-  if (value === 0) return "0";
-  return Math.abs(value) >= 1
-    ? formatMetric(value, "amount")
-    : stripNegativeZero(value.toLocaleString("zh-CN", { maximumSignificantDigits: 3 }));
+  return value == null ? "—" : formulaAmount(value);
 }
 
 /** Lengths are read to three decimals everywhere (e.g. PLv = 2.216); a tiny signed value keeps its sign. */
@@ -161,6 +171,12 @@ function disclosureRatio(numerator: number | null, denominator: number | null): 
   return numerator != null && denominator != null && denominator > 0
     ? numerator / denominator
     : null;
+}
+
+/** Why a share has no value: the reason the student can check against the total line above it. */
+function disclosureRatioGap(numerator: number | null, denominator: number | null): string {
+  if (numerator == null || denominator == null) return "—（缺数据，无法计算）";
+  return denominator < 0 ? "—（总量为负，无法计算比重）" : "—（总量为 0，无法计算比重）";
 }
 
 export function IndicatorCalculationDisclosure({ step, row }: { step: number; row: Row }) {
@@ -178,7 +194,7 @@ export function IndicatorCalculationDisclosure({ step, row }: { step: number; ro
         <div className="icd-title">{title}</div>
         <div className="icd-formula">{title} = {numeratorKey} / {denominatorLabel}</div>
         <div className="icd-calc">
-          = {disclosureAmount(numerator)} / {disclosureAmount(denominator)} = <b>{ratio == null ? "—（总量为 0 或缺数据，无法计算）" : percentText(ratio * 100)}</b>
+          = {disclosureAmount(numerator)} / {disclosureAmount(denominator)} = <b>{ratio == null ? disclosureRatioGap(numerator, denominator) : percentText(ratio * 100)}</b>
         </div>
         <p>{step === 4
           ? "FVA 不包括外国重复计算 FDC。分母是下面六项相加得到的总出口，所以这个比例和 OECD TiVA 公布的“出口中外国增加值占比”不完全相同。"
@@ -192,13 +208,18 @@ export function IndicatorCalculationDisclosure({ step, row }: { step: number; ro
   const position = forward != null && backward != null && Math.abs(backward) > 1e-12
     ? forward / backward
     : null;
+  // A GVC segment with no value added (or final goods) in it has no length: no activity, not missing data —
+  // the same reading as the segment list under the PLv identity.
+  const noActivity = (forward == null && finiteNumber(row["3_VA_GVC"]) === 0)
+    || (backward == null && finiteNumber(row["3_FGY_GVC"]) === 0);
+  const positionGap = noActivity ? "—（无此类活动，无法计算）" : "—（缺数据，无法计算）";
   return (
     <section className="indicator-calculation-disclosure" aria-label="GVC 位置指数计算公示">
       <div className="icd-kicker">这个指标怎么算</div>
       <div className="icd-title">GVC 位置指数 GVCPs</div>
       <div className="icd-formula">GVCPs = PLv_GVC / PLy_GVC</div>
       <div className="icd-calc">
-        = {disclosureLength(forward)} / {disclosureLength(backward)} = <b>{position == null ? "—（缺数据，无法计算）" : stripNegativeZero(position.toFixed(3))}</b>
+        = {disclosureLength(forward)} / {disclosureLength(backward)} = <b>{position == null ? positionGap : stripNegativeZero(position.toFixed(3))}</b>
       </div>
       <p>这里比较前向与后向的 GVC 段长度。上方 PLv 恒等式中的每一项是“增加值份额 × 段长度”的加权贡献，不是段长度本身。</p>
     </section>
@@ -215,6 +236,7 @@ export function DecompositionDetailTable({
   hover = null,
   onHover,
   compact = false,
+  negativeNote = "负值表示抵减项（例如净补贴），所以其他分项的比重之和可能超过 100%。",
 }: {
   caption: string;
   parts: readonly Part[];
@@ -226,8 +248,13 @@ export function DecompositionDetailTable({
   onHover?: (key: string | null) => void;
   /** Side by side: the meaning goes under the name instead of a squeezed fourth column. */
   compact?: boolean;
+  /** What a negative part means in this decomposition; only shown beside shares it explains. */
+  negativeNote?: string;
 }) {
-  const hasNegative = !unavailable && values.some((value) => value != null && value < 0);
+  // The note explains shares summing past 100%; with no shares (e.g. a negative total) the reason line says why.
+  const hasNegative = !unavailable
+    && Boolean(shares?.some((share) => share != null))
+    && values.some((value) => value != null && value < 0);
   return (
     <>
     <table className={`decomp-table${compact ? " decomp-table--compact" : ""}`}>
@@ -263,7 +290,7 @@ export function DecompositionDetailTable({
         );
       })}</tbody>
     </table>
-    {hasNegative && <p className="decomp-table-note">负值表示抵减项（例如净补贴），所以其他分项的比重之和可能超过 100%。</p>}
+    {hasNegative && <p className="decomp-table-note">{negativeNote}</p>}
     </>
   );
 }
@@ -470,8 +497,12 @@ export function DecompositionDemo({
   const pageB = sideBQuery.status === "success" ? sideBQuery.data?.page ?? null : null;
 
   const sectorsA = (pageA?.rows ?? []).map((row) => String(row.industry));
-  const sectorsB = (pageB?.rows ?? []).map((row) => String(row.industry));
   const effSectorA = sectorsA.includes(sectorA) ? sectorA : sectorsA[0] ?? "";
+  // Within one country, B offers A's other industries only: the same country and industry on both sides would
+  // show two identical panels. As at country level, moving A onto B's choice moves B to the next industry.
+  const sectorsB = (pageB?.rows ?? [])
+    .map((row) => String(row.industry))
+    .filter((code) => !(gran === "sector" && countryB === countryA && code === effSectorA));
   const effSectorB = sectorsB.includes(sectorB) ? sectorB : sectorsB[0] ?? "";
   const rowA = gran === "country"
     ? countryRowsA?.find((row) => row.country === countryA)
@@ -582,6 +613,7 @@ export function DecompositionDemo({
             unit={cfg.unit}
             unavailable
             compact={compare}
+            negativeNote={cfg.negativeNote}
           />
           {step === 6 && <MiniBackwardBar row={row} />}
         </div>
@@ -641,6 +673,7 @@ export function DecompositionDemo({
           hover={hover}
           onHover={setHover}
           compact={compare}
+          negativeNote={cfg.negativeNote}
         />
         {step === 6 && <MiniBackwardBar row={row} />}
         {cfg.note && sharesAvailable && <div className="decomp-note">{cfg.note(row, model.values)}</div>}
@@ -918,31 +951,95 @@ export function ClosenessPathTable({
   );
 }
 
-// 重建一条经过 v 的、跨度尽量大的最短路径,用于高亮演示
-function samplePathThrough(v: string, C: ReturnType<typeof computeCentrality>): string[] {
+/** One (s, t) pair whose shortest routes pass through a node: `through` of the `total` shortest routes do, so the
+ * pair adds through / total to the node's betweenness. */
+export type BetweennessPair = { source: string; target: string; distance: number; through: number; total: number };
+
+function betweennessPairsFrom(v: string, C: ReturnType<typeof computeCentrality>): BetweennessPair[] {
   const ids = NET_NODES.map((n) => n.id);
-  let best: string[] = [];
-  let bestLen = -1;
+  const pairs: BetweennessPair[] = [];
   for (const s of ids) for (const t of ids) {
     if (s === t || s === v || t === v || !Number.isFinite(C.dist[s][t])) continue;
-    if (C.dist[s][v] + C.dist[v][t] === C.dist[s][t] && C.dist[s][t] > bestLen) {
-      // 沿 preds 从 t 回溯一条经过 v 的最短路径
-      const half = (from: string, to: string): string[] | null => {
-        // 回溯 to<-…<-from 的一条最短路径
-        const path: string[] = [to];
-        let cur = to;
-        while (cur !== from) {
-          const p = C.preds[from][cur][0];
-          if (p === undefined) return null;
-          path.push(p); cur = p;
-        }
-        return path.reverse();
-      };
-      const p1 = half(s, v), p2 = half(v, t);
-      if (p1 && p2) { best = [...p1, ...p2.slice(1)]; bestLen = C.dist[s][t]; }
-    }
+    if (C.dist[s][v] + C.dist[v][t] !== C.dist[s][t]) continue;
+    pairs.push({ source: s, target: t, distance: C.dist[s][t], through: C.sigma[s][v] * C.sigma[v][t], total: C.sigma[s][t] });
+  }
+  return pairs;
+}
+
+/** The per-pair contributions behind a node's betweenness in the teaching network; they add up to its value. */
+export function teachingBetweennessPairs(nodeId: string): BetweennessPair[] {
+  return betweennessPairsFrom(nodeId, computeCentrality());
+}
+
+/** The example pair for the highlight: one where every shortest route passes the node when there is one (so
+ * "要经过" is true), otherwise one where only some do; the longest such pair first. */
+export function betweennessExamplePair(pairs: readonly BetweennessPair[]): BetweennessPair | null {
+  let best: BetweennessPair | null = null;
+  for (const pair of pairs) {
+    const all = pair.through === pair.total;
+    const bestAll = best != null && best.through === best.total;
+    if (best == null || (all && !bestAll) || (all === bestAll && pair.distance > best.distance)) best = pair;
   }
   return best;
+}
+
+// 重建一条经过 v 的最短路径（s → … → v → … → t），用于高亮演示
+function samplePathThrough(v: string, pair: BetweennessPair | null, C: ReturnType<typeof computeCentrality>): string[] {
+  if (!pair) return [];
+  // 回溯 to<-…<-from 的一条最短路径
+  const half = (from: string, to: string): string[] | null => {
+    const path: string[] = [to];
+    let cur = to;
+    while (cur !== from) {
+      const p = C.preds[from][cur][0];
+      if (p === undefined) return null;
+      path.push(p); cur = p;
+    }
+    return path.reverse();
+  };
+  const p1 = half(pair.source, v), p2 = half(v, pair.target);
+  return p1 && p2 ? [...p1, ...p2.slice(1)] : [];
+}
+
+/** A pair's share as written in the breakdown: "1", or "1/2 = 0.5". */
+function pairShareText(pair: BetweennessPair): string {
+  if (pair.through === pair.total) return "1";
+  return `${pair.through}/${pair.total} = ${Number((pair.through / pair.total).toFixed(3))}`;
+}
+
+/** The highlighted example in words: "要经过" only when every shortest route of the pair passes the node. */
+export function betweennessExampleSentence(pair: BetweennessPair, node: string): string {
+  const route = `${pair.source} → ${pair.target}`;
+  if (pair.through === pair.total) {
+    return pair.total === 1
+      ? `例如 ${route} 只有一条最短路线，它要经过 ${node}（已高亮），这一对计 1。`
+      : `例如 ${route} 的 ${pair.total} 条最短路线都要经过 ${node}（已高亮），这一对计 1。`;
+  }
+  return `例如 ${route} 有 ${pair.total} 条最短路线，其中 ${pair.through} 条经过 ${node}（已高亮），这一对计 ${pairShareText(pair)}。`;
+}
+
+export function BetweennessPairTable({ node, pairs }: { node: string; pairs: readonly BetweennessPair[] }) {
+  return (
+    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+      <caption className="sr-only">节点 {node} 的介数：每一对起点和终点计入的份额</caption>
+      <thead>
+        <tr>
+          <th scope="col" style={{ textAlign: "left" }}>起点 → 终点</th>
+          <th scope="col">最短路线条数</th>
+          <th scope="col">其中经过 {node}</th>
+          <th scope="col">计入</th>
+        </tr>
+      </thead>
+      <tbody>{pairs.map((pair) => (
+        <tr key={`${pair.source}-${pair.target}`}>
+          <th scope="row" style={{ textAlign: "left" }}>{pair.source} → {pair.target}</th>
+          <td style={{ textAlign: "center" }}>{pair.total}</td>
+          <td style={{ textAlign: "center" }}>{pair.through}</td>
+          <td style={{ textAlign: "center" }}>{pairShareText(pair)}</td>
+        </tr>
+      ))}</tbody>
+    </table>
+  );
 }
 
 export function NetworkCentralityDemo() {
@@ -961,7 +1058,9 @@ export function NetworkCentralityDemo() {
     else globalThis.setTimeout(focus, 0);
   };
 
-  const pathNodes = mode === "betweenness" ? samplePathThrough(sel, C) : [];
+  const betweennessPairs = betweennessPairsFrom(sel, C);
+  const examplePair = betweennessExamplePair(betweennessPairs);
+  const pathNodes = mode === "betweenness" ? samplePathThrough(sel, examplePair, C) : [];
   const pathEdges = new Set<string>();
   for (let i = 0; i + 1 < pathNodes.length; i++) pathEdges.add(ekey(pathNodes[i], pathNodes[i + 1]));
   const distancePaths = NET_NODES.filter((node) => node.id !== sel).map((node) => ({
@@ -1110,14 +1209,27 @@ export function NetworkCentralityDemo() {
           ) : mode === "betweenness" ? (
             <>
               <div className="ndp-formula">介数 = Σ σₛₜ(v) / σₛₜ（σₛₜ：s 到 t 的最短路线条数；σₛₜ(v)：其中经过 v 的条数）</div>
-              <div className="ndp-calc">= <b>{networkDemoMetricText(C.bet[sel], "betweenness")}</b></div>
+              <div className="ndp-calc">
+                = {betweennessPairs.length > 0 && betweennessPairs.length <= 8
+                  ? <>{betweennessPairs.map((pair) => pairShareText(pair).split(" = ").at(-1)).join(" + ")} = </>
+                  : betweennessPairs.length > 8 ? <>下表 {betweennessPairs.length} 对之和 = </> : null}
+                <b>{networkDemoMetricText(C.bet[sel], "betweenness")}</b>
+              </div>
               <p className="ndp-note">
-                {pathNodes.length >= 3
-                  ? <>例如 {pathNodes[0]} → {pathNodes[pathNodes.length - 1]} 的最短路线要经过 {sel}（已高亮）。经过它的最短路线越多，介数越高；但这不说明它是经济瓶颈。</>
+                {examplePair && pathNodes.length >= 3
+                  ? <>{betweennessExampleSentence(examplePair, sel)}经过它的最短路线越多，介数越高；但这不说明它是经济瓶颈。</>
                   : C.bet[sel] === 0
                     ? <>{selNode.label}（{sel}）不在其他节点之间的任何最短路线上，介数为 0。</>
                     : <>{selNode.label}（{sel}）很少落在其他节点之间的最短路线上，介数低。</>}
               </p>
+              {betweennessPairs.length > 0 && (
+                <ScrollableRegion
+                  label={`节点 ${sel} 的介数按节点对拆开的明细，可滚动`}
+                  style={{ maxHeight: 150, overflow: "auto", marginBottom: 10 }}
+                >
+                  <BetweennessPairTable node={sel} pairs={betweennessPairs} />
+                </ScrollableRegion>
+              )}
             </>
           ) : (
             <>

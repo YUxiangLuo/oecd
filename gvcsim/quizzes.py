@@ -302,7 +302,7 @@ def public_quiz(step: int) -> dict[str, Any] | None:
 # (retries are unlimited, so an explanation that states the answer would make the check meaningless).
 # The full explanation is shown once the answer is correct.
 HINTS: dict[str, str] = {
-    "s01-z-cell": "提示：Z 表的行和列分别代表谁？回到表格，看左上角“行·供给方 / 列·使用方”的标注。",
+    "s01-z-cell": "提示：Z 表的行和列分别代表谁？回到表格，看左上角“列·使用方 → / 行·供给方 ↓”的标注。",
     "s02-fva": "提示：这个指标的分子和分母各是什么？它描述的是出口价值的构成，还是跨境次数？",
     "s03-complex": "提示：逐条数一数：每条路径里跨境的是中间品还是最终品？在最终使用前一共跨境了几次？再对照本步对复杂 GVC 的定义。",
     "s04-position": "提示：这是前向 GVC 段长度与后向 GVC 段长度之比（GVCPs）。想想前向长度从哪一端开始追踪，比值大于 1 意味着哪一端更长。",
