@@ -15,6 +15,8 @@ export interface IndicatorTopic {
     unit: string;
     denominator?: string;
     numerator?: string;
+    /** Only a 定位图 axis here (label, unit and derivation), not offered in the step's metric list. */
+    axisOnly?: boolean;
   }[];
   composition?: CompositionSpec & {
     /** A second way to read the same step (step 7: the final-goods / backward side). */

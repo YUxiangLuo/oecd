@@ -523,7 +523,7 @@ export function IndicatorExplorer({
                 value={metric}
                 onChange={(e) => select({ metric: e.target.value })}
               >
-                {[...new Set(topic.metrics.map((item) => item.unit))].map(
+                {[...new Set(topic.metrics.filter((item) => !item.axisOnly).map((item) => item.unit))].map(
                   (category) => (
                     <optgroup
                       key={category}
@@ -536,7 +536,7 @@ export function IndicatorExplorer({
                       }
                     >
                       {topic.metrics
-                        .filter((item) => item.unit === category)
+                        .filter((item) => item.unit === category && !item.axisOnly)
                         .map((item) => (
                           <option key={item.key} value={item.key}>
                             {item.label}

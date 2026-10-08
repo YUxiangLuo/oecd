@@ -23,6 +23,7 @@ _SHARES: dict[str, tuple[str, str]] = {
     "DVAex_share": ("DVAex", "gross_exports"),
     "3_VA_GVC_share": ("3_VA_GVC", "SVA"),
     "3b_VA_GVC_C_share": ("3b_VA_GVC_C", "SVA"),
+    "3_FGY_GVC_share": ("3_FGY_GVC", "FGY"),
     "1_VA_D_share": ("1_VA_D", "SVA"),
     "2_VA_RT_share": ("2_VA_RT", "SVA"),
     "3a_VA_GVC_S_share": ("3a_VA_GVC_S", "SVA"),

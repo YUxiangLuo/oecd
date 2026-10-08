@@ -34,6 +34,15 @@ export const TRADE_TOPIC: IndicatorTopic = {
     { key: "FDC", label: "外国重复计算", unit: "百万美元" },
     { key: "taxsub", label: "税收减补贴（TLS 扩展）", unit: "百万美元" },
     { key: "EXDVA", label: "出口国内增加值合计", unit: "百万美元" },
+    // The 跨境生产 positioning axis (step 7's measure): a share, not an amount.
+    {
+      key: "3_VA_GVC_share",
+      label: "前向 GVC 生产总份额",
+      unit: "%",
+      numerator: "3_VA_GVC",
+      denominator: "SVA",
+      axisOnly: true,
+    },
   ],
   composition: {
     total: "gross_exports",
@@ -68,7 +77,7 @@ export const TRADE_TOPIC: IndicatorTopic = {
     },
     {
       key: "gvc",
-      label: "跨境生产：外国增加值项占比 × GVC 生产份额",
+      label: "跨境生产：外国增加值项占比 × 前向 GVC 生产总份额",
       x: "FVA_share",
       y: "3_VA_GVC_share",
       labels: ["两项份额均较高", "跨境生产较高", "两项份额均较低", "外国增加值项较高"],

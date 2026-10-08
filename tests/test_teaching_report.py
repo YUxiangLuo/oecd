@@ -902,7 +902,7 @@ def test_composition_requires_all_trade_components_and_reports_each_reading():
     ]
     assert not any(item["step"] == 6 for item in check_material_gate(session))
     text = "\n".join(teaching_report._experiment_sections(session))
-    assert "| 出口中的税收减补贴 | 百万美元 | -2 |" in text
+    assert "| 税收减补贴（TLS 扩展） | 百万美元 | -2 |" in text
     chart = teaching_report._observed_chart(data, 6, data["observations"])
     # Global-median bars are added when country data is available; the saved countries' bars are fixed.
     # Median bars are flagged as references so the report draws them grey, not as a third country.
@@ -956,7 +956,7 @@ def test_composition_evolution_generates_each_component_as_a_two_country_trend()
         {series["label"] for series in chart_countries} == {"CHN 中国", "USA 美国"} for chart_countries in countries
     )
     assert all("构成演变" in chart["title"] and chart["y_label"] == "占总出口的百分比（%）" for chart in charts)
-    fva = next(chart for chart in charts if "出口中的外国增加值占总出口比重" in chart["title"])
+    fva = next(chart for chart in charts if "构成演变 · 外国增加值占总出口" in chart["title"])
     assert fva["series"][0]["points"] == [
         {"label": "2019", "value": 20 / 80 * 100},
         {"label": "2020", "value": 21 / 81 * 100},
@@ -2156,3 +2156,36 @@ def test_tiny_signed_values_keep_two_significant_figures_like_the_result_card():
     # The page shows toPrecision(2): "-0.0050"; Python's "g" format dropped the trailing zero.
     assert teaching_report._signed(-0.00498, 2) == "-0.0050"
     assert teaching_report._signed(0.000305694, 3) == "+0.00031"
+
+
+def test_report_metric_labels_match_the_page_labels():
+    from gvcsim.report_common import _STUDENT_METRIC_LABELS
+    from gvcsim.report_reference import _SHARES
+
+    # The labels steps 6–8 show (frontend topics trade/production/length); the report must print the same names.
+    page_labels = {
+        "FVA_share": "外国增加值项占比",
+        "DVAex_share": "国内增加值出口占比",
+        "gross_exports": "总出口（VA+TLS）",
+        "DVAex": "国内增加值出口",
+        "DVArt": "返回国内的增加值",
+        "FVA": "外国增加值",
+        "taxsub": "税收减补贴（TLS 扩展）",
+        "3b_VA_GVC_C_share": "复杂 GVC 生产份额",
+        "3_VA_GVC_share": "前向 GVC 生产总份额",
+        "3_FGY_GVC_share": "后向 GVC 生产总份额",
+        "1_VA_D_share": "纯国内生产份额",
+        "2_VA_RT_share": "传统贸易生产份额",
+        "3a_VA_GVC_S_share": "简单 GVC 生产份额",
+        "1_VA_D": "纯国内增加值",
+        "3_VA_GVC": "GVC 增加值",
+        "FGY": "最终品生产（后向总量）",
+        "1_FGY_D": "纯国内（后向）",
+        "3_FGY_GVC": "全部 GVC（后向）",
+        "3b_FGY_GVC_C": "复杂 GVC（后向）",
+        "GVCPs": "GVC 位置指数（前向 GVC 段／后向 GVC 段）",
+        "Pos_TPL": "总长度位置指数（前向总长／后向总长）",
+    }
+    assert {key: _STUDENT_METRIC_LABELS.get(key) for key in page_labels} == page_labels
+    # Every share metric the pages derive has a global reference (median and rank) in the report.
+    assert {key for key in page_labels if key.endswith("_share")} <= set(_SHARES)
