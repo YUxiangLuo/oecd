@@ -14,7 +14,7 @@ export function stepPrimaryActionLabel(step: Pick<Step, "title">): string {
 export type StepMaterialStatus = "checking" | "saving" | "unsynced" | "ready" | "missing";
 
 export const MATERIAL_STATUS_LABELS: Record<StepMaterialStatus, string> = {
-  checking: "正在检查", saving: "正在保存", unsynced: "尚未保存", ready: "已齐全", missing: "尚未齐全",
+  checking: "检查中", saving: "保存中", unsynced: "未保存", ready: "已齐全", missing: "未齐全",
 };
 
 export function materialStatusForStep(
@@ -68,7 +68,7 @@ type ReportState = "draft" | "pending" | "graded";
  */
 export function reportStatusLabel(complete: boolean, reportExists: boolean, reportState?: ReportState | null): string {
   if (!complete) return reportExists ? "需更新" : "未生成";
-  return reportState === "graded" ? "已评阅" : reportState === "pending" ? "待评阅" : reportState === "draft" ? "草稿未提交" : "已生成";
+  return reportState === "graded" ? "已评阅" : reportState === "pending" ? "待评阅" : reportState === "draft" ? "草稿（未提交）" : "已生成";
 }
 
 /** Whether a step shows as done: a draft report is generated but not yet with the teacher, so it is still to do. */

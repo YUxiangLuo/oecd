@@ -295,7 +295,7 @@ describe("edits during conflict reload", () => {
       expect(result.current.getStep<{ research_question: string }>(15)?.research_question).toBe("typed during reload");
       expect(result.current.syncConflict).toBe(true);
       expect(result.current.unsynced).toBe(true);
-      expect(result.current.syncError).toContain("载入期间又有本地修改");
+      expect(result.current.syncError).toContain("载入时你又改了内容");
       await act(async () => { await result.current.resolveSyncConflict(); });
       expect(result.current.getStep<{ research_question: string }>(15)?.research_question).toBe("server");
       expect(result.current.syncConflict).toBe(false);

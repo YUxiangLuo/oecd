@@ -1,7 +1,11 @@
 * { box-sizing: border-box; }
 :root {
-  /* Desktop-only layout contract; keep this aligned with README.md. */
-  --desktop-min-width: 1200px;
+  /* Desktop-only layout contract; keep this aligned with README.md. The shell is designed for 1200px and
+     compresses down to this width (Windows 125% zoom on a 1280px screen is 1024 CSS px); below it the page
+     scrolls sideways and .narrow-window-notice says so. */
+  --desktop-min-width: 1000px;
+  /* One keyboard focus ring for every control that does not draw its own. */
+  --focus-ring: #4b47e0;
   --text-muted: #5f6677;
   --text-success: #0b6f3a;
   --text-warning: #714817;
@@ -15,6 +19,10 @@ body {
   font-size: 14px;
 }
 button { font-family: inherit; cursor: pointer; }
+/* :where keeps this at zero specificity, so components with their own focus style still win. */
+:where(button, a[href], input, select, textarea, summary, [role="tab"], [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--focus-ring); outline-offset: 2px;
+}
 .sr-only {
   position: absolute !important; width: 1px !important; height: 1px !important;
   /* 无坐标的 absolute 会钉在静态位置:深处滚动容器里的 sr-only（如指标表 caption）
@@ -90,7 +98,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .sidebar-head { flex: none; padding: 18px 20px 14px; }
 .sidebar-head-row { display: flex; align-items: baseline; justify-content: space-between; }
 .sidebar-title { font-weight: 700; font-size: 13.5px; letter-spacing: 0.3px; }
-.sidebar-steps { font-size: 10.5px; color: var(--text-muted); font-family: monospace; }
+.sidebar-steps { font-size: 11px; color: var(--text-muted); }
 .progress-track {
   margin-top: 11px; height: 6px; background: #eef0f5; border-radius: 99px; overflow: hidden;
 }
@@ -128,7 +136,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 }
 /* done = 服务端按答题结果判定的真实完成,独占成功绿。
    past = 只是到过(导航信息),中性灰蓝——到过不是做过。 */
-.step-badge.done { background: #12a150; color: #fff; }
+.step-badge.done { background: var(--text-success); color: #fff; }
 .step-badge.past { background: #d7dae3; color: #4a5162; }
 .step-badge.cur { background: #4b47e0; color: #fff; box-shadow: 0 0 0 4px #ded9fb; }
 .step-badge.future { background: #eef0f5; color: var(--text-muted); }
@@ -139,7 +147,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   min-width: 0; white-space: normal; overflow-wrap: anywhere; line-height: 1.35;
   font-size: 12.5px; color: #5a6070;
 }
-.step-row-status { color: #687080; font-size: 9.5px; line-height: 1.25; }
+.step-row-status { color: #5f6677; font-size: 11px; line-height: 1.3; }
 .step-row.active .step-row-title { color: #2c2a6b; font-weight: 600; }
 .step-row.active .step-row-status { color: #55518e; }
 .workarea { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
@@ -183,7 +191,7 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
 .step-header-mid { flex: 1; min-width: 0; }
 .step-header-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
 .step-header-mid h2 { margin: 0; font-size: 20px; font-weight: 700; }
-.step-count { font-size: 11px; color: var(--text-muted); font-family: monospace; }
+.step-count { font-size: 11px; color: var(--text-muted); }
 .stage-chip {
   font-size: 11px; font-weight: 600; color: #4b47e0; background: #edecfd;
   padding: 3px 9px; border-radius: 6px;

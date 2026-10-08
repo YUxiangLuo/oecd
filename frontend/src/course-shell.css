@@ -66,7 +66,8 @@
   color: #4b47e0; font-size: 9.5px; font-weight: 800; vertical-align: 1px;
 }
 .step-task-list li + li::before { margin-left: 0; }
-.step-task-list li:not(:last-child)::after { content: "→"; margin: 0 10px; color: #b3b7c6; }
+/* No arrows between items: the numbers give the order, and an arrow left at a line end pointed at nothing. */
+.step-task-list { column-gap: 18px; }
 .step-task-tip { max-width: 900px; margin: 8px 0 0; color: #765000; font-size: 11.5px; line-height: 1.7; }
 
 /* ---------- 底部页脚(流程位置 + 圆点分页) ---------- */
@@ -372,4 +373,36 @@ button.footer-next:hover { text-decoration: underline; }
 /* Users who ask for less motion get results and toasts without the slide/fade. */
 @media (prefers-reduced-motion: reduce) {
   .reg-results, .toast-item { animation: none; }
+}
+
+/* Password dialog: the field a validation message is about (aria-invalid) is outlined, focused or not. */
+.modal-form input[aria-invalid="true"], .modal-form input[aria-invalid="true"]:focus { border-color: #c4422b; }
+
+/* ---------- 窄窗口（1000–1199px，如 Windows 125% 缩放） ----------
+   Not a responsive layout: the shell only compresses so that 上一步/下一步, 修改密码 and 退出登录 stay on screen. */
+@media (max-width: 1199px) {
+  .sidebar { width: 240px; }
+  .sidebar-head { padding: 16px 16px 12px; }
+  .topbar { height: auto; min-height: 56px; flex-wrap: wrap; row-gap: 6px; padding: 8px 16px; }
+  .topbar-user { flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; min-width: 0; }
+  .step-header-bar { flex-wrap: wrap; gap: 8px 16px; padding: 12px 20px; }
+  .step-header-bar .big-num { font-size: 34px; }
+  /* The title keeps a line of its own width; the buttons move under it rather than off screen. */
+  .step-header-mid { flex: 1 1 320px; }
+  .nav-btns { flex: none; }
+  .content { padding: 16px 18px 32px; }
+  .stepfooter { gap: 10px; padding: 0 16px; }
+  .footer-loc { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+}
+
+/* Below the supported width the page scrolls sideways; one line says why and what to do. */
+.narrow-window-notice { display: none; }
+@media (max-width: 999px) {
+  .narrow-window-notice {
+    display: block; position: sticky; top: 0; left: 0; z-index: 30;
+    width: 100vw; height: 32px; padding: 0 16px; overflow: hidden;
+    border-bottom: 1px solid #ecd28f; background: #fff4d8; color: var(--solid-warning);
+    font-size: 12.5px; font-weight: 600; line-height: 31px; white-space: nowrap; text-overflow: ellipsis;
+  }
+  .layout { height: calc(100vh - 32px); }
 }

@@ -1089,7 +1089,7 @@ def test_regression_route_maps_numerical_failure_to_chinese_400(teaching_db, mon
         json={"outcome": "trade"},
     )
     assert response.status_code == 400
-    assert response.json()["detail"].startswith("回归线性代数计算失败")
+    assert response.json()["detail"].startswith("这次回归没能算出结果")
 
 
 def test_regression_rejects_teacher(teaching_db):

@@ -6,7 +6,7 @@ import { isDemoStudentUsername } from "./login";
 import { TeacherDashboard } from "./teacher";
 import { TeacherReviewGuardProvider, useTeacherReviewGuard } from "./teacher/review-guard";
 import { ToastHost } from "./toast";
-import { materialStatusForStep, reportStatusLabel, stepShowsDone } from "./step-task-card";
+import { MATERIAL_STATUS_LABELS, materialStatusForStep, reportStatusLabel, stepShowsDone } from "./step-task-card";
 import { revealOutlineStep } from "./step-navigation";
 import type {
   AuthUser,
@@ -20,6 +20,15 @@ import type {
 const ROMAN = ["", "一", "二", "三", "四", "五"];
 // Vite includes the canonical PDF as a versioned asset in both production and demo builds.
 const STUDENT_MANUAL_URL = new URL("../../实验手册.pdf", import.meta.url).href;
+
+const DEMO_PASSWORD_NOTE = "演示账号不能修改密码";
+
+export const NARROW_WINDOW_NOTICE = "窗口较窄，部分内容需要横向滚动；请放宽窗口或缩小浏览器缩放";
+
+/** Shown by CSS only below the supported width (course-shell.css), on every page including login. */
+export function NarrowWindowNotice() {
+  return <div className="narrow-window-notice" role="note">{NARROW_WINDOW_NOTICE}</div>;
+}
 
 export function AppBootSkeleton() {
   return (
@@ -42,7 +51,7 @@ export function AppBootSkeleton() {
           <div className="sidebar-head">
             <div className="sidebar-head-row">
               <span className="sidebar-title">课程大纲</span>
-              <span className="sidebar-steps">15 STEPS</span>
+              <span className="sidebar-steps">共 15 步</span>
             </div>
             <div className="progress-track"><div className="progress-bar" style={{ width: "35%" }} /></div>
           </div>
@@ -121,7 +130,7 @@ function TeacherWorkspaceContent({
           </span>
           <span className="role-chip" title={`${user.name} · 教师账号 · ${user.username}`}><span>{user.name}</span></span>
           <button ref={passwordTriggerRef} onClick={() => reviewGuard.attempt(onRequestPasswordChange)}>修改密码</button>
-          <button onClick={() => reviewGuard.attempt(() => { reviewGuard.clear(); onLogout(); })}>退出</button>
+          <button onClick={() => reviewGuard.attempt(() => { reviewGuard.clear(); onLogout(); })}>退出登录</button>
         </div>
       </header>
       <TeacherDashboard user={user} />
@@ -176,13 +185,13 @@ export function StudentTopbar({
           ref={passwordTriggerRef}
           aria-disabled={fixedDemoPassword || undefined}
           aria-describedby={fixedDemoPassword ? "fixed-demo-password-note" : undefined}
-          title={fixedDemoPassword ? "演示账号的密码由系统统一管理，不能修改" : undefined}
+          title={fixedDemoPassword ? DEMO_PASSWORD_NOTE : undefined}
           onClick={fixedDemoPassword ? undefined : onRequestPasswordChange}
         >
-          {fixedDemoPassword ? "固定演示口令" : "修改密码"}
+          修改密码
         </button>
-        {fixedDemoPassword && <span id="fixed-demo-password-note" className="sr-only">演示账号的密码由系统统一管理，不能修改</span>}
-        <button onClick={onLogout}>退出</button>
+        {fixedDemoPassword && <span id="fixed-demo-password-note" className="sr-only">{DEMO_PASSWORD_NOTE}</span>}
+        <button onClick={onLogout}>退出登录</button>
       </div>
     </header>
   );
@@ -217,7 +226,7 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
       <div className="sidebar-head">
         <div className="sidebar-head-row">
           <span className="sidebar-title">课程大纲</span>
-          <span className="sidebar-steps">{totalSteps} STEPS</span>
+          <span className="sidebar-steps">共 {totalSteps} 步</span>
         </div>
         {completion ? (
           <div className="progress-track" role="img" aria-label={`已完成 ${doneCount} 步，共 ${totalSteps} 步`}>
@@ -229,7 +238,7 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
         ) : <div className="progress-track" />}
         <div className="sidebar-sub">
           {completion
-            ? `完成进度 ${doneCount}/${totalSteps} · 数据→指标→回归→报告`
+            ? `完成进度 ${doneCount}/${totalSteps}`
             : "正在读取完成进度…"}
         </div>
         <a
@@ -260,17 +269,14 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
               const materialStatus = step.n === current && currentMaterialStatus
                 ? currentMaterialStatus
                 : materialStatusForStep(step.n, materialGate);
-              const materialText = materialStatus === "checking" ? "检查中"
-                : materialStatus === "saving" ? "保存中"
-                : materialStatus === "unsynced" ? "未保存"
-                : materialStatus === "ready" ? "已齐全" : "未齐全";
-              const materialLabel = `报告材料${materialText}`;
+              // One vocabulary with the task card: 检查中 / 保存中 / 未保存 / 已齐全 / 未齐全.
+              const materialLabel = `报告材料${MATERIAL_STATUS_LABELS[materialStatus]}`;
               // The badge agrees with the task card: a draft report is not yet a finished step.
               const shownDone = stepShowsDone(step, done, reportState);
               const state = shownDone ? "done" : step.n === current ? "cur" : "future";
-              const completionLabel = step.lab === "rep" ? `报告${reportStatusLabel(done, reportExists, reportState)}` : (done ? "理解已完成" : "理解未完成");
+              const completionLabel = step.lab === "rep" ? `报告${reportStatusLabel(done, reportExists, reportState)}` : (done ? "理解题已完成" : "理解题未完成");
               const accessibleName = [
-                `第 ${step.n} 步：${step.title}`,
+                `步骤 ${step.n}：${step.title}`,
                 step.n === current ? "当前步骤" : null,
                 completionLabel,
                 materialLabel,
@@ -283,13 +289,13 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
                   aria-label={accessibleName}
                   aria-current={step.n === current ? "step" : undefined}
                   onClick={() => onNavigate(step.n)}
-                  title={`第 ${step.n} 步：${step.title}（${completionLabel}）`}
+                  title={`步骤 ${step.n}：${step.title}（${completionLabel}）`}
                 >
                   <span className={`step-badge ${state}`} aria-hidden="true">{shownDone ? "✓" : step.n}</span>
                   <span className="step-row-copy" aria-hidden="true">
                     <span className="step-row-title">{step.title}</span>
                     <span className="step-row-status">
-                      {completionLabel} · 材料{materialText}
+                      {completionLabel} · {materialLabel}
                     </span>
                   </span>
                 </button>
@@ -318,7 +324,7 @@ export function StepHeader({ step, previous, next, stageName, totalSteps, onNavi
       <div className="step-header-mid">
         <div className="step-header-meta">
           <span className="stage-chip">{stageName}</span>
-          <span className="step-count">STEP {step.n} / {totalSteps}</span>
+          <span className="step-count">步骤 {step.n} / {totalSteps}</span>
         </div>
         <h2 id="current-step-heading">{step.title}</h2>
       </div>
@@ -361,6 +367,7 @@ export function StepFooter({
             key={item.n}
             onClick={() => onNavigate(item.n)}
             aria-label={`前往步骤 ${item.n}：${item.title}`}
+            title={`步骤 ${item.n}：${item.title}`}
             aria-current={item.n === current ? "step" : undefined}
             className={`fdot${item.n === current ? " on" : completedSteps.has(item.n) ? " done" : ""}`}
           />

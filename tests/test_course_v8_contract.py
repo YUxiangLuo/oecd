@@ -78,7 +78,8 @@ def test_session_rejects_nontext_variable_identity_without_server_error(field, v
         )
 
     assert error.value.status_code == 422
-    assert "模型快照" in error.value.detail
+    assert "步骤 11 保存的回归结果已过期" in error.value.detail
+    assert "“计算贸易流回归”" in error.value.detail and "teaching-v" not in error.value.detail
 
 
 @pytest.mark.parametrize("reasons", [None, [], [" "], [None], ["支持不足", 42]])

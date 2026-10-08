@@ -101,10 +101,10 @@
 }
 .intro-lede { font-size: 17px; line-height: 2; color: #e8ecf8; max-width: 840px; margin: 16px auto 0; }
 .intro-pipeline { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 36px auto 0; flex-wrap: wrap; max-width: 900px; }
+/* Stage names are labels, not controls: no border or fill that would read as a button. */
 .intro-chip {
   display: inline-flex; align-items: center; gap: 8px;
-  padding: 8px 14px; border-radius: 99px; font-size: 13px; font-weight: 600;
-  background: rgba(122, 107, 255, 0.14); border: 1px solid rgba(150, 140, 255, 0.38);
+  padding: 6px 4px; font-size: 13px; font-weight: 600;
   opacity: 1;
 }
 .intro-chip-num {
@@ -174,10 +174,10 @@
 .intro-route-details { max-width: 780px; margin: 16px auto 0; font-size: 14px; }
 .intro-route-details ol { list-style: none; padding: 0; margin: 14px 0; }
 .intro-load-state p { margin: 0 0 12px; }
-.intro-preview-selection { display: flex; justify-content: center; gap: 10px; margin: 20px auto 12px; }
+/* Placeholders for the student's own choice: plain labels, so they are not clicked as pickers. */
+.intro-preview-selection { display: flex; justify-content: center; gap: 22px; margin: 20px auto 12px; }
 .intro-preview-selection span {
-  display: flex; align-items: baseline; gap: 8px; padding: 8px 14px; border: 1px solid rgba(164, 154, 255, .34);
-  border-radius: 99px; background: rgba(255, 255, 255, .06); font-size: 13px; font-weight: 650;
+  display: flex; align-items: baseline; gap: 8px; padding: 4px 0; font-size: 13px; font-weight: 650;
 }
 .intro-preview-selection small { color: #aeb8d4; font-size: 11px; font-weight: 500; }
 .intro-evidence-preview { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(260px, .8fr); gap: 14px; max-width: 860px; margin: 0 auto; text-align: left; }

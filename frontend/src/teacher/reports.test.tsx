@@ -83,7 +83,7 @@ describe("stale teacher report recovery", () => {
       fireEvent.click(await screen.findByRole("button", { name: "评阅报告：学生" }));
       const feedback = await screen.findByRole("textbox", { name: "评语（可空）" });
       fireEvent.change(feedback, { target: { value: "不能丢失的评语" } });
-      for (const name of [/学生与进度 账号/, /^修改密码$/, /^退出$/]) {
+      for (const name of [/学生与进度 账号/, /^修改密码$/, /^退出登录$/]) {
         fireEvent.click(screen.getByRole("button", { name }));
         expect((feedback as HTMLTextAreaElement).value).toBe("不能丢失的评语");
       }
@@ -98,12 +98,12 @@ describe("stale teacher report recovery", () => {
       fireEvent.click(screen.getByRole("button", { name: "修改密码" }));
       expect(password).toHaveBeenCalledTimes(1);
       confirm.mockReturnValue(false);
-      fireEvent.click(screen.getByRole("button", { name: "退出" }));
+      fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
       expect(logout).not.toHaveBeenCalled();
       fireEvent.click(screen.getByRole("button", { name: "提交评阅" }));
       const promptsBeforeSaving = confirm.mock.calls.length;
       fireEvent.click(screen.getByRole("button", { name: /学生与进度 账号/ }));
-      fireEvent.click(screen.getByRole("button", { name: "退出" }));
+      fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
       expect(confirm.mock.calls.length).toBe(promptsBeforeSaving);
       expect(logout).not.toHaveBeenCalled();
       expect((feedback as HTMLTextAreaElement).disabled).toBe(true);
