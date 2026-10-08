@@ -4,11 +4,12 @@ import { api, ApiError } from "./api";
 import { percentagePoints } from "./format";
 import { useAsync } from "./labs";
 import { ReadingCards } from "./labs/steps/viz/reading-cards";
-import { baselineKeyOf, lessonFor, lessonQuestion, VIZ_STEPS } from "./regression-lessons";
+import { baselineKeyOf, displayBaselineLabel, lessonFor, lessonQuestion, VIZ_STEPS } from "./regression-lessons";
 import { nextRegressionSave } from "./regression-save";
 import { formatPValue } from "./regression-statistics";
 import {
   buildRegressionVerdict,
+  teachingEffect,
   chartDisplayScale,
   countUnit,
   depvarKind,
@@ -52,48 +53,62 @@ export function scrollRegressionVerdict(target: HTMLElement | null, behavior: Sc
   scroller.scrollTo({ top, left: 0, behavior });
 }
 
+/** The saved design's sample rule in plain words; the stored text (a data contract) is kept as is. */
+export function sampleFilterLabel(filter: string | undefined): string {
+  if (!filter) return "—";
+  if (/^排除 ROW/.test(filter)) return "不含 ROW（OECD 把其他国家合在一起的“世界其他地区”）";
+  return filter.replace("(", "（").replace(")", "）");
+}
+
 function DesignMeta({ design }: { design: RegressionDesignInfo }) {
   return (
     <div className="design-meta">
       {/* Same name as the Y list and the report ("加权总度"); the schema label's "（入+出）" is a step 5 detail. */}
-      <span>结果指标：{design.depvar_label?.replace(/（入\+出）$/, "")}</span>
+      <span>结果指标 Y：{displayBaselineLabel(design.depvar_label)}</span>
       <span>解释变量：关税暴露 X</span>
-      <span>面板：教学关税面板（国家×行业×年份）</span>
-      <span>观察个体：{ENTITY_LABEL[design.entity] ?? design.entity}</span>
-      <span>标准误按{ENTITY_LABEL[design.cluster] ?? design.cluster}聚类</span>
-      <span>模型：国家×行业与年份双向固定效应</span>
-      {/* Saved designs keep their original text; shown here in full-width punctuation. */}
-      <span>样本：{design.sample_filter?.replace("(", "（").replace(")", "）")}</span>
-      <span>暴露权重：首次处理前固定结构</span>
+      <span>数据：关税数据（国家×行业×年份）</span>
+      <span>观察单位：{ENTITY_LABEL[design.entity] ?? design.entity}</span>
+      <span>95% 区间按{ENTITY_LABEL[design.cluster] ?? design.cluster}计算（按{ENTITY_LABEL[design.cluster] ?? design.cluster}聚类）</span>
+      <span>模型：双向固定效应</span>
+      <span>样本：{sampleFilterLabel(design.sample_filter)}</span>
+      <span>首年对美出口份额 w：各年固定用 2016 年的值</span>
     </div>
   );
 }
 
+/** Column names in the saved equation shown as symbols: "teaching_y_trade_ijt" reads "Y_ijt". */
+export function equationSymbol(part: { text: string; term?: string }): string {
+  if (part.term === "dependent") return part.text.replace(/^.*_(\w+)$/, "Y_$1");
+  if (part.term === "policy") return part.text.replace(/^β·.*_(\w+)$/, "β·X_$1");
+  return part.text;
+}
+
+/** "α_ij" with its index as a subscript. */
+function withSubscripts(text: string) {
+  return text.split(/(_\w+)/).filter(Boolean).map((token, index) => token.startsWith("_")
+    ? <sub key={index}>{token.slice(1)}</sub>
+    : <span key={index}>{token}</span>);
+}
+
+const FALLBACK_EQUATION = ["Y_ijt", " = ", "β·X_ijt", " + ", "α_ij", " + ", "λ_t", " + ", "ε_ijt"];
+
 function DesignEquation({ design }: { design: RegressionDesignInfo }) {
-  const [description, setDescription] = useState<string | null>(null);
-  const parts = design.equation_parts?.length ? design.equation_parts : [{ text: design.equation }];
+  const parts = design.equation_parts?.length ? design.equation_parts.map(equationSymbol) : FALLBACK_EQUATION;
+  const yLabel = displayBaselineLabel(design.depvar_label) || "本步的结果指标";
   return (
     <div>
-      <div className="model-eq" role="group" aria-label="当前实际运行方程">
-        {parts.map((part, index) => {
-          const interactive = Boolean(part.description);
-          return (
-            <span
-              key={`${part.text}-${index}`}
-              tabIndex={interactive ? 0 : undefined}
-              title={part.description}
-              onMouseEnter={() => setDescription(part.description ?? null)}
-              onMouseLeave={() => setDescription(null)}
-              onFocus={() => setDescription(part.description ?? null)}
-              onBlur={() => setDescription(null)}
-              style={interactive ? { cursor: "help", borderBottom: "1px dotted #8b88df" } : undefined}
-            >
-              {part.text}
-            </span>
-          );
-        })}
+      <div className="model-eq" role="group" aria-label="本步计算的公式">
+        {parts.map((text, index) => <span key={`${text}-${index}`}>{withSubscripts(text)}</span>)}
       </div>
-      {description && <p className="muted" role="status">{description}</p>}
+      {/* The five terms, always visible (a hover-only gloss went unnoticed). */}
+      <ul className="model-eq-terms" aria-label="公式里各项的意思">
+        <li><b>Y</b>：结果指标，本步是{yLabel}；i = 国家，j = 行业，t = 年份。</li>
+        <li><b>β·X</b>：X 是关税暴露（首年对美出口份额 w × 加征税率 τ）；β 就是要算的估计值：X 每增加 1 个百分点，Y 平均变化多少。</li>
+        <li><b>α</b>：每个国家×行业自己的平均水平，先扣掉。</li>
+        <li><b>λ</b>：每一年所有国家×行业共同的变化，先扣掉。</li>
+        <li><b>ε</b>：剩下的随机波动。</li>
+      </ul>
+      <p className="muted">扣掉 α 和 λ 的做法叫“双向固定效应”：这样比较的是同一个国家×行业在不同年份、相对共同变化的起伏。</p>
       <DesignMeta design={design} />
     </div>
   );
@@ -123,12 +138,14 @@ export function exampleEffect(outcome: RegressionOutcome, coef: number, x: numbe
 }
 
 /** The result is a coefficient plot plus short sentences: what changed, for the student's example, how sure, what not to claim. */
-export function RegressionResultCard({ outcome, response, examples = [], exampleSaved = true }: {
+export function RegressionResultCard({ outcome, response, examples = [], exampleSaved = true, exampleYear }: {
   outcome: RegressionOutcome;
   response: RegressionResponse;
   examples?: RegressionExample[];
   /** False when step 10 has not saved an example yet: the conversion uses the default example. */
   exampleSaved?: boolean;
+  /** The year whose X the conversion uses (the last year of the data). */
+  exampleYear?: number;
 }) {
   const verdict = buildRegressionVerdict(outcome, response);
   const lesson = lessonFor(outcome, response.design.baseline, response.design.baseline_label);
@@ -142,15 +159,27 @@ export function RegressionResultCard({ outcome, response, examples = [], example
     : verdict.state === "positive"
       ? `平均上升 ${unsignedEffect}`
       : `平均变化为 ${verdict.effect}`;
+  // "外国增加值项占比平均下降", but "GVC 位置指数 平均…" keeps a space after a Latin name.
+  const metricGap = /[A-Za-z]$/.test(lesson.shortMetric) ? " " : "";
   return (
     <section className={`verdict-card verdict-${verdict.state}`} aria-labelledby="reg-result-title">
       <div className="verdict-kicker">回归结果</div>
-      <h3 id="reg-result-title" tabIndex={-1} className="reg-plain-verdict">方向判断：{verdict.title}</h3>
+      {/* The headline answers the step's question with the number; the direction reading follows as a sub-line. */}
+      <h3 id="reg-result-title" tabIndex={-1} className="reg-plain-verdict">
+        {verdict.coefficient
+          ? <>
+            <span className="reg-headline-main">关税暴露 X 每增加 1 个百分点 → {lesson.shortMetric}{metricGap}<b>{plainResult}</b></span>
+            <span className="reg-headline-interval">{suppressed ? "这次不显示 95% 区间" : `95% 区间：${verdict.intervalShort}`}</span>
+          </>
+          : "没算出 X 的估计值"}
+      </h3>
+      {verdict.coefficient && <p className="reg-verdict-direction">{verdict.title}</p>}
       {verdict.coefficient && response.result.binscatter && response.result.binscatter.bins.length >= 2 && (
         <BinScatterChart
           bins={response.result.binscatter.bins}
           slope={response.result.binscatter.slope * display.scale}
-          xLabel="关税暴露 X（个百分点）"
+          slopeUnit={countUnit(depvarKind(outcome, response.design))}
+          xLabel="X 扣掉平均水平后的高低（个百分点）"
           yLabel={`${lesson.shortMetric}（${display.unit}）`}
           xScale={100}
           yScale={display.scale * 100}
@@ -169,11 +198,9 @@ export function RegressionResultCard({ outcome, response, examples = [], example
         />
       )}
       <ul className="reg-result-points">
-        {!suppressed && verdict.coefficient && (
-          <li>关税暴露（X）每增加 1 个百分点，{lesson.shortMetric}（Y）<b>{plainResult}</b>；95% 区间为 {verdict.interval}。</li>
-        )}
+        <li>{verdict.evidence}</li>
         {!suppressed && verdict.coefficient && examples.length > 0 && (
-          <li className="reg-example-effect">{exampleSaved ? "换算到你在步骤 10 选的例子" : "换算到默认例子（步骤 10 还没有保存你的例子）"}：{examples.map((example, index) => {
+          <li className="reg-example-effect">{exampleSaved ? "按你在步骤 10 选的例子" : "按默认例子（步骤 10 还没有保存你的例子）"}换算{exampleYear ? `（用 ${exampleYear} 年的 X）` : ""}：{examples.map((example, index) => {
             const coef = verdict.coefficient!.coef;
             const text = example.x > 0
               ? (() => {
@@ -182,20 +209,19 @@ export function RegressionResultCard({ outcome, response, examples = [], example
                 return <>{example.label}（X = {percentagePoints(example.x)} 个百分点）Y 约{coef * example.x < 0 ? "下降" : "上升"}{effect.startsWith("不到") ? "" : " "}<b>{effect}</b></>;
               })()
               : (example.tau ?? 0) > 0
-                ? <>{example.label}被加税但首年不向美国出口（w = 0，X = 0），按估计不变</>
-                : <>{example.label}未被加税（X = 0），按估计不变</>;
+                ? <>{example.label}被加税但首年不向美国出口（w = 0，X = 0），按估计 Y 不变</>
+                : <>{example.label}未被加税（X = 0），按估计 Y 不变</>;
             return <span key={example.label}>{index ? "；" : ""}{text}</span>;
-          })}{verdict.state === "insufficient" ? "；但区间跨过 0，这个方向本身并不确定" : ""}。
+          })}{verdict.state === "insufficient" ? "；但区间包含 0，这个方向本身并不确定" : ""}。
             {examples.every((example) => example.x <= 0 && !((example.tau ?? 0) > 0)) && (examples.length === 1
-              ? "你选的例子未被加税，所以换算结果是不变；回步骤 10 换成加税的国家（如加拿大），或再选一个加税的对比国家，就能看到换算。"
-              : "两个例子都未被加税，所以换算结果都是不变；回步骤 10 把其中一个换成加税的国家（如加拿大），就能看到换算。")}</li>
+              ? "你选的例子没被加税，换算结果是不变。想看换算，回步骤 10 换成加税的国家（如加拿大），或再选一个加税的对比国家。"
+              : "两个例子都没被加税，换算结果都是不变。想看换算，回步骤 10 选一个加税的国家（如加拿大）。")}</li>
         )}
-        <li>{verdict.evidence}</li>
-        <li><b>解释限制：</b>{lesson.dontClaim}</li>
       </ul>
       {verdict.warnings.length > 0 && (!suppressed || !verdict.coefficient) && (
         <ul aria-label="本次计算的限制">{verdict.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
       )}
+      <p className="reg-caveat" role="note"><b>解释限制</b>{lesson.dontClaim}</p>
     </section>
   );
 }
@@ -203,11 +229,26 @@ export function RegressionResultCard({ outcome, response, examples = [], example
 /** Column names in the coefficient table, as the page names them (the code stays in the report appendix). */
 const COEFFICIENT_NAMES: Record<string, string> = { teaching_tariff_exposure: "关税暴露 X" };
 
+/**
+ * The raw coefficients, with their scale said in the header: X is stored as a share (0.01 = 1 percentage
+ * point), so a coefficient is "Y per 1.00 of X". The column next to it repeats the page's reading, "Y per
+ * 1 percentage point of X", so the two numbers can be matched (for lengths and centrality they differ 100×).
+ */
 export function RegressionCoefficientTable({ response }: { response: RegressionResponse }) {
+  const outcome = response.design.outcome;
+  const display = chartDisplayScale(outcome, response.design);
   return (
     <ScrollableRegion className="table-wrap" label="完整回归系数表，可横向滚动">
       <table className="data-table">
-        <thead><tr><th>变量</th><th>系数</th><th>标称 95% CI</th><th>聚类SE</th><th>t</th><th>p</th></tr></thead>
+        <thead><tr>
+          <th>变量</th>
+          <th>X 每增加 1 个百分点（{display.unit}）</th>
+          <th>系数（X 按份额计）</th>
+          <th>95% 区间（系数口径）</th>
+          <th>标准误（按国家计算）</th>
+          <th>t 值</th>
+          <th>p 值</th>
+        </tr></thead>
         <tbody>{response.result.coefs.map((coef) => {
           const globallySuppressed = globalInferenceIsSuppressed(
             response.result.status, response.result.support,
@@ -219,6 +260,7 @@ export function RegressionCoefficientTable({ response }: { response: RegressionR
           return (
             <tr key={coef.name}>
               <td>{COEFFICIENT_NAMES[coef.name] ?? coef.name}</td>
+              <td>{coef.name === response.design.shock_col ? teachingEffect(outcome, coef.coef, response.design) : "—"}</td>
               <td>{coef.coef.toFixed(4)}</td>
               <td>{ciLow != null && ciHigh != null ? `[${ciLow.toFixed(4)}, ${ciHigh.toFixed(4)}]` : "—"}</td>
               {/* With inference suppressed, SE and t are not read either (the backend keeps them for integrity checks). */}
@@ -295,7 +337,7 @@ export function RegressionRequestLoading({ designLoading }: {
   designLoading: boolean;
 }) {
   if (!designLoading) return null;
-  return <div className="reg-request-state muted" role="status" aria-live="polite" aria-busy="true">正在生成当前模型设计…</div>;
+  return <div className="reg-request-state muted" role="status" aria-live="polite" aria-busy="true">正在准备公式…</div>;
 }
 
 export function RegressionRequestError({ label, error, onRetry }: {
@@ -305,8 +347,8 @@ export function RegressionRequestError({ label, error, onRetry }: {
 }) {
   return (
     <div className="error-box async-error" role="alert">
-      <span>{userFacingRequestError(error, `${label}失败`)}</span>
-      <button type="button" className="secondary" onClick={onRetry}>重试{label}</button>
+      <span>{userFacingRequestError(error, `${label}加载失败`)}</span>
+      <button type="button" className="secondary" onClick={onRetry}>重新加载{label}</button>
     </div>
   );
 }
@@ -373,7 +415,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   const baselineOffered = baseline == null || baselineOptions.length === 0 || baselineOptions.some((option) => option.key === baseline);
   useEffect(() => {
     if (baselineOffered) return;
-    setBaselineNotice(`上次算的 Y（${savedRun?.design?.baseline_label ?? lesson.shortMetric}）在当前课程数据里没有，已换回本步默认指标，请重新计算。`);
+    setBaselineNotice(`上次算的 Y（${displayBaselineLabel(savedRun?.design?.baseline_label) || lesson.shortMetric}）在当前课程数据里没有，已换回本步默认指标，请重新计算。`);
     setBaseline(null);
     setResult(null);
   }, [baselineOffered]);
@@ -452,7 +494,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
       const response = await api.runRegression(outcome, controller.signal, baseline);
       if (!mountedRef.current) return;
       if (response.model_snapshot?.version !== TEACHING_MODEL_VERSION || !response.variable_catalog) {
-        throw new Error("教学模型版本不匹配，结果未保存");
+        throw new Error(`页面版本已更新，结果没有保存。请刷新页面后再点“计算${runName}”`);
       }
       const saved = nextRegressionSave(state.data, {
         design: response.design, result: response.result,
@@ -467,7 +509,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
       setResult(response);
     } catch (cause) {
       if (mountedRef.current) {
-        setError(userFacingRequestError(cause, "回归运行失败"));
+        setError(userFacingRequestError(cause, `${runName}没有算完`));
         if (cause instanceof ApiError && cause.status === 429 && cause.retryAfter) {
           setNow(Date.now());
           setRetryAt(Date.now() + cause.retryAfter * 1000);
@@ -498,12 +540,25 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   return (
     <div className="reg-workbench">
       <section className="reg-run-card">
-        <span className="reg-section-step">本步回归 · 固定计算</span>
+        <span className="reg-section-step">本步回归（模型固定，只换 Y）</span>
         <h3>{lessonQuestion(outcome, baseline)}</h3>
+        {/* The step title names the default Y; a student who switched Y sees that here, with a way back. */}
+        {!usesDefault && baselineOptions.length > 1 && (
+          <p className="reg-y-pill" role="status">
+            <span>当前 Y：{displayBaselineLabel(baselineOptions.find((option) => option.key === baseline)?.label) || lesson.shortMetric}（不是本步默认）</span>
+            <button type="button" className="link-button" disabled={running} onClick={() => {
+              baselineChosen.current = true;
+              setBaselineNotice(null);
+              setBaseline(null);
+              setResult(null);
+              setError(null);
+            }}>恢复默认（{displayBaselineLabel(baselineOptions.find((option) => option.default)?.label) || lessonFor(outcome, null).shortMetric}）</button>
+          </p>
+        )}
         {outcome !== "trade" && <p className="muted">方法与步骤 11 相同，这次 Y 换成{/^[A-Za-z]/.test(lesson.shortMetric) ? " " : ""}{lesson.shortMetric}。</p>}
-        <p className="reg-step-focus"><b>本步重点</b>{lesson.learnThis}</p>
+        <p className="reg-step-focus"><b>本步重点</b> · {lesson.learnThis}</p>
         {depvarKind(outcome, design) === "network" && (
-          <p className="muted" role="note">这里的 Y 是按真实网络指标的排名校准生成的教学数据，单位是“中心性原始单位”，不是步骤 5、9 的百万美元，不能与那两步的数值直接比较。</p>
+          <p className="muted" role="note">这里 Y 的单位是“中心性原始单位”，不是步骤 5、9 的百万美元，不能和那两步的数值直接比较。</p>
         )}
         {baselineNotice && <p className="reg-boundary" role="status">{baselineNotice}</p>}
         {baselineOptions.length > 1 && (
@@ -523,7 +578,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
                 }}
               >
                 {baselineOptions.map((option) => (
-                  <option key={option.key} value={option.key}>{option.label}{option.default ? "（本步默认）" : ""}</option>
+                  <option key={option.key} value={option.key}>{displayBaselineLabel(option.label)}{option.default ? "（本步默认）" : ""}</option>
                 ))}
               </select>
             </label>
@@ -571,7 +626,13 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
             <ReadingCards label="两组读图" cards={[
               { eyebrow: `加税前（${groups.years[0]}–${groups.policy_year - 1}）`, big: preGap == null ? "缺失" : Math.abs(preGap) < tiny ? "两组差不多" : `两组相差 ${fmt(preGap)}`, small: "每条线都减去了本组加税前的平均水平，所以起点都接近 0" },
               { eyebrow: `加税后（${lastYear}）`, big: postGap == null ? "缺失" : Math.abs(postGap) < tiny ? "两组差不多" : `加税组比未加税组${postGap < 0 ? "低" : "高"} ${fmt(Math.abs(postGap)).replace(/^\+/, "")}`, small: `${groups.sample.taxed_countries} 国加税、${groups.sample.untaxed_countries} 国未加税的平均值` },
-              { eyebrow: "回归要算的", big: estimate ? `估计的差距 ${fmt(estimate.gap * levelScale)}` : "两条线分开的距离", small: estimate ? "= β × 加税组的平均暴露 X；图上虚线括号" : "β 按每个单元的暴露 X 把这段距离换算成每 1 个百分点的变化" },
+              {
+                eyebrow: "回归要算的",
+                big: estimate ? `估计的差距 ${fmt(estimate.gap * levelScale)}` : "两条线分开多远",
+                small: estimate
+                  ? "= 估计值 × 加税组的平均 X（图上虚线标出的那段）。左边是两组平均值直接相减；这里按每个国家×行业自己的 X 算，还扣掉了各自的平均水平和每年的共同变化，所以两个数接近但不相同。"
+                  : "回归把这段距离换算成“X 每增加 1 个百分点，Y 平均变多少”",
+              },
             ]} />
             {design && <div className="reg-equation"><span className="reg-section-step">公式</span><DesignEquation design={design} /></div>}
           </div>;
@@ -581,58 +642,52 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         )}
         <RegressionRequestLoading designLoading={designQuery.status === "loading"} />
         {designQuery.status === "error" && designQuery.error && (
-          <RegressionRequestError label="当前模型设计" error={designQuery.error} onRetry={designQuery.retry} />
+          <RegressionRequestError label="公式" error={designQuery.error} onRetry={designQuery.retry} />
         )}
+        {/* Once a result exists, recalculating is a secondary action; it replaces saved material. */}
         <button
           ref={runButtonRef}
-          className="run-btn"
+          className={result && !error ? "run-btn secondary" : "run-btn"}
           onClick={() => { if (!running && retryWait === 0) void run(); }}
           // aria-disabled while running keeps keyboard focus on the button instead of dropping it to the page.
           aria-disabled={running || retryWait > 0}
           disabled={designQuery.status !== "success" || !design}
         >
-          {running ? "正在计算…" : result ? `重新计算${runName}` : groups ? `计算${runName}（用全部 ${groups.sample.rows.toLocaleString("zh-CN")} 条记录）` : `计算${runName}`}
+          {running ? "正在计算…"
+            : retryWait > 0 ? `重试（${retryWait} 秒后）`
+              : error ? `重试：计算${runName}`
+                : result ? `重新计算${runName}`
+                  : groups ? `计算${runName}（用全部 ${groups.sample.rows.toLocaleString("zh-CN")} 条记录）` : `计算${runName}`}
         </button>
         {/* Mounted before it has text, so screen readers announce the change. */}
-        <span className={running ? "muted reg-inline-status" : "sr-only"} role="status" aria-live="polite">{running ? "正在估计…" : ""}</span>
+        <span className={running ? "muted reg-inline-status" : "sr-only"} role="status" aria-live="polite">{running ? "正在计算…" : ""}</span>
         {!running && !baselineNotice && savedRunY && savedRunY.key !== (baseline ?? defaultBaseline) && (
           <p className="reg-boundary" role="status">
-            报告材料里保存的仍是上次算出的 Y（{savedRunY.label}）；点上面的“计算{runName}”后，才会换成{/^[A-Za-z]/.test(lesson.shortMetric) ? " " : ""}{lesson.shortMetric}。
+            报告材料里保存的仍是上次算出的 Y（{displayBaselineLabel(savedRunY.label)}）；点上面的“计算{runName}”后，才会换成{/^[A-Za-z]/.test(lesson.shortMetric) ? " " : ""}{lesson.shortMetric}。
           </p>
         )}
         {!running && savedRun && state.materialLocked && (
-          <p className="muted">报告已提交：重新计算会替换报告材料里保存的结果，之后需在步骤 15 更新报告并重新提交。</p>
+          <p className="reg-rerun-warning" role="note">
+            <b>报告已提交</b>重新计算会替换报告材料里保存的结果；之后要到步骤 15 更新报告，并重新提交给老师。
+          </p>
         )}
       </section>
 
-      {error && (
-        <div className="error-box async-error" role="alert">
-          <span>{error}</span>
-          <button
-            type="button"
-            className="secondary"
-            aria-disabled={running || !design || retryWait > 0}
-            onClick={() => {
-              if (running || !design || retryWait > 0) return;
-              // This box disappears when the retry starts; keep focus on the run button that replaces it.
-              runButtonRef.current?.focus();
-              void run();
-            }}
-          >{retryWait > 0 ? `重试（${retryWait} 秒后）` : "重试"}</button>
-        </div>
-      )}
+      {/* One action: the run button above doubles as the retry (it shows the wait after "too many requests"). */}
+      {error && <div className="error-box async-error" role="alert"><span>{error}</span></div>}
 
       {result && (
-        <div className="reg-results">
+        <div className={error ? "reg-results reg-results-stale" : "reg-results"}>
+          {error && <p className="reg-stale-note" role="note">这次计算没有成功；下面仍是上次保存的结果。</p>}
           <div ref={verdictAnchorRef} className="verdict-anchor">
-            <RegressionResultCard outcome={outcome} response={result} examples={examples} exampleSaved={exampleSaved} />
+            <RegressionResultCard outcome={outcome} response={result} examples={examples} exampleSaved={exampleSaved} exampleYear={lastYear} />
           </div>
           <details className="technical-details">
-            <summary>系数表与样本（可选）</summary>
+            <summary>详细数字（可选）</summary>
             <RegressionCoefficientTable response={result} />
-            <p className="muted">极小 p 值以 &lt;0.0001 展示，不能读作概率为零。</p>
-            <p className="muted">表中系数按 X 的原始单位计（X 是份额，0.01 即 1 个百分点）：上方“X 每增加 1 个百分点”的读数 = 系数 × 0.01{outcome === "trade" || outcome === "production" ? "，Y 也是份额，再乘 100 换成百分点，所以数值与系数相同" : ""}。</p>
-            <p className="muted">N={result.result.n_obs.toLocaleString("zh-CN")} · {result.result.n_entities.toLocaleString("zh-CN")} 个体 × {result.result.n_times} 年 · {result.result.n_clusters} 个聚类 · {result.result.r2_within == null ? "本次 TWFE 结果未提供组内 R²" : `组内 R²=${result.result.r2_within.toFixed(4)}`}</p>
+            <p className="muted">很小的 p 值显示为 &lt;0.0001，不是说概率为零。</p>
+            <p className="muted">系数按“X 从 0 增加到 1（100 个百分点）”计：X 存的是份额，0.01 即 1 个百分点。所以页面上“X 每增加 1 个百分点”的数 = 系数 × 0.01{depvarKind(outcome, result.design) === "share" ? "；Y 也是份额，再乘 100 换成百分点，两次换算抵消，所以两列数字相同" : "，两列相差 100 倍"}。</p>
+            <p className="muted">共 {result.result.n_obs.toLocaleString("zh-CN")} 条记录 = {result.result.n_entities.toLocaleString("zh-CN")} 个国家×行业 × {result.result.n_times} 年；95% 区间按 {result.result.n_clusters} 个国家计算；{result.result.r2_within == null ? "这次结果没有组内 R²" : `组内 R² = ${result.result.r2_within.toFixed(3)}（扣掉各国家×行业的平均水平和每年共同变化后，模型能解释的那部分变动所占比例）`}。</p>
           </details>
         </div>
       )}

@@ -19,7 +19,7 @@ describe("fixed regression forest chart", () => {
       globalStatus: "insufficient",
       globalSupport: { status: "insufficient", suppress_inference: true } as TreatmentSupport,
     }));
-    expect(markup).toContain("整体设计门禁已抑制统计推断");
+    expect(markup).toContain("只显示估计值，不显示 95% 区间");
     expect(markup).toContain("<circle");
     expect(markup).not.toContain('class="coef-ci"');
     expect(markup).not.toContain("91.234");

@@ -71,7 +71,7 @@ export function RegressionFamilyPanels({ getStep }: { getStep?: (step: number) =
             labels={{ teaching_tariff_exposure: lessonFor(family.outcome, run.design?.baseline, run.design?.baseline_label).shortMetric }}
             title={`步骤 ${family.step} · ${family.family}`}
           />
-        ) : <div key={family.outcome} className="muted reg-family-missing">步骤 {family.step} · {family.family}：还没有可用结果</div>;
+        ) : <div key={family.outcome} className="muted reg-family-missing">步骤 {family.step} · {family.family}：还没计算</div>;
       })}
     </div>
   );
@@ -90,12 +90,12 @@ export function RegressionEvidenceMatrix({
           <span className="reg-section-step">四步结果汇总</span>
           <h3 id="reg-evidence-matrix-title">比较方向、不确定性和单位</h3>
         </div>
-        <p>不同指标的系数不能比大小；空白表示该步还没有可用结果。</p>
+        <p>四个 Y 的单位不同，数字不能比大小；“—”表示该步还没有结果。四步用同一个模型，只换 Y。</p>
       </div>
       <div className="table-wrap" role="region" aria-label="四步结果汇总表，可横向滚动" tabIndex={0}>
         <table className="data-table reg-evidence-table">
           <thead>
-            <tr><th>步骤</th><th>指标类型</th><th>模型设置</th><th>方向</th><th>估计值与单位</th><th>标称 95% 近似区间</th><th>解释限制</th></tr>
+            <tr><th>步骤</th><th>指标类型</th><th>方向</th><th>X 每增加 1 个百分点时 Y 的变化</th><th>95% 区间</th><th>解释限制</th></tr>
           </thead>
           <tbody>
             {REGRESSION_FAMILIES.map((item) => {
@@ -106,13 +106,7 @@ export function RegressionEvidenceMatrix({
                 <tr key={item.outcome}>
                   <th scope="row">{item.step}</th>
                   <td><b>{item.family}</b><span>{lesson.shortMetric}</span></td>
-                  <td>{design ? <>
-                    关税暴露 X
-                    <span>连续强度 TWFE</span>
-                    <span>国家×行业</span>
-                    <span>固定处理前权重</span>
-                  </> : "—"}</td>
-                  <td>{verdict ? familyDirectionLabel(verdict.state) : "待估计"}</td>
+                  <td>{verdict ? (verdict.coefficient ? familyDirectionLabel(verdict.state) : "没算出估计值") : "还没计算"}</td>
                   <td><b>{verdict?.effect ?? "—"}</b></td>
                   <td>{verdict?.interval ?? "—"}</td>
                   <td>{lesson.dontClaim}</td>

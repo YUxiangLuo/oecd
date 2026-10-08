@@ -38,10 +38,10 @@ describe("regression lessons", () => {
   });
 
   test("family summaries distinguish the published evidence states", () => {
-    expect(familyDirectionLabel("positive")).toBe("上升");
-    expect(familyDirectionLabel("negative")).toBe("下降");
-    expect(familyDirectionLabel("suppressed")).toBe("无法评估");
-    expect(familyDirectionLabel("insufficient")).toBe("看不出");
+    expect(familyDirectionLabel("positive")).toBe("方向明确：X 越高，Y 越高");
+    expect(familyDirectionLabel("negative")).toBe("方向明确：X 越高，Y 越低");
+    expect(familyDirectionLabel("suppressed")).toBe("方向不确定（不显示区间）");
+    expect(familyDirectionLabel("insufficient")).toBe("方向不确定");
   });
 
   test("research question stays on the fixed teaching X", () => {

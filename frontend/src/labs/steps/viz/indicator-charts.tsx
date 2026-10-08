@@ -241,6 +241,7 @@ export function IndicatorTrendChart({
   mode = "pair",
   sameIndustry = false,
   markYear,
+  stepped = false,
   gapNote,
   digits,
 }: {
@@ -259,6 +260,9 @@ export function IndicatorTrendChart({
   sameIndustry?: boolean;
   /** Step 10: a dashed line just before this year, e.g. the year the simulated tariff starts. */
   markYear?: { year: number; label: string };
+  /** Step 10: annual values that jump in one year are drawn as steps (held until the next year), and the
+   *  `markYear` line sits on its year, where the jump is drawn. */
+  stepped?: boolean;
   /** Pair mode only: caption under the gap card. */
   gapNote?: string;
   /** Overrides the shared reading precision for readouts and cards (step 10: X to two decimals). */
@@ -291,11 +295,13 @@ export function IndicatorTrendChart({
   // Shares and amounts keep a zero baseline; lengths (always ≥ 1) and position ratios fit their range,
   // otherwise a band around 4 production stages collapses into a sliver. Position ratios keep 1 in view.
   const positionRatio = metric === "GVCPs" || metric === "Pos_TPL";
-  const zeroBased = unit === "%" || unit === "百万美元";
+  // Step 10 passes X already in percentage points ("个百分点"): zero-based like a share.
+  const zeroBased = unit === "%" || unit === "个百分点" || unit === "百万美元";
   const rawHigh = zeroBased ? Math.max(0, ...values) : Math.max(...values, positionRatio ? 1 : -Infinity);
   const rawLow = zeroBased ? Math.min(0, ...values) : Math.min(...values, positionRatio ? 1 : Infinity);
   // An all-zero share series (e.g. an untaxed country's X) gets a small 0–1% axis, not 0–100%.
-  const axis = niceDomain(rawLow, rawLow === 0 && rawHigh === 0 && unit === "%" ? 0.01 : rawHigh);
+  const allZero = rawLow === 0 && rawHigh === 0;
+  const axis = niceDomain(rawLow, allZero && unit === "%" ? 0.01 : allZero && unit === "个百分点" ? 1 : rawHigh);
   const lo = axis.lo;
   const extent = axis.hi - lo || 1;
   const y = (value: number) => 250 - ((value - lo) / extent) * 210;
@@ -404,8 +410,8 @@ export function IndicatorTrendChart({
         ))}
         {markYear && years.includes(markYear.year) && markYear.year > years[0] && (
           <g data-mark-year={markYear.year}>
-            <line x1={x(markYear.year - 0.5)} x2={x(markYear.year - 0.5)} y1={34} y2={250} stroke="#4b5563" strokeDasharray="5 4" />
-            <text x={x(markYear.year - 0.5) + 6} y={46} fontSize={12} fill="#374151">{markYear.label}</text>
+            <line x1={x(markYear.year - (stepped ? 0 : 0.5))} x2={x(markYear.year - (stepped ? 0 : 0.5))} y1={34} y2={250} stroke="#4b5563" strokeDasharray="5 4" />
+            <text x={x(markYear.year - (stepped ? 0 : 0.5)) + 6} y={46} fontSize={12} fill="#374151">{markYear.label}</text>
           </g>
         )}
         {bandPath && <path d={bandPath} fill={REFERENCE_FILL} fillOpacity={0.22} stroke="none" />}
@@ -446,7 +452,17 @@ export function IndicatorTrendChart({
             {series[index].map((point, i) =>
               point.value === null ? null : (
                 <g key={point.year}>
-                  {i > 0 && series[index][i - 1].value !== null && (
+                  {i > 0 && series[index][i - 1].value !== null && stepped && (
+                    <polyline
+                      data-series={countries[index]}
+                      points={`${x(series[index][i - 1].year)},${y(series[index][i - 1].value!)} ${x(point.year)},${y(series[index][i - 1].value!)} ${x(point.year)},${y(point.value)}`}
+                      fill="none"
+                      stroke={CAT[index]}
+                      strokeWidth={context && index ? 2 : context ? 3 : 2.5}
+                      strokeDasharray={index ? "7 4" : undefined}
+                    />
+                  )}
+                  {i > 0 && series[index][i - 1].value !== null && !stepped && (
                     <line
                       data-series={countries[index]}
                       x1={x(series[index][i - 1].year)}

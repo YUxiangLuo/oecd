@@ -61,10 +61,18 @@ describe("step 15 report states", () => {
     };
     try {
       const view = render(<ReportLab {...props} />);
-      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "根据实验记录生成报告" })); });
+      // While the saved records still miss items, the generate buttons say why and point to the list.
+      const draft = screen.getByRole("button", { name: "只生成草稿（不提交）" });
+      expect(draft.getAttribute("aria-disabled")).toBe("true");
+      expect(screen.getByText(/还有 1 项没完成，现在还不能生成报告/)).toBeDefined();
+      await act(async () => { fireEvent.click(draft); });
+      expect(generate).toHaveBeenCalledTimes(0);
+      expect(view.container.querySelector(".report-gate-panel.report-gate-flash")).not.toBeNull();
       expect(screen.getByText("还不能生成报告")).toBeDefined();
       view.rerender(<ReportLab {...props} reportGate={[]} state={{ ...props.state, data: { research_question: "已保存的新分析" } }} />);
       expect(screen.queryByText("还不能生成报告")).toBeNull();
+      expect(screen.getByRole("button", { name: "只生成草稿（不提交）" }).getAttribute("aria-disabled")).toBeNull();
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "只生成草稿（不提交）" })); });
       expect(generate).toHaveBeenCalledTimes(1);
     } finally {
       generate.mockRestore();
@@ -135,6 +143,13 @@ describe("step 15 report states", () => {
     const graded = renderToStaticMarkup(<ReportStatus report={report("graded")} />);
     expect(graded).toContain("93 分");
     expect(graded).toContain("证据链完整");
+    // Without comments the score card says so, and the roadmap link no longer promises them.
+    const silent = { ...report("graded"), feedback: "" };
+    expect(renderToStaticMarkup(<ReportStatus report={silent} />)).toContain("老师没有写评语。");
+    const page = renderToStaticMarkup(<ReportLab {...finishProps} report={silent} />);
+    expect(page).toContain(">已评阅，查看分数<");
+    // The score card comes before the submit panel.
+    expect(page.indexOf("report-score-card")).toBeLessThan(page.indexOf("report-submit-panel"));
   });
 
   test("shows progress against both the minimum and the hard maximum", () => {
@@ -145,8 +160,8 @@ describe("step 15 report states", () => {
   });
 
   test("uses resubmission semantics after submission or grading", () => {
-    expect(reportGenerateLabel(null)).toBe("根据实验记录生成报告");
-    expect(reportGenerateLabel(report("draft"))).toBe("重新生成报告");
+    expect(reportGenerateLabel(null)).toBe("只生成草稿（不提交）");
+    expect(reportGenerateLabel(report("draft"))).toBe("重新生成草稿");
     expect(reportGenerateLabel(report("pending"))).toBe("重新生成并提交");
     expect(reportGenerateLabel(report("graded"))).toBe("重新生成并提交");
   });
@@ -154,7 +169,7 @@ describe("step 15 report states", () => {
   test("keeps the generate action distinguishable from the step title", () => {
     const stepTitle = "生成实验报告";
     const first = reportGenerateLabel(null);
-    expect(first).toBe("根据实验记录生成报告");
+    expect(first).toBe("只生成草稿（不提交）");
     expect(first.includes(stepTitle)).toBe(false);
     const html = renderToStaticMarkup(<ReportLab
       state={{
@@ -174,8 +189,8 @@ describe("step 15 report states", () => {
       onNavigateStep={() => {}}
       onReportChanged={() => {}}
     />);
-    expect(html).toContain(">根据实验记录生成报告<");
-    const generateButton = html.match(/<button[^>]*class="secondary"[^>]*>根据实验记录生成报告<\/button>/)?.[0];
+    expect(html).toContain(">只生成草稿（不提交）<");
+    const generateButton = html.match(/<button[^>]*class="secondary"[^>]*>只生成草稿（不提交）<\/button>/)?.[0];
     expect(generateButton).toBeDefined();
     expect(generateButton).not.toContain("aria-label=");
   });
@@ -187,7 +202,7 @@ describe("step 15 report states", () => {
     expect(reportWaitLabel("ready", true, false, "session changed")).toBe("保存失败，请先重试");
     expect(reportGenerateButtonLabel(null, false, "ready", true, false, "offline")).toBe("保存失败，请先重试");
     expect(reportGenerateButtonLabel(null, false, "loading", false, false)).toBe("正在恢复实验记录…");
-    expect(reportGenerateButtonLabel(null, true, "loading", false, false)).toBe("服务端生成中…");
+    expect(reportGenerateButtonLabel(null, true, "loading", false, false)).toBe("正在生成报告…");
   });
 
   test("renders actionable report-gate links", () => {
@@ -207,7 +222,7 @@ describe("step 15 report states", () => {
       blocked={[{ step: 15, title: "原创分析与反思", missing: ["填写证据解释"] }]}
       onNavigateStep={() => {}}
     />);
-    expect(html).toContain("继续填写原创分析");
+    expect(html).toContain("去写你的分析");
     expect(html).not.toContain("继续步骤 15");
 
     const navigated: number[] = [];
@@ -269,7 +284,7 @@ describe("step 15 report states", () => {
       { step: 15, title: "原创分析", missing: ["填写研究问题"] },
       { step: 2, title: "贸易流指标", missing: ["记录两个国家"] },
     ]);
-    expect(overview.summary).toBe("第 1–14 步中 3 个步骤还有 4 项待补齐；本步还有 1 项待完成");
+    expect(overview.summary).toBe("步骤 1–14 中 3 个步骤还有 4 项待补齐；本步还有 1 项待完成");
     expect(overview.next?.step).toBe(1);
     expect(overview.groups.map((group) => group.label)).toEqual([
       "数据接入", "指标计算", "关税回归", "实验报告",
@@ -408,7 +423,7 @@ test("draft generation keeps toast feedback when no outro is shown", async () =>
   const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("draft"));
   try {
     render(<><ReportLab {...finishProps} /><ToastHost /></>);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "根据实验记录生成报告" })); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "只生成草稿（不提交）" })); });
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByRole("status").textContent).toContain("报告草稿已生成，请预览后提交");
   } finally { generate.mockRestore(); }
@@ -434,7 +449,7 @@ for (const action of ["提交报告给老师", "生成并提交报告"]) {
     const submit = spyOn(api.classroom, "submitReport").mockImplementation(() => new Promise((resolve) => { acknowledge = resolve; }));
     try {
       const view = render(<><ReportLab {...finishProps} /><ToastHost /></>);
-      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "根据实验记录生成报告" })); });
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "只生成草稿（不提交）" })); });
       if (action === "提交报告给老师") {
         view.rerender(<><ReportLab {...finishProps} report={report("draft")} /><ToastHost /></>);
       }
@@ -563,7 +578,7 @@ test("each report state shows one action group in the submit panel, without dupl
   const names = (view: ReturnType<typeof render>) =>
     [...view.container.querySelectorAll(".report-submit-panel .report-actions button")].map((button) => button.textContent);
   const none = render(<ReportLab {...finishProps} />);
-  expect(names(none)).toEqual(["生成并提交报告", "根据实验记录生成报告"]);
+  expect(names(none)).toEqual(["生成并提交报告", "只生成草稿（不提交）"]);
   none.unmount();
   const outdated = render(<ReportLab {...finishProps} report={report("graded")} sessionUpdatedAt="2026-08-14T00:00:00Z" />);
   expect(names(outdated)).toEqual(["更新报告并提交给老师", "查看提交回执与实验总结", "导出 PDF"]);
