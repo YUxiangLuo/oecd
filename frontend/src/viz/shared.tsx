@@ -132,7 +132,8 @@ export const KEY_ECONOMIES = new Set(["CHN", "USA", "DEU", "JPN"]);
 export const rowName = (r: Row) => (r.industry != null ? sectorLabel(String(r.industry)) : String(r.country));
 /** 图元实体展示名:行业与国家都带中文名(仅用于标签/tooltip 展示,不用于匹配) */
 /** "CHN 中国与USA 美国" for two; "、" between three or more reads better than a chain of 与. */
-export const joinCountries = (codes: readonly string[]) => codes.map(countryLabel).join(codes.length > 2 ? "、" : "与");
+// "CHN 中国 与 USA 美国": a space on both sides of 与, since each name starts with a Latin code.
+export const joinCountries = (codes: readonly string[]) => codes.map(countryLabel).join(codes.length > 2 ? "、" : " 与 ");
 
 export const rowLabel = (r: Row) => (r.industry != null ? sectorLabel(String(r.industry)) : countryLabel(String(r.country)));
 

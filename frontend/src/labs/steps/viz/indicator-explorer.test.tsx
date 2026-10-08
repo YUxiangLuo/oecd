@@ -300,7 +300,7 @@ describe("indicator explorer with automatic report material", () => {
     await view.findByRole("button", { name: "出口构成" });
     fireEvent.click(view.getByRole("button", { name: "历年变化" }));
     const scope = view.getByLabelText("当前比较口径").textContent ?? "";
-    for (const part of ["CHN 中国与USA 美国", "国家整体", "2019–2021", "外国增加值项占比"]) expect(scope).toContain(part);
+    for (const part of ["CHN 中国 与 USA 美国", "国家整体", "2019–2021", "外国增加值项占比"]) expect(scope).toContain(part);
     fireEvent.click(view.getByRole("button", { name: "出口构成" }));
     await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("composition"));
     expect(new Set(view.saves.at(-1)!.observations!.map((x) => x.metric))).toEqual(
