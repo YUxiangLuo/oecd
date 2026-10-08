@@ -905,7 +905,7 @@ def test_composition_requires_all_trade_components_and_reports_each_reading():
     ]
     assert not any(item["step"] == 6 for item in check_material_gate(session))
     text = "\n".join(teaching_report._experiment_sections(session))
-    assert "| 税收减补贴（TLS 扩展） | 百万美元 | -2 |" in text
+    assert "| 产品税减补贴 | 百万美元 | -2 |" in text
     chart = teaching_report._observed_chart(data, 6, data["observations"])
     # Global-median bars are added when country data is available; the saved countries' bars are fixed.
     # Median bars are flagged as references so the report draws them grey, not as a third country.
@@ -992,7 +992,7 @@ def test_report_ranking_extrema_use_all_saved_industries(step):
     chart = json.loads(section.split("```gvcsim-chart\n", 1)[1].split("\n```", 1)[0])
     assert len(chart["items"]) == 18
     assert {item["group"] for item in chart["items"]} == {"CHN 中国", "USA 美国"}
-    # The 定位行业 view is a ranking ordered by country A, not a two-country comparison.
+    # The 行业排名 view is a ranking ordered by country A, not a two-country comparison.
     assert "行业排名（按 CHN 中国 降序）" in chart["title"]
 
 
@@ -1124,14 +1124,14 @@ def test_report_labels_step_nine_observation_without_a_step_level_metric(tmp_pat
 
     report = build(session, "同学")
 
-    assert "网络介数（全正边二值）" in report.markdown
+    assert "记录的代表指标：介数" in report.markdown
     assert "记录的代表指标：—" not in report.markdown
 
 
 @pytest.mark.parametrize(
     ("metric", "unit", "label"),
     [
-        ("betweenesscentrality", "未归一化介数", "网络介数（全正边二值）"),
+        ("betweenesscentrality", "未归一化介数", "介数"),
         ("weighted indegree", "百万美元", "加权入度"),
         ("closnesscentrality", "无量纲", "接近中心性"),
     ],
@@ -1191,7 +1191,7 @@ def test_report_labels_step_five_network_metric_like_the_step_does(tmp_path, mon
 
     report = build(session, "同学")
 
-    assert "加权总度（入+出）" in report.markdown
+    assert "记录的代表指标：加权总度" in report.markdown
     assert "记录的代表指标：weighted degree" not in report.markdown
 
 
@@ -2186,11 +2186,11 @@ def test_report_metric_labels_match_the_page_labels():
     page_labels = {
         "FVA_share": "外国增加值项占比",
         "DVAex_share": "国内增加值出口占比",
-        "gross_exports": "总出口（VA+TLS）",
+        "gross_exports": "总出口（含产品税减补贴）",
         "DVAex": "国内增加值出口",
         "DVArt": "返回国内的增加值",
         "FVA": "外国增加值",
-        "taxsub": "税收减补贴（TLS 扩展）",
+        "taxsub": "产品税减补贴",
         "3b_VA_GVC_C_share": "复杂 GVC 生产份额",
         "3_VA_GVC_share": "前向 GVC 生产总份额",
         "3_FGY_GVC_share": "后向 GVC 生产总份额",

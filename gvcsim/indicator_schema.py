@@ -63,7 +63,7 @@ INDICATOR_SCHEMA = {
         },
         {
             "key": "network",
-            "label": "生产网络指标（流量规模 + 全正边拓扑基准）",
+            "label": "生产网络指标",
             "fields": [
                 "degree",
                 "indegree",
@@ -80,7 +80,7 @@ INDICATOR_SCHEMA = {
         },
     ],
     "fields": {
-        "gross_exports": {"label": "总出口（VA+TLS）", "format": "amount"},
+        "gross_exports": {"label": "总出口（含产品税减补贴）", "format": "amount"},
         "FVA_share": {"label": "外国增加值项占比", "format": "pct"},
         "DVAex_share": {"label": "国内增加值出口占比", "format": "pct"},
         "3_VA_GVC_share": {"label": "前向 GVC 生产总份额", "format": "pct"},
@@ -91,7 +91,7 @@ INDICATOR_SCHEMA = {
         "DDC": {"label": "国内重复计算", "format": "amount"},
         "FVA": {"label": "外国增加值", "format": "amount"},
         "FDC": {"label": "外国重复计算", "format": "amount"},
-        "taxsub": {"label": "税收减补贴（TLS 扩展）", "format": "amount"},
+        "taxsub": {"label": "产品税减补贴", "format": "amount"},
         "EXDVA": {"label": "出口国内增加值合计", "format": "amount"},
         "SVA": {"label": "总增加值", "format": "amount"},
         "1_VA_D": {"label": "纯国内增加值", "format": "amount"},
@@ -118,64 +118,67 @@ INDICATOR_SCHEMA = {
         "degree": {"label": "度", "format": "count"},
         "indegree": {"label": "入度", "format": "count"},
         "outdegree": {"label": "出度", "format": "count"},
-        "weighted degree": {"label": "加权总度（入+出）", "format": "amount"},
+        "weighted degree": {"label": "加权总度", "format": "amount"},
         "weighted indegree": {"label": "加权入度", "format": "amount"},
         "weighted outdegree": {"label": "加权出度", "format": "amount"},
         "Eccentricity": {"label": "离心率", "format": "count"},
         "closnesscentrality": {"label": "接近中心性", "format": "number"},
         "harmonicclosnesscentrality": {"label": "调和中心性", "format": "number"},
-        "betweenesscentrality": {"label": "网络介数（全正边二值）", "format": "count"},
-        "eigencentrality": {"label": "Gephi 0.10.1 兼容入边分数", "format": "number"},
+        "betweenesscentrality": {"label": "介数", "format": "count"},
+        "eigencentrality": {"label": "特征向量中心性（软件近似）", "format": "number"},
     },
 }
 
+# Shown to students under each chart (steps 6–9) and in the step 5 table headers: plain words, no formulas.
+# The accounting caveats (WWZ items, TLS, negative value added, the Gephi algorithm) live in 技术手册.md
+# and the report's method notes.
 _INDICATOR_DESCRIPTIONS = {
-    "gross_exports": "五类 WWZ 聚合项与 OECD TLS（产品税减补贴）扩展项之和；这是 VA+TLS 账户闭合口径，不表示 taxsub 就是关税，也不是 WWZ 原文分解项。",
-    "FVA_share": "WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 总出口的比重；不是总出口的全部外国含量。在不含 TLS 的口径下，全部外国含量 = FVA（外国增加值）+ FDC（外国重复计算，不是增加值）；OECD TiVA 另将相关 TLS 计入 VA，所以本指标不能当作官方 EXGR_FVASH。",
-    "DVAex_share": "被国外最终吸收的国内增加值占 VA+TLS 账户闭合总出口的比重；越高表示出口中由本国创造且最终被国外吸收的价值构成更高。",
-    "3_VA_GVC_share": "通过中间品跨境参与 GVC 的增加值占总增加值 SVA 的比重。",
-    "3_FGY_GVC_share": "最终品生产 FGY 中经中间品跨境（GVC）的增加值所占比重，即从最终品回溯的后向 GVC 参与度。",
-    "3b_VA_GVC_C_share": "至少经历两次跨境的复杂 GVC 增加值占总增加值 SVA 的比重。",
-    "DVAex": "由本国创造、随出口离境并最终被国外吸收的增加值。",
-    "DVArt": "随出口离境后又返回本国并在本国最终吸收的国内增加值。",
-    "DDC": "本国增加值在跨境生产链中多次计入毛流量形成的国内重复计算。",
-    "FVA": "WWZ 第 11–14 项聚合的外国增加值，不含第 15–16 项外国纯重复计算 FDC。在不含 TLS 的口径下，总出口的全部外国含量 = FVA + FDC（FDC 是重复计算，不是增加值）；OECD TiVA 的 VA 还含相关 TLS，因此不可与 EXGR_FVA 混称。",
-    "FDC": "外国增加值在跨境生产链中多次计入毛流量形成的重复计算。",
-    "taxsub": "由 OECD ICIO 的 TLS 账户沿投入产出链计算的出口税收减补贴含量；这是本系统为匹配 OECD 账户口径加入的扩展项，不是 WWZ 原文分解项。负值表示沿供应链累计后呈净补贴。",
-    "EXDVA": "WWZ 不含国内纯重复计算 DDC 的国内增加值合计，等于 DVAex+DVArt；不要混称为 OECD 总出口国内 VA 总含量。",
-    "SVA": "从增加值来源端核算的生产活动总增加值。",
-    "1_VA_D": "只在本国生产并满足本国最终需求、未发生跨境的增加值。",
-    "2_VA_RT": "随最终品直接出口、只发生一次跨境的传统贸易增加值。",
-    "3_VA_GVC": "随中间品贸易跨境并进入全球价值链生产的增加值。",
-    "3a_VA_GVC_S": "中间品跨境一次后在国外被最终吸收的简单 GVC 增加值。",
-    "3b_VA_GVC_C": "至少一次中间品跨境、最终吸收前累计跨境至少两次的复杂 GVC 增加值；后续可以是中间品或最终品出口。",
-    "FGY": "从最终品生产端核算、为最终需求服务的全球增加值总量。",
-    "1_FGY_D": "本国最终品中由本国生产且全程不跨境的增加值。",
-    "2_FGY_RT": "最终品直接出口中包含的本国增加值。",
-    "3_FGY_GVC": "经由中间品跨境贸易后进入最终品的增加值。",
-    "3a_FGY_GVC_S": "从最终品端回溯、只经历一次中间品跨境的简单 GVC 增加值。",
-    "3b_FGY_GVC_C": "从最终品端回溯，至少一次中间品跨境且累计跨境至少两次的增加值；后续跨境可以由最终品承载。",
-    "PLv": "从增加值创造端向最终吸收端追踪的账户比值；VA 为正时可理解为增加值加权平均总生产阶段数，存在负 VA 时则是有符号账户加权，不保证普通凸加权平均的区间性质；不是跨境次数、经过国家数或网络边数。",
-    "PLv_D": "前向纯国内活动诱发的累计总产出除以该段关联增加值，表示该段的平均生产阶段数。",
-    "PLv_RT": "前向传统最终品贸易活动诱发的累计总产出除以该段关联增加值，表示该段的平均生产阶段数。",
-    "PLv_GVC": "从增加值创造端向最终吸收端追踪：GVC 活动诱发的累计总产出除以该段关联增加值。VA 为正时可理解为增加值加权平均生产阶段数；存在负 VA 时是有符号账户比值；不是跨境次数、经过国家数或网络边数。",
-    "PLy": "从最终品端向初始增加值来源回溯的账户比值；VA 为正时可理解为增加值加权平均总生产阶段数，存在负 VA 时则是有符号账户加权；不是跨境次数、经过国家数或网络边数。",
-    "PLy_D": "从最终品端回溯：纯国内活动的累计总产出除以最终产品承载的该段关联增加值，表示平均生产阶段数。",
-    "PLy_RT": "从最终品端回溯：传统贸易活动的累计总产出除以最终产品承载的该段关联增加值，表示平均生产阶段数。",
-    "PLy_GVC": "从最终品端向初始增加值来源回溯：GVC 活动累计总产出除以最终产品承载的关联增加值。VA 为正时可理解为增加值加权平均生产阶段数；存在负 VA 时是有符号账户比值；不是跨境次数、经过国家数或网络边数。",
-    "Pos_TPL": "以前向与后向总生产长度的相对关系衡量价值链位置。",
-    "GVCPs": "前向与后向 GVC 段长度之比；大于 1 通常表示更靠近上游。",
-    "degree": "与该节点直接相连的入边和出边数量。",
-    "indegree": "指向该节点的直接供应链连接数量。",
-    "outdegree": "由该节点指向其他节点的直接供应链连接数量。",
-    "weighted degree": "加权入度与加权出度之和；正自环同时属于入向和出向，因而在本指标中计两次。它不是去重后的贸易额或外部联系总额。国家级图只含国家间中间品与最终品贸易、不含国内边，因而没有自环：国家级数值等于该国对其他国家的出口加进口，不能与含国内流量的行业级数值直接比较。",
-    "weighted indegree": "流入该节点的网络边流量之和。",
-    "weighted outdegree": "由该节点流出的网络边流量之和。",
-    "Eccentricity": "该节点到所有可达节点的最远最短路径距离。",
-    "closnesscentrality": "从该节点沿出边可达的节点数除以最短路径距离之和，越高表示向外可达性越强。",
-    "harmonicclosnesscentrality": "从该节点沿出边到可达节点的距离倒数平均值，可处理不完全连通网络。",
-    "betweenesscentrality": "全部有限正流量边等长时，各有序节点对的有向最短路径经过该节点的份额之和（σ_st(v)/σ_st；未按节点对数归一化）。微小正边与大额边同权且未做边阈值敏感性检验；它只是一项拓扑基准，不是经济枢纽、瓶颈或不可替代性的证据。",
-    "eigencentrality": "精确复现 Gephi Toolkit 0.10.1 的 100 次累计入边迭代并以最大值归一。该兼容分数保留软件复现性，但累计迭代不同于标准 Perron 特征向量幂迭代，不能简称为标准特征向量中心性。",
+    "gross_exports": "出口总额，等于五类价值来源（国内增加值出口、返回国内的增加值、国内重复计算、外国增加值、外国重复计算）加上产品税减补贴。",
+    "FVA_share": "出口额中由外国创造的价值（外国增加值）所占的比例。不含被重复计算的部分，所以和 OECD 公布的“出口中外国含量”不完全相同。",
+    "DVAex_share": "出口额中由本国创造、最终在国外被使用的价值所占的比例。",
+    "3_VA_GVC_share": "本国增加值中，随中间品跨境、进入全球价值链生产的部分所占的比例（前向，分母是本国总增加值）。",
+    "3_FGY_GVC_share": "本国生产的最终品中，经过中间品跨境而来的增加值所占的比例（后向，分母是最终品总值）。",
+    "3b_VA_GVC_C_share": "本国增加值中，被最终使用前至少跨境两次的部分（复杂 GVC）所占的比例。",
+    "DVAex": "由本国创造、随出口离开本国、最终在国外被使用的增加值。",
+    "DVArt": "随出口离开本国、又回到本国并在本国被最终使用的增加值。",
+    "DDC": "中间品多次过境时，本国的同一份价值被重复计入出口额的部分。",
+    "FVA": "出口中由外国创造的价值（不含被重复计算的部分）。",
+    "FDC": "中间品多次过境时，外国的同一份价值被重复计入出口额的部分。",
+    "taxsub": "出口中含的产品税减去补贴；负数表示补贴更多。它不是步骤 10 的关税。",
+    "EXDVA": "出口中由本国创造的价值合计，等于国内增加值出口 + 返回国内的增加值。",
+    "SVA": "本国生产活动创造的全部增加值（前向份额的分母）。",
+    "1_VA_D": "只在本国生产、满足本国最终需求、不跨境的增加值。",
+    "2_VA_RT": "随最终品直接出口、只跨境一次的增加值（传统贸易）。",
+    "3_VA_GVC": "随中间品跨境、进入全球价值链生产的增加值。",
+    "3a_VA_GVC_S": "随中间品跨境一次、在进口国被最终使用的增加值（简单 GVC）。",
+    "3b_VA_GVC_C": "被最终使用前至少跨境两次的增加值（复杂 GVC）；其中至少一次是中间品跨境。",
+    "FGY": "本国生产的最终品总值，其中的增加值可以来自各国（后向份额的分母）。",
+    "1_FGY_D": "本国最终品中，由本国生产、全程不跨境的增加值。",
+    "2_FGY_RT": "本国直接出口的最终品中含的本国增加值。",
+    "3_FGY_GVC": "本国最终品中，经过中间品跨境而来的增加值。",
+    "3a_FGY_GVC_S": "从最终品往回看，只经过一次中间品跨境的增加值（简单 GVC）。",
+    "3b_FGY_GVC_C": "从最终品往回看，累计跨境至少两次的增加值（复杂 GVC）；后面的跨境可以是最终品。",
+    "PLv": "从增加值的产地往最终使用方向追踪，全部生产活动平均经过几道生产工序。它不是跨境次数。",
+    "PLv_D": "前向追踪时，纯国内这一段平均经过几道生产工序。",
+    "PLv_RT": "前向追踪时，传统贸易这一段平均经过几道生产工序。",
+    "PLv_GVC": "从增加值的产地往最终使用方向追踪，GVC 这一段平均经过几道生产工序。它不是跨境次数。",
+    "PLy": "从最终品往回追到增加值的产地，全部生产活动平均经过几道生产工序。它不是跨境次数。",
+    "PLy_D": "后向追踪时，纯国内这一段平均经过几道生产工序。",
+    "PLy_RT": "后向追踪时，传统贸易这一段平均经过几道生产工序。",
+    "PLy_GVC": "从最终品往回追到增加值的产地，GVC 这一段平均经过几道生产工序。它不是跨境次数。",
+    "Pos_TPL": "前向总生产长度 ÷ 后向总生产长度；大于 1 表示相对更上游。",
+    "GVCPs": "前向 GVC 段长度 ÷ 后向 GVC 段长度；大于 1 表示相对更上游。",
+    "degree": "与这个节点直接相连的连接条数（买入和卖出都算）。",
+    "indegree": "向这个节点供货的直接连接条数。",
+    "outdegree": "这个节点向其他节点供货的直接连接条数。",
+    "weighted degree": "这个节点买入和卖出的金额之和（买入 + 卖出，百万美元）。行业级只算中间品；自环（行业卖给自己的部分，例如钢铁卖给钢铁）在买、卖两边各算一次。",
+    "weighted indegree": "这个节点买入的金额之和（流入的流量）。",
+    "weighted outdegree": "这个节点卖出的金额之和（流出的流量）。",
+    "Eccentricity": "从这个节点出发，到最远一个能到达的节点要走几步（按最短路线算）。",
+    "closnesscentrality": "从这个节点沿供货方向出发，到其他节点平均有多近；越高表示越容易到达其他节点。",
+    "harmonicclosnesscentrality": "和接近中心性类似：把到每个能到达的节点的距离取倒数再平均；越高表示离其他节点越近。",
+    "betweenesscentrality": "只看连接、不看金额：把每条供货关系都看成一样长，数一数其他节点之间的最短路线有多少经过这个行业。数值越大越像“中转站”；但它不看金额，不能证明这个行业是经济枢纽或瓶颈。",
+    "eigencentrality": "被重要节点连接的节点得分更高。这里按 Gephi 网络软件的算法近似计算（最高为 1），只作参考。",
 }
 # 国家级贸易图在全部正流量边下是完全图,这些无权中心性因此对所有国家取同一常数
 # (度=152、介数=0、接近/离心/调和/特征向量恒定),没有横截面区分度,只在国家–行业级
@@ -193,14 +196,12 @@ _COUNTRY_DEGENERATE_NETWORK_FIELDS = frozenset(
         "eigencentrality",
     }
 )
-_COUNTRY_DEGENERATE_NOTE = "（国家级贸易图为完全图，该指标对所有国家恒为常数，仅在国家–行业级有区分度）"
 
 # 用 .get 而不是下标:漏写描述应表现为测试失败(test_indicator_schema 断言
 # desc 全部非空),而不是 import 时 KeyError 拖垮整个服务。
 _indicator_fields = cast(dict[str, dict[str, Any]], INDICATOR_SCHEMA["fields"])
 for _field, _meta in _indicator_fields.items():
-    _degenerate = _field in _COUNTRY_DEGENERATE_NETWORK_FIELDS
-    _desc = _INDICATOR_DESCRIPTIONS.get(_field, "")
-    _meta["desc"] = _desc + _COUNTRY_DEGENERATE_NOTE if _degenerate else _desc
-    # 契约字段:前端在国家级粒度隐藏被标记的字段,避免展示零信息的常数中心性。
-    _meta["country_degenerate"] = _degenerate
+    _meta["desc"] = _INDICATOR_DESCRIPTIONS.get(_field, "")
+    # 契约字段:前端在国家级粒度隐藏被标记的字段,避免展示零信息的常数中心性。这些字段的说明
+    # 因此只在行业级页面出现,不再附加“国家级为常数”的提示。
+    _meta["country_degenerate"] = _field in _COUNTRY_DEGENERATE_NETWORK_FIELDS
