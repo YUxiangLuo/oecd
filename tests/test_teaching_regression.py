@@ -457,3 +457,51 @@ def test_design_with_an_alternative_baseline_runs_and_recovers_its_own_relation(
     with pytest.raises(ValueError):
         RegressionDesign("trade", baseline="DVAex_share")
     assert RegressionDesign("length", baseline="PLy_GVC").depvar == "PLy_GVC"
+
+
+def test_country_exposure_overview_lists_every_sample_country_taxed_or_not():
+    from gvcsim.regression.teaching import MARKET, country_exposure_overview
+
+    source = _source(tuple(f"C{i:02}" for i in range(30)))
+    panel = build_teaching_panel(source, _exposure(source))
+    overview = country_exposure_overview(panel)
+    countries = overview["countries"]
+    # Step 10 shows the whole sample before any example: every country once, the market not among them.
+    assert sorted(item["country"] for item in countries) == sorted(panel.country.unique())
+    assert MARKET not in {item["country"] for item in countries}
+    taxed = panel.groupby("country").teaching_tariff_rate_tau.max().gt(0)
+    assert overview["taxed_countries"] == int(taxed.sum())
+    assert overview["untaxed_countries"] == int((~taxed).sum())
+    last = panel.loc[panel.year.eq(overview["year"])]
+    for item in countries:
+        rows = last.loc[last.country.eq(item["country"]), X_COLUMN]
+        assert item["mean_exposure"] == pytest.approx(float(rows.mean()))
+        assert item["exposed_industries"] == int(rows.gt(0).sum())
+        assert item["taxed"] == bool(taxed[item["country"]])
+        if not item["taxed"]:
+            assert item["mean_exposure"] == 0
+    # Sorted from the highest mean exposure down.
+    means = [item["mean_exposure"] for item in countries]
+    assert means == sorted(means, reverse=True)
+    assert overview["policy_year"] == min(panel.loc[panel.teaching_tariff_rate_tau.gt(0), "year"])
+
+
+def test_estimate_overview_matches_a_single_run_for_every_baseline():
+    from gvcsim.regression.design import RegressionDesign
+    from gvcsim.regression.panel import run_design_with_benchmark
+    from gvcsim.regression.teaching import BASELINES, available_baselines
+    from gvcsim.regression_routes import _estimate_overview
+
+    source = _full_source(tuple(f"C{i:02}" for i in range(30)))
+    panel = build_teaching_panel(source, _exposure(source))
+    overview = _estimate_overview(panel)
+    for outcome, items in overview["outcomes"].items():
+        assert [item["key"] for item in items] == [b.key for b in available_baselines(outcome, panel.columns)]
+        assert [item["default"] for item in items].count(True) == 1
+        assert items[0]["key"] == BASELINES[outcome][0].key and items[0]["default"]
+        for item in items:
+            # The bar for each Y is the same estimate the run endpoint saves for that Y.
+            result, _ = run_design_with_benchmark(panel, RegressionDesign(outcome, teaching=True, baseline=item["key"]))
+            coef = result.to_dict()["coefs"][0]
+            assert item["coef"] == pytest.approx(coef["coef"])
+            assert item["ci_low"] == pytest.approx(coef["ci_low"]) and item["ci_high"] == pytest.approx(coef["ci_high"])

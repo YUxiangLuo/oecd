@@ -262,6 +262,51 @@ export interface TeachingPanelResponse {
 export interface TeachingGroupPoint { year: number; change: number }
 
 /** Taxed vs untaxed mean change of each simulated Y, relative to each group's pre-policy mean. */
+/** Step 10: every sample country's exposure X in the last year (the imposing market is not in the sample). */
+export interface TeachingCountriesResponse {
+  version: string;
+  year: number;
+  market: string;
+  tariff_rate: number;
+  policy_year: number | null;
+  taxed_countries: number;
+  untaxed_countries: number;
+  entities: number;
+  /** Sorted from the highest mean exposure down; X is a fraction (0.23 = 23 percentage points). */
+  countries: {
+    country: string;
+    taxed: boolean;
+    mean_exposure: number;
+    max_exposure: number;
+    industries: number;
+    exposed_industries: number;
+  }[];
+}
+
+/** One Y's estimate, as the run endpoint would save it (coef per unit of X, i.e. per 100 percentage points). */
+export interface TeachingEstimate {
+  key: string;
+  label: string;
+  kind: "share" | "length" | "position" | "network" | string;
+  default: boolean;
+  coef: number | null;
+  ci_low: number | null;
+  ci_high: number | null;
+  p: number | null;
+  status: string | null;
+  suppress_inference: boolean;
+  depvar_std: number | null;
+  depvar_mean: number | null;
+  n_obs: number | null;
+}
+
+/** Steps 11–14: every Y's estimate of every family, computed once per release (the bar chart). */
+export interface TeachingOverviewResponse {
+  version: string;
+  disclaimer: string;
+  outcomes: Record<"trade" | "production" | "length" | "network", TeachingEstimate[]>;
+}
+
 export interface TeachingGroupsResponse {
   version: string;
   years: number[];

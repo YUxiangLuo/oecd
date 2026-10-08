@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import TypeVar, cast
 
 import numpy as np
 import pandas as pd
@@ -468,6 +468,45 @@ def model_snapshot(outcome: str, baseline_key: str | None = None) -> dict:
         "market": MARKET,
         "calibration": item.calibration,
         "disclaimer": DISCLAIMER,
+    }
+
+
+def country_exposure_overview(panel: pd.DataFrame) -> dict:
+    """Every sample country's tariff exposure in the last year: what step 10 shows before any single example.
+
+    ``mean_exposure`` averages X over the country's industries in the sample (untaxed countries are 0);
+    ``exposed_industries`` counts the industries with X > 0 (a taxed country's industry with w = 0 has X = 0).
+    The imposing market is not in the sample and is reported separately.
+    """
+    years = sorted(int(year) for year in panel["year"].unique())
+    last = years[-1]
+    rows = panel.loc[panel["year"].eq(last)]
+    taxed = panel.groupby("country")["teaching_tariff_rate_tau"].max().gt(0)
+    grouped = rows.groupby("country")[X_COLUMN]
+    countries = [
+        {
+            "country": str(country),
+            "taxed": bool(taxed.get(country, False)),
+            "mean_exposure": float(values.mean()),
+            "max_exposure": float(values.max()),
+            "industries": int(values.size),
+            "exposed_industries": int(values.gt(0).sum()),
+        }
+        for country, values in grouped
+    ]
+    countries.sort(key=lambda item: (-float(cast(float, item["mean_exposure"])), str(item["country"])))
+    rates = panel.groupby("year")["teaching_tariff_rate_tau"].max()
+    policy_years = [year for year in years if rates.get(year, 0) > 0]
+    return {
+        "version": VERSION,
+        "year": last,
+        "market": MARKET,
+        "tariff_rate": float(max(TARIFF_PATH)),
+        "policy_year": policy_years[0] if policy_years else None,
+        "taxed_countries": sum(1 for item in countries if item["taxed"]),
+        "untaxed_countries": sum(1 for item in countries if not item["taxed"]),
+        "entities": int(rows[["country", "industry"]].drop_duplicates().shape[0]),
+        "countries": countries,
     }
 
 

@@ -22,9 +22,12 @@ from gvcsim.regression.design import (
 )
 from gvcsim.regression.panel import run_design_with_benchmark
 from gvcsim.regression.teaching import (
+    BASELINES,
     DISCLAIMER,
     VERSION,
     Y_COLUMNS,
+    available_baselines,
+    country_exposure_overview,
     group_trends,
     model_snapshot,
     variable_catalog,
@@ -42,6 +45,9 @@ _RUN_LIMITER = SlidingWindowRateLimiter(app_config.REGRESSION_RUNS_PER_MINUTE)
 def clear_result_cache() -> None:
     """Clear completed regression results at process and test boundaries."""
     _RESULT_CACHE.clear()
+    with _OVERVIEW_LOCK:
+        _COUNTRY_OVERVIEW_CACHE.clear()
+        _ESTIMATE_OVERVIEW_CACHE.clear()
 
 
 def clear_rate_limits() -> None:
@@ -213,6 +219,83 @@ async def teaching_groups():
         return trends
 
     return await concurrency.run_sync(read)
+
+
+_COUNTRY_OVERVIEW_CACHE: list[tuple[Any, dict]] = []
+_ESTIMATE_OVERVIEW_CACHE: list[tuple[Any, dict]] = []
+_OVERVIEW_LOCK = threading.Lock()
+
+
+def _cached_on_panel(cache: list[tuple[Any, dict]], panel: Any, build: Any) -> dict:
+    """Reuse a result computed from the same cached panel DataFrame (it changes only with the release).
+    One build at a time: a class opening the page together waits for the first build instead of repeating it."""
+    with _OVERVIEW_LOCK:
+        if cache and cache[0][0] is panel:
+            return cache[0][1]
+        value = build(panel)
+        cache[:] = [(panel, value)]
+        return value
+
+
+@router.get("/api/regression/teaching-countries")
+async def teaching_countries():
+    """Step 10: every sample country's exposure X in the last year, taxed and untaxed, before any example."""
+
+    def read() -> dict:
+        panel = _read_csv("panel_teaching.csv")
+        return _cached_on_panel(_COUNTRY_OVERVIEW_CACHE, panel, country_exposure_overview)
+
+    return await concurrency.run_sync(read)
+
+
+def _estimate_overview(panel: Any) -> dict:
+    """The estimate of every Y of every family, as the run endpoint would compute it (one bar per Y)."""
+    outcomes: dict[str, list[dict[str, Any]]] = {}
+    for outcome in OUTCOMES:
+        default_key = BASELINES[outcome][0].key
+        items = []
+        for baseline in available_baselines(outcome, panel.columns):
+            design = RegressionDesign(outcome, teaching=True, baseline=baseline.key)
+            result, _ = run_design_with_benchmark(panel, design)
+            info = result.to_dict()
+            coef = (info.get("coefs") or [{}])[0]
+            raw_support = info.get("support")
+            support = raw_support if isinstance(raw_support, dict) else {}
+            items.append(
+                {
+                    "key": baseline.key,
+                    "label": baseline.label,
+                    "kind": baseline.kind,
+                    "default": baseline.key == default_key,
+                    "coef": coef.get("coef"),
+                    "ci_low": coef.get("ci_low"),
+                    "ci_high": coef.get("ci_high"),
+                    "p": coef.get("p"),
+                    "status": info.get("status"),
+                    "suppress_inference": bool(support.get("suppress_inference")),
+                    "depvar_std": info.get("depvar_std"),
+                    "depvar_mean": info.get("depvar_mean"),
+                    "n_obs": info.get("n_obs"),
+                }
+            )
+        outcomes[outcome] = items
+    return {"version": VERSION, "disclaimer": DISCLAIMER, "outcomes": outcomes}
+
+
+@router.get("/api/regression/teaching-overview")
+async def teaching_overview():
+    """Steps 11–14: every Y's estimate at once, for the bar chart (the same data for every student, computed
+    once per release, so it does not count against the per-student run limit)."""
+
+    def read() -> dict:
+        panel = _read_csv("panel_teaching.csv")
+        return _cached_on_panel(_ESTIMATE_OVERVIEW_CACHE, panel, _estimate_overview)
+
+    try:
+        return await concurrency.run_cpu_bound(read)
+    except (np.linalg.LinAlgError, FloatingPointError, OverflowError, ValueError) as error:
+        _LOG.warning("回归总览计算失败：%s", error)
+        raise HTTPException(status_code=409, detail="回归总览暂时算不出来，请稍后重试。") from error
 
 
 @router.get("/api/regression/design", response_model=RegressionDesignResponse)

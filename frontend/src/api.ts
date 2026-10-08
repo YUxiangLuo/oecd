@@ -327,6 +327,8 @@ export const api = {
       withQuery("/api/regression/teaching-panel", { country, year, limit }),
     ),
   teachingGroups: () => getOnce<import("./types").TeachingGroupsResponse>("/api/regression/teaching-groups"),
+  teachingCountries: () => getOnce<import("./types").TeachingCountriesResponse>("/api/regression/teaching-countries"),
+  teachingOverview: () => getOnce<import("./types").TeachingOverviewResponse>("/api/regression/teaching-overview"),
   teachingSeries: (countries: string[], industry: string) =>
     get<import("./types").TeachingPanelResponse>(
       withQuery("/api/regression/teaching-panel", {
