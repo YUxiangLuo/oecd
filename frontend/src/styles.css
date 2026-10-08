@@ -17,6 +17,9 @@ body {
   background: #eef0f5;
   color: #1b1f2b;
   font-size: 14px;
+  /* Chinese text breaks between any two characters, so a paragraph often ended with one or two characters
+     alone on its last line ("…多 / 少？"). Inherited by all text; browsers without it wrap as before. */
+  text-wrap: pretty;
 }
 button { font-family: inherit; cursor: pointer; }
 /* :where keeps this at zero specificity, so components with their own focus style still win. */

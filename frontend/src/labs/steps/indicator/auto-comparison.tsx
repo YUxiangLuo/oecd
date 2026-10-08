@@ -8,6 +8,7 @@ import { api } from "../../../api";
 import { sameJsonValue } from "../../../session-store";
 import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE, STEP_MATERIAL_ACTION_ID } from "../../../step-task-card";
 import type { IndicatorSchema, Meta, StepStateApi } from "../../../types";
+import { cjkSpace } from "../../../format";
 import { countryLabel } from "../../../viz";
 import { fieldLabel, fmtField, useAsync } from "../../shared";
 import { keepFocusNear } from "../../../a11y";
@@ -119,7 +120,7 @@ export function AutoMaterialStatus({ meta, state, schema, first, second, metric,
     <div id={STEP_MATERIAL_ACTION_ID} tabIndex={-1} className={`auto-material${loadFailed && recorded.length !== 2 ? " auto-material--failed" : ""}`}>
       <b>报告材料 · {state.materialLocked ? "已记录" : "自动记录"}</b>
       {recorded.length === 2
-        ? <span role="status">{recorded[0].year} 年{fieldLabel(recorded[0].metric, schema)}：{recorded.map((item) => `${countryLabel(item.country)} ${fmtField(item.value, item.metric, schema)}${item.unit === "百万美元" ? " 百万美元" : ""}`).join("；")}</span>
+        ? <span role="status">{cjkSpace(`${recorded[0].year} 年`, fieldLabel(recorded[0].metric, schema))}：{recorded.map((item) => `${countryLabel(item.country)} ${fmtField(item.value, item.metric, schema)}${item.unit === "百万美元" ? " 百万美元" : ""}`).join("；")}</span>
         : <span role="status">
           {loadFailed ? userFacingRequestError(loadError, "国家整体数据加载失败") : "正在记录当前选择…"}
           {loadFailed && onRetryLoad && <button type="button" className="secondary" onClick={(event) => { const button = event.currentTarget; onRetryLoad(); keepFocusNear(button); }}>重试</button>}
@@ -131,7 +132,7 @@ export function AutoMaterialStatus({ meta, state, schema, first, second, metric,
       </label>
       {state.materialLocked
         ? <small>{MATERIAL_LOCKED_NOTE}{record && <button type="button" className="secondary" onClick={record}>{MATERIAL_LOCKED_ACTION.replace("图表", "选择")}</button>}</small>
-        : <small>记录{where}和对比国家同一年的{metric ? fieldLabel(metric, schema) : "本步指标"}（国家整体），换国家或年份后自动更新，无需另外保存。{note ? ` ${note}` : ""}</small>}
+        : <small>记录{where}{cjkSpace("和对比国家同一年的", metric ? fieldLabel(metric, schema) : "本步指标")}（国家整体），换国家或年份后自动更新，无需另外保存。{note ? ` ${note}` : ""}</small>}
     </div>
   );
 }
