@@ -250,7 +250,7 @@ def create_student_batch(
             (class_id,),
         ).fetchone()
         if group is None or not group["is_active"] or not group["term_is_active"]:
-            raise ValueError("这个班级已归档，请选择使用中的班级")
+            raise ValueError("这个学期或班级已归档，请选择使用中的班级")
         # Each roster 学号 becomes both the username and the 学号, so it conflicts with an
         # existing username or with another student's 学号.
         names = [student["username"] for student in students]
