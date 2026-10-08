@@ -2331,7 +2331,8 @@ def test_report_regression_headings_name_the_step_not_its_default_y(tmp_path, mo
     # A saved run may use another Y than the step title's default, so the headings name the regression only;
     # the saved Y follows below them ("结果指标 Y").
     for step, name in ((11, "贸易流回归"), (12, "生产回归"), (13, "长度回归"), (14, "网络回归")):
-        assert f"### 步骤 {step} · {name}（用于汇总表）\n" in summary
+        # One saved run per step: no "（用于汇总表）" marker is needed.
+        assert f"### 步骤 {step} · {name}\n" in summary
         assert f"### 步骤 {step} · {name}\n" in appendix
     headings = [line for line in (summary + appendix).splitlines() if line.startswith("### 步骤 1")]
     assert len(headings) == 8 and not any("关税与" in line for line in headings)

@@ -577,8 +577,12 @@ def _evidence_summary(
         primary = _primary_coefficient(design, result)
         suppressed = _global_inference_suppressed(result)
         used_in_table = qualified.get(step) is run
+        # Usually a step has one saved run; only when it has two does the heading say which one the summary uses.
+        several = sum(1 for other in runs if other["step"] == step) > 1
         marker = (
-            "（用于汇总表）"
+            ""
+            if not several
+            else "（用于汇总表）"
             if used_in_table
             else ("（另一次计算，未用于汇总表）" if not _result_is_qualified(result, design) else "")
         )
@@ -727,7 +731,7 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
         "",
         # One source line per paragraph: Markdown joins consecutive lines with a space, which would show
         # after each "。".
-        "以下是你在步骤 11–14 保存的计算结果，生成报告时不会重算；同一步可能有最近一次计算和一份用于汇总表的结果。"
+        "以下是你在步骤 11–14 保存的计算结果，生成报告时不会重算。每步通常只有最后一次计算；只有最后一次没有算出可用结果时，才会同时列出用于汇总表的那一次。"
         "表中数字四舍五入到 4 位有效数字，很小的 p 值显示为 <0.0001，不是说概率为零。",
         "",
         "表中的“系数”对应 X 相差 1（即 100 个百分点）时 Y 平均相差多少；除以 100，才是正文里“X 每高 1 个百分点”的数，"
