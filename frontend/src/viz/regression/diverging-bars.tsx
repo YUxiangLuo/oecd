@@ -27,6 +27,7 @@ const LABEL_SIZE = 12.5, SUB_SIZE = 11, VALUE_SIZE = 12, TAG_SIZE = 10.5;
 const ROW_H = 42, BAR_H = 20, PAD_T = 10, AXIS_H = 44, GAP = 7, COLUMN_GAP = 16, EDGE = 10;
 /** Narrowest and widest drawing widths: the chart is drawn at its container's width, so text keeps its size. */
 export const MIN_WIDTH = 420, MAX_WIDTH = 980, DEFAULT_WIDTH = 680;
+const CARD_PADDING_X = 16;
 
 /** The text after a bar's end: its value, and "· 方向不确定" when the interval includes 0. */
 export function endLabel(row: Pick<DivergingBarRow, "valueLabel" | "uncertain">): string {
@@ -167,7 +168,8 @@ function useDrawingWidth(ref: React.RefObject<HTMLDivElement | null>): number {
     const element = ref.current;
     if (!element || typeof ResizeObserver === "undefined") return;
     const measure = () => {
-      const inner = element.clientWidth;
+      // clientWidth includes the card's 16px side padding; the drawing gets what is inside it.
+      const inner = element.clientWidth - 2 * CARD_PADDING_X;
       if (inner > 0) setWidth(Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, inner))));
     };
     measure();
@@ -234,7 +236,7 @@ export function DivergingBarChart({
   ].filter((item) => present.has(item.color));
   const plotBottom = PAD_T + rows.length * ROW_H;
   return (
-    <div ref={wrapRef} className="diverging-bars" style={{ ...cardStyle, padding: "14px 16px", printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}>
+    <div ref={wrapRef} className="diverging-bars" style={{ ...cardStyle, padding: `14px ${CARD_PADDING_X}px`, printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}>
       {title && <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3a4050" }}>{title}</div>}
       <div className="diverging-bars-legend" style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", margin: "4px 0 6px", fontSize: 11.5, color: "#5a6070" }}>
         {legend.map((item) => (
