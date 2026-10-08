@@ -52,7 +52,7 @@ def _limit_expensive_request(limiter: SlidingWindowRateLimiter, account_id: int,
     try:
         limiter.check(account_id)
     except RateLimitExceeded as error:
-        # The page already prefixes the action ("回归运行失败："), so the label names only what was counted.
+        # The page already prefixes the action ("贸易流回归没有算完："), so the label names only what was counted.
         raise HTTPException(
             status_code=429,
             detail=f"{label}次数过多，请约 {error.retry_after_header} 秒后再试。",
