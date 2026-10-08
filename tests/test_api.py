@@ -269,7 +269,8 @@ def test_report_state_machine_and_failure_preserves_grade(teaching_db, monkeypat
         json={"score": 70, "feedback": "旧内容", "expected_updated_at": graded.json()["updated_at"]},
     )
     assert stale.status_code == 409
-    assert "重新加载" in stale.json()["detail"]
+    # The detail names the cause; the grading page adds the “载入最新报告” instruction.
+    assert stale.json()["detail"] == "学生刚重新提交了报告"
 
 
 def test_submit_api_rejects_a_draft_after_the_session_changes(teaching_db):
