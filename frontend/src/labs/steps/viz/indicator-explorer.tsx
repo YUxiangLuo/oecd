@@ -23,7 +23,9 @@ import {
 import {
   COMPARISON_LETTERS,
   countryDistribution,
+  DEFAULT_MARK,
   defaultEntities,
+  defaultPartner,
   finiteValue,
   indicatorMaterial,
   indicatorRows,
@@ -698,7 +700,7 @@ export function IndicatorExplorer({
                     .filter((candidate) => candidate === country || !selected.includes(candidate))
                     .map((candidate) => (
                       <option key={candidate} value={candidate}>
-                        {countryLabel(candidate)}
+                        {countryLabel(candidate)}{index === 0 && candidate === defaultPartner(countries, first) ? DEFAULT_MARK : ""}
                       </option>
                     ))}
                 </select>

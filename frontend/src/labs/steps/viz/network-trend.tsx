@@ -11,7 +11,7 @@ import { IndicatorTrendChart, indicatorNumber } from "./indicator-charts";
 import { AddCountryControl, MaxCountriesNote } from "./add-country";
 import { QuadrantScatter } from "../../../viz";
 import { Butterfly } from "./theme-charts";
-import { COMPARISON_LETTERS, defaultComparison, defaultEntities, MAX_ENTITIES, type YearDistribution } from "./indicator-model";
+import { COMPARISON_LETTERS, DEFAULT_MARK, defaultComparison, defaultEntities, defaultPartner, MAX_ENTITIES, type YearDistribution } from "./indicator-model";
 import { ScopeCard } from "./scope-card";
 import { NetworkRanking, networkRanking, networkValue } from "./network-ranking";
 
@@ -203,7 +203,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         <LabeledControl key={index} label={`对比国家 ${COMPARISON_LETTERS[index]}`}>{(id) => (
           <span className="add-country">
             <select id={id} name={index ? undefined : "network-country-b"} value={country} onChange={(event) => setOthers(others.map((item, at) => (at === index ? event.target.value : item)))}>
-              {countries.filter((candidate) => candidate === country || !selected.includes(candidate)).map((candidate) => <option key={candidate} value={candidate}>{countryLabel(candidate)}</option>)}
+              {countries.filter((candidate) => candidate === country || !selected.includes(candidate)).map((candidate) => <option key={candidate} value={candidate}>{countryLabel(candidate)}{index === 0 && candidate === defaultPartner(countries, first) ? DEFAULT_MARK : ""}</option>)}
             </select>
             {/* A separate button: as the select's first option, arrow keys could remove a country unnoticed. */}
             <button type="button" className="secondary" aria-label={`移除对比国家 ${COMPARISON_LETTERS[index]}：${countryLabel(country)}`} onClick={() => {

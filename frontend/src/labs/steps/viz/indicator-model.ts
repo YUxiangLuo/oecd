@@ -124,6 +124,13 @@ export function defaultComparison(
       : countries.find((country) => country !== first) ?? "");
   return [first, second];
 }
+/** The comparison country a page starts with for country A (USA, or the first other country when A is the USA),
+ * marked "（默认）" in the comparison select so a preset is not read as the student's own choice. */
+export function defaultPartner(countries: string[], first: string): string {
+  return defaultComparison(countries, [first])[1];
+}
+export const DEFAULT_MARK = "（默认）";
+
 export const finiteValue = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
