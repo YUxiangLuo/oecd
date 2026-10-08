@@ -457,21 +457,25 @@ export function ReportLab({
                   aria-invalid={attemptedIncomplete && short ? true : undefined}
                   value={value}
                   rows={field.key === "research_question" ? 2 : 4}
-                  maxLength={REFLECTION_MAX_LENGTH}
                   placeholder={`${field.starter}\n（输入后自动保存）`}
                   data-report-reflection-incomplete={length < field.min ? "true" : undefined}
                   disabled={busy}
-                  onChange={(event) => state.save({ [field.key]: event.target.value })}
-                  onPaste={(event) => {
-                    const target = event.currentTarget;
-                    const pasted = event.clipboardData.getData("text");
-                    const room = REFLECTION_MAX_LENGTH - (target.value.length - (target.selectionEnd - target.selectionStart));
-                    setPasteCut(pasted.length > room ? field.key : null);
+                  onChange={(event) => {
+                    // The limit counts characters as the server and the counter do (an emoji is one), which a
+                    // maxLength attribute (UTF-16 units) would not; text beyond it is cut and the cut is said.
+                    const characters = [...event.target.value];
+                    if (characters.length > REFLECTION_MAX_LENGTH) {
+                      state.save({ [field.key]: characters.slice(0, REFLECTION_MAX_LENGTH).join("") });
+                      setPasteCut(field.key);
+                      return;
+                    }
+                    if (pasteCut === field.key) setPasteCut(null);
+                    state.save({ [field.key]: event.target.value });
                   }}
                 />
                 {pasteCut === field.key && (
                   <small id={`report-paste-${field.key}`} className="report-writing-hint" role="status">
-                    粘贴的内容超过 {REFLECTION_MAX_LENGTH} 字上限，超出的部分没有放进来；请精简后再粘贴。
+                    内容超过 {REFLECTION_MAX_LENGTH} 字上限，超出的部分没有保留；请精简后再补充。
                   </small>
                 )}
               </label>

@@ -89,7 +89,7 @@ describe("demo-mode login UI source behavior", () => {
         // 提交会把预填的教师凭证原样发给真实登录 API。
         fireEvent.submit(document.querySelector("form")!);
         await waitFor(() => expect(logins).toEqual([{ username: "teacher", password: "gvclab2026" }]));
-        expect(document.querySelector(".login-hint")?.textContent).toContain("种子学生账号");
+        expect(document.querySelector(".login-hint")?.textContent).toContain("教师演示账号");
       } finally {
         api.login = original;
       }

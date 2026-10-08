@@ -337,6 +337,8 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
           <div className="login-hint">
             {demoMode && !returningUsername && (noIdleDemoStudent
               ? <>{DEMO_STUDENT_COUNT} 个种子学生账号近 1 小时都有人在用，暂无空闲演示账号；请向老师索取账号，或稍后刷新页面。<br /></>
+              : username === "teacher"
+                ? <>当前预填的是教师演示账号，用于学生管理与报告评阅。上方可切换回学生身份。<br /></>
               : suggestion === "failed"
                 ? <>暂时无法确认空闲账号（网络或服务繁忙）：当前预填的是随机挑选的种子学生账号，可能有同学正在使用；网络恢复后会自动重新分配，也可以向老师索取账号。<br /></>
                 : suggestion === "pending"

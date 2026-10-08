@@ -58,7 +58,7 @@ function DesignMeta({ design }: { design: RegressionDesignInfo }) {
       {/* Same name as the Y list and the report ("加权总度"); the schema label's "（入+出）" is a step 5 detail. */}
       <span>结果指标：{design.depvar_label?.replace(/（入\+出）$/, "")}</span>
       <span>解释变量：关税暴露强度</span>
-      <span>面板：{design.panel_file}</span>
+      <span>面板：教学关税面板（国家×行业×年份）</span>
       <span>观察个体：{ENTITY_LABEL[design.entity] ?? design.entity}</span>
       <span>标准误按{ENTITY_LABEL[design.cluster] ?? design.cluster}聚类</span>
       <span>模型：国家×行业与年份双向固定效应</span>
@@ -200,6 +200,9 @@ export function RegressionResultCard({ outcome, response, examples = [], example
   );
 }
 
+/** Column names in the coefficient table, as the page names them (the code stays in the report appendix). */
+const COEFFICIENT_NAMES: Record<string, string> = { teaching_tariff_exposure: "关税暴露 X" };
+
 export function RegressionCoefficientTable({ response }: { response: RegressionResponse }) {
   return (
     <ScrollableRegion className="table-wrap" label="完整回归系数表，可横向滚动">
@@ -215,7 +218,7 @@ export function RegressionCoefficientTable({ response }: { response: RegressionR
           const p = inferenceAllowed ? coef.p : null;
           return (
             <tr key={coef.name}>
-              <td>{coef.name}</td>
+              <td>{COEFFICIENT_NAMES[coef.name] ?? coef.name}</td>
               <td>{coef.coef.toFixed(4)}</td>
               <td>{ciLow != null && ciHigh != null ? `[${ciLow.toFixed(4)}, ${ciHigh.toFixed(4)}]` : "—"}</td>
               {/* With inference suppressed, SE and t are not read either (the backend keeps them for integrity checks). */}
