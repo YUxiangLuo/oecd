@@ -72,7 +72,7 @@ export function focusStepPrimaryAction(content: HTMLElement | null, targetId = S
 /** Shown on material cards once the report is submitted (steps that record automatically). */
 export const MATERIAL_LOCKED_NOTE = "报告已提交：浏览不再自动改动报告材料。";
 /** The same fact at the top of the task card, whose task lines still describe automatic recording. */
-export const TASK_LOCKED_NOTE = "报告已提交，自动记录已暂停：报告材料保持提交时的内容。要更换，请在本页报告材料处确认。";
+export const TASK_LOCKED_NOTE = "报告已提交，自动记录已暂停：报告材料保持提交时的内容；要更换，请按本页提示确认。";
 /** Steps whose report material is recorded automatically while browsing (step 1 a cell, 2–5 the selected
  * countries, 6–9 the last chart, 10 the example). Steps 11–14 record a run and say so themselves. */
 export function stepRecordsAutomatically(step: number): boolean {

@@ -475,4 +475,24 @@ describe("saving when the tab is hidden or closed", () => {
       hook.unmount(); get.mockRestore(); save.mockRestore();
     }
   });
+
+  test("a record too large for keepalive starts saving at once and asks before leaving", async () => {
+    // A finished record (four regression runs, long analysis) can pass the 64 KiB keepalive limit.
+    const large = patchSessionStep(emptySession(), 11, { notes: "长".repeat(22_000) });
+    const get = spyOn(api.classroom, "session").mockResolvedValue(response(large));
+    const save = spyOn(api.classroom, "saveSession").mockImplementation(async ({ session }) => response(session, NEWER));
+    const hook = renderHook(() => useSession(true, "student"));
+    try {
+      await waitFor(() => expect(hook.result.current.status).toBe("ready"));
+      const leaving = new Event("beforeunload", { cancelable: true });
+      act(() => {
+        hook.result.current.patchStep(15, { research_question: "typed on a large record" });
+        window.dispatchEvent(leaving);
+      });
+      expect(leaving.defaultPrevented).toBe(true);
+      expect(save).toHaveBeenCalledTimes(1);
+      expect(save.mock.calls[0]).toHaveLength(1);
+      await waitFor(() => expect(hook.result.current.unsynced).toBe(false));
+    } finally { hook.unmount(); get.mockRestore(); save.mockRestore(); }
+  });
 });

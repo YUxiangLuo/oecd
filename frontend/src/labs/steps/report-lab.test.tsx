@@ -725,6 +725,9 @@ describe("the 2,400 limit shortens only the inserted text", () => {
     expect(limitInsertion("abc", "abXc", 3)).toEqual({ value: "abXc", caret: 3, cut: false });
     const result = limitInsertion(original, "新新" + original, null);
     expect(result.value).toBe("新" + original);
+    // A field already over the limit (saved elsewhere): deleting a character is not reported as a cut.
+    const over = "超".repeat(REFLECTION_MAX_LENGTH + 5);
+    expect(limitInsertion(over, over.slice(1), 0)).toEqual({ value: over.slice(1), caret: 0, cut: false });
   });
 
   test("the field keeps the ending, says the pasted part was cut and puts the caret after it", async () => {

@@ -455,13 +455,11 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       }
       void queue.current.drain().catch(() => {});
     };
-    // Whether a save sent while leaving can be counted on: online, the last save did not fail, no conflict,
-    // and the record fits a keepalive request.
-    const flushCanSave = () => navigator.onLine !== false
+    // Whether a save sent now is likely to go through: online, the last save did not fail, no conflict.
+    const canSaveNow = () => navigator.onLine !== false
       && !saveFailedRef.current
       && !syncConflictRef.current
-      && statusRef.current === "ready"
-      && fitsKeepalive({ session: sessionRef.current, base_updated_at: null });
+      && statusRef.current === "ready";
     const preserveBeforeLeaving = (event: Event) => {
       if (!queue.current?.hasUnsynced()) return;
       // A refresh puts the kept copy back; a closed tab loses it (sessionStorage belongs to the tab).
@@ -472,8 +470,13 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         return;
       }
       // beforeunload: ask before leaving when the edits can neither be kept here (storage failure) nor be
-      // saved on the way out (offline, a failed save, a conflict, a record too large to send while leaving).
-      if (!saved || (!leavingOnPurposeRef.current && !flushCanSave())) {
+      // saved on the way out (offline, a failed save, a conflict, or a record too large to be sent with
+      // keepalive, which a finished record with a long analysis can be).
+      const canSave = canSaveNow();
+      const fits = fitsKeepalive({ session: sessionRef.current, base_updated_at: null });
+      // Too large for keepalive: start the normal save now, so it is already on its way while the browser asks.
+      if (canSave && !fits) flushBeforeLeaving();
+      if (!saved || (!leavingOnPurposeRef.current && !(canSave && fits))) {
         event.preventDefault();
         (event as BeforeUnloadEvent).returnValue = "";
       }

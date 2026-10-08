@@ -301,7 +301,8 @@ export function limitInsertion(
     kept += part;
     room -= size;
   }
-  return { value: before + kept + after, caret: before.length + kept.length, cut: true };
+  // A field already over the limit (saved elsewhere) may still lose characters: that is not a cut.
+  return { value: before + kept + after, caret: before.length + kept.length, cut: kept.length !== inserted.length };
 }
 
 /**

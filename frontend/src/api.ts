@@ -179,9 +179,10 @@ function get<T>(url: string, signal?: AbortSignal): Promise<T> {
   return getWithToken<T>(url, getActiveAuthToken(), undefined, signal);
 }
 
-/** Browsers refuse a keepalive request once the bodies of all keepalive requests in flight pass 64 KiB;
- * stay below it with some room. */
-export const KEEPALIVE_BODY_LIMIT = 60_000;
+/** Browsers refuse a keepalive request once the bodies of all keepalive requests in flight pass 64 KiB
+ * (65,536 bytes); the session saves are sent one at a time, so stay just below it. A finished record measured
+ * about 61 KB before the step-15 analysis, so a long analysis can pass it. */
+export const KEEPALIVE_BODY_LIMIT = 64_000;
 
 /** Whether a JSON body is small enough to be sent with `keepalive` (it then outlives the page). */
 export function fitsKeepalive(body: unknown): boolean {
