@@ -19,7 +19,7 @@ from gvcsim.data.citations import (
 from gvcsim.regression.teaching import GENERATED_DATA_NOTE, VERSION as TEACHING_VERSION, X_COLUMN
 from gvcsim.session import SESSION_VERSION
 from gvcsim.report_common import ReportGateError, TeachingReport, _safe
-from gvcsim.report_gate import check_gate
+from gvcsim.report_gate import _step_data, check_gate
 from gvcsim.report_observed import (
     _observed_evidence_section,
     _quiz_sections,
@@ -134,7 +134,11 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "",
         *_reflection_section(session),
         *_observed_evidence_section(session),
-        *_evidence_summary(runs, metadata["simulation_contract"]["source_filter_disclosure"]),
+        *_evidence_summary(
+            runs,
+            metadata["simulation_contract"]["source_filter_disclosure"],
+            _step_data(session, 10).get("teaching_observation"),
+        ),
         *_quiz_sections(session),
         *_experiment_sections(session),
         *_run_sections(runs),

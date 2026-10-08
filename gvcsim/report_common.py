@@ -192,6 +192,17 @@ def _share_digits(points: float) -> int:
     return 3 if 0.005 <= abs(points) < 0.1 else 2
 
 
+def standardized_digits(point: float | None, bounds: tuple[float, float] | None) -> int:
+    """Decimals of a size in standard deviations, as on the page (``standardizedDigits``): 3 when the point or an
+    interval end is below 0.1 (2 decimals put 0.0459 on the edge of "[-0.05, -0.04]"), otherwise 2; more digits
+    until the interval's ends differ, at most 4."""
+    values = [value for value in (point, *(bounds or ())) if value is not None]
+    start = 3 if any(abs(value) < 0.1 for value in values) else 2
+    if bounds is None:
+        return start
+    return next((d for d in range(start, 5) if _signed(bounds[0], d) != _signed(bounds[1], d)), 4)
+
+
 def _signed(value: float, digits: int) -> str:
     rounded = f"{value:+,.{digits}f}"
     # Match the result card (toPrecision(2)): a small nonzero estimate/CI endpoint is not zero, and keeps
@@ -313,16 +324,12 @@ def _natural_effect(
         sd = result.get("depvar_std")
         positive_sd = float(sd) if isinstance(sd, (int, float)) and float(sd) > 0 else None
         sd_bounds = (ci[0] * increment / positive_sd, ci[1] * increment / positive_sd) if ci and positive_sd else None
-        # A narrow interval would print as "[-0.05, -0.05]" at 2 decimals; add digits until the ends differ.
-        # The point size uses the same digits, as on the page ("0.047", inside "[-0.048, -0.046]").
-        sd_digits = next(
-            (d for d in (2, 3, 4) if sd_bounds and _signed(sd_bounds[0], d) != _signed(sd_bounds[1], d)),
-            4 if sd_bounds else 2,
-        )
+        sd_point = effect / positive_sd if positive_sd is not None else None
+        sd_digits = standardized_digits(sd_point, sd_bounds)
         effect_text = f"{_signed(effect, 2)} 个中心性原始单位"
         # Unsigned, as on the page ("平均下降 39.70 …（幅度约 0.047 个标准差）"): the number before it carries the sign.
         if positive_sd is not None:
-            effect_text += f"（幅度约 {_signed(effect / positive_sd, sd_digits)[1:]} 个标准差）"
+            effect_text += f"（幅度约 {_signed(cast(float, sd_point), sd_digits)[1:]} 个标准差）"
         interval = (
             f"[{_signed(ci[0] * increment, 2)}, {_signed(ci[1] * increment, 2)}] 个中心性原始单位"
             + (

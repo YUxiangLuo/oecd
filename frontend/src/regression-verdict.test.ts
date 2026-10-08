@@ -103,3 +103,26 @@ test("every regression status has safe display copy", () => {
   );
   expect(regressionStatusLabel("bogus")).toBe("设计有效性未知");
 });
+
+describe("network size in standard deviations (same digits as the report)", () => {
+  const network = (coef: number, low: number, high: number, sd: number) => {
+    const data = response("network", coefficient(coef, low, high));
+    data.result.depvar_std = sd;
+    return buildRegressionVerdict("network", data);
+  };
+
+  test("step 14 weighted degree reads 0.047 inside [-0.048, -0.046]", () => {
+    const verdict = network(-4010.70, -4109.84, -3911.56, 856);
+    expect(verdict.effect).toContain("（幅度约 0.047 个标准差，");
+    expect(verdict.interval).toContain("约 [-0.048, -0.046] 个标准差");
+  });
+
+  test("below 0.1 the size keeps 3 decimals, so the point never sits on its interval's edge", () => {
+    const verdict = network(-4590, -4800, -4300, 1000);
+    expect(verdict.effect).toContain("（幅度约 0.046 个标准差，");
+    expect(verdict.interval).toContain("约 [-0.048, -0.043] 个标准差");
+    const large = network(-4590, -6000, -3000, 100);
+    expect(large.effect).toContain("（幅度约 0.46 个标准差，");
+    expect(large.interval).toContain("约 [-0.60, -0.30] 个标准差");
+  });
+});

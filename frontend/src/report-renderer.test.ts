@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
+import { cleanup, render as renderDom } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { closeBoldBeforeCjkPunctuation, parseReportChart, ReportMarkdown } from "./report-renderer";
 
@@ -25,13 +26,38 @@ describe("report tables", () => {
     element.innerHTML = render();
     const regions = [...element.querySelectorAll('[role="region"]')];
     expect(regions.map((region) => region.getAttribute("aria-label"))).toEqual([
-      "报告数据表 1，可横向滚动",
-      "报告数据表 2：步骤 11 · 贸易结果，可横向滚动",
-      "报告数据表 3：步骤 11 · 贸易结果，可横向滚动",
-      "报告数据表 4：步骤 12 · 生产结果，可横向滚动",
+      "报告数据表 1",
+      "报告数据表 2：步骤 11 · 贸易结果",
+      "报告数据表 3：步骤 11 · 贸易结果",
+      "报告数据表 4：步骤 12 · 生产结果",
     ]);
-    expect(regions.every((region) => region.getAttribute("tabindex") === "0")).toBe(true);
+    // Before a measurement says a table is wider than the column, it is not an extra Tab stop.
+    expect(regions.every((region) => region.getAttribute("tabindex") === "-1")).toBe(true);
     expect(render()).toBe(render()); // No render-time counters shared between reports/renders.
+  });
+
+  test("only a table that overflows sideways is a Tab stop named 可横向滚动", () => {
+
+    const table = "| 项目 | 结果 |\n|---|---|\n| 系数 | 0.01 |";
+    const markdown = `### 宽表\n\n${table}\n\n### 窄表\n\n${table}`;
+    const scroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollWidth");
+    const client = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    // The first region holds a table wider than the column; the second fits.
+    const wide = (element: HTMLElement) => element.classList.contains("table-wrap") && element.getAttribute("aria-label")?.startsWith("报告数据表 1");
+    Object.defineProperty(HTMLElement.prototype, "scrollWidth", { configurable: true, get(this: HTMLElement) { return wide(this) ? 900 : 600; } });
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get() { return 600; } });
+    try {
+      const { container } = renderDom(createElement(ReportMarkdown, { markdown }));
+      const regions = [...container.querySelectorAll('[role="region"]')];
+      expect(regions.map((region) => [region.getAttribute("aria-label"), region.getAttribute("tabindex")])).toEqual([
+        ["报告数据表 1：宽表，可横向滚动", "0"],
+        ["报告数据表 2：窄表", "-1"],
+      ]);
+    } finally {
+      cleanup();
+      if (scroll) Object.defineProperty(HTMLElement.prototype, "scrollWidth", scroll);
+      if (client) Object.defineProperty(HTMLElement.prototype, "clientWidth", client);
+    }
   });
 
   test("print rules fit report tables to paper without changing screen tables", async () => {
@@ -43,6 +69,10 @@ describe("report tables", () => {
     expect(print).toMatch(/\.report-md \.data-table td\s*\{[^}]*white-space:\s*normal/);
     expect(print).toMatch(/\.report-md \.data-table td\s*\{[^}]*overflow-wrap:\s*anywhere/);
     expect(print).toMatch(/\.report-md \.data-table tr\s*\{[^}]*break-inside:\s*avoid/);
+    // A chart's caption and heading stay with it: the figure is unbreakable and its SVG a block (inline, the
+    // chart's line box moved to the next page alone).
+    expect(print).toMatch(/\.report-md \.report-figure\s*\{[^}]*break-inside:\s*avoid/);
+    expect(print).toMatch(/\.report-md \.report-figure svg\s*\{[^}]*display:\s*block/);
   });
 });
 
@@ -269,6 +299,25 @@ describe("parseReportChart", () => {
     expect(html).toContain("[-0.61, -0.50]");
     expect(html).toContain("横线 = 95% 区间（真实系数的合理取值范围）");
   });
+
+  test("a weak estimate's label is signed and kept off the zero line", () => {
+    const chart = JSON.stringify({
+      version: 1,
+      type: "coefficient",
+      x_label: "个百分点",
+      items: [{ label: "复杂 GVC 生产份额", value: 0.00752, ci_low: -0.0112, ci_high: 0.0262 }],
+    });
+    const element = document.createElement("div");
+    element.innerHTML = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: `\`\`\`gvcsim-chart\n${chart}\n\`\`\`` }));
+    const labels = [...element.querySelectorAll("[data-coef-label]")];
+    expect(labels.map((label) => label.textContent).join(" ")).toMatch(/^\+0\.008\s+\[-0\.011, \+0\.026\]$/);
+    const zero = [...element.querySelectorAll("line")].find((line) => line.getAttribute("stroke-width") === "1.8" && line.getAttribute("x1") === line.getAttribute("x2"))!;
+    // A positive estimate's labels start right of the zero line.
+    for (const label of labels) {
+      expect(label.getAttribute("text-anchor")).toBe("start");
+      expect(Number(label.getAttribute("x"))).toBeGreaterThan(Number(zero.getAttribute("x1")));
+    }
+  });
 });
 
 test("react-markdown's node prop never reaches the DOM", async () => {
@@ -283,4 +332,10 @@ test("bold ending in Chinese punctuation renders even in reports generated befor
   const html = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: old }));
   expect(html).not.toContain("**");
   expect(html).toContain("<strong>2020 年：现价与疫情期外推限制</strong>。本节");
+  // Followed by punctuation the bold closes on its own: the bracket stays inside it.
+  const heading = "> **指标部分（步骤 1–9）**：覆盖 2016–2020。\n\n> **关税回归部分（步骤 10–14）**：X = w × τ。";
+  expect(closeBoldBeforeCjkPunctuation(heading)).toBe(heading);
+  const rendered = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: heading }));
+  expect(rendered).toContain("<strong>指标部分（步骤 1–9）</strong>：覆盖");
+  expect(rendered).toContain("<strong>关税回归部分（步骤 10–14）</strong>：X");
 });

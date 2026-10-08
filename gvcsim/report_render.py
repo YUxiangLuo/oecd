@@ -6,6 +6,7 @@ import re
 from typing import Any, cast
 
 from gvcsim.regression.estimation import two_way_note
+from gvcsim.regression.teaching import MARKET
 from gvcsim.regression.validity import CLUSTER_INTERVAL_NOTE
 from gvcsim.report_common import (
     _KIND_DIMENSIONS,
@@ -243,7 +244,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                     f"- 记录的代表指标：{_STUDENT_METRIC_LABELS.get(str(metric_label), _safe(metric_label or '—'))}"
                 )
                 if step in (2, 3, 4) and automatic:
-                    lines.append("- 数值为国家级代表指标：页面可按国家–行业浏览，报告材料统一按国家级记录。")
+                    lines.append("- 数值为国家级代表指标：页面可按国家×行业浏览，报告材料统一按国家级记录。")
                 if step == 5 and metric_label == "weighted degree":
                     lines.append(
                         "- 国家级加权总度：该国全部出口 + 进口，中间品和最终品都算在内（不含国内流量）；"
@@ -336,6 +337,11 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
     if not captured:
         lines.extend(("- 未保存额外实验快照。", ""))
     return lines
+
+
+def _regression_heading(step: int) -> str:
+    """A step 11–14 heading without its default Y ("贸易流回归"): the saved run's Y is stated below it."""
+    return _STEP_TITLES.get(step, "").split("：")[0]
 
 
 def _reported_by_step(runs: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
@@ -487,7 +493,67 @@ def _teaching_sample_lines(source_filter: dict[str, Any] | None) -> list[str]:
     ]
 
 
-def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] | None = None) -> list[str]:
+def _network_digits(size: float) -> int:
+    """Decimals of a centrality amount, by its size (frontend ``networkDigits``)."""
+    return 0 if size >= 100 else 1 if size >= 10 else 2 if size >= 1 else 3 if size >= 0.1 else 4 if size >= 0.01 else 5
+
+
+def _example_size(kind: str, change: float) -> str:
+    """The unsigned Y change implied for the step 10 example, in the step's unit (frontend ``exampleEffect``)."""
+    size = abs(change)
+    if kind == "network":
+        return f"{size:.{_network_digits(size)}f} 个中心性原始单位"
+    digits, unit = {"share": (2, "个百分点"), "position": (4, "个位置指数单位")}.get(kind, (3, "个长度单位"))
+    if kind == "share":
+        size *= 100
+    if 0 < size < 0.5 * 10**-digits:
+        return f"不到 {10**-digits:.{digits}f} {unit}"
+    return f"{size:.{digits}f} {unit}"
+
+
+def _example_conversion(
+    outcome: str, design: dict[str, Any], coefficient: dict[str, Any], directional: bool, example: Any
+) -> str | None:
+    """The page's "按你在步骤 10 选的例子换算…" line for the example step 10 recorded (its X, as saved there)."""
+    if not isinstance(example, dict):
+        return None
+    try:
+        x = float(example["teaching_tariff_exposure"])
+        tau = float(example.get("teaching_tariff_rate_tau") or 0)
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not math.isfinite(x):
+        return None
+    label = f"{_safe(country_label(str(example.get('country'))))} · {_safe(sector_label(str(example.get('industry'))))}"
+    if str(example.get("country")) == MARKET:
+        text = f"{label} 属于加征关税的一方，按设计不在回归样本中，X 记为 0 只是定义，不做换算"
+    elif x > 0:
+        change = float(coefficient["coef"]) * x
+        size = _example_size(_depvar_kind(outcome, design), change)
+        words = _difference_words(_depvar_kind(outcome, design))
+        if size.startswith("不到"):
+            amount = size
+        else:
+            amount = f"约为 {'-' if change < 0 else '+'}{size}"
+        reading = f"（Y 偏{words[0] if change < 0 else words[1]}）" if directional else "；但区间包含 0，差异的高低方向并不确定"
+        text = f"{label} 的 X 为 {_points(x)} 个百分点，按估计与 X 相关的差异{amount}{reading}"
+    elif tau > 0:
+        text = f"{label} 被加税但首年不向美国出口（w = 0），X = 0，按估计没有与 X 相关的差异"
+    else:
+        text = f"{label} 未被加税，X = 0，按估计没有与 X 相关的差异"
+    return f"- **按步骤 10 的例子换算**：{text}。"
+
+
+def _difference_words(kind: str) -> tuple[str, str]:
+    """How a gap in Y is said, (lower, higher): lengths are 短/长, everything else 低/高."""
+    return ("短", "长") if kind == "length" else ("低", "高")
+
+
+def _evidence_summary(
+    runs: list[dict[str, Any]],
+    source_filter: dict[str, Any] | None = None,
+    teaching_observation: Any = None,
+) -> list[str]:
     lines = [
         "## 关键证据摘要",
         "",
@@ -516,7 +582,9 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
             else ("（另一次计算，未用于汇总表）" if not _result_is_qualified(result, design) else "")
         )
         coefficient = primary
-        lines.extend((f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}{marker}", ""))
+        # The step's title names its default Y; the saved run may use another, so the heading names the
+        # regression only and the saved Y is given in the table below ("结果指标 Y").
+        lines.extend((f"### 步骤 {step} · {_regression_heading(step)}{marker}", ""))
         if coefficient is None or not isinstance(coefficient.get("coef"), (int, float)):
             lines.extend(
                 (
@@ -528,6 +596,7 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
             continue
         effect_label, effect, interval = _natural_effect(outcome, design, result, coefficient)
         evidence, interpretation = _evidence_reading(outcome, coefficient, suppressed, design)
+        directional = evidence.startswith("方向明确")
         setting = _model_summary(design)
         lines.extend(_coefficient_chart(step, outcome, coefficient, suppressed, design))
         if not suppressed:
@@ -543,9 +612,14 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
                 f"| 方向 | **{evidence}** |",
                 f"| 结果能否解读 | {_STATUS_LABELS.get(status, _STATUS_LABELS['unknown'])} |",
                 "",
-                f"- **可以支持的表述**：{interpretation}",
+                # An open direction gets a caution, not a claim it "supports".
+                f"- **{'可以支持的表述' if directional else '表述提醒'}**：{interpretation}",
             )
         )
+        if not suppressed:
+            conversion = _example_conversion(outcome, design, coefficient, directional, teaching_observation)
+            if conversion:
+                lines.append(conversion)
         flow = result.get("sample_flow")
         dropped = f"；计算时再剔除 {_count(flow.get('dropped_rows_total'))} 条" if isinstance(flow, dict) else ""
         lines.append(
@@ -676,7 +750,7 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
             reasons = list(dict.fromkeys(_safe(reason) for reason in reasons))
             globally_suppressed = _global_inference_suppressed(result)
             suppressed = globally_suppressed
-            heading = f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}"
+            heading = f"### 步骤 {step} · {_regression_heading(step)}"
             if len(step_runs) > 1:
                 heading += f"（保存 {index + 1}/{len(step_runs)}）"
             lines.extend(

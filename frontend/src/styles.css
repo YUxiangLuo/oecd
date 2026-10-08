@@ -957,7 +957,12 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
      instead of being pushed to the next page and split there (which left near-blank pages). The SVG keeps
      its aspect ratio inside the capped box. */
   .report-md .report-figure { break-inside: avoid; }
-  .report-md .report-figure svg { max-height: 225mm; }
+  /* A block SVG, not an inline one in a line box: inline, Chrome moved the chart's line to the next page and left
+     the step heading and the caption over an empty frame. */
+  .report-md .report-figure svg { display: block; max-height: 225mm; }
+  .report-md .report-figure figcaption,
+  .report-md h2,
+  .report-md h3 { break-after: avoid; }
   /* The report body is focused on open; its focus ring is application UI, not part of the printed report. */
   *:focus, *:focus-visible { outline: none !important; box-shadow: none !important; }
 }

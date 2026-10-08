@@ -1,4 +1,4 @@
-import { isValidElement } from "react";
+import { isValidElement, useLayoutEffect, useRef, useState } from "react";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -389,7 +389,20 @@ function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coef
   const decimals = Math.max(0, Math.min(4, 1 - Math.floor(Math.log10(extent / 2))));
   // Trailing zeros trimmed on ticks ("-1.5", "-0.075"); the point values below keep fixed decimals.
   const tick = (value: number) => (value === 0 ? "0" : String(Number(value.toFixed(decimals))));
-  const value = (number: number) => number.toFixed(Math.max(2, decimals));
+  // Signed, as in the result table and the step pages ("+0.008", "[-0.011, +0.026]").
+  const value = (number: number) => `${number >= 0 ? "+" : ""}${number.toFixed(Math.max(2, decimals))}`;
+  const zero = x(0);
+  /** Where a bold label goes so it stays clear of the zero line: on the estimate's side of 0, near the point,
+   *  inside the plot; null when it is wider than that side. */
+  const awayFromZero = (text: string, at: number, positive: boolean) => {
+    const width = textWidth(text, AXIS_FONT) * 1.05;
+    if (positive) {
+      const start = Math.min(Math.max(at - width / 2, zero + 8), W - m.r - width);
+      return start >= zero + 8 ? { x: start, anchor: "start" as const } : null;
+    }
+    const end = Math.max(Math.min(at + width / 2, zero - 8), m.l + width);
+    return end <= zero - 8 ? { x: end, anchor: "end" as const } : null;
+  };
 
   return (
     <ReportFigure title={chart.title ?? "系数图"}>
@@ -409,7 +422,22 @@ function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coef
         {chart.x_label && <text x={m.l + plotW / 2} y={H - 8} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{chart.x_label}</text>}
         {chart.items.map((item, index) => {
           const color = !hasCi ? "#b6bac6" : "#2a2f3a";
-          const labelAt = Math.min(Math.max(x(item.value), m.l + 24), W - m.r - 24);
+          const interval = item.ci_low != null && item.ci_high != null ? `[${value(item.ci_low)}, ${value(item.ci_high)}]` : "";
+          const full = interval ? `${value(item.value)}  ${interval}` : value(item.value);
+          const positive = item.value >= 0;
+          // One line above the point when it fits beside the zero line; otherwise the value above and the interval
+          // below the whisker, each on the estimate's side; centred inside the plot as a last resort.
+          const together = awayFromZero(full, x(item.value), positive);
+          const centred = (text: string) => ({
+            x: Math.min(Math.max(x(item.value), m.l + textWidth(text, AXIS_FONT) / 2), W - m.r - textWidth(text, AXIS_FONT) / 2),
+            anchor: "middle" as const,
+          });
+          const labels = together
+            ? [{ text: full, dy: -18, ...together }]
+            : [
+              { text: value(item.value), dy: -18, ...(awayFromZero(value(item.value), x(item.value), positive) ?? centred(value(item.value))) },
+              ...(interval ? [{ text: interval, dy: 28, ...(awayFromZero(interval, x(item.value), positive) ?? centred(interval)) }] : []),
+            ];
           return (
             <g key={`${item.label}-${index}`}>
               <text x={m.l - 12} y={y(index) + 5} textAnchor="end" fontSize={LABEL_FONT} fill="#3a4050">{item.label}</text>
@@ -421,10 +449,11 @@ function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coef
                 </g>
               )}
               <circle cx={x(item.value)} cy={y(index)} r={6.5} fill={color} stroke="#fff" strokeWidth={2} />
-              <text x={labelAt} y={y(index) - 18} textAnchor="middle" fontSize={AXIS_FONT} fontWeight={700} fill="#2a2f3a">
-                {value(item.value)}
-                {item.ci_low != null && item.ci_high != null ? `  [${value(item.ci_low)}, ${value(item.ci_high)}]` : ""}
-              </text>
+              {labels.map((label) => (
+                <text key={label.text} data-coef-label x={label.x} y={y(index) + label.dy} textAnchor={label.anchor} fontSize={AXIS_FONT} fontWeight={700} fill="#2a2f3a">
+                  {label.text}
+                </text>
+              ))}
             </g>
           );
         })}
@@ -607,7 +636,7 @@ function rehypeReportTableLabels() {
         tableIndex += 1;
         node.properties = {
           ...node.properties,
-          ariaLabel: `报告数据表 ${tableIndex}${heading ? `：${heading}` : ""}，可横向滚动`,
+          ariaLabel: `报告数据表 ${tableIndex}${heading ? `：${heading}` : ""}`,
         };
       }
       node.children?.forEach(visit);
@@ -616,10 +645,43 @@ function rehypeReportTableLabels() {
   };
 }
 
+/**
+ * A report table in its scroll region. Only a table wider than the report column (measured, and re-measured when
+ * either resizes) is a Tab stop and is named "可横向滚动"; one that fits is not an extra stop for keyboard users.
+ */
+function ReportTable({ children, ...props }: ComponentPropsWithoutRef<"table">) {
+  const tableRef = useRef<HTMLTableElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  useLayoutEffect(() => {
+    const table = tableRef.current;
+    const region = table?.parentElement;
+    if (!table || !region) return;
+    const measure = () => setOverflows(region.scrollWidth > region.clientWidth + 1);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(region);
+    observer.observe(table);
+    return () => observer.disconnect();
+  }, []);
+  const label = props["aria-label"];
+  return (
+    <ScrollableRegion
+      className="table-wrap"
+      label={label && overflows ? `${label}，可横向滚动` : label}
+      focusable={overflows}
+      style={{ margin: "14px 0" }}
+    >
+      <table ref={tableRef} className="data-table" {...props}>{children}</table>
+    </ScrollableRegion>
+  );
+}
+
 /** CommonMark cannot close "**…。**" when a letter follows the closing "**" (punctuation before it, a letter after);
- * reports generated before the server fix still contain that form, so move the punctuation outside the bold. */
+ * reports generated before the server fix still contain that form, so move the punctuation outside the bold.
+ * Followed by punctuation ("**指标部分（步骤 1–9）**：") the bold already closes, and the bracket stays inside it. */
 export function closeBoldBeforeCjkPunctuation(markdown: string): string {
-  return markdown.replace(/\*\*([^*\n]+?)([。，；：！？、）])\*\*(?=[^\s*])/g, "**$1**$2");
+  return markdown.replace(/\*\*([^*\n]+?)([。，；：！？、）])\*\*(?=[^\s*\p{P}\p{S}])/gu, "**$1**$2");
 }
 
 /** Shared student/teacher report body. Raw HTML is intentionally not enabled. */
@@ -633,15 +695,7 @@ export function ReportMarkdown({ markdown, className = "report-md" }: { markdown
         components={{
           code: ReportCode,
           pre: ReportPre,
-          table: ({ node: _node, children, ...props }) => (
-            <ScrollableRegion
-              className="table-wrap"
-              label={props["aria-label"]}
-              style={{ margin: "14px 0" }}
-            >
-              <table className="data-table" {...props}>{children}</table>
-            </ScrollableRegion>
-          ),
+          table: ({ node: _node, children, ...props }) => <ReportTable {...props}>{children}</ReportTable>,
           h1: ({ node: _node, children, ...props }) => <h1 style={{ breakAfter: "avoid" }} {...props}>{children}</h1>,
           h2: ({ node: _node, children, ...props }) => <h2 style={{ breakAfter: "avoid", marginTop: 24 }} {...props}>{children}</h2>,
           h3: ({ node: _node, children, ...props }) => <h3 style={{ breakAfter: "avoid", marginTop: 20 }} {...props}>{children}</h3>,

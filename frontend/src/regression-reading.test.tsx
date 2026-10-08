@@ -185,7 +185,7 @@ describe("fixed teaching regression reading", () => {
       + "USA 美国·C29 属于加征关税的一方，按设计不在回归样本中，X 记为 0 只是定义，不做换算；但区间包含 0，差异的高低方向并不确定。",
     );
     // The slope label gives the signed gap, not 高/低, when the direction is open.
-    expect(container.querySelector("[data-slope-label]")?.textContent).toBe("斜率：X 每高 1 个百分点，Y 平均相差 0.12 个百分点");
+    expect(container.querySelector("[data-slope-label]")?.textContent).toBe("斜率：X 每高 1 个百分点，Y 平均相差 +0.12 个百分点");
     expect(container.textContent).not.toMatch(/平均高|平均低|偏高|偏低|没受加税影响/);
   });
 

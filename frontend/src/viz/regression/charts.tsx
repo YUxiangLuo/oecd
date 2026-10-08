@@ -1,8 +1,26 @@
-import { globalInferenceIsSuppressed, INTERVAL_FIRST_MENTION } from "../../regression-verdict";
+import { globalInferenceIsSuppressed, INTERVAL_FIRST_MENTION, signedEffect } from "../../regression-verdict";
 import { CLUSTER_INTERVAL_LABEL, formatPValue } from "../../regression-statistics";
-import type { RegressionStatus, TreatmentSupport } from "../../types";
+import type { DepvarKind, RegressionStatus, TreatmentSupport } from "../../types";
 import { cardStyle, useTip } from "../shared";
 import { niceDomain } from "../nice-ticks";
+
+/** Approximate SVG text width (generous, so a clamped label never reaches a neighbour): CJK 1 em, Latin 0.62 em. */
+export function svgTextWidth(text: string, size: number): number {
+  return [...text].reduce((width, char) => width + (/[⺀-￿]/.test(char) ? size : size * 0.62), 0);
+}
+
+/** Centre of a centred label of the given width, kept inside [left, right]. */
+function clampCentre(centre: number, width: number, left: number, right: number): number {
+  return Math.min(Math.max(centre, left + width / 2), right - width / 2);
+}
+
+/** Signed, as the headline and the interval print it ("+0.008", "[-0.011, +0.026]"). */
+const withSign = (value: number, text: string) => (value >= 0 && !text.startsWith("+") ? `+${text}` : text);
+
+/** The kind a counted slope unit names ("个位置指数单位" → position), so the slope follows the headline's digits. */
+const UNIT_KINDS: Record<string, DepvarKind> = {
+  个百分点: "share", 个长度单位: "length", 个位置指数单位: "position", 个中心性原始单位: "network",
+};
 
 export function scaleForestCoefs<T extends { coef: number; ci_low: number | null; ci_high: number | null }>(
   coefs: T[],
@@ -81,11 +99,14 @@ export function CoefForestChart({
   const y = (index: number) => padT + (index + 0.5) * rowH;
   const decimals = Math.max(0, Math.min(4, 1 - Math.floor(Math.log10(extent / 2))));
   const format = (value: number) => (value === 0 ? "0" : value.toFixed(decimals));
-  // Shares (scale 1) match the headline: 3 decimals from 0.005 to 0.1 ("0.008"), 2 significant digits below.
+  // Shares (scale 1) match the headline: 3 decimals from 0.005 to 0.1 ("+0.008"), 2 significant digits below.
+  // Signed like the headline and the interval ("+0.56", "[-0.011, +0.026]").
   const valueLabel = (value: number) => {
-    if (scale === 1 && value !== 0 && Math.abs(value) < 0.1) return Math.abs(value) >= 0.005 ? value.toFixed(3) : value.toPrecision(2);
-    return value.toFixed(Math.max(2, decimals));
+    if (scale === 1 && value !== 0 && Math.abs(value) < 0.1) return withSign(value, Math.abs(value) >= 0.005 ? value.toFixed(3) : value.toPrecision(2));
+    return withSign(value, value.toFixed(Math.max(2, decimals)));
   };
+  // A centred label is kept inside the plot: never into the row-label column on the left or past the right edge.
+  const inPlot = (centre: number, text: string, size: number) => clampCentre(centre, svgTextWidth(text, size) + 4, labelW, width - padR);
   const tip = (point: (typeof pts)[number]): [string, string][] => inferenceAllowed ? [
     ["", point.displayName],
     [unit ? `估计值（${unit}）` : "估计值", valueLabel(point.coef)],
@@ -117,10 +138,12 @@ export function CoefForestChart({
           const parts = splitCoefName(point.displayName);
           const fill = !inferenceAllowed ? NEUTRAL : ESTIMATE;
           // The value sits just above the estimate, kept inside the plot so it never meets the row label or whisker.
-          const labelAt = Math.min(Math.max(x(point.coef), labelW + 24), width - padR - 24);
+          const labelAt = inPlot(x(point.coef), valueLabel(point.coef), 11.5);
           const hasInterval = point.lo != null && point.hi != null;
           // An interval narrower than the dot would hide under it: draw a hollow ring and say so in words.
           const narrow = hasInterval && x(point.hi!) - x(point.lo!) < 2 * 6.5;
+          const narrowText = narrow ? `区间很窄 [${valueLabel(point.lo!)}, ${valueLabel(point.hi!)}]，在图上与点重合` : "";
+          const shortText = hasInterval ? `[${valueLabel(point.lo!)}, ${valueLabel(point.hi!)}]` : "";
           return (
             <g key={point.name} onMouseEnter={(event) => show(event, tip(point))} onMouseMove={(event) => show(event, tip(point))} onMouseLeave={hide}>
               <text x={labelW - 12} y={y(index) - (parts.length > 1 ? 5 : 0)} dominantBaseline="middle" textAnchor="end" fontSize={11.5} fill="#3a4050">
@@ -132,12 +155,12 @@ export function CoefForestChart({
                   <line x1={x(point.lo)} x2={x(point.lo)} y1={y(index) - 8} y2={y(index) + 8} />
                   <line x1={x(point.hi)} x2={x(point.hi)} y1={y(index) - 8} y2={y(index) + 8} />
                   {narrow
-                    ? <text data-narrow-ci x={labelAt} y={y(index) + 24} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">区间很窄 [{valueLabel(point.lo)}, {valueLabel(point.hi)}]，在图上与点重合</text>
+                    ? <text data-narrow-ci x={inPlot(x(point.coef), narrowText, 10.5)} y={y(index) + 24} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">{narrowText}</text>
                     : x(point.hi) - x(point.lo) < 64
-                    ? <text x={(x(point.lo) + x(point.hi)) / 2} y={y(index) + 22} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">[{valueLabel(point.lo)}, {valueLabel(point.hi)}]</text>
+                    ? <text x={inPlot((x(point.lo) + x(point.hi)) / 2, shortText, 10.5)} y={y(index) + 22} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">{shortText}</text>
                     : <>
-                      <text x={x(point.lo)} y={y(index) + 22} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">{valueLabel(point.lo)}</text>
-                      <text x={x(point.hi)} y={y(index) + 22} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">{valueLabel(point.hi)}</text>
+                      <text x={inPlot(x(point.lo), valueLabel(point.lo), 10.5)} y={y(index) + 22} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">{valueLabel(point.lo)}</text>
+                      <text x={inPlot(x(point.hi), valueLabel(point.hi), 10.5)} y={y(index) + 22} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">{valueLabel(point.hi)}</text>
                     </>}
                 </g>
               )}
@@ -165,7 +188,7 @@ const BIN = "#216cc0";
  * ~20 equal-count bins on y, and the fitted line through the origin with the estimated slope. This is
  * what the regression "sees" after the fixed effects are taken out.
  */
-export function BinScatterChart({ bins, slope, slopeUnit, slopeWords, xLabel, yLabel, xScale = 100, yScale = 1, title = "回归在量什么" }: {
+export function BinScatterChart({ bins, slope, slopeUnit, slopeWords, kind, xLabel, yLabel, xScale = 100, yScale = 1, title = "回归在量什么" }: {
   bins: { x: number; y: number; n: number }[];
   /** The estimate in display units: shown Y units per one percentage point of X (what the label prints). */
   slope: number;
@@ -176,6 +199,8 @@ export function BinScatterChart({ bins, slope, slopeUnit, slopeWords, xLabel, yL
    * excludes 0): the label then reads "Y 平均低 0.55 个百分点". Without them it gives the signed gap ("相差").
    */
   slopeWords?: { lower: string; higher: string };
+  /** How Y is read, so the slope has the headline's digits (position 4: "0.0008"); defaults to the kind slopeUnit names. */
+  kind?: DepvarKind;
   xLabel: string;
   yLabel: string;
   /** Display scales: shares are stored as fractions and shown in percentage points. */
@@ -200,19 +225,38 @@ export function BinScatterChart({ bins, slope, slopeUnit, slopeWords, xLabel, yL
     const text = String(Number(value.toFixed(digits(axis))));
     return text === "-0" ? "0" : text;
   };
-  // The slope label is right-aligned in whichever corner (top or bottom) is farther from where the line
-  // ends, so it never sits on the line (a label just off the line end landed on it when the line ran into
-  // a corner).
-  const lineEnd = y(fitted[1]);
-  const corners = [m.t + 12, H - m.b - 6];
-  const slopeLabelY = Math.abs(corners[0] - lineEnd) >= Math.abs(corners[1] - lineEnd) ? corners[0] : corners[1];
-  // Between 0.005 and 0.1 a share headline prints 3 decimals ("+0.008"); smaller slopes keep 2 significant digits.
-  const slopeText = Math.abs(slope) >= 100 ? slope.toFixed(0) : Math.abs(slope) >= 0.1 ? slope.toFixed(2)
-    : Math.abs(slope) >= 0.005 ? slope.toFixed(3) : slope.toPrecision(2);
-  // An association across records, as in the result headline: "X 每高 1 个百分点，Y 平均低 0.55 个百分点".
+  // The slope has the headline's digits for its kind ("+0.008" for a weak share, "+0.0008" for the position
+  // index); without a known kind, 2 decimals from 0.1, 3 from 0.005 and 2 significant digits below.
+  const slopeKind = kind ?? (slopeUnit ? UNIT_KINDS[slopeUnit] : undefined);
+  const slopeText = slopeKind ? signedEffect(slope, slopeKind) : withSign(slope, Math.abs(slope) >= 100 ? slope.toFixed(0)
+    : Math.abs(slope) >= 0.1 ? slope.toFixed(2) : Math.abs(slope) >= 0.005 ? slope.toFixed(3) : slope.toPrecision(2));
+  // An association across records, as in the result headline: "X 每高 1 个百分点，Y 平均低 0.55 个百分点"; with
+  // the direction open, the signed gap ("平均相差 +0.008").
   const slopeReading = slopeWords && slope !== 0
-    ? `平均${slope < 0 ? slopeWords.lower : slopeWords.higher} ${slopeText.replace(/^-/, "")}`
+    ? `平均${slope < 0 ? slopeWords.lower : slopeWords.higher} ${slopeText.replace(/^[+-]/, "")}`
     : `平均相差 ${slopeText}`;
+  // The label sits on the side of the dashed x = 0 line with more room, so it never crosses that line; when one
+  // line of text does not fit there, it breaks after "，" into two.
+  const zeroX = x(0), plotLeft = m.l + 6, plotRight = W - m.r - 6, gap = 8;
+  const roomRight = plotRight - (zeroX + gap), roomLeft = zeroX - gap - plotLeft;
+  const slopeLines = slopeUnit ? [`斜率：X 每高 1 个百分点，`, `Y ${slopeReading} ${slopeUnit}`] : [`斜率 = ${slopeText}`];
+  const oneLine = slopeLines.join("");
+  const fits = (lines: string[], room: number) => Math.max(...lines.map((line) => svgTextWidth(line, 11))) + 4 <= room;
+  // Right-aligned at the right edge as before when it fits there; otherwise the left side; otherwise two lines.
+  const onRight = fits([oneLine], roomRight) || (!fits([oneLine], roomLeft) && roomRight >= roomLeft);
+  const labelLines = fits([oneLine], onRight ? roomRight : roomLeft) ? [oneLine] : slopeLines;
+  const labelWidth = Math.max(...labelLines.map((line) => svgTextWidth(line, 11)));
+  const labelX = onRight ? plotRight : plotLeft;
+  const span = onRight ? [plotRight - labelWidth, plotRight] : [plotLeft, plotLeft + labelWidth];
+  // Top or bottom corner, whichever is farther from the fitted line where the label runs, so it never sits on the line.
+  const lineAt = (px: number) => y(fitted[0]) + ((px - x(xAxis.lo)) / (x(xAxis.hi) - x(xAxis.lo) || 1)) * (y(fitted[1]) - y(fitted[0]));
+  const lineHeight = 13, blockHeight = (labelLines.length - 1) * lineHeight;
+  const topFirst = m.t + 12, bottomFirst = H - m.b - 6 - blockHeight;
+  const clearance = (first: number) => Math.min(...span.map((px) => {
+    const lineY = lineAt(px);
+    return lineY < first - 11 ? first - 11 - lineY : lineY > first + blockHeight ? lineY - first - blockHeight : 0;
+  }));
+  const slopeLabelY = clearance(topFirst) >= clearance(bottomFirst) ? topFirst : bottomFirst;
   const description = `分箱散点图：横轴为扣掉平均水平后的 X，纵轴为各组 Y 的平均；直线的斜率就是估计值`;
   return (
     <div ref={wrapRef} className="binscatter-plot" style={{ ...cardStyle, flex: "1 1 320px", minWidth: 280 }}>
@@ -249,7 +293,11 @@ export function BinScatterChart({ bins, slope, slopeUnit, slopeWords, xLabel, yL
         {/* Kept inside the plot (a line ending at the bottom put it on the x tick labels); small slopes keep
             two significant figures so they match the coefficient chart (-0.0049, not -0.005). */}
         {/* A white halo keeps the label readable where the line still runs under it near a corner. */}
-        <text data-slope-label x={x(xAxis.hi) - 6} y={slopeLabelY} textAnchor="end" fontSize={11} fontWeight={700} fill={ESTIMATE} stroke="#fff" strokeWidth={3} paintOrder="stroke" strokeLinejoin="round">{slopeUnit ? `斜率：X 每高 1 个百分点，Y ${slopeReading} ${slopeUnit}` : `斜率 = ${slopeText}`}</text>
+        <text data-slope-label x={labelX} y={slopeLabelY} textAnchor={onRight ? "end" : "start"} fontSize={11} fontWeight={700} fill={ESTIMATE} stroke="#fff" strokeWidth={3} paintOrder="stroke" strokeLinejoin="round">
+          {labelLines.length === 1
+            ? labelLines[0]
+            : labelLines.map((line, index) => <tspan key={line} x={labelX} dy={index ? lineHeight : 0}>{line}</tspan>)}
+        </text>
       </svg>
       {Tip}
     </div>
@@ -290,7 +338,12 @@ export function GroupChangeChart({
   unit: string;
   title: string;
   /** After the run: the gap the estimate implies (β × mean exposure), in stored Y units, drawn at the last year. */
-  estimate?: { gap: number; label: string } | null;
+  estimate?: {
+    gap: number;
+    label: string;
+    /** The 95% interval includes 0: a third line says "（方向不确定）", as the reading card below does. */
+    uncertain?: boolean;
+  } | null;
 }) {
   const width = 640, height = 250, padL = 64, padR = 140, padT = 22, padB = 34;
   const values = [...taxed, ...untaxed].map((point) => point.change * scale);
@@ -312,7 +365,7 @@ export function GroupChangeChart({
   const slots = spreadLabels([
     { key: "taxed", at: y(lastTaxed * scale) + (lastTaxed < lastUntaxed ? 8 : -8), size: 14 },
     { key: "untaxed", at: y(lastUntaxed * scale) + (lastTaxed < lastUntaxed ? -8 : 8), size: 14 },
-    ...(estimateY == null ? [] : [{ key: "estimate", at: estimateY, size: 28 }]),
+    ...(estimateY == null ? [] : [{ key: "estimate", at: estimateY, size: estimate?.uncertain ? 42 : 28 }]),
   ], padT, height - 4);
   const label = (series: { year: number; change: number }[], text: string, color: string, key: string) => {
     const last = series.at(-1);
@@ -347,8 +400,9 @@ export function GroupChangeChart({
               <line x1={bx - 4} x2={bx + 4} y1={y1} y2={y1} />
               {/* Two lines ("回归估计的差距" / value and unit): on one line a unit such as 中心性原始单位 ran off the chart. */}
               <text x={bx + 7} y={slots.estimate + 4} fontSize={10.5} fill="#2a2f3a" stroke="none">
-                <tspan x={bx + 7} dy="-0.6em">{estimateHead}</tspan>
+                <tspan x={bx + 7} dy={estimate.uncertain ? "-1.2em" : "-0.6em"}>{estimateHead}</tspan>
                 <tspan x={bx + 7} dy="1.2em">{estimateValue}</tspan>
+                {estimate.uncertain && <tspan data-estimate-uncertain x={bx + 7} dy="1.2em">（方向不确定）</tspan>}
               </text>
             </g>
           );
