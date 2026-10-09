@@ -32,6 +32,12 @@ describe("indicator method intro", () => {
     }
   });
 
+  test("production method points to the 四类生产活动 · 后向 view for the backward split (round 21)", () => {
+    const text = render("production").body.textContent ?? "";
+    expect(text).toContain("在步骤 7 的“四类生产活动”视角选“后向（按最终品）”，查看各类所占份额。");
+    expect(text).not.toContain("选带“（后向）”的指标");
+  });
+
   test("length method keeps the boundary that length is not the number of border crossings", () => {
     expect(render("length").body.textContent).toContain("长度不是跨境次数");
   });

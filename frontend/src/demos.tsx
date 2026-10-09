@@ -96,7 +96,7 @@ export const DECOMP: Record<number, DecompCfg> = {
     negativeNote: "负值表示这部分增加值为负（例如行业亏损），所以其他分项的比重之和可能超过 100%。",
     note: (_r, values, decimals) =>
       `GVC 合计（3_VA_GVC）= 简单 GVC + 复杂 GVC = ${sumText(values[2], values[3], decimals)}。` +
-      `也可以反过来，从最终产品在哪国完成来拆分（后向分解，代码 FGY），在步骤 7 选带“（后向）”的指标查看。`,
+      `也可以反过来，从最终产品在哪国完成来拆分（后向分解，代码 FGY）：在步骤 7 的“四类生产活动”视角选“后向（按最终品）”，查看各类所占份额。`,
   },
   6: {
     title: "各段对总长度的贡献",
@@ -572,7 +572,10 @@ function MiniBackwardBar({ row }: { row: Row }) {
         ))}
       </div>
       <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>
-        PLy = 各段（最终产品中的份额 × 段长度）之和 = {fmt(model.sum, "number")}；{model.error < 1e-6 ? "与总量一致" : `与总量相差 ${model.error.toPrecision(2)}`}。
+        {/* Name what the sum is checked against: the PLy computed directly, shown at the right of the heading. */}
+        各段（最终产品中的份额 × 段长度）之和 = {fmt(model.sum, "number")}；{model.error < 1e-6
+          ? `等于直接算出的后向总生产长度 PLy（${fmt(model.total, "number")}），即 PLy 是三段长度按最终产品份额的加权平均`
+          : `与直接算出的后向总生产长度 PLy（${fmt(model.total, "number")}）相差 ${model.error.toPrecision(2)}`}。
       </div>
     </div>
   );
