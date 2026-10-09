@@ -381,12 +381,12 @@ export function DivergingBarChart({
                 "aria-label": spoken(row),
                 onClick: () => select(row),
                 onKeyDown: (event: KeyboardEvent<SVGGElement>) => onKey(event, index, row),
-                // Keyboard focus shows the hover tooltip (its value and 95% interval), under the focused row.
+                // Keyboard focus shows the hover tooltip (its value and 95% interval) above the focused row, so it
+                // never covers the lines under the chart (step 12's 合计 100% note, the axis title).
                 onFocus: (event: FocusEvent<SVGGElement>) => {
                   setFocused(row.key);
                   const box = event.currentTarget.getBoundingClientRect();
-                  // useTip positions by the pointer only (clientX/clientY); the row stands in for it.
-                  show({ clientX: box.left + box.width * 0.55, clientY: box.bottom - 6 } as Parameters<typeof show>[0], barTip(row, interactive));
+                  show({ clientX: box.left + box.width * 0.55, clientY: box.top } as Parameters<typeof show>[0], barTip(row, interactive), box);
                 },
                 onBlur: () => {
                   setFocused((current) => (current === row.key ? null : current));

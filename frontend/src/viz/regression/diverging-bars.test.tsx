@@ -230,4 +230,22 @@ describe("DivergingBarChart", () => {
     fireEvent.keyDown(busy, { key: "Enter" });
     expect(onSelect).toHaveBeenCalledTimes(3);
   });
+
+  test("keyboard focus puts the tooltip above the row, not over the lines under the chart", () => {
+    const { container } = render(<DivergingBarChart rows={STEP11} unitTitle="个百分点" onSelect={() => {}} width={650}><p>合计 100%</p></DivergingBarChart>);
+    const wrap = container.querySelector<HTMLElement>(".diverging-bars")!;
+    const tip = container.querySelector<HTMLElement>(".diverging-bars > div[style*='pointer-events']")!;
+    const rect = (top: number, bottom: number) => ({ top, bottom, left: 0, right: 600, width: 600, height: bottom - top, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+    wrap.getBoundingClientRect = () => rect(100, 400);
+    Object.defineProperty(tip, "offsetHeight", { configurable: true, value: 80 });
+    const [first, last] = [...container.querySelectorAll<SVGGElement>('[role="button"]')];
+    last.getBoundingClientRect = () => rect(300, 340);
+    fireEvent.focus(last);
+    // The row starts 200px into the card: the 80px tip ends 6px above it.
+    expect(tip.style.top).toBe(`${200 - 80 - 6}px`);
+    // No room above the first row: below it instead (over the next row, never under the chart).
+    first.getBoundingClientRect = () => rect(150, 190);
+    fireEvent.focus(first);
+    expect(tip.style.top).toBe(`${190 - 100 + 6}px`);
+  });
 });
