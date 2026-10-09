@@ -106,6 +106,16 @@ def industry_reference(
     if metric in {"country", "industry"} or not {"country", "industry", metric} <= set(df.columns):
         return []
     frame = df.loc[df["country"].astype(str) != "ROW", ["country", "industry", metric]].copy()
+    # An economy whose industry neither adds value nor buys or sells intermediates has no output there (LUX·A03):
+    # its 0 is not a position, so a requested country in that case is flagged instead of ranked last.
+    no_output: set[tuple[str, str]] = set()
+    if countries and {"SVA", "weighted degree"} <= set(df.columns):
+        idle = df[
+            (pd.to_numeric(df["SVA"], errors="coerce") == 0)
+            & (pd.to_numeric(df["weighted degree"], errors="coerce") == 0)
+            & df["country"].astype(str).isin(countries)
+        ]
+        no_output = set(zip(idle["country"].astype(str), idle["industry"].astype(str)))
     if industry is not None:
         frame = frame[frame["industry"].astype(str) == industry]
     frame[metric] = pd.to_numeric(frame[metric], errors="coerce").astype(float)
@@ -123,6 +133,8 @@ def industry_reference(
             continue
         values = group[metric]
         by_country = dict(zip(group["country"].astype(str), values))
+        idle_here = [country for country in countries if (country, str(name)) in no_output]
+        ranked = [country for country in countries if country in by_country and country not in idle_here]
         rows.append(
             {
                 "industry": str(name),
@@ -130,16 +142,9 @@ def industry_reference(
                 "p25": float(values.quantile(0.25)),
                 "median": float(values.quantile(0.5)),
                 "p75": float(values.quantile(0.75)),
-                "ranks": {
-                    country: 1 + int((values > by_country[country]).sum())
-                    for country in countries
-                    if country in by_country
-                },
-                "ties": {
-                    country: int((values == by_country[country]).sum())
-                    for country in countries
-                    if country in by_country
-                },
+                "ranks": {country: 1 + int((values > by_country[country]).sum()) for country in ranked},
+                "ties": {country: int((values == by_country[country]).sum()) for country in ranked},
+                **({"no_output": idle_here} if idle_here else {}),
             }
         )
     return rows

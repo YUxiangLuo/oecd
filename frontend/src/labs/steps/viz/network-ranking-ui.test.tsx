@@ -28,3 +28,18 @@ test("an undefined path metric is named, and the caption covers it (round 12)", 
   expect(html).toContain("无连接，无法定义");
   expect(html).toContain("缺少或无法定义的数据留空，不当作 0。");
 });
+
+test("an industry with no output in that country is flagged, not ranked last (LUX·A03, round 27)", () => {
+  const html = renderToStaticMarkup(
+    <NetworkRanking
+      rows={[{ industry: "A03", values: [0, 3776] }]}
+      countries={["LUX", "USA"]}
+      unit="百万美元"
+      onIndustry={() => {}}
+      reference={new Map([["A03", { median: 500, n: 76, ranks: { USA: 16 }, ties: { USA: 1 }, noOutput: ["LUX"] }]])}
+    />,
+  );
+  expect(html).toContain("无产出，不排名");
+  expect(html).not.toContain("第 76 位");
+  expect(html).toContain("全球第 16 位 / 76");
+});

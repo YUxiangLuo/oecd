@@ -23,6 +23,13 @@ describe("indicator PDF reading library", () => {
     }
   });
 
+  test("the network guide source calls the country graph complete, as the data is (round 27)", () => {
+    const source = readFileSync(resolve(import.meta.dir, "../../../../../docs/indicator-readings/network.html"), "utf8");
+    expect(source).toContain("国家级图在全部正边下是完全图");
+    expect(source).not.toContain("接近完全图");
+    expect(source).not.toContain("最短路径");
+  });
+
   test("opens by default with one preview, unloads it when collapsed, and switches one preview without removing open-PDF access", () => {
     const view = render(<IndicatorReadingLibrary topic="trade" />);
     const details = view.container.querySelector("details") as HTMLDetailsElement;

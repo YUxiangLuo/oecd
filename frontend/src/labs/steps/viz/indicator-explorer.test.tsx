@@ -757,6 +757,21 @@ test("step 7 四类生产活动 in 金额 describes amounts, and the material sa
   } finally { rows.mockRestore(); schema.mockRestore(); }
 });
 
+test("step 7 占比 says nothing about red negative parts when the only negative total is left out (ITA·C19, round 27)", async () => {
+  const part = { SVA: 10, "1_VA_D": 4, "2_VA_RT": 2, "3a_VA_GVC_S": 1, "3b_VA_GVC_C": 3 };
+  const negative = { SVA: -2, "1_VA_D": -5, "2_VA_RT": 1, "3a_VA_GVC_S": 1, "3b_VA_GVC_C": 1 };
+  const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) =>
+    countryRows(year).map((row) => ({ ...row, ...(row.country === "USA" ? negative : part) })));
+  const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+  try {
+    const view = setup(ProductionVizStep);
+    await view.findByText(/构成份额无法计算，占比图里不画/);
+    expect(view.container.textContent).not.toContain("负分项画成红色");
+    fireEvent.click(view.getByRole("button", { name: "金额" }));
+    await waitFor(() => expect(view.container.textContent).toContain("负分项画在零轴左侧"));
+  } finally { rows.mockRestore(); schema.mockRestore(); }
+});
+
 describe("undefined lengths and medians that say nothing (round 11)", () => {
   // Household production (T): no GVC production in either direction, so every GVC length is undefined.
   const idleRow = (country: string, year: number, industry = "A") => ({

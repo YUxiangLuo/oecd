@@ -2,7 +2,7 @@ import { countryLabel, sectorLabel } from "../../../viz";
 import { CAT } from "../../../viz/shared";
 import { ScrollableRegion } from "../../../a11y";
 import { indicatorNumber } from "./indicator-charts";
-import { rankText } from "./indicator-model";
+import { NO_OUTPUT, rankText } from "./indicator-model";
 import type { Row } from "./scaffold";
 import { PATH_UNDEFINED_LABEL, pathMetricUndefined } from "../../../viz/views/network-heat";
 
@@ -29,7 +29,7 @@ export function networkRanking(rows: Row[], year: number, countries: string[], m
 }
 
 /** Each industry's global median across all economies, and every selected country's rank there. */
-export type IndustryReference = ReadonlyMap<string, { median: number; n: number; ranks?: Record<string, number>; ties?: Record<string, number> }>;
+export type IndustryReference = ReadonlyMap<string, { median: number; n: number; ranks?: Record<string, number>; ties?: Record<string, number>; noOutput?: string[] }>;
 
 export function NetworkRanking({ rows, countries, unit, onIndustry, reference = new Map() }: {
   rows: NetworkRankRow[]; countries: string[]; unit: string; onIndustry: (industry: string) => void;
@@ -66,6 +66,8 @@ export function NetworkRanking({ rows, countries, unit, onIndustry, reference = 
             <b>{value === null && row.undefinedAt?.[index] ? PATH_UNDEFINED_LABEL : indicatorNumber(value, unit)}</b>
             {(() => {
               const countryRank = global?.ranks?.[countries[index]];
+              // LUX·A03 reads 0 because the industry produces nothing there: flagged, not ranked last.
+              if (global?.noOutput?.includes(countries[index])) return <small>{NO_OUTPUT}</small>;
               if (!global || countryRank == null) return null;
               const text = rankText(countryRank, global.ties?.[countries[index]], global.n);
               return <small>{text ? `全球${text} / ${global.n}` : "全球数值都相同，不排名"}</small>;

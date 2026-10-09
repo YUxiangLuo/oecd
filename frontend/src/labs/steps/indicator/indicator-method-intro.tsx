@@ -45,7 +45,7 @@ const METHOD: Record<MethodTopic, MethodContent> = {
       },
       {
         title: "按来源和使用地归类",
-        body: "WWZ 把双边总出口分解为 16 项，按“国内还是外国增加值 × 在哪里被最终使用 × 是否重复计算”归并为五类：被国外最终使用的国内增加值（DVAex）、返回国内的增加值（DVArt）、国内重复计算（DDC）、外国增加值（FVA）、外国重复计算（FDC）；本系统另加产品税减补贴（taxsub，来自 TLS 账户）。",
+        body: "WWZ 把双边总出口分解为 16 项，按“国内还是外国增加值 × 在哪里被最终使用 × 是否重复计算”归并为五个聚合项：被国外最终使用的国内增加值（DVAex）、返回国内的增加值（DVArt）、国内重复计算（DDC）、外国增加值（FVA）、外国重复计算（FDC）；本系统另加产品税减补贴（taxsub，来自 TLS 账户）。",
         source: "trade-paper-en",
         sourceLabel: "Wang, Wei & Zhu（2018）",
       },
@@ -126,7 +126,7 @@ const METHOD: Record<MethodTopic, MethodContent> = {
       },
       {
         title: "路径位置：介数",
-        body: "介数（只看连接、不看金额）：将每条连接视为等长，统计其他节点之间的最短路线中经过该节点的条数（用 Brandes 算法精确计算）。",
+        body: "介数（只看连接、不看金额）：将每条连接视为等长，计算经过该节点的最短路线所占比例，对所有节点对求和（未归一化；用 Brandes 算法精确计算）。",
         source: "brandes-paper",
         sourceLabel: "Brandes（2001）",
       },

@@ -284,7 +284,8 @@ export const materialKey = (rows: VizObservation[]) =>
 export const readingDigits = (value: number, unit: string) =>
   value === 0
   || (unit === "百万美元" && Math.abs(value) >= 1)
-  // Counts and path lengths are whole numbers; unnormalised betweenness (a path count) reads as a whole number from 1 up.
+  // Counts and path lengths are whole numbers; unnormalised betweenness (a sum of shares over node pairs) is rounded
+  // to a whole number from 1 up.
   || unit === "连接数" || unit === "路径长度"
   || (unit === "未归一化介数" && Math.abs(value) >= 1)
     ? 0
@@ -325,11 +326,15 @@ export interface YearDistribution {
   ranks: Record<string, number>;
   /** How many economies share each reading (1 = no tie). */
   ties?: Record<string, number>;
+  /** Step 9: countries whose industry has no output that year; they have no rank (see {@link NO_OUTPUT}). */
+  noOutput?: string[];
 }
 
 /** Shown for a year in which every economy has the same reading; the report uses the same words. */
 export const NO_RANK = "不分名次";
 export const NO_RANK_NOTE = "不分名次：该年全部经济体数值相同";
+/** Step 9: an industry with no output in that country reads 0, which is not a position among the economies. */
+export const NO_OUTPUT = "无产出，不排名";
 
 /**
  * “第 3 位”, or “并列第 3 位” when other economies have the same reading; null when every economy has

@@ -2,7 +2,7 @@ import { useMemo, useState, type KeyboardEvent } from "react";
 import { countryLabel, joinCountries, sectorLabel } from "../../../viz";
 import { useHoverTip, type TipLine } from "../../../viz/hover";
 import { CAT } from "../../../viz/shared";
-import { changeReading, finiteValue, NO_RANK, NO_RANK_NOTE, rankText, readingDigits, type YearDistribution } from "./indicator-model";
+import { changeReading, finiteValue, NO_OUTPUT, NO_RANK, NO_RANK_NOTE, rankText, readingDigits, type YearDistribution } from "./indicator-model";
 import { integerDomain, niceDomain } from "../../../viz/nice-ticks";
 import { stripNegativeZero } from "../../../format";
 import type { Row } from "./scaffold";
@@ -182,6 +182,13 @@ export function TrendSummary({
         {/* An exact zero end reads "0" ("0 → 0.00039"), not "0.00000" at a tiny-value precision. */}
         <small>{start === 0 && end === 0 ? indicatorNumber(0, unit) : [start, end].map((value) => (value === 0 ? indicatorNumber(0, unit) : fixedIndicatorNumber(value, unit, digits ?? smallAmountDigits(value, unit)))).join(" → ")}</small>
       </div>
+      {startRef && endRef && [startRef, endRef].some((ref) => ref.noOutput?.includes(first)) && (
+        <div>
+          <span>{sameIndustry ? "在全部经济体的同一行业中" : "在全部经济体中"}（从高到低）</span>
+          <b>{NO_OUTPUT}</b>
+          <small>{`${[...new Set([startRef, endRef].filter((ref) => ref.noOutput?.includes(first)).map((ref) => ref.year))].join("、")} 年该行业在 ${countryLabel(first)}没有产出，读数 0 不代表排名靠后`}</small>
+        </div>
+      )}
       {startRank != null && endRank != null && startRef && endRef && (() => {
         const from = rankText(startRank, startRef.ties?.[first], startRef.n);
         const to = rankText(endRank, endRef.ties?.[first], endRef.n);
@@ -395,6 +402,11 @@ export function IndicatorTrendChart({
   const readings = countries.flatMap((country, index) =>
     series[index].map((point) => ({ country, ...point })),
   );
+  // A reference far below the selected countries (step 9 加权总度 of CHN·C26) lies on the 0 line: say so, the
+  // readouts below still give the median and the middle 50%.
+  const referenceFlat = band.length >= 2 && lo === 0
+    && Math.max(...band.map((item) => item.p75)) < 0.02 * extent
+    && values.some((value) => value >= 0.5 * extent);
   const bandPath = band.length >= 2
     ? `M${band.map((item) => `${x(item.year)},${y(item.p75)}`).join(" L")} L${[...band].reverse().map((item) => `${x(item.year)},${y(item.p25)}`).join(" L")} Z`
     : "";
@@ -608,6 +620,11 @@ export function IndicatorTrendChart({
       </svg>
       {Tip}
       </div>
+      {referenceFlat && (
+        <p className="muted" role="note" data-reference-flat>
+          {referenceLabel}与中间 50% 远小于所选国家，图中贴近 0；中位数见下方读数，中间 50% 的范围悬停可读。
+        </p>
+      )}
       {context
         ? <TrendSummary readings={readings} countries={countries} years={years} unit={unit} distribution={band} sameIndustry={sameIndustry} digits={digits} industry={industry} reasonFor={reasonFor} />
         : <ComparisonSummary

@@ -119,3 +119,55 @@ def test_step_12_asks_to_read_the_grey_bar_without_clicking_it():
     assert question["correct"] == "b" and quizzes.quiz_version(12) == quizzes.QUIZ_VERSION
     tasks = " ".join(next(step for step in STEPS if step["n"] == 12)["tasks"])
     assert "点灰色" not in tasks and "不用点击" in tasks
+
+
+def _quiz_text(question):
+    return " ".join(
+        [
+            question["prompt"],
+            question["explanation"],
+            quizzes.HINTS[question["id"]],
+            *(o["label"] for o in question["options"]),
+        ]
+    )
+
+
+QUIZ_BY_ID = {question["id"]: question for questions in quizzes.STEP_QUIZZES.values() for question in questions}
+
+
+def test_betweenness_reads_as_a_sum_of_shares_and_shortest_routes_have_one_name_round_27():
+    from gvcsim.indicator_schema import _INDICATOR_DESCRIPTIONS as FIELD_DESCRIPTIONS
+    from gvcsim.steps import STEPS
+
+    every = " ".join(_quiz_text(question) for question in QUIZ_BY_ID.values())
+    assert "最短路径" not in every
+    assert "对所有节点对求和（未归一化" in QUIZ_BY_ID["s05-between"]["explanation"]
+    assert "有多少条最短路线经过这个节点（" not in QUIZ_BY_ID["s05-between"]["explanation"]
+    step5 = next(step for step in STEPS if step["n"] == 5)
+    assert "多少条最短路线" not in step5["goal"] and "对所有节点对求和" in step5["goal"]
+    assert "最短路线条数" not in FIELD_DESCRIPTIONS["betweenesscentrality"]
+    assert "对所有节点对求和（未归一化）" in FIELD_DESCRIPTIONS["betweenesscentrality"]
+    assert all("最短路径" not in text for text in FIELD_DESCRIPTIONS.values())
+
+
+def test_quizzes_read_x_as_exposure_an_association_and_step_14_y_as_no_amount_round_27():
+    every = " ".join(_quiz_text(question) for question in QUIZ_BY_ID.values())
+    assert "受新关税影响" not in every and "面对的新关税暴露越强" in QUIZ_BY_ID["s10-unit-v8"]["explanation"]
+    assert "没有影响" not in every and "没有关联" in QUIZ_BY_ID["s12-compare"]["explanation"]
+    # Step 14's Y is generated on the real 加权总度 ranking, in 中心性原始单位: not an amount.
+    assert "中心性原始单位" in QUIZ_BY_ID["s14-metric-v9"]["explanation"]
+    assert "不是金额" in QUIZ_BY_ID["s14-metric-v9"]["explanation"]
+    assert "金额" not in quizzes.HINTS["s14-metric-v9"]
+    # The options and correct answers stay as the owner kept them.
+    assert [q["correct"] for q in QUIZ_BY_ID.values() if q["id"] in ("s12-compare", "s14-metric-v9")] == ["b", "a"]
+
+
+def test_hints_guide_without_giving_the_answer_away_round_27():
+    x_hint = quizzes.HINTS["s10-x-definition-v8"]
+    # No formula to copy, and the page's word for the yearly readouts.
+    assert "w × τ" not in x_hint and "相乘" not in x_hint
+    assert "逐年表" not in x_hint and "逐年读数" in x_hint
+    compare_hint = quizzes.HINTS["s13-compare"]
+    assert "单位不同的数能直接比较大小吗" not in compare_hint and "标准差" in compare_hint
+    assert [q["correct"] for q in quizzes.STEP_QUIZZES[10]] == ["a", "a"]
+    assert [q["correct"] for q in quizzes.STEP_QUIZZES[13]] == ["a", "a"]

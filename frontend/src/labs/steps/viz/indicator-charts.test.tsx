@@ -260,11 +260,49 @@ describe("trend cards name the industry when the scope is one industry (round 21
     cleanup();
   });
 
+  test("step 9 LUX·A03 with no output reads 无产出，不排名, not 第 76 位 (round 27)", () => {
+    const zero = [2016, 2020].map((year) => ({ country: "LUX", year, value: 0 }));
+    const reference = [2016, 2020].map((year) => ({ year, n: 76, p25: 10, median: 500, p75: 2000, ranks: {}, ties: {}, noOutput: ["LUX"] }));
+    const view = render(<TrendSummary readings={zero} countries={["LUX"]} years={[2016, 2020]} unit="百万美元" distribution={reference} sameIndustry industry="A03" />);
+    const text = view.getByLabelText("趋势读数").textContent ?? "";
+    expect(text).toContain("无产出，不排名");
+    expect(text).toContain("2016、2020 年该行业在 LUX 卢森堡没有产出");
+    expect(text).not.toContain("第 76");
+    cleanup();
+  });
+
   test("country level keeps the plain country label", () => {
     const view = render(<TrendSummary readings={readings} countries={["JPN"]} years={[2016, 2020]} unit="%" />);
     const text = view.getByLabelText("趋势读数").textContent ?? "";
     expect(text).toContain("JPN 日本 · 2016→2020");
     expect(text).not.toContain("C29");
+    cleanup();
+  });
+
+  test("a reference squashed onto 0 gets a note; a readable one does not (step 9 CHN·C26 加权总度)", () => {
+    const years = [2016, 2020];
+    // As in the data: CHN about 2.5 million, the same industry's 75th percentile about 1% of the axis (2016–2020
+    // ratios 0.86–0.99%). Scaled up threefold the band reaches 3% of the axis and is drawn readably: no note.
+    const chart = (scale: number) => {
+      const rows: Row[] = years.flatMap((year) => [
+        { country: "CHN", year, m: 2_400_000 + (year - 2016) * 30_000 },
+        ...Array.from({ length: 19 }, (_, index) => ({ country: `E${index}`, year, m: scale * (500 + index * 2100) })),
+      ]);
+      return render(
+        <IndicatorTrendChart rows={rows} countries={["CHN", "E18"]} years={years} metric="m" label="加权总度" unit="百万美元"
+          distribution={countryDistribution(rows, "m", years)} mode="context" sameIndustry industry="C26" />,
+      );
+    };
+    const view = chart(1);
+    expect(view.getByRole("note").textContent).toContain("同行业全球中位数与中间 50% 远小于所选国家，图中贴近 0");
+    cleanup();
+    expect(chart(3).container.querySelector("[data-reference-flat]")).toBeNull();
+    cleanup();
+    const shares = render(
+      <IndicatorTrendChart rows={trendRows} countries={["CHN", "USA"]} years={[2018, 2019, 2020]} metric="FVA_share" label="外国增加值项占比"
+        unit="%" distribution={countryDistribution(trendRows, "FVA_share", [2018, 2019, 2020])} mode="context" />,
+    );
+    expect(shares.container.querySelector("[data-reference-flat]")).toBeNull();
     cleanup();
   });
 

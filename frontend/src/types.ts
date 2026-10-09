@@ -462,6 +462,8 @@ export interface IndustryDistributionRow {
   ranks: Record<string, number>;
   /** How many economies share each requested country's reading (1 = no tie). */
   ties?: Record<string, number>;
+  /** Requested countries whose industry has no output that year (SVA and 加权总度 both 0): flagged, not ranked. */
+  no_output?: string[];
 }
 
 export type IndustryPage = PagedRows;

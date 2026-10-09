@@ -109,17 +109,25 @@ export const DECOMP: Record<number, DecompCfg> = {
       { key: "PLv_RT", label: "传统贸易加权贡献", short: "传统贸易", color: COMPONENT_COLORS.traditional, desc: "传统贸易这一段的长度 × 它的增加值份额，就是这一段对总长度的贡献。", weightKey: "2_VA_RT" },
       { key: "PLv_GVC", label: "GVC 加权贡献", short: "GVC", color: COMPONENT_COLORS.gvc, desc: "GVC 这一段的长度 × 它的增加值份额，就是这一段对总长度的贡献；段长度和贡献不是同一个数。", weightKey: "3_VA_GVC" },
     ],
-    note: (r) => {
-      const segment = (lengthKey: string, weightKey: string) => {
-        const length = finiteNumber(r[lengthKey]);
-        if (length != null) return length.toFixed(3);
-        return finiteNumber(r[weightKey]) === 0 ? "—（无此类活动）" : "—";
-      };
-      return `前向各段长度：纯国内 ${segment("PLv_D", "1_VA_D")}、传统贸易 ${segment("PLv_RT", "2_VA_RT")}、GVC ${segment("PLv_GVC", "3_VA_GVC")}` +
-        `（上表是这些长度乘以增加值份额后的贡献）。`;
-    },
+    note: (r) => `${forwardSegmentLengths(r)}（上表是这些长度乘以增加值份额后的贡献）。`,
   },
 };
+
+const FORWARD_SEGMENTS = [["PLv_D", "1_VA_D", "纯国内"], ["PLv_RT", "2_VA_RT", "传统贸易"], ["PLv_GVC", "3_VA_GVC", "GVC"]] as const;
+
+/** Step 4: some forward segment has a length, even where SVA ≤ 0 leaves the share-weighted split undefined. */
+export const hasForwardSegmentLength = (r: Row) => FORWARD_SEGMENTS.some(([lengthKey]) => finiteNumber(r[lengthKey]) != null);
+
+/** Step 4: "前向各段长度：纯国内 …、传统贸易 …、GVC …". */
+export function forwardSegmentLengths(r: Row): string {
+  const keys = FORWARD_SEGMENTS;
+  const segment = (lengthKey: string, weightKey: string) => {
+    const length = finiteNumber(r[lengthKey]);
+    if (length != null) return length.toFixed(3);
+    return finiteNumber(r[weightKey]) === 0 ? "—（无此类活动）" : "—";
+  };
+  return `前向各段长度：${keys.map(([lengthKey, weightKey, name]) => `${name} ${segment(lengthKey, weightKey)}`).join("、")}`;
+}
 
 /** A negative part keeps its own colour (so parts stay distinguishable) striped with the negative red. */
 export function negativeFill(color: string): string {
@@ -478,10 +486,14 @@ export const PLY_DECOMP: DecompCfg = {
   ],
 };
 
-export function zeroTotalDecompositionHint(model: DecompositionModel, totalLabel: string): string | null {
+/** Step 2: an industry that produces (SVA ≠ 0) but exports nothing has every export part 0 (CHN·E). */
+export const NO_EXPORTS_NOTE = "该行业这一年没有出口，出口分解各项为 0";
+
+/** `noExports`: step 2's total is 0 because the industry does not export, although it has activity. */
+export function zeroTotalDecompositionHint(model: DecompositionModel, totalLabel: string, noExports = false): string | null {
   const kind = directZeroTotalKind(model);
   if (kind === "all-zero") {
-    return "所有分项都是 0，这一年可能没有相关活动，请换一个行业。";
+    return noExports ? `${NO_EXPORTS_NOTE}，无法算比重；请换一个行业。` : "所有分项都是 0，这一年可能没有相关活动，请换一个行业。";
   }
   if (kind === "signed-offset") {
     return `${cjkJoin(totalLabel, "为 0：")}正负分项相互抵消，无法算比重。`;
@@ -492,7 +504,7 @@ export function zeroTotalDecompositionHint(model: DecompositionModel, totalLabel
   return null;
 }
 
-export function decompositionModelReason(model: DecompositionModel, weightLabel?: string): string {
+export function decompositionModelReason(model: DecompositionModel, weightLabel?: string, noExports = false): string {
   const weight = weightLabel ?? "权重";
   if (model.reason === "zero-weight-denominator") {
     return cjkJoin(weight, "为 0（没有这类活动），无法计算加权长度。");
@@ -507,7 +519,7 @@ export function decompositionModelReason(model: DecompositionModel, weightLabel?
   if (model.reason === "zero-total") {
     const kind = directZeroTotalKind(model);
     if (kind === "all-zero") {
-      return "所有分项都是 0，这一年可能没有相关活动；无法算比重。";
+      return noExports ? `${NO_EXPORTS_NOTE}；无法算比重。` : "所有分项都是 0，这一年可能没有相关活动；无法算比重。";
     }
     if (kind === "signed-offset") {
       return "总量为 0：正负分项相互抵消，无法算比重。";
@@ -743,7 +755,10 @@ export function DecompositionDemo({
       if (value == null) return acc;
       return finiteNumber(acc + Math.abs(value));
     }, 0);
-    const zeroTotalHint = zeroTotalDecompositionHint(model, cfg.totalLabel);
+    // Step 2: exports of 0 with value added is an industry that does not export, not one without activity.
+    const sva = finiteNumber(row.SVA);
+    const noExports = cfg.total === "gross_exports" && sva != null && sva !== 0;
+    const zeroTotalHint = zeroTotalDecompositionHint(model, cfg.totalLabel, noExports);
     // A negative total is not "too small": the identity line already explains it (总量为负，无法算比重).
     const negligible = model.total != null && gran === "sector" && (
       model.total === 0 || (model.total > 0 && countryTotal != null && countryTotal > 0 && model.total / countryTotal < 1e-4)
@@ -757,10 +772,10 @@ export function DecompositionDemo({
             {cfg.totalLabel} = <b>{model.total == null ? "—（未定义）" : fmt(model.total, cfg.unit)}</b>
             {cfg.unit === "amount" && model.total != null && <span className="muted">（百万美元）</span>}
           </div>
-          <IndicatorCalculationDisclosure step={step} row={row} />
+          {step !== 6 && <IndicatorCalculationDisclosure step={step} row={row} />}
           <div className="decomp-unavailable" role="status">
             <b>当前分解不可用</b>
-            <div>{decompositionModelReason(model, cfg.weightTotal)}</div>
+            <div>{decompositionModelReason(model, cfg.weightTotal, noExports)}</div>
             {unavailableTotalNote(model, cfg) && <div>{unavailableTotalNote(model, cfg)}</div>}
             <div>{unavailableDashNote(model)}</div>
           </div>
@@ -773,7 +788,12 @@ export function DecompositionDemo({
             unavailable
             negativeNote={cfg.negativeNote}
           />
+          {/* The segment lengths come straight from the input-output relations and need no share (ITA·C19 2020). */}
+          {step === 6 && hasForwardSegmentLength(row) && (
+            <div className="decomp-note">{forwardSegmentLengths(row)}（段长度不需要份额，仍可读）。</div>
+          )}
           {step === 6 && <MiniBackwardBar row={row} />}
+          {step === 6 && <IndicatorCalculationDisclosure step={step} row={row} />}
         </div>
       );
     }
@@ -800,7 +820,9 @@ export function DecompositionDemo({
         <div className="decomp-total-line">
           {cfg.totalLabel} = <b>{amount(model.total)}</b>{cfg.unit === "amount" && <span className="muted">（百万美元）</span>}
         </div>
-        <IndicatorCalculationDisclosure step={step} row={row} decimals={precision?.decimals} />
+        {/* Step 4's GVCPs is another indicator (forward over backward GVC length): it follows both bars below, not
+            between the PLv heading and the PLv bar it does not decompose. */}
+        {step !== 6 && <IndicatorCalculationDisclosure step={step} row={row} decimals={precision?.decimals} />}
         {/* All parts 0: nothing to stack, so no empty grey bar (the line below says why). */}
         {model.values.some((value) => value !== 0) && <div className="decomp-bar" style={{ position: "relative", display: "block", overflow: "hidden" }}>
           {panelDomain.negative > 0 && <span aria-hidden style={{ position: "absolute", zIndex: 3, left: `${layout.zeroPct}%`, top: -2, bottom: -2, borderLeft: "2px solid #4b5263" }} />}
@@ -823,7 +845,7 @@ export function DecompositionDemo({
         ) : negligible && zeroTotalHint ? null : (
           // A zero total is explained once, by the specific hint below.
           <div className="decomp-identity neutral" role="status">
-            ℹ {decompositionModelReason(model, cfg.weightTotal)}
+            ℹ {decompositionModelReason(model, cfg.weightTotal, noExports)}
             {model.amountCloses != null && ` ${cfg.parts.length} 项金额相加${model.amountCloses ? "等于" : "不等于"}总量。`}
           </div>
         )}
@@ -844,6 +866,7 @@ export function DecompositionDemo({
         />
         {cfg.note && sharesAvailable && <div className="decomp-note">{cfg.note(row, model.values, precision?.decimals)}</div>}
         {step === 6 && <MiniBackwardBar row={row} />}
+        {step === 6 && <IndicatorCalculationDisclosure step={step} row={row} />}
       </div>
     );
   };
@@ -1093,12 +1116,12 @@ export function ClosenessPathTable({
   const sortedPaths = [...paths].sort((a, b) => a.distance - b.distance || a.target.localeCompare(b.target));
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-      <caption className="sr-only">从节点 {source} 出发的最短路径明细</caption>
+      <caption className="sr-only">从节点 {source} 出发的最短路线明细</caption>
       <thead>
         <tr>
           <th scope="col" style={{ textAlign: "left" }}>目标</th>
           <th scope="col">距离</th>
-          <th scope="col" style={{ textAlign: "left" }}>一条最短路径</th>
+          <th scope="col" style={{ textAlign: "left" }}>一条最短路线</th>
         </tr>
       </thead>
       <tbody>{sortedPaths.map((item) => (
@@ -1404,7 +1427,7 @@ export function NetworkCentralityDemo() {
               </div>
               <p className="ndp-note">高亮的是从 {sel} 沿箭头出发的最短路线；无法到达的节点不计入分子和分母。</p>
               <ScrollableRegion
-                label={`从节点 ${sel} 出发的最短路径明细，可滚动`}
+                label={`从节点 ${sel} 出发的最短路线明细，可滚动`}
                 style={{ maxHeight: 150, overflow: "auto", marginBottom: 10 }}
               >
                 <ClosenessPathTable source={sel} paths={distancePaths} />

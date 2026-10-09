@@ -204,6 +204,8 @@ describe("indicator calculation disclosure", () => {
       expect(box).toContain("前向总生产长度 PLv = 1.643 仍有定义");
       expect(box).toContain("“—”表示这一项无法计算（不是缺少数据）");
       expect(box).not.toContain("表示没有数据");
+      // Round 27: the segment lengths are defined without shares, so they are still listed (ITA·C19 2020).
+      expect(view.container.textContent).toContain("前向各段长度：纯国内 1.061、传统贸易 1.061、GVC 3.324（段长度不需要份额，仍可读）。");
     } finally {
       countryRequest.mockRestore();
       industryRequest.mockRestore();
@@ -420,13 +422,13 @@ describe("semantic decomposition and path tables", () => {
       />,
     );
 
-    expect(html).toContain('<caption class="sr-only">从节点 DEU 出发的最短路径明细</caption>');
+    expect(html).toContain('<caption class="sr-only">从节点 DEU 出发的最短路线明细</caption>');
     expect(html).toContain("<thead>");
     expect(html.match(/scope="col"/g)).toHaveLength(3);
     expect(html.match(/scope="row"/g)).toHaveLength(2);
     expect(html).toContain("目标");
     expect(html).toContain("距离");
-    expect(html).toContain("一条最短路径");
+    expect(html).toContain("一条最短路线");
     expect(html).toContain("DEU → CHN");
     expect(html).toContain("不可达");
     expect(html).toContain("—");
@@ -664,6 +666,21 @@ describe("steps 2–4 decomposition demo: all-zero rows and the remembered level
       );
       await waitFor(() => expect(view.container.textContent).toContain("所有分项都是 0"));
       expect(view.container.querySelector(".decomp-bar")).toBeNull();
+    } finally {
+      cleanup();
+      mocks.forEach((mock) => mock.mockRestore());
+    }
+  });
+
+  test("step 2: an industry with value added but no exports says it does not export (CHN·E, round 27)", async () => {
+    const mocks = mockRows([{ ...tradeRow("CHN", "E", 0), SVA: 75_000 } as ReturnType<typeof tradeRow>]);
+    try {
+      const view = render(
+        <DecompositionDemo step={4} meta={{ years: [2020], countries: ["CHN"], sectors: ["E"], dataset: null }}
+          primaryYear={2020} primaryCountry="CHN" initialView={{ level: "sector", industry: "E" }} />,
+      );
+      await waitFor(() => expect(view.container.textContent).toContain("该行业这一年没有出口，出口分解各项为 0"));
+      expect(view.container.textContent).not.toContain("可能没有相关活动");
     } finally {
       cleanup();
       mocks.forEach((mock) => mock.mockRestore());
@@ -975,6 +992,11 @@ describe("steps 2–4 notes read plainly (round 17)", () => {
       await waitFor(() => expect(view.container.textContent).toContain("前向各段长度：纯国内 3.263、传统贸易 3.525、GVC 5.622"));
       const text = view.container.textContent!;
       expect(text.indexOf("前向各段长度")).toBeLessThan(text.indexOf("后向 PLy"));
+      // Round 27: GVCPs is another indicator; its card follows the PLv bar, its identity line and the backward box.
+      const position = text.indexOf("GVC 位置指数 GVCPs");
+      expect(text.indexOf("项相加")).toBeGreaterThan(-1);
+      expect(position).toBeGreaterThan(text.indexOf("项相加"));
+      expect(position).toBeGreaterThan(text.indexOf("后向 PLy"));
     } finally {
       countryRequest.mockRestore();
       industryRequest.mockRestore();

@@ -37,7 +37,7 @@ export function NetworkIndicatorStep({ meta, step: _step, state }: { meta: Meta;
             <h3 id="network-demo-bridge-title">从小网络示意到当前数据网络</h3>
             <div><b>小网络的边</b><span>一条手工连接</span><i aria-hidden="true">→</i><b>数据网络的边</b><span>一个国家×行业向另一个节点提供的中间品（金额为正）</span></div>
             <div><b>小网络的度</b><span>直接连接条数</span><i aria-hidden="true">→</i><b>加权总度（买入 + 卖出）</b><span>流入和流出的中间品金额之和；自环（行业卖给自己的部分）在买入和卖出各计一次</span></div>
-            <div><b>小网络的介数</b><span>处在多少条最短路线上</span><i aria-hidden="true">→</i><b>行业节点的介数</b><span>同样只看连接、不看金额，只作参考</span></div>
+            <div><b>小网络的介数</b><span>经过它的最短路线所占比例，对所有节点对求和（未归一化）</span><i aria-hidden="true">→</i><b>行业节点的介数</b><span>同样只看连接、不看金额，只作参考</span></div>
           </section>
         </details>
       </IndicatorMethodIntro>

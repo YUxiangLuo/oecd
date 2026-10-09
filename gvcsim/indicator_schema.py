@@ -133,7 +133,7 @@ INDICATOR_SCHEMA = {
 # The accounting caveats (WWZ items, TLS, negative value added, the Gephi algorithm) live in 技术手册.md
 # and the report's method notes.
 _INDICATOR_DESCRIPTIONS = {
-    "gross_exports": "出口总额，等于五类价值来源（国内增加值出口、返回国内的增加值、国内重复计算、外国增加值、外国重复计算）加上产品税减补贴。",
+    "gross_exports": "出口总额，等于 WWZ 的五个聚合项（国内增加值出口、返回国内的增加值、国内重复计算、外国增加值、外国重复计算）加上产品税减补贴。",
     "FVA_share": "出口额中由外国创造的价值（外国增加值）所占的比例。不含被重复计算的部分，所以和 OECD TiVA 公布的“出口中外国增加值占比”不完全相同。",
     "DVAex_share": "出口额中由本国创造、最终在国外被使用的价值所占的比例。",
     "3_VA_GVC_share": "本国增加值中，随中间品跨境、进入全球价值链生产的部分所占的比例（前向，分母是本国总增加值）。",
@@ -174,10 +174,10 @@ _INDICATOR_DESCRIPTIONS = {
     "weighted degree": "这个节点买入和卖出的金额之和（买入 + 卖出，百万美元）。行业级只算中间品；自环（行业卖给自己的部分，例如钢铁卖给钢铁）在买、卖两边各计一次。",
     "weighted indegree": "这个节点买入的金额之和（流入的流量）。",
     "weighted outdegree": "这个节点卖出的金额之和（流出的流量）。",
-    "Eccentricity": "从该节点出发，到可达节点的最短路径中最长的一条所含步数。",
+    "Eccentricity": "从该节点出发，到可达节点的最短路线中最长的一条所含步数。",
     "closnesscentrality": "从这个节点沿供货方向出发，到其他节点平均有多近；越高表示越容易到达其他节点。",
     "harmonicclosnesscentrality": "和接近中心性类似：把到每个能到达的节点的距离取倒数再平均；越高表示离其他节点越近。",
-    "betweenesscentrality": "只看连接、不看金额：将每条供货关系视为等长，统计其他节点之间经过该行业的最短路线条数；数值越大，中转位置越突出；但它不看金额，不能证明这个行业是经济枢纽或瓶颈。",
+    "betweenesscentrality": "只看连接、不看金额：将每条供货关系视为等长，计算经过该行业的最短路线所占比例，对所有节点对求和（未归一化）；数值越大，中转位置越突出；但它不看金额，不能证明这个行业是经济枢纽或瓶颈。",
     "eigencentrality": "被重要节点连接的节点得分更高。这里按 Gephi 网络软件的算法近似计算（最高为 1），只作参考。",
 }
 # 国家级贸易图在全部正流量边下是完全图,这些无权中心性因此对所有国家取同一常数
