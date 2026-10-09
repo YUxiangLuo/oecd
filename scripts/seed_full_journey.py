@@ -385,10 +385,10 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
 
     session["steps"]["15"] = make_record(
         {
-            "research_question": "关税暴露 X 越高的国家×行业，贸易流、生产、长度和网络指标分别有什么不同？",
+            "research_question": "关税暴露 X 每高 1 个百分点，贸易流、生产、长度和网络指标平均相差多少，方向是否一致？",
             "evidence_interpretation": (
                 "我把四步保存的结果并列比较：先看估计值的方向，再看 95% 区间是否包含 0；"
-                "方向不确定的结果照实写出，不写成“没有影响”。四个 Y 单位不同，只比较方向，不直接比较数值大小。"
+                "方向不确定的结果照实写出，不写成“没有关联”。四个 Y 单位不同，只比较方向，不直接比较数值大小。"
             ),
             "limitations": (
                 "回归只说明 X 与 Y 的关联，不能证明关税造成了这些变化；数据只有五年，同期还有其他冲击，"
