@@ -138,7 +138,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     { requestKey: trendReferenceKey, enabled: Boolean(release && view === "trend" && industry && first) },
   );
   const distribution: YearDistribution[] = trendReference.status === "success"
-    ? (trendReference.data ?? []).map(({ year, n, p25, median, p75, ranks, ties }) => ({ year, n, p25, median, p75, ranks, ties }))
+    ? (trendReference.data ?? []).map(({ year, n, p25, median, p75, ranks, ties, no_output }) => ({ year, n, p25, median, p75, ranks, ties, noOutput: no_output }))
     : [];
   const rankingReferenceKey = `${release}:network-ranking-reference:${metric}:${year}:${selected.join(",")}`;
   const rankingReference = useAsync(
@@ -150,7 +150,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   const industriesOf = (country: string) => (query.data ?? []).filter((row) => row.country === country && row.year === year && row.industry != null);
   const industryReference = new Map(
     rankingReference.status === "success"
-      ? (rankingReference.data ?? []).map((row) => [row.industry, { median: row.median, n: row.n, ranks: row.ranks, ties: row.ties }] as const)
+      ? (rankingReference.data ?? []).map((row) => [row.industry, { median: row.median, n: row.n, ranks: row.ranks, ties: row.ties, noOutput: row.no_output }] as const)
       : [],
   );
   const points = networkTrendPoints(query.data ?? [], years, selected, industry, metric);

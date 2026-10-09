@@ -49,6 +49,30 @@ def test_industry_reference_compares_the_same_industry_across_economies(tmp_path
     assert industry_reference("weighted degree", 2019) == []
 
 
+def test_industry_reference_flags_an_industry_with_no_output_instead_of_ranking_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    rows = [
+        # LUX·A03 neither adds value nor trades intermediates: no output, not the lowest position.
+        ("LUX", "A03", 0.0, 0.0),
+        ("USA", "A03", 120.0, 3776.0),
+        ("DEU", "A03", 40.0, 900.0),
+        # LUX·T adds value but buys and sells no intermediates (households as employers): a real 0, still ranked.
+        ("LUX", "T", 173.0, 0.0),
+        ("USA", "T", 900.0, 0.0),
+    ]
+    pd.DataFrame(rows, columns=["country", "industry", "SVA", "weighted degree"]).to_csv(
+        tmp_path / "indicators_industry_2020.csv", index=False
+    )
+    by_industry = {
+        row["industry"]: row for row in industry_reference("weighted degree", 2020, countries=("LUX", "USA"))
+    }
+    a03 = by_industry["A03"]
+    # The economy still counts in the global median and n; only its rank is withheld.
+    assert a03["n"] == 3 and a03["ranks"] == {"USA": 1} and a03["ties"] == {"USA": 1}
+    assert a03["no_output"] == ["LUX"]
+    assert by_industry["T"]["ranks"] == {"LUX": 1, "USA": 1} and "no_output" not in by_industry["T"]
+
+
 def test_industry_distribution_endpoint_validates_years_and_countries(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     monkeypatch.setattr(data_routes, "processed_years", lambda: [2020])

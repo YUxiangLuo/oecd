@@ -349,6 +349,10 @@ def _rank_reading(context: dict[str, Any], countries: list[str]) -> str:
         return f"全部 {last['n']} 个经济体{context.get('scope', '')}数值相同，排名不作比较"
     parts = []
     for country in countries:
+        # An industry with no output in that country (LUX·A03) has a 0 that is not a position.
+        if country in first.get("no_output", []) or country in last.get("no_output", []):
+            parts.append(f"{country_label(country)}该行业无产出，不排名")
+            continue
         if country not in first["ranks"] or country not in last["ranks"]:
             continue
         first_rank, last_rank = rank(first, country), rank(last, country)

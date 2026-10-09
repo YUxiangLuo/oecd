@@ -2287,6 +2287,17 @@ def test_rank_reading_marks_ties_and_skips_a_ranking_everyone_shares():
     assert report_observed._rank_reading(one_end, ["CHN"]) == (
         "在 76 个经济体中（从高到低），CHN 中国从不分名次变为第 3 位（不分名次：该年全部经济体数值相同）"
     )
+    # An industry with no output in that country (LUX·A03) is flagged, not ranked last.
+    idle = {
+        "references": {
+            "2016": {**ref({"USA": 16}, {"USA": 1}), "no_output": ["LUX"]},
+            "2020": {**ref({"USA": 16}, {"USA": 1}), "no_output": ["LUX"]},
+        },
+        "scope": "的同一行业",
+    }
+    assert report_observed._rank_reading(idle, ["LUX", "USA"]) == (
+        "在 76 个经济体的同一行业中（从高到低），LUX 卢森堡该行业无产出，不排名；USA 美国 2016 年与 2020 年均为第 16 位"
+    )
 
 
 def test_view_only_keys_never_change_the_experiment_sections():

@@ -2,7 +2,7 @@ import { useMemo, useState, type KeyboardEvent } from "react";
 import { countryLabel, joinCountries, sectorLabel } from "../../../viz";
 import { useHoverTip, type TipLine } from "../../../viz/hover";
 import { CAT } from "../../../viz/shared";
-import { changeReading, finiteValue, NO_RANK, NO_RANK_NOTE, rankText, readingDigits, type YearDistribution } from "./indicator-model";
+import { changeReading, finiteValue, NO_OUTPUT, NO_RANK, NO_RANK_NOTE, rankText, readingDigits, type YearDistribution } from "./indicator-model";
 import { integerDomain, niceDomain } from "../../../viz/nice-ticks";
 import { stripNegativeZero } from "../../../format";
 import type { Row } from "./scaffold";
@@ -182,6 +182,13 @@ export function TrendSummary({
         {/* An exact zero end reads "0" ("0 → 0.00039"), not "0.00000" at a tiny-value precision. */}
         <small>{start === 0 && end === 0 ? indicatorNumber(0, unit) : [start, end].map((value) => (value === 0 ? indicatorNumber(0, unit) : fixedIndicatorNumber(value, unit, digits ?? smallAmountDigits(value, unit)))).join(" → ")}</small>
       </div>
+      {startRef && endRef && [startRef, endRef].some((ref) => ref.noOutput?.includes(first)) && (
+        <div>
+          <span>{sameIndustry ? "在全部经济体的同一行业中" : "在全部经济体中"}（从高到低）</span>
+          <b>{NO_OUTPUT}</b>
+          <small>{`${[...new Set([startRef, endRef].filter((ref) => ref.noOutput?.includes(first)).map((ref) => ref.year))].join("、")} 年该行业在 ${countryLabel(first)}没有产出，读数 0 不代表排名靠后`}</small>
+        </div>
+      )}
       {startRank != null && endRank != null && startRef && endRef && (() => {
         const from = rankText(startRank, startRef.ties?.[first], startRef.n);
         const to = rankText(endRank, endRef.ties?.[first], endRef.n);

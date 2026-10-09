@@ -260,6 +260,17 @@ describe("trend cards name the industry when the scope is one industry (round 21
     cleanup();
   });
 
+  test("step 9 LUX·A03 with no output reads 无产出，不排名, not 第 76 位 (round 27)", () => {
+    const zero = [2016, 2020].map((year) => ({ country: "LUX", year, value: 0 }));
+    const reference = [2016, 2020].map((year) => ({ year, n: 76, p25: 10, median: 500, p75: 2000, ranks: {}, ties: {}, noOutput: ["LUX"] }));
+    const view = render(<TrendSummary readings={zero} countries={["LUX"]} years={[2016, 2020]} unit="百万美元" distribution={reference} sameIndustry industry="A03" />);
+    const text = view.getByLabelText("趋势读数").textContent ?? "";
+    expect(text).toContain("无产出，不排名");
+    expect(text).toContain("2016、2020 年该行业在 LUX 卢森堡没有产出");
+    expect(text).not.toContain("第 76");
+    cleanup();
+  });
+
   test("country level keeps the plain country label", () => {
     const view = render(<TrendSummary readings={readings} countries={["JPN"]} years={[2016, 2020]} unit="%" />);
     const text = view.getByLabelText("趋势读数").textContent ?? "";
