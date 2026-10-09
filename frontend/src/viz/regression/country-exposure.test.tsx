@@ -107,13 +107,13 @@ test("amounts in million USD read in 亿美元, and the goods balance names a su
   expect(yiUsd(300)).toBe("3.0 亿美元");
   expect(yiUsd(290)).toBe("2.9 亿美元");
   expect(yiUsd(13)).toBe("0.13 亿美元");
-  expect(yiUsd(248900)).toBe("2,489.0 亿美元");
+  expect(yiUsd(248900)).toBe("2,489 亿美元");
   expect(yiUsd(1234)).toBe("12.3 亿美元");
   expect(yiUsd(45)).toBe("0.45 亿美元");
   expect(yiUsd(0)).toBe("0 亿美元");
   // The rule's threshold is a set round number.
   expect(ruleYiUsd(1000)).toBe("10 亿美元");
-  expect(goodsBalanceText({ market_goods_surplus: 248900 }, RULE)).toBe("2016 年对美货物顺差 2,489.0 亿美元");
+  expect(goodsBalanceText({ market_goods_surplus: 248900 }, RULE)).toBe("2016 年对美货物顺差 2,489 亿美元");
   expect(goodsBalanceText({ market_goods_surplus: -1234 }, RULE)).toBe("2016 年对美货物逆差 12.3 亿美元");
   // Missing from an older server: nothing to say.
   expect(goodsBalanceText({ market_goods_surplus: null }, RULE)).toBeUndefined();
@@ -138,7 +138,7 @@ test("with the taxed rule, the chart states it and every country's readout gives
     const tip = () => document.querySelector(".hover-tip")!.textContent;
     // A taxed bar on hover.
     fireEvent.mouseMove(document.querySelector('[data-country="CAN"]')!, { clientX: 10, clientY: 10 });
-    expect(tip()).toContain("2016 年对美货物顺差2,489.0 亿美元");
+    expect(tip()).toContain("2016 年对美货物顺差2,489 亿美元");
     // An untaxed code on hover and on keyboard focus (a deficit), with the same text in its accessible name.
     const aut = document.querySelector('[data-country="AUT"]') as HTMLElement;
     fireEvent.mouseMove(aut, { clientX: 10, clientY: 10 });
@@ -155,7 +155,7 @@ test("with the taxed rule, the chart states it and every country's readout gives
     // The collapsed table lists the balance too (negative = deficit).
     expect(document.querySelector(".country-exposure-table thead")!.textContent).toContain("2016 年对美货物顺差（负数为逆差）");
     const cells = [...document.querySelectorAll(".country-exposure-table tbody tr")].map((tr) => [...tr.querySelectorAll("td")].map((td) => td.textContent));
-    expect(cells[0]).toEqual(["CAN 加拿大", "被加税", "14.30", "44/44", "2,489.0 亿美元"]);
+    expect(cells[0]).toEqual(["CAN 加拿大", "被加税", "14.30", "44/44", "2,489 亿美元"]);
     expect(cells.find((cells) => cells[0] === "AUT 奥地利")).toEqual(["AUT 奥地利", "未被加税", "0", "0/44", "-12.3 亿美元"]);
     expect(cells.find((cells) => cells[0] === "MEX 墨西哥")!.at(-1)).toBe("—");
   } finally {

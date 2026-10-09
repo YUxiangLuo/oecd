@@ -20,13 +20,14 @@ export function countryIndustryNote(row: CountryRow): string {
     : base;
 }
 
-/** An amount in million USD (the ICIO unit) in 亿美元, with one rule so readings side by side line up: one decimal
- * from 1 up (300 → "3.0", 248,900 → "2,489.0"), two significant digits below 1 (13 → "0.13"), and "0" for zero. */
+/** An amount in million USD (the ICIO unit) in 亿美元: no decimal from 100 up (248,900 → "2,489"), one decimal from 1
+ * to 100 (300 → "3.0"), two significant digits below 1 (13 → "0.13"), and "0" for zero. */
 export function yiUsd(millionUsd: number): string {
   const yi = millionUsd / 100;
   if (yi === 0) return "0 亿美元";
+  const decimals = Math.abs(yi) >= 100 ? 0 : 1;
   const text = Math.abs(yi) >= 1
-    ? yi.toLocaleString("zh-CN", { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+    ? yi.toLocaleString("zh-CN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
     : String(Number(yi.toPrecision(2)));
   return `${text} 亿美元`;
 }
