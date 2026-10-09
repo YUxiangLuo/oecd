@@ -710,6 +710,7 @@ test("the yearly table shows w at one precision for every year of a unit (w is f
 });
 
 test("step 10 逐年读数 lists country A first, then B", async () => {
+  cleanup();
   const meta: Meta = { years: tenYears, countries: ["CAN", "MEX"], sectors: ["C29"] };
   const groups = tenGroups();
   // The server sends the rows in alphabetical order.
@@ -725,6 +726,7 @@ test("step 10 逐年读数 lists country A first, then B", async () => {
 });
 
 test("after the report is submitted, an unconfirmed step 10 selection is kept as browsing state", async () => {
+  cleanup();
   const meta: Meta = { years: tenYears, countries: ["CAN", "CRI", "MEX"], sectors: ["C29", "C26"] };
   const groups = tenGroups();
   const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.5, country === "CAN")));
