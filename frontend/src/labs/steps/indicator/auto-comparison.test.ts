@@ -107,6 +107,12 @@ test("after 改用当前选择 on a submitted report, the line says to update th
   cleanup();
 });
 
+test("a label that ends in a bracket takes 国家整体 inside it: one pair, not two back to back", async () => {
+  const { countryScope } = await import("./auto-comparison");
+  expect(countryScope("GVC 位置指数（前向 GVC 段／后向 GVC 段）")).toBe("GVC 位置指数（前向 GVC 段／后向 GVC 段，国家整体）");
+  expect(countryScope("外国增加值项占比")).toBe("外国增加值项占比（国家整体）");
+});
+
 describe("recording under the report lock", () => {
   test("automatic saves clear the choice marker; a save on request after submission sets it", async () => {
     const rows = spyOn(api, "countryIndicators").mockResolvedValue([

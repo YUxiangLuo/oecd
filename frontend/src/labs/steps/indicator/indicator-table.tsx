@@ -340,7 +340,7 @@ export function IndicatorDataTable({
   const stickyIndustry = columns[0] === "country" && columns[1] === "industry";
   const stickyLeft = (index: number) => index === 0 ? 0 : stickyIndustry && index === 1 ? firstWidth : null;
   return (
-    <table className="data-table">
+    <table className="data-table indicator-data-table">
       <caption className="sr-only">{captionLabel} · {year} 年 · {country ? countryLabel(country) : "全部国家"}{totalPages > 1 ? ` · 第 ${page} 页` : ""}</caption>
       <thead>
         <tr>

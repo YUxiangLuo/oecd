@@ -575,6 +575,22 @@ describe("readouts and update notes follow the chart on screen (round 10)", () =
       expect(view.getByLabelText("构成读数").textContent).toContain("无法算比重");
     } finally { rows.mockRestore(); schema.mockRestore(); }
   });
+
+  test("a total of 0 with every part 0 does not send the student to 金额, which would be empty too", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) =>
+      countryRows(year).map((row) => (row.country === "USA" ? { ...row, gross_exports: 0, FVA: 0, DVAex: 0, DVArt: 0, DDC: 0, FDC: 0, taxsub: 0 } : row)));
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const view = setup();
+      const note = await view.findByText(/构成份额无法计算，占比图里不画/);
+      expect(note.textContent).toContain("USA 美国 · 2021：总出口（含产品税减补贴）为 0，构成份额无法计算，占比图里不画。");
+      expect(note.textContent).not.toContain("金额");
+      // 历年构成 draws bands, not bars: its note does not say "每条".
+      fireEvent.click(view.getByRole("button", { name: "历年构成" }));
+      await waitFor(() => expect(view.container.textContent).toContain("每个色带是总出口的一项"));
+      expect(view.container.textContent).not.toContain("每条是");
+    } finally { rows.mockRestore(); schema.mockRestore(); }
+  });
 });
 
 test("a complete chart's readings summary has no blank-reading suffix (round 13)", async () => {

@@ -323,6 +323,32 @@ test("step 9 keeps the countries, view and industry of an exploration view after
   expect((screen.getByLabelText("行业") as HTMLSelectElement).value).toBe("C27");
 });
 
+test("undefined path metrics: economies with the same years share one clause", async () => {
+  // CHN and USA have no outgoing links in every year; DEU only in 2018.
+  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([{
+    country, year, industry: "C26", closnesscentrality: country === "DEU" ? (year === 2018 ? 0 : 0.5) : 0,
+  } as never]));
+  mockReference();
+  render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA", "DEU"]} onRecord={() => {}}
+    initialBrowse={{ countries: ["CHN", "USA", "DEU"], view: "trend", industry: "C26", metric: "closnesscentrality", year: 2020 }} />);
+  await waitFor(() => expect(screen.getByText(/无法定义（不是 0，不参与排名和中位数，图上留空）/)).toBeTruthy());
+  const note = screen.getByText(/无法定义（不是 0，不参与排名和中位数，图上留空）/).textContent!;
+  expect(note.startsWith("CHN 中国、USA 美国 历年，DEU 德国 2018 年的 C26")).toBe(true);
+  expect(note).not.toContain("中国历年");
+});
+
+test("流量与路径 says which industries it leaves out and why", async () => {
+  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([
+    { country, year, industry: "C26", "weighted degree": 120, betweenesscentrality: 3 },
+    { country, year, industry: "C27", "weighted degree": 0, betweenesscentrality: 0 },
+    { country, year, industry: "T", "weighted degree": 0, betweenesscentrality: 0 },
+  ] as never));
+  mockReference();
+  render(<NetworkTrend meta={{ ...meta, sectors: ["C26", "C27", "T"] }} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={() => {}} />);
+  fireEvent.click(screen.getByRole("button", { name: "流量与路径" }));
+  await waitFor(() => expect(screen.getAllByText("另有 2 个行业没有画出：C27、T 加权总度为 0（没有买卖，对数刻度上画不出）。")).toHaveLength(2));
+});
+
 test("a recorded ranking does not change the trend's industry; a carried pair says where it came from", () => {
   spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([row(country, year, 10)]));
   mockReference();

@@ -180,12 +180,30 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   // blocked note names them instead of saying "有的年份".
   const undefinedThroughout = [...new Set(undefinedPoints.map((point) => point.country))]
     .filter((country) => undefinedPoints.filter((point) => point.country === country).length === years.length);
+  // Economies with the same years share one clause: "KHM 柬埔寨、MLT 马耳他 历年的 H51 …", not "KHM 柬埔寨历年、MLT 马耳他历年".
+  const undefinedGroups = new Map<string, string[]>();
+  for (const country of new Set(undefinedPoints.map((point) => point.country))) {
+    const at = undefinedPoints.filter((point) => point.country === country).map((point) => point.year);
+    const when = at.length === years.length ? "历年" : `${at.join("、")} 年`;
+    undefinedGroups.set(when, [...(undefinedGroups.get(when) ?? []), country]);
+  }
   const undefinedNote = undefinedPoints.length
-    ? `${[...new Set(undefinedPoints.map((point) => point.country))].map((country) => {
-        const at = undefinedPoints.filter((point) => point.country === country).map((point) => point.year);
-        return `${countryLabel(country)}${at.length === years.length ? "历年" : ` ${at.join("、")} 年`}`;
-      }).join("、")}的 ${sectorLabel(industry)}${PATH_UNDEFINED_NOTE}，${label}无法定义（不是 0，不参与排名和中位数，图上留空）。`
+    ? `${[...undefinedGroups].map(([when, codes]) => `${codes.map(countryLabel).join("、")} ${when}`).join("，")}的 ${sectorLabel(industry)}${PATH_UNDEFINED_NOTE}，${label}无法定义（不是 0，不参与排名和中位数，图上留空）。`
     : "";
+  // 流量与路径 reads 加权总度 on a log scale: an industry with no trade (0) or no reading cannot be placed. Say how
+  // many and why, as step 7's 行业结构 does.
+  const topologyHiddenNote = (country: string): string | null => {
+    const hidden = industriesOf(country).filter((row) => !(typeof row["weighted degree"] === "number" && row["weighted degree"] > 0
+      && typeof row[HEAT_EVIDENCE_METRIC] === "number" && Number.isFinite(row[HEAT_EVIDENCE_METRIC])));
+    if (!hidden.length) return null;
+    const zero = hidden.filter((row) => row["weighted degree"] === 0).map((row) => String(row.industry));
+    const missing = hidden.filter((row) => row["weighted degree"] !== 0).map((row) => String(row.industry));
+    const clauses = [
+      ...(zero.length ? [`${zero.join("、")} 加权总度为 0（没有买卖，对数刻度上画不出）`] : []),
+      ...(missing.length ? [`${missing.join("、")} 缺少数据`] : []),
+    ];
+    return `另有 ${hidden.length} 个行业没有画出：${clauses.join("；")}。`;
+  };
   const pendingObservations: VizObservation[] = readings.map((point) => ({
       entity: `${point.country}·${point.industry}`, country: point.country, industry: point.industry,
       year: point.year, value: point.value!, metric, unit,
@@ -329,6 +347,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
               quadrantLabels={["流量大 · 经过的路线多", "流量小 · 经过的路线多", "流量小 · 经过的路线少", "流量大 · 经过的路线少"]}
               dataLabel={`${countryLabel(country)} 流量与路径`}
             />
+            {topologyHiddenNote(country) && <p className="muted">{topologyHiddenNote(country)}</p>}
           </section>
         ))}
       </div>

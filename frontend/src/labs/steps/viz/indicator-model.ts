@@ -38,6 +38,8 @@ export interface CompositionSpec {
     /** The focus part's share as an indicator name ("外国增加值项占比"), for the reading cards; defaults to the part's name. */
     focusLabel?: string;
     note: string;
+    /** The note under 历年构成 when `note` describes the single-year bars ("每条是…"). */
+    evolutionNote?: string;
 }
 
 export interface AxesOption {

@@ -86,6 +86,11 @@ export function useAutoMaterial({ topic, meta, state, country, year, schema, bro
   };
 }
 
+/** "GVC 位置指数（前向 GVC 段／后向 GVC 段，国家整体）": one bracket pair, never two back to back. */
+export function countryScope(label: string): string {
+  return label.endsWith("）") ? `${label.slice(0, -1)}，国家整体）` : `${label}（国家整体）`;
+}
+
 export function AutoMaterialStatus({ state, schema, metric, current, record, loadFailed, loadError = null, onRetryLoad, where, lead, note }: {
   state: StepStateApi<IndicatorStepState>;
   schema: IndicatorSchema | null | undefined;
@@ -122,7 +127,7 @@ export function AutoMaterialStatus({ state, schema, metric, current, record, loa
         </span>}
       {state.materialLocked
         ? <small>{MATERIAL_LOCKED_NOTE}{rechosen && current ? `当前选择就是已记录的材料。${MATERIAL_RECHOSEN_NEXT}` : ""}{record && <button type="button" className="secondary" onClick={() => { setRechosen(true); record(); }}>{MATERIAL_LOCKED_ACTION.replace("图表", "选择")}</button>}</small>
-        : <small>{lead ?? `记录${where}`}{cjkSpace(lead ? "记录的是同一年的" : "同一年的", metric ? fieldLabel(metric, schema) : "本步指标")}（国家整体），换国家或年份后自动更新，无需另外保存。{note ? ` ${note}` : ""}</small>}
+        : <small>{lead ?? `记录${where}`}{cjkSpace(lead ? "记录的是同一年的" : "同一年的", countryScope(metric ? fieldLabel(metric, schema) : "本步指标"))}，换国家或年份后自动更新，无需另外保存。{note ? ` ${note}` : ""}</small>}
     </div>
   );
 }

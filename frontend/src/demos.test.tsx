@@ -238,7 +238,9 @@ describe("step 4: the sum line says ≈ when the shown lengths do not add up to 
       PLv_D: 1.2222 / 0.6, PLv_RT: 2.054, PLv_GVC: 0.7821 / 0.3,
     });
     expect(rows).toEqual(["1.222", "0.205", "0.782"]);
-    expect(line).toContain("✓ 3 项相加 ≈ 2.210，等于前向总生产长度 PLv");
+    // "≈" and "等于" never share a line.
+    expect(line).toContain("✓ 3 项相加 ≈ 2.210，与前向总生产长度 PLv 一致（差别来自四舍五入）");
+    expect(line).not.toContain("等于");
     cleanup();
     // Rows that add up as shown keep "=".
     const exact = await renderLengths({
@@ -825,7 +827,7 @@ describe("steps 2–3: every table row checks by hand, not only the formula (rou
     ]);
     for (const cell of cells) expect(byHand(cell.amount, total)).toBe(cell.share);
     expect(text).toContain("= 0.55999 / 1.37876 = 40.615%");
-    expect(text).toContain("6 项相加 ≈ 1.37876，");
+    expect(text).toContain("6 项相加 ≈ 1.37876，与总出口一致（差别来自四舍五入）");
     expect(text).toContain("EXDVA）= DVAex + DVArt = 0.75549 + 0.00015 = 0.75564。");
     expect(text).not.toContain("<0.001");
     expect(text).not.toContain("末位可能有出入");
@@ -855,6 +857,62 @@ describe("steps 2–3: every table row checks by hand, not only the formula (rou
     expect(text).toContain("总出口 = 178.52855（");
     expect(text).toContain(PANEL_ROUNDING_NOTE);
     expect(PANEL_ROUNDING_NOTE).toBe("百分比按未四舍五入的金额计算，按表中显示值手算，末位可能有出入。");
+  });
+
+  test("LUX T 2016 (step 3): a zero share reads 0.000% like the 100.000% beside it", async () => {
+    const { cells, text } = await renderPanel(5, {
+      country: "LUX", year: 2016, SVA: 150.45, "1_VA_D": 150.45, "2_VA_RT": 0, "3a_VA_GVC_S": 0, "3b_VA_GVC_C": 0,
+    });
+    expect(cells.map((cell) => cell.share)).toEqual(["100.000%", "0.000%", "0.000%", "0.000%"]);
+    expect(text).toContain("= 0 / 150.45 = 0.000%");
+    expect(text).not.toMatch(/= 0%|\b0%/);
+  });
+});
+
+describe("steps 2–4 notes read plainly (round 17)", () => {
+  test("step 4: the segment lengths are named forward and sit above the backward box", async () => {
+    // MLT B09: forward lengths defined, no final goods (FGY = 0), so the backward side cannot be split.
+    const row = {
+      country: "MLT", industry: null, year: 2020,
+      SVA: 1, PLv: 4.0, "1_VA_D": 0.5, "2_VA_RT": 0.2, "3_VA_GVC": 0.3, PLv_D: 3.263, PLv_RT: 3.525, PLv_GVC: 5.622,
+      FGY: 0, PLy: null, "1_FGY_D": 0, "2_FGY_RT": 0, "3_FGY_GVC": 0, PLy_D: null, PLy_RT: null, PLy_GVC: null, GVCPs: null,
+    };
+    const countryRequest = spyOn(api, "countryIndicatorsForCountry").mockResolvedValue([row]);
+    const industryRequest = spyOn(api, "industryIndicatorsAll").mockResolvedValue({ total: 1, page: 1, page_size: 200, rows: [{ ...row, industry: "B09" }] });
+    try {
+      const view = render(
+        <DecompositionDemo step={6} meta={{ years: [2020], countries: ["MLT"], sectors: ["B09"], dataset: null }}
+          primaryYear={2020} primaryCountry="MLT" />,
+      );
+      await waitFor(() => expect(view.container.textContent).toContain("前向各段长度：纯国内 3.263、传统贸易 3.525、GVC 5.622"));
+      const text = view.container.textContent!;
+      expect(text.indexOf("前向各段长度")).toBeLessThan(text.indexOf("后向 PLy"));
+    } finally {
+      countryRequest.mockRestore();
+      industryRequest.mockRestore();
+    }
+  });
+
+  test("a zero industry total is a plain notice, without an emoji", async () => {
+    const zero = { country: "LUX", industry: "T", year: 2020, gross_exports: 0, DVAex: 0, DVArt: 0, DDC: 0, FVA: 0, FDC: 0, taxsub: 0 };
+    const countryRequest = spyOn(api, "countryIndicatorsForCountry").mockResolvedValue([{ ...zero, industry: null, gross_exports: 100, DVAex: 100 }]);
+    const industryRequest = spyOn(api, "industryIndicatorsAll").mockResolvedValue({ total: 1, page: 1, page_size: 200, rows: [zero] });
+    try {
+      const view = render(
+        <DecompositionDemo step={4} meta={{ years: [2020], countries: ["LUX"], sectors: ["T"], dataset: null }}
+          primaryYear={2020} primaryCountry="LUX" />,
+      );
+      fireEvent.click(await view.findByRole("button", { name: "单个行业" }));
+      await waitFor(() => expect(view.container.querySelector(".decomp-hint")).not.toBeNull());
+      const hint = view.container.querySelector(".decomp-hint")!;
+      expect(hint.getAttribute("role")).toBe("note");
+      expect(hint.className).toContain("decomp-identity neutral");
+      expect(hint.textContent!.startsWith("ℹ LUX 卢森堡 · T")).toBe(true);
+      expect(view.container.textContent).not.toContain("⚠");
+    } finally {
+      countryRequest.mockRestore();
+      industryRequest.mockRestore();
+    }
   });
 
   test("one panel precision: a whole-million total stays whole; a row below the last digit reads <unit", () => {

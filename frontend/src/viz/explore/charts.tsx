@@ -221,6 +221,50 @@ export function xTickAnchor(x: number, text: string, width: number): "start" | "
   return "middle";
 }
 
+/** Rough box of a 10.5-unit corner label: CJK characters are square, Latin and digits about half. */
+function cornerLabelBox(text: string, x: number, y: number, anchor: "start" | "end"): LabelBox {
+  const width = [...text].reduce((sum, char) => sum + (/[\u2e80-\u9fff\uff00-\uffef]/.test(char) ? 10.5 : 6), 0);
+  return anchor === "end"
+    ? { x0: x - width, x1: x, y0: y - 10, y1: y + 3 }
+    : { x0: x, x1: x + width, y0: y - 10, y1: y + 3 };
+}
+
+/** Whether the segment from a to b passes through the box (sampled; the plot is a few hundred units wide). */
+function segmentCrossesBox(a: { x: number; y: number }, b: { x: number; y: number }, box: LabelBox, pad = 3): boolean {
+  for (let i = 0; i <= 80; i += 1) {
+    const x = a.x + ((b.x - a.x) * i) / 80;
+    const y = a.y + ((b.y - a.y) * i) / 80;
+    if (x >= box.x0 - pad && x <= box.x1 + pad && y >= box.y0 - pad && y <= box.y1 + pad) return true;
+  }
+  return false;
+}
+
+/**
+ * A corner label the equal-length line would run through (the line meets the top-right and bottom-left corners
+ * when both axes share a range) moves inward, down or up along its edge, or sideways, to the nearest clear place.
+ */
+export function placeCornerLabel(
+  text: string,
+  corner: { x: number; y: number; anchor: "start" | "end" },
+  line: { from: { x: number; y: number }; to: { x: number; y: number } } | null,
+  bounds: { left: number; right: number; top: number; bottom: number },
+): { x: number; y: number } {
+  if (!line) return { x: corner.x, y: corner.y };
+  const clear = (x: number, y: number) => {
+    const box = cornerLabelBox(text, x, y, corner.anchor);
+    return box.x0 >= bounds.left && box.x1 <= bounds.right && box.y0 >= bounds.top && box.y1 <= bounds.bottom
+      && !segmentCrossesBox(line.from, line.to, box);
+  };
+  if (clear(corner.x, corner.y)) return { x: corner.x, y: corner.y };
+  const down = corner.y < (bounds.top + bounds.bottom) / 2 ? 1 : -1;
+  const inward = corner.anchor === "end" ? -1 : 1;
+  for (let step = 1; step <= 24; step += 1) {
+    if (clear(corner.x, corner.y + down * step * 6)) return { x: corner.x, y: corner.y + down * step * 6 };
+    if (clear(corner.x + inward * step * 6, corner.y)) return { x: corner.x + inward * step * 6, y: corner.y };
+  }
+  return { x: corner.x, y: corner.y };
+}
+
 /** 象限散点图:两条参考线(默认中位数)把平面切成四象限,四角标注角色。
  *  步6「定位图」(外国增加值项占比×跨境生产占比)等双指标比较。 */
 /** A highlighted economy's path through the years on the scatter (phase 2 定位图 轨迹). */
@@ -278,6 +322,10 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
     { x: m.l + 6, y: H - m.b - 8, anchor: "start" },
     { x: W - m.r - 6, y: H - m.b - 8, anchor: "end" },
   ];
+  // The equal-length line in pixels, so a corner label it would cross ("前后向均较高") moves out of its way.
+  const equalityPixels = equalityLine && !log && Math.max(x0, y0) < Math.min(x1, y1)
+    ? { from: { x: px(Math.max(x0, y0)), y: py(Math.max(x0, y0)) }, to: { x: px(Math.min(x1, y1)), y: py(Math.min(x1, y1)) } }
+    : null;
   return (
     <div style={cardStyle} ref={wrapRef}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>横轴 {xLabel} · 纵轴 {yLabel}</div>
@@ -354,8 +402,8 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
           );
         })}
         {/* 四角角色标签：画在点之上，白色描边保证可读 */}
-        {showReference && quadrantLabels?.map((lab, i) => (
-          <text key={i} x={corners[i].x} y={corners[i].y} textAnchor={corners[i].anchor} pointerEvents="none"
+        {showReference && quadrantLabels?.map((lab, i) => ({ lab, i, at: placeCornerLabel(lab, corners[i], equalityPixels, { left: m.l, right: W - m.r, top: m.t, bottom: H - m.b }) })).map(({ lab, i, at }) => (
+          <text key={i} data-corner={i} x={at.x} y={at.y} textAnchor={corners[i].anchor} pointerEvents="none"
             stroke="#fff" strokeWidth={3} strokeLinejoin="round" paintOrder="stroke"
             fontSize="10.5" fill="#5f6677" fontWeight={600}>{lab}</text>
         ))}

@@ -575,6 +575,11 @@ export function IndicatorExplorer({
   // Single-year composition bars leave out a total of 0 or below in the share view (shares are undefined);
   // the amount view still draws it, negative parts left of zero.
   const droppedBars = view === "composition" && !amountMode ? totalIssues : [];
+  // "切换到‘金额’可看各分项" only helps when some part is not 0 (LUX T: every part is 0, the amount view is empty too).
+  const droppedHaveParts = droppedBars.some((item) => activeComposition?.segments.some((segment) => {
+    const value = scoped.find((row) => row.country === item.country && row.year === item.year)?.[segment.key];
+    return finiteValue(value) && value !== 0;
+  }));
   const valuesFor = (key: string, sector = industry) =>
     selected.map((country) => {
       const value = rows.find(
@@ -1096,7 +1101,7 @@ export function IndicatorExplorer({
           {composition && activeComposition && (
             <>
               <p>
-                {activeComposition.note}
+                {view === "evolution" ? activeComposition.evolutionNote ?? activeComposition.note : activeComposition.note}
                 {view === "evolution"
                   ? "每个国家一张图，颜色和年份顺序都相同；先看各国自己的变化，再比较国家之间的差别。"
                   : amountMode ? "所选国家使用同一金额刻度，条长与总量成比例；负分项画在零轴左侧。" : "所选国家使用相同分项颜色和共同刻度；金额和份额不能混读。"}
@@ -1135,7 +1140,7 @@ export function IndicatorExplorer({
               )}
               {droppedBars.length > 0 && (
                 <p className="muted">
-                  {droppedBars.map((item) => `${countryLabel(item.country)} · ${item.year}：${label(activeComposition.total)}为${item.value === 0 ? " 0" : `负（${textNumber(item.value, "百万美元")} 百万美元）`}`).join("；")}，构成份额无法计算，占比图里不画；切换到“金额”可看各分项。
+                  {droppedBars.map((item) => `${countryLabel(item.country)} · ${item.year}：${label(activeComposition.total)}为${item.value === 0 ? " 0" : `负（${textNumber(item.value, "百万美元")} 百万美元）`}`).join("；")}，构成份额无法计算，占比图里不画{droppedHaveParts ? "；切换到“金额”可看各分项" : ""}。
                 </p>
               )}
               {view === "composition"
