@@ -726,6 +726,23 @@ test("receipt distinguishes busy export from outdated content and preserves pend
   rerender(<ReportOutro {...props} />);
   expect(screen.getByText(/你可以离开页面/)).toBeTruthy();
   expect((screen.getByRole("button", { name: "导出 PDF 留存" }) as HTMLButtonElement).disabled).toBe(false);
+  // Graded: nothing is left to wait for, so the closing line no longer promises the teacher's review.
+  rerender(<ReportOutro {...props} report={report("graded")} />);
+  expect(screen.queryByText(/查看报告与老师的评阅/)).toBeNull();
+  expect(screen.getByText("报告与评阅已保存在服务器上，可随时回到步骤 15 查看。")).toBeTruthy();
+});
+
+test("the submit panel drops the pre-submit line once the current version is with the teacher", () => {
+  const panelText = (view: ReturnType<typeof render>) => view.container.querySelector(".report-submit-panel > p")?.textContent;
+  const draft = render(<ReportLab {...finishProps} report={report("draft")} />);
+  expect(panelText(draft)).toStartWith("提交前会先保存文字并检查材料");
+  draft.unmount();
+  const pending = render(<ReportLab {...finishProps} report={report("pending")} />);
+  expect(panelText(pending)).toBe("导出 PDF 仅供个人留存，不能代替提交。");
+  pending.unmount();
+  const outdatedDraft = render(<ReportLab {...finishProps} report={report("draft")} sessionUpdatedAt="2026-08-14T00:00:00Z" />);
+  expect(outdatedDraft.getByText("草稿需更新，尚未提交")).toBeTruthy();
+  outdatedDraft.unmount();
 });
 
 test("each report state shows one action group in the submit panel, without duplicate update buttons", () => {
