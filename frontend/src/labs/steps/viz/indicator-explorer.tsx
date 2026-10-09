@@ -587,8 +587,10 @@ export function IndicatorExplorer({
   // the amount view still draws it, negative parts left of zero.
   const droppedBars = view === "composition" && !amountMode ? totalIssues : [];
   // The note mentions negative parts only when one is on the chart (step 7's activities are almost never negative).
+  // The share views leave out a total of 0 or below, and its negative parts with it (ITA·C19 2020 in 占比).
   const compositionHasNegative = Boolean(activeComposition) && scoped.some((row) =>
     selected.includes(String(row.country)) && chartYears.includes(Number(row.year))
+    && ((view === "composition" && amountMode) || (finiteValue(row[activeComposition!.total]) && (row[activeComposition!.total] as number) > 0))
     && activeComposition!.segments.some((segment) => typeof row[segment.key] === "number" && (row[segment.key] as number) < 0));
   // "切换到‘金额’可看各分项" only helps when some part is not 0 (LUX T: every part is 0, the amount view is empty too).
   const droppedHaveParts = droppedBars.some((item) => activeComposition?.segments.some((segment) => {
