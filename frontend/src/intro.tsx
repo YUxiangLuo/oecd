@@ -246,7 +246,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
     <div key={2} className="intro-scene">
       <div className="intro-scene-kicker">实验路线</div>
       <h2 className="intro-h2">{stages.length === 0 ? "实验路线" : stages.length === 5 && stepsData.steps.length === 15 ? "五个阶段，十五步" : `${stages.length} 个阶段，${stepsData.steps.length} 步`}</h2>
-      <p className="intro-lede">点一个阶段，看看要做什么、留下哪些报告材料。这里只是预览，不会跳转步骤。</p>
+      <p className="intro-lede">点击任一阶段，可查看该阶段的任务和需留下的报告材料。这里只是预览，不会跳转步骤。</p>
       {stages.length === 0 && <p role="status">当前课程暂无实验路线信息。</p>}
       <div className="intro-stage-tabs">
         {stages.map((st) => (
@@ -338,7 +338,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       <div className="intro-ready-rules">
         <div><b>完成进度</b><p>答对本步理解题后，步骤显示 ✓。步骤 15 要提交报告后才显示 ✓。只浏览不算完成。</p></div>
         <div><b>报告材料</b><p>步骤 1–10 打开页面即自动记录；步骤 11–14 点“计算…回归”按钮后自动保存；步骤 15 写三段分析。每步顶部会显示报告材料是否齐全（保存成功后更新）。</p></div>
-        <div><b>报告提交</b><p>只生成草稿不算提交。检查后提交给老师，看到“等待教师评阅”才算交了。</p></div>
+        <div><b>报告提交</b><p>只生成草稿不算提交。核对后提交给老师，页面显示“等待教师评阅”即表示提交成功。</p></div>
       </div>
       <div className="intro-cta-row">
         <button type="button" className="intro-cta" onClick={() => onDone()}>开始实验</button>

@@ -426,7 +426,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const syncNow = useCallback(async () => {
     if (timer.current != null) window.clearTimeout(timer.current);
     timer.current = null;
-    if (status !== "ready") throw new Error("暂时连不上服务器，实验记录可能还没保存。请稍后再试。");
+    if (status !== "ready") throw new Error("暂时无法连接服务器，实验记录可能尚未保存。请稍后再试。");
     if (syncConflictRef.current) throw new Error("你的账号在别处保存了更新的记录，请先点“载入服务器版本”。");
     await drain();
   }, [drain, status]);

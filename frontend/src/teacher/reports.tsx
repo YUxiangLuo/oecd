@@ -17,7 +17,7 @@ type Filter = "pending" | "graded" | "all";
 /** Empty list copy: "no match" only when a search or class filter is active, not when all pending work is done. */
 export function reportsEmptyState(total: number, filter: Filter, narrowed: boolean): { title: string; hint: string } {
   if (!total) return { title: "还没有学生提交报告", hint: "学生提交报告后会出现在这里" };
-  if (narrowed) return { title: "没有匹配的报告", hint: "换个筛选或关键词试试" };
+  if (narrowed) return { title: "没有匹配的报告", hint: "请调整筛选条件或关键词" };
   if (filter === "pending") return { title: "暂无待评阅报告", hint: "已提交的报告都评阅完了；新的提交会出现在这里" };
   return { title: "暂无已评阅报告", hint: "评阅后的报告会出现在这里" };
 }

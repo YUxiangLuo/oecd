@@ -168,7 +168,7 @@ def main():
             if step == 1:
                 student.run("click", f'input[name="{names[0]}"][value="c"]')
                 student.button("提交答案")
-                student.run("wait", "--text", "这项还不对")
+                student.run("wait", "--text", "回答有误")
             for name, choice in zip(names, QUIZ_CHOICES[step], strict=True):
                 student.run("click", f'input[name="{name}"][value="{choice}"]')
             student.button("提交答案")

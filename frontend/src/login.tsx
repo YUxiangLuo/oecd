@@ -384,7 +384,7 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
           </button>
           <div className="login-hint">
             {demoMode && !returningUsername && (noIdleDemoStudent
-              ? <>演示账号都在使用中。请稍后刷新页面，或向老师要账号。<br /></>
+              ? <>演示账号都在使用中。请稍后刷新页面，或向老师申请账号。<br /></>
               : username === "teacher"
                 ? <>当前预填的是教师演示账号，用于学生管理与报告评阅。上方可切换回学生身份。<br /></>
               : previousDemoStudent && username === previousDemoStudent.username
@@ -393,7 +393,7 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
               : previousDemoStudent
                 ? <>这不是上次在这台电脑用的账号。点上方“学生身份”可换回。<br /></>
               : suggestion === "failed"
-                ? <>暂时无法分配空闲账号，当前预填的账号可能有同学在用。请稍后刷新页面，或向老师要账号。<br /></>
+                ? <>暂时无法分配空闲账号，当前预填的账号可能有同学在用。请稍后刷新页面，或向老师申请账号。<br /></>
                 : suggestion === "pending"
                   ? <>正在分配空闲的演示账号…<br /></>
                   : confirmedStudent !== null && username !== confirmedStudent

@@ -31,7 +31,7 @@ const whyCheck = (name: string) => WHY_CHECK.find(([prefix]) => name.startsWith(
 
 export function qcResultLabel(check: QcCheck): { className: string; text: string } {
   if (check.severity === "fatal") return { className: "qc-fail", text: "✗ Fatal" };
-  if (check.severity === "warning") return { className: "qc-warning", text: "⚠ Warning" };
+  if (check.severity === "warning") return { className: "qc-warning", text: "⚠ 提醒" };
   if (check.severity === "disclosure") return { className: "qc-warning", text: "✓ 通过·需披露" };
   return check.passed
     ? { className: "qc-pass", text: "✓ 通过" }

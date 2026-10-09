@@ -258,7 +258,7 @@ export function StudentBatchModal({ semesters, initialClassId, onClose, onCreate
         {!existing.length && !refused && <>
           {!done && <p>清单含初始密码，请先下载保存。逐人发放账号，不要将整份清单发到群里。</p>}
           <button disabled={busy} onClick={download}>{done ? "再次下载账号清单" : "下载账号清单"}</button>
-          <p className="muted batch-download-hint">可以用记事本打开。用 Excel 打开时，请把学号列设为“文本”，否则开头的 0 会丢。</p>
+          <p className="muted batch-download-hint">可以用记事本打开。用 Excel 打开时，请把学号列设为“文本”，否则开头的 0 会被删除。</p>
           {downloaded && !done && <p>请确认文件已保存，再创建账号。</p>}</>}
       </>}
       {error && <div ref={errorRef} className="error-box" role="alert" tabIndex={-1} style={{ whiteSpace: "pre-line" }}>{error}</div>}

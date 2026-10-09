@@ -410,7 +410,7 @@ export function StudentsTab({ onOpenReport, onGoToSemesters }: {
             icon="👥"
             title={all.length ? "没有匹配的学生" : "暂无学生"}
             hint={all.length
-              ? (needle || semesterId != null || classId != null ? "试试清除搜索或学期/班级筛选" : "换个关键词试试")
+              ? (needle || semesterId != null || classId != null ? "请清除搜索或学期/班级筛选" : "请更换关键词")
               : "点右上角“+ 添加学生”或“批量导入学生”"}
           />}
         </ScrollableRegion>

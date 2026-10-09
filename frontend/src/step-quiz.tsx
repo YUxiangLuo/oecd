@@ -172,7 +172,7 @@ function QuizPanelBody({
               </div>
               {result && (
                 <p className="quiz-feedback" id={feedbackId(question.id)}>
-                  <b>{result.correct ? "回答正确。" : "这项还不对。"}</b>{result.explanation}
+                  <b>{result.correct ? "回答正确。" : "回答有误。"}</b>{result.explanation}
                 </p>
               )}
             </fieldset>

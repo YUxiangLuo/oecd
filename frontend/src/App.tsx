@@ -361,7 +361,7 @@ function AppContent() {
   if (session.status === "unavailable") return (
     <BootFailure
       title="暂时无法读取实验记录"
-      message={session.syncError ?? "读取实验记录失败：暂时连不上服务器"}
+      message={session.syncError ?? "读取实验记录失败：暂时无法连接服务器"}
       note={`你的实验记录保存在服务器上，没有丢失。读取成功后才能继续；网络恢复后会自动重新读取。${session.loadAttempts > 0 ? `已重试 ${session.loadAttempts} 次。` : ""}`}
       primary={{ label: "重试读取", onClick: () => { recoverFocus.current = true; session.retryLoad(); } }}
       secondary={{ label: "退出登录", onClick: logout }}
