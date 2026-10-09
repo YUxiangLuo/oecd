@@ -17,7 +17,8 @@ export function formatMetric(value: number, format?: string): string {
     const digits = Math.abs(value) >= 1 ? 0 : 3;
     return stripNegativeZero(value.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits }));
   }
-  // Degrees, eccentricity and (unnormalised) betweenness count paths or edges: whole numbers, as in the report.
+  // Degrees and eccentricity count edges or steps; unnormalised betweenness (a sum of shares over node pairs) is
+  // rounded to the same whole numbers, as in the report.
   if (format === "count") return stripNegativeZero(value.toLocaleString("zh-CN", { maximumFractionDigits: 0 }));
   // Counts (degree, eccentricity) are whole numbers: "43", not "43.000". Large dimensionless values (betweenness
   // reaches tens of thousands) read as grouped integers rather than widening the table with three decimals.

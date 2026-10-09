@@ -422,13 +422,13 @@ describe("semantic decomposition and path tables", () => {
       />,
     );
 
-    expect(html).toContain('<caption class="sr-only">从节点 DEU 出发的最短路径明细</caption>');
+    expect(html).toContain('<caption class="sr-only">从节点 DEU 出发的最短路线明细</caption>');
     expect(html).toContain("<thead>");
     expect(html.match(/scope="col"/g)).toHaveLength(3);
     expect(html.match(/scope="row"/g)).toHaveLength(2);
     expect(html).toContain("目标");
     expect(html).toContain("距离");
-    expect(html).toContain("一条最短路径");
+    expect(html).toContain("一条最短路线");
     expect(html).toContain("DEU → CHN");
     expect(html).toContain("不可达");
     expect(html).toContain("—");

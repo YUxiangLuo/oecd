@@ -1116,12 +1116,12 @@ export function ClosenessPathTable({
   const sortedPaths = [...paths].sort((a, b) => a.distance - b.distance || a.target.localeCompare(b.target));
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-      <caption className="sr-only">从节点 {source} 出发的最短路径明细</caption>
+      <caption className="sr-only">从节点 {source} 出发的最短路线明细</caption>
       <thead>
         <tr>
           <th scope="col" style={{ textAlign: "left" }}>目标</th>
           <th scope="col">距离</th>
-          <th scope="col" style={{ textAlign: "left" }}>一条最短路径</th>
+          <th scope="col" style={{ textAlign: "left" }}>一条最短路线</th>
         </tr>
       </thead>
       <tbody>{sortedPaths.map((item) => (
@@ -1427,7 +1427,7 @@ export function NetworkCentralityDemo() {
               </div>
               <p className="ndp-note">高亮的是从 {sel} 沿箭头出发的最短路线；无法到达的节点不计入分子和分母。</p>
               <ScrollableRegion
-                label={`从节点 ${sel} 出发的最短路径明细，可滚动`}
+                label={`从节点 ${sel} 出发的最短路线明细，可滚动`}
                 style={{ maxHeight: 150, overflow: "auto", marginBottom: 10 }}
               >
                 <ClosenessPathTable source={sel} paths={distancePaths} />

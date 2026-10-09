@@ -119,3 +119,27 @@ def test_step_12_asks_to_read_the_grey_bar_without_clicking_it():
     assert question["correct"] == "b" and quizzes.quiz_version(12) == quizzes.QUIZ_VERSION
     tasks = " ".join(next(step for step in STEPS if step["n"] == 12)["tasks"])
     assert "点灰色" not in tasks and "不用点击" in tasks
+
+
+def _quiz_text(question):
+    return " ".join(
+        [question["prompt"], question["explanation"], quizzes.HINTS[question["id"]], *(o["label"] for o in question["options"])]
+    )
+
+
+QUIZ_BY_ID = {question["id"]: question for questions in quizzes.STEP_QUIZZES.values() for question in questions}
+
+
+def test_betweenness_reads_as_a_sum_of_shares_and_shortest_routes_have_one_name_round_27():
+    from gvcsim.indicator_schema import _INDICATOR_DESCRIPTIONS as FIELD_DESCRIPTIONS
+    from gvcsim.steps import STEPS
+
+    every = " ".join(_quiz_text(question) for question in QUIZ_BY_ID.values())
+    assert "最短路径" not in every
+    assert "对所有节点对求和（未归一化" in QUIZ_BY_ID["s05-between"]["explanation"]
+    assert "有多少条最短路线经过这个节点（" not in QUIZ_BY_ID["s05-between"]["explanation"]
+    step5 = next(step for step in STEPS if step["n"] == 5)
+    assert "多少条最短路线" not in step5["goal"] and "对所有节点对求和" in step5["goal"]
+    assert "最短路线条数" not in FIELD_DESCRIPTIONS["betweenesscentrality"]
+    assert "对所有节点对求和（未归一化）" in FIELD_DESCRIPTIONS["betweenesscentrality"]
+    assert all("最短路径" not in text for text in FIELD_DESCRIPTIONS.values())

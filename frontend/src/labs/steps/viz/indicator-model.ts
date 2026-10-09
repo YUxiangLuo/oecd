@@ -284,7 +284,8 @@ export const materialKey = (rows: VizObservation[]) =>
 export const readingDigits = (value: number, unit: string) =>
   value === 0
   || (unit === "百万美元" && Math.abs(value) >= 1)
-  // Counts and path lengths are whole numbers; unnormalised betweenness (a path count) reads as a whole number from 1 up.
+  // Counts and path lengths are whole numbers; unnormalised betweenness (a sum of shares over node pairs) is rounded
+  // to a whole number from 1 up.
   || unit === "连接数" || unit === "路径长度"
   || (unit === "未归一化介数" && Math.abs(value) >= 1)
     ? 0

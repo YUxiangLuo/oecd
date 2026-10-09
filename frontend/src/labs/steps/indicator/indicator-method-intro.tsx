@@ -126,7 +126,7 @@ const METHOD: Record<MethodTopic, MethodContent> = {
       },
       {
         title: "路径位置：介数",
-        body: "介数（只看连接、不看金额）：将每条连接视为等长，统计其他节点之间的最短路线中经过该节点的条数（用 Brandes 算法精确计算）。",
+        body: "介数（只看连接、不看金额）：将每条连接视为等长，计算经过该节点的最短路线所占比例，对所有节点对求和（未归一化；用 Brandes 算法精确计算）。",
         source: "brandes-paper",
         sourceLabel: "Brandes（2001）",
       },
