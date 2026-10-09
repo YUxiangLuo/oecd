@@ -642,6 +642,33 @@ test("the USA as A with a valid recorded example: one note, and the recorded exa
   cleanup();
 });
 
+test("ISR · D outside the sample while ISR · S is recorded: one note, and the recorded example stays", async () => {
+  const meta: Meta = { years: tenYears, countries: ["ISR", "USA"], sectors: ["D", "S"] };
+  const groups = spyOn(api, "teachingGroups").mockResolvedValue({
+    version: "step10-tariff-teaching-v5", years: tenYears, policy_year: 2018,
+    sample: { rows: 10, entities: 2, countries: 1, industries: 2, taxed_countries: 1, untaxed_countries: 0 },
+    industries: ["D", "S"], outcomes: {} as never,
+  });
+  // ISR · D has no first-year data, so it is not in the sample.
+  const series = tenSeries((countries, industry) => (industry === "D" ? [] : countries.flatMap((country) => tenRows(country, industry, 0.2, true))));
+  const saved = {
+    compared: ["ISR"], teaching_industry: "S", teaching_example_chosen: true,
+    teaching_observation: { country: "ISR", industry: "S", year: 2020, teaching_export_share_w: 0.2, teaching_tariff_rate_tau: 0.25, teaching_tariff_exposure: 0.05, version: "step10-tariff-teaching-v5" },
+  };
+  render(<ShockLab meta={meta} step={step} state={tenState(saved)} />);
+  fireEvent.change(screen.getByRole("combobox", { name: "行业" }), { target: { value: "D" } });
+  await waitFor(() => expect(document.querySelector('[aria-label="用已记录的例子算一次 X"]')).not.toBeNull());
+  const notes = document.querySelectorAll(".reg-boundary");
+  expect(notes).toHaveLength(1);
+  expect(notes[0].textContent).toMatch(/^ISR 以色列 · D .* 不在回归样本里：这个国家的这个行业在首年（2016 年）缺少必要数据，回归没有用到它。请换一个国家或行业。当前选择不在回归样本中，下面仍显示已记录的例子 ISR 以色列 · S /);
+  expect(document.querySelector('[aria-label="用已记录的例子算一次 X"]')!.textContent).toContain("ISR 以色列 · S");
+  expect(document.body.textContent).not.toContain("各行业的平均算");
+  expect(document.body.textContent).toContain("已记录的例子 · 五年趋势");
+  groups.mockRestore();
+  series.mockRestore();
+  cleanup();
+});
+
 test("each country's trend card reads X at its own digits; the marker sits between 2017 and 2018", async () => {
   const meta: Meta = { years: tenYears, countries: ["CAN", "CHN"], sectors: ["C29"] };
   const groups = tenGroups();

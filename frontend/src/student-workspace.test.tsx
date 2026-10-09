@@ -6,7 +6,10 @@ import {
   StudentWorkspaceSkipLink,
   focusStepMainContent,
   stepMainContentId,
+  useRestoredEditsToast,
 } from "./student-workspace";
+import { cleanup, render, renderHook, screen } from "@testing-library/react";
+import { ToastHost } from "./toast";
 
 describe("student workspace skip link", () => {
   test("is the first native Tab stop and has one unique current-main target", () => {
@@ -112,4 +115,19 @@ describe("steps 2–5 record one country, which the later steps carry", () => {
     // A one-country save on steps 6–9 is not a comparison: the steps 2–5 country is used.
     expect(carriedComparisonFor(7, [], from({ 5: ["DEU"], 6: ["JPN"] }), countries)).toEqual(["DEU", "USA"]);
   });
+});
+
+test("edits put back after a re-login are confirmed once with a toast", async () => {
+  render(<ToastHost />);
+  const hook = renderHook(({ count }) => useRestoredEditsToast(count), { initialProps: { count: 0 } });
+  expect(screen.queryByText("已恢复上次未保存的修改")).toBeNull();
+  hook.rerender({ count: 1 });
+  expect(await screen.findByText("已恢复上次未保存的修改", { exact: false })).toBeTruthy();
+  // A remounted workspace with the same count does not say it again.
+  hook.unmount();
+  const toasts = () => screen.queryAllByText("已恢复上次未保存的修改", { exact: false }).length;
+  const before = toasts();
+  renderHook(() => useRestoredEditsToast(1));
+  expect(toasts()).toBe(before);
+  cleanup();
 });

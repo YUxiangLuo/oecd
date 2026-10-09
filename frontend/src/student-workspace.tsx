@@ -34,6 +34,17 @@ import { showToast } from "./toast";
 
 export const RESTORED_EDITS_TOAST = "已恢复上次未保存的修改";
 
+/** Edits kept when the login expired were put back on the saved record: say so once per restore (a remount of
+ *  the workspace with the same count does not repeat it). */
+const shownRestores = { count: 0 };
+export function useRestoredEditsToast(restoredEdits: number): void {
+  useEffect(() => {
+    if (restoredEdits <= shownRestores.count) return;
+    shownRestores.count = restoredEdits;
+    showToast(RESTORED_EDITS_TOAST);
+  }, [restoredEdits]);
+}
+
 export function stepMainContentId(step: number): string {
   return `step-${step}-main-content`;
 }
@@ -205,11 +216,7 @@ export function StudentWorkspace({
     }
     hadSyncError.current = failing;
   }, [session.syncError, contentRef]);
-  // Edits kept when the login expired were put back on the saved record: say so once.
-  const restoredEdits = session.restoredEdits ?? 0;
-  useEffect(() => {
-    if (restoredEdits > 0) showToast(RESTORED_EDITS_TOAST);
-  }, [restoredEdits]);
+  useRestoredEditsToast(session.restoredEdits ?? 0);
   if (stepIndex < 0) {
     return <div style={{ padding: 40 }} className="error-box">步骤不存在，请从课程大纲重新选择。</div>;
   }
