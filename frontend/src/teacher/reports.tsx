@@ -104,12 +104,14 @@ function scrollPaneToTop(node: HTMLElement | null) {
   if (pane) pane.scrollTop = 0;
 }
 
-export function ReportsTab({ user, initialReview, onGraded, onRefresh }: {
+export function ReportsTab({ user, initialReview, onGraded, onRefresh, onReturn }: {
   user: AuthUser;
   /** Open this report first (from the student table), moving through `queue` with 上一份/下一份. */
   initialReview?: { accountId: number; queue: number[] };
   onGraded?: () => void;
   onRefresh?: () => void;
+  /** Leaving a review opened from 学生与进度 goes back there (where the teacher came from), not to this list. */
+  onReturn?: () => void;
 }) {
   const [refresh, setRefresh] = useState(0);
   const [openAccountId, setOpenAccountId] = useState<number | null>(initialReview?.accountId ?? null);
@@ -175,7 +177,13 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh }: {
         if (changed) saved();
         setOpenAccountId(accountId);
       }}
+      backLabel={initialReview && onReturn ? "← 返回学生与进度" : undefined}
       onBack={(changed) => {
+        if (initialReview && onReturn) {
+          if (changed) saved();
+          onReturn();
+          return;
+        }
         returnFocus.current = { accountId: openAccountId, afterLoad: loads };
         setOpenAccountId(null);
         if (changed) saved();
@@ -242,8 +250,11 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh }: {
 
 export type GradeDraft = { score: string; feedback: string };
 
-function ReportView({ accountId, queue, grader, semesters, onBack, onMove }: {
+const BACK_TO_LIST = "← 返回列表";
+
+function ReportView({ accountId, queue, grader, semesters, backLabel = BACK_TO_LIST, onBack, onMove }: {
   accountId: number; queue: readonly number[]; grader: string; semesters: readonly AcademicSemester[];
+  backLabel?: string;
   onBack: (changed: boolean) => void;
   /** Open another report of the queue; `changed` when this one was just saved. */
   onMove: (accountId: number, changed: boolean) => void;
@@ -256,7 +267,7 @@ function ReportView({ accountId, queue, grader, semesters, onBack, onMove }: {
   if (error) {
     return (
       <div>
-        <div className="review-topbar"><button className="back-btn" onClick={() => onBack(false)}>← 返回列表</button></div>
+        <div className="review-topbar"><button className="back-btn" onClick={() => onBack(false)}>{backLabel}</button></div>
         <LoadFailure what="报告" error={error} onRetry={retry} />
       </div>
     );
@@ -267,6 +278,7 @@ function ReportView({ accountId, queue, grader, semesters, onBack, onMove }: {
     data={data}
     grader={grader}
     semesters={semesters}
+    backLabel={backLabel}
     onBack={onBack}
     position={position ?? undefined}
     onPrevious={position?.previous != null ? () => onMove(position.previous!, false) : undefined}
@@ -279,9 +291,11 @@ function ReportView({ accountId, queue, grader, semesters, onBack, onMove }: {
   />;
 }
 
-export function GradeView({ data, grader, semesters = [], onBack, onReload, initialDraft, position, onPrevious, onNext }: {
+export function GradeView({ data, grader, semesters = [], backLabel = BACK_TO_LIST, onBack, onReload, initialDraft, position, onPrevious, onNext }: {
   data: TeacherReport;
   grader: string;
+  /** The back button names where it goes: the list, or 学生与进度 for a report opened from there. */
+  backLabel?: string;
   /** Marks an archived class in the header, as the list does. */
   semesters?: readonly AcademicSemester[];
   onBack: (changed: boolean) => void;
@@ -376,7 +390,7 @@ export function GradeView({ data, grader, semesters = [], onBack, onReload, init
   return (
     <div>
       <div className="review-topbar">
-        <button className="back-btn" disabled={saving} onClick={() => attemptLocalLeave(() => onBack(false))}>← 返回列表</button>
+        <button className="back-btn" disabled={saving} onClick={() => attemptLocalLeave(() => onBack(false))}>{backLabel}</button>
         <a className="review-skip" href={`#${formHeadingId}`} onClick={skipToForm}>跳到评阅表单</a>
         <h3 ref={headingRef} tabIndex={-1} className="stage-chip review-student">{data.display_name}（{data.username}）</h3>
         <span className="muted">{data.enrollments.map((item) => enrollmentLabel(item, semesters)).join("；") || "未分班"} · 提交于 {fmtTime(data.submitted_at)}</span>

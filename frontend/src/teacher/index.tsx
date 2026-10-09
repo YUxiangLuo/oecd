@@ -111,7 +111,13 @@ export function TeacherDashboard({ user }: { user: AuthUser }) {
           ) : (
             <ReportsTab user={user} initialReview={reportRequest ?? undefined}
               onGraded={() => setReviewBump((value) => value + 1)}
-              onRefresh={() => setReviewBump((value) => value + 1)} />
+              onRefresh={() => setReviewBump((value) => value + 1)}
+              onReturn={() => {
+                setReportRequest(null);
+                setTab("students");
+                // The review's back button is gone: start again at the page heading, as after login.
+                requestAnimationFrame(() => headingRef.current?.focus());
+              }} />
           )}
         </div>
       </main>

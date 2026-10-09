@@ -516,7 +516,16 @@ describe("moving through the list while grading", () => {
       await screen.findByRole("heading", { level: 3, name: "学生8（s8）" });
       expect(document.title).toContain("报告评阅");
       expect(screen.getByText("第 1 / 1 份")).toBeTruthy();
-      fireEvent.click(screen.getByRole("button", { name: "← 返回列表" }));
+      // Back goes where the teacher came from, and the button says so.
+      expect(screen.queryByRole("button", { name: "← 返回列表" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "← 返回学生与进度" }));
+      expect(await screen.findByRole("button", { name: "待评阅，打开报告：学生8（s8）" })).toBeTruthy();
+      expect(document.title).toContain("学生与进度");
+      await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { level: 2, name: "学生与进度" })));
+      // Opened from the sidebar instead, the same report returns to the list.
+      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "评阅报告：学生8" }));
+      fireEvent.click(await screen.findByRole("button", { name: "← 返回列表" }));
       expect(await screen.findByRole("button", { name: "评阅报告：学生8" })).toBeTruthy();
     } finally {
       spies.forEach((spy) => spy.mockRestore());
