@@ -195,7 +195,7 @@ describe("indicator calculation disclosure", () => {
         />,
       );
       await waitFor(() => expect(view.getByText("当前分解不可用")).toBeTruthy());
-      const disclosure = view.getByLabelText("GVC 位置指数计算公示");
+      const disclosure = view.getByLabelText("GVC 位置指数计算公式");
       expect(disclosure.textContent).toContain("3.324 / 3.545 = 0.937");
       // Round 12: the headline length is defined, only its share-weighted split is not; "—" is not missing data.
       const box = view.getByText("当前分解不可用").parentElement!.textContent ?? "";

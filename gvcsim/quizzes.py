@@ -109,7 +109,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
     6: [
         _question(
             "s06-trade-viz",
-            "图中 A 国的外国增加值项占比比 B 国高，能直接得出什么结论？",
+            "假设 A 国的外国增加值项占比比 B 国高，能直接得出什么结论？",
             [
                 _option("a", "A 国的国内增加值占比也更高"),
                 _option("b", "A 国出口中外国增加值的比例更高"),

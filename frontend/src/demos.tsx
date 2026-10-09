@@ -355,7 +355,7 @@ export function IndicatorCalculationDisclosure({ step, row, decimals }: { step: 
     const title = step === 4 ? "外国增加值项占比" : "复杂 GVC 生产份额";
     const denominatorLabel = step === 4 ? "总出口" : "总增加值 SVA";
     return (
-      <section className="indicator-calculation-disclosure" aria-label={`${title}计算公示`}>
+      <section className="indicator-calculation-disclosure" aria-label={`${title}计算公式`}>
         <div className="icd-kicker">这个指标怎么算</div>
         <div className="icd-title">{title}</div>
         <div className="icd-formula">{title} = {numeratorKey} / {denominatorLabel}</div>
@@ -380,7 +380,7 @@ export function IndicatorCalculationDisclosure({ step, row, decimals }: { step: 
     || (backward == null && finiteNumber(row["3_FGY_GVC"]) === 0);
   const positionGap = noActivity ? "—（无此类活动，无法计算）" : "—（缺数据，无法计算）";
   return (
-    <section className="indicator-calculation-disclosure" aria-label="GVC 位置指数计算公示">
+    <section className="indicator-calculation-disclosure" aria-label="GVC 位置指数计算公式">
       <div className="icd-kicker">这个指标怎么算</div>
       <div className="icd-title">GVC 位置指数 GVCPs</div>
       <div className="icd-formula">GVCPs = PLv_GVC / PLy_GVC</div>
