@@ -1407,7 +1407,7 @@ export function NetworkCentralityDemo() {
           )}
           <ScrollableRegion
             className="ndp-edges"
-            label={`节点 ${sel} 的全部直接入边与出边，可横向滚动`}
+            label={`节点 ${sel} 的全部直接入边与出边`}
           >
             <table className="data-table net-demo-edge-table">
               <caption>节点 {sel} 的全部直接入边与出边；演示网络每条边权重均为 1</caption>

@@ -660,7 +660,8 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
             <text x={x(tick)} y={H - m.b + 19} textAnchor={x(tick) > plotRight - 20 ? "end" : "middle"} fontSize={AXIS_FONT} fill="#5f6677">{tickText(tick)}</text>
           </g>
         ))}
-        <line x1={plotLeft} x2={plotRight} y1={H - m.b} y2={H - m.b} stroke="#d7dae2" />
+        {/* The baseline spans the ticks only: the room beyond them holds the end labels, not more axis. */}
+        {ticks.length > 1 && <line x1={x(ticks[0])} x2={x(ticks[ticks.length - 1])} y1={H - m.b} y2={H - m.b} stroke="#d7dae2" />}
         {rows.map((row, index) => {
           const { item } = row;
           const top = tops[index];

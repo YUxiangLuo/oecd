@@ -94,7 +94,7 @@ _REFERENCES = (
         "https://doi.org/10.1257/aer.104.2.459",
     ),
     (
-        "Wang, Wei & Zhu (2013), ",
+        "Wang, Wei & Zhu (2018), ",
         "Quantifying International Production Sharing at the Bilateral and Sector Levels",
         ", NBER w19677",
         "https://www.nber.org/papers/w19677",

@@ -467,6 +467,11 @@ describe("regression bar charts (steps 11–14 and the summary)", () => {
     const texts = [...svg.querySelectorAll("text")];
     expect(texts.every((node) => Number(node.getAttribute("font-size")) >= 14)).toBe(true);
     expect(svg.outerHTML).not.toContain("NaN");
+    // The axis baseline runs from the first tick to the last, not under the end labels beyond them.
+    const tickXs = texts.filter((node) => node.getAttribute("fill") === "#5f6677" && /^-?[\d.]+$/.test(node.textContent ?? "")).map((node) => Number(node.getAttribute("x")));
+    const baseline = svg.querySelector('line[stroke="#d7dae2"]')!;
+    expect(Number(baseline.getAttribute("x1"))).toBeCloseTo(Math.min(...tickXs), 6);
+    expect(Number(baseline.getAttribute("x2"))).toBeCloseTo(Math.max(...tickXs), 6);
     const boxes = texts.map((node) => ({ text: node.textContent, ...textBox(node) }));
     for (const box of boxes) {
       expect(box.left).toBeGreaterThanOrEqual(0);
