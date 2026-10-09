@@ -300,7 +300,7 @@ export function ShockLab({ meta, step: _step, state }: {
     ...(complete && untaxedRows.length
       ? [`你的例子 ${names(untaxedRows.map((row) => row.country))} ${untaxedRows.length > 1 ? "都" : ""}未被加税，X 一直是 0`]
       : []),
-    ...(query.status === "error" ? ["你的例子的关税数据没有读到"] : []),
+    ...(query.status === "error" ? ["未能读取所选例子的关税数据"] : []),
     ...(query.status === "loading" ? ["你的例子的关税数据还在读取"] : []),
   ];
   // The worked row is country B when A has no exposure (untaxed, taxed with w = 0, or the imposer): say so.
@@ -373,8 +373,8 @@ export function ShockLab({ meta, step: _step, state }: {
       </>}
       {workedExample && (() => {
         const shown = worked(workedExample);
-        return <div className="teaching-x-card" role="group" aria-label={shownExample?.recorded ? "用已记录的例子算一次 X" : "用所选例子算一次 X"}>
-          <b>算一次：X = w × τ</b>
+        return <div className="teaching-x-card" role="group" aria-label={shownExample?.recorded ? "已记录例子的 X 算例" : "所选例子的 X 算例"}>
+          <b>算例：X = w × τ</b>
           <p>
             {countryLabel(workedExample.country)} · {sectorLabel(shownIndustry)} · {workedExample.year} 年：{" "}
             <span className="teaching-x-formula">X = {shown.w}% × {rate(workedExample.teaching_tariff_rate_tau)} = <b>{shown.x} 个百分点</b></span>
@@ -387,8 +387,8 @@ export function ShockLab({ meta, step: _step, state }: {
       })()}
       {workedCountry && overview && (() => {
         const shown = workedNumbers(workedCountry.mean_w, overview.tariff_rate, workedCountry.mean_exposure);
-        return <div className="teaching-x-card" role="group" aria-label="用被加税国家算一次 X">
-          <b>算一次：X = w × τ</b>
+        return <div className="teaching-x-card" role="group" aria-label="被加税国家的 X 算例">
+          <b>算例：X = w × τ</b>
           <p>
             {countryLabel(workedCountry.country)} · {overview.year} 年 · {workedCountry.industries} 个行业平均：{" "}
             <span className="teaching-x-formula">X = {shown.w}% × {rate(overview.tariff_rate)} = <b>{shown.x} 个百分点</b></span>
@@ -404,7 +404,7 @@ export function ShockLab({ meta, step: _step, state }: {
     <section className="reg-run-card">
       <span className="reg-section-step">跟踪一个例子（可选）</span>
       <p className="teaching-example-lead">
-        看 X 从{policyYear ? ` ${policyYear} 年` : "加税那年"}起怎样从 0 上升。默认的加拿大是{taxedCount ? ` ${taxedCount} 个` : ""}被加税国家之一，对比的哥斯达黎加未被加税（两国汽车业都主要卖给美国），行业默认是 C29 汽车及零部件。步骤 11–14 会把回归结果换算到你选的例子上。
+        看 X 从{policyYear ? ` ${policyYear} 年` : "加税那年"}起怎样从 0 上升。默认的加拿大是{taxedCount ? ` ${taxedCount} 个` : ""}被加税国家之一，对比的哥斯达黎加未被加税（两国汽车业都主要出口到美国），行业默认是 C29 汽车及零部件。步骤 11–14 会把回归结果换算到你选的例子上。
       </p>
       <div className="controls" role="group" aria-label="跟随的例子">
         <label className="model-control"><span className="model-control-label">国家 A</span>
@@ -470,8 +470,8 @@ export function ShockLab({ meta, step: _step, state }: {
           const unexposedNames = unexposed.map((row) => countryLabel(row.country)).join("、");
           const hint = lastRows.some((row) => isImposer(row.country))
             ? (lastRows.length === 1
-              ? "想看加税带来的 X，换成被加税的国家（如加拿大），或再选一个被加税的对比国家。"
-              : "想看被加税与未被加税国家的差别，把美国换成别的国家（被加税的如加拿大，未被加税的如哥斯达黎加）。")
+              ? "若要观察加税带来的 X，请换成被加税的国家（如加拿大），或再选一个被加税的对比国家。"
+              : "若要观察被加税与未被加税国家的差别，请把美国换成别的国家（被加税的如加拿大，未被加税的如哥斯达黎加）。")
             : unexposed.length && exposed.length
             // The other country already shows the exposure: nothing to switch.
             ? `${unexposedNames} 被加税，但该行业首年不向美国出口（w = 0），所以 X 一直为 0；图上 ${exposed.map((row) => countryLabel(row.country)).join("、")} 的 X 就是加税带来的暴露。`

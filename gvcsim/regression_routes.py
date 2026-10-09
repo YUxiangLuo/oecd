@@ -58,7 +58,7 @@ def _limit_expensive_request(limiter: SlidingWindowRateLimiter, account_id: int,
     try:
         limiter.check(account_id)
     except RateLimitExceeded as error:
-        # The page already prefixes the action ("贸易流回归没有算完："), so the label names only what was counted.
+        # The page already prefixes the action ("贸易流回归未完成："), so the label names only what was counted.
         raise HTTPException(
             status_code=429,
             detail=f"{label}次数过多，请约 {error.retry_after_header} 秒后再试。",
@@ -295,7 +295,7 @@ async def teaching_overview():
         return await concurrency.run_cpu_bound(read)
     except (np.linalg.LinAlgError, FloatingPointError, OverflowError, ValueError) as error:
         _LOG.warning("回归总览计算失败：%s", error)
-        raise HTTPException(status_code=409, detail="回归总览暂时算不出来，请稍后重试。") from error
+        raise HTTPException(status_code=409, detail="回归总览暂时无法计算，请稍后重试。") from error
 
 
 @router.get("/api/regression/design", response_model=RegressionDesignResponse)
@@ -348,7 +348,7 @@ async def regression_run(req: RegressionRequest, request: Request):
         _LOG.warning("回归线性代数计算失败（%s）：%s", req.outcome, e)
         raise HTTPException(
             status_code=400,
-            detail="这次回归没能算出结果。请换一个指标或稍后重试；若持续出现，请告诉老师。",
+            detail="这次回归没能算出结果。请换一个指标或稍后重试；若持续出现，请联系老师。",
         ) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

@@ -224,7 +224,7 @@ export function RegressionResultCard({ outcome, response, examples = [], example
                 : <>{example.label} 未被加税{zeroNote}</>;
             return <span key={example.label}>{index ? "；" : ""}{text}</span>;
           })}。
-            {noConversion && `${examples.length === 1 ? "这个例子的 X = 0" : "两个例子的 X 都是 0"}，换算不出与 X 相关的差异。想看换算，回步骤 10 ${unexposedTaxed
+            {noConversion && `${examples.length === 1 ? "这个例子的 X = 0" : "两个例子的 X 都是 0"}，无法换算与 X 相关的差异。如需换算，请回到步骤 10 ${unexposedTaxed
               ? "换一个向美国出口的被加税国家或行业（如加拿大的汽车行业）"
               : examples.length === 1 ? "换成被加税的国家（如加拿大），或再选一个被加税的对比国家" : "选一个被加税的国家（如加拿大）"}。`}</li>;
         })()}
@@ -447,7 +447,7 @@ export const INTERRUPTED_RUN_NOTE = "上次计算没有完成，请重新计算�
 
 /** The bars' title: a click (or Enter on the focused bar) saves that Y. */
 export function familyBarsTitle(count: number): string {
-  return `本类 ${count} 个 Y · 点一条，换成它并保存（键盘：方向键切换，Enter 保存）`;
+  return `本类 ${count} 个 Y · 点击任一条即改为保存该 Y（键盘：方向键切换，Enter 保存）`;
 }
 
 /**
@@ -603,7 +603,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
     } catch (cause) {
       focusSavedBarAfterRun.current = false;
       if (mountedRef.current) {
-        setError(userFacingRequestError(cause, `${runName}没有算完`));
+        setError(userFacingRequestError(cause, `${runName}未完成`));
         if (cause instanceof ApiError && cause.status === 429 && cause.retryAfter) {
           setNow(Date.now());
           setRetryAt(Date.now() + cause.retryAfter * 1000);
@@ -664,7 +664,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
       <section className="reg-run-card">
         <h3>{lessonQuestion(outcome, selectedKey)}</h3>
         {staleSavedY && (
-          <p className="reg-boundary" role="status">上次算的 Y（{displayBaselineLabel(savedRun?.design?.baseline_label) || "—"}）在当前课程数据里没有，已换回本步默认指标，请重新计算。</p>
+          <p className="reg-boundary" role="status">上次计算的 Y（{displayBaselineLabel(savedRun?.design?.baseline_label) || "—"}）不在当前课程数据中，已恢复为本步默认指标，请重新计算。</p>
         )}
         {/* Said before the run (the result card repeats it), so the Y is never read as OECD data first. */}
         {!result && <p className="muted reg-data-note reg-data-note-before" role="note">{GENERATED_DATA_NOTE}</p>}
@@ -688,7 +688,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         {!running && savedRun && state.materialLocked && (!replacedBy || !bars) && (
           replacedBy
             ? <p className="reg-rerun-warning reg-replaced-notice" role="status">{REPLACED_NOTICE[replacedBy]}</p>
-            : <p className="reg-rerun-warning" role="note"><b>报告已提交</b>重新计算或点另一条，会替换报告材料里保存的结果；之后要到步骤 15 更新报告，并重新提交给老师。</p>
+            : <p className="reg-rerun-warning" role="note"><b>报告已提交</b>重新计算或点击另一条，会替换报告材料里保存的结果；之后要到步骤 15 更新报告，并重新提交给老师。</p>
         )}
         {groups && (() => {
           const series = selectedKey === defaultKey ? groups.outcomes[outcome] : groups.series?.[outcome]?.[selectedKey];
@@ -763,7 +763,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
               </div>
             ) : overviewQuery.status === "error" && overviewQuery.error
               ? <RegressionRequestError label="条形图" error={overviewQuery.error} onRetry={overviewQuery.retry} />
-              : overviewQuery.status === "loading" && <div className="reg-request-state muted" role="status" aria-busy="true">正在画本类各个 Y 的条形图…</div>}
+              : overviewQuery.status === "loading" && <div className="reg-request-state muted" role="status" aria-busy="true">正在绘制本类各 Y 的条形图…</div>}
             <RegressionResultCard outcome={outcome} response={result} examples={examples} exampleSaved={exampleSaved} exampleYear={lastYear} />
           </div>
           <details className="technical-details">
@@ -779,7 +779,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
               && <p className="muted">很小的 p 值显示为 &lt;0.0001，不是说概率为零。</p>}
             <p className="muted">表里的“系数”按 X 以份额计：X 每高 1（即 100 个百分点），Y 平均相差多少。{depvarKind(outcome, result.design) === "share"
               ? "这一步的 Y 是份额，页面也按百分点读，X 和 Y 都换成百分点后倍数正好抵消：两列是同一个数，左列按页面精度四舍五入。"
-              : "除以 100，就是页面上“X 每高 1 个百分点”时的数。"}</p>
+              : "除以 100 即为页面上“X 每高 1 个百分点”对应的数值。"}</p>
             <p className="muted">共 {result.result.n_obs.toLocaleString("zh-CN")} 条记录 = {result.result.n_entities.toLocaleString("zh-CN")} 个国家×行业 × {result.result.n_times} 年；95% 区间按 {result.result.n_clusters} 个国家计算；{result.result.r2_within == null ? "这次结果没有组内 R²" : `组内 R² = ${result.result.r2_within.toFixed(3)}（扣掉各国家×行业的平均水平和每年共同变化后，模型能解释的那部分变动所占比例）`}。</p>
           </details>
         </div>

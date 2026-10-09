@@ -106,7 +106,7 @@ export function RegressionEvidenceMatrix({
           <span className="reg-section-step">四步结果汇总</span>
           <h3 id="reg-evidence-matrix-title">比较方向、不确定性和单位</h3>
         </div>
-        <p>四个 Y 的单位不同，数字不能比大小（括号里换算成标准差，{SD_DEFINITION}）；“—”表示该步还没有结果。四步用同一个模型，只换 Y。</p>
+        <p>四个 Y 的单位不同，数字不能直接比较大小（括号里换算成标准差，{SD_DEFINITION}）；“—”表示该步还没有结果。四步用同一个模型，只换 Y。</p>
       </div>
       <div className="table-wrap" role="region" aria-label="四步结果汇总表，可横向滚动" tabIndex={0}>
         <table className="data-table reg-evidence-table">

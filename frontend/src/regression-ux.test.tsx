@@ -204,10 +204,10 @@ describe("simple regression workbench", () => {
     const rerun = await screen.findByRole("button", { name: "重新计算贸易流回归" });
     expect(rerun.className).toBe("run-btn secondary");
     // A submitted report: the warning is a callout, not a grey footnote.
-    expect(document.querySelector(".reg-rerun-warning")?.textContent).toContain("重新计算或点另一条，会替换报告材料里保存的结果");
+    expect(document.querySelector(".reg-rerun-warning")?.textContent).toContain("重新计算或点击另一条，会替换报告材料里保存的结果");
     fireEvent.click(rerun);
     await screen.findByRole("alert");
-    expect(screen.getByRole("alert").textContent).toBe("贸易流回归没有算完：网络连接中断，请检查连接后重试。");
+    expect(screen.getByRole("alert").textContent).toBe("贸易流回归未完成：网络连接中断，请检查连接后重试。");
     // The run button is the one retry action; the old result stays, said to be the last saved one.
     expect(screen.getByRole("button", { name: "重试：计算贸易流回归" }).className).toBe("run-btn");
     expect(document.querySelector(".reg-stale-note")?.textContent).toBe("这次计算没有成功；下面仍是上次保存的结果。");
@@ -267,9 +267,9 @@ describe("simple regression workbench", () => {
     const tip = () => document.querySelector(".diverging-bars > div[style*='pointer-events']")?.textContent ?? "";
     fireEvent.mouseEnter(saved, { clientX: 10, clientY: 10 });
     expect(tip()).toContain("状态 · 已保存（报告用这个 Y）");
-    expect(tip()).not.toContain("点一下");
+    expect(tip()).not.toContain("点击");
     fireEvent.mouseEnter(screen.getByRole("button", { name: "国内增加值出口占比：+0.56" }), { clientX: 10, clientY: 10 });
-    expect(tip()).toContain("操作 · 点一下，换成这个 Y 并保存");
+    expect(tip()).toContain("操作 · 点击即改为保存此 Y");
   });
 
   test("step 12's identity line sits inside the chart card, under the drawing", async () => {
@@ -302,7 +302,7 @@ describe("simple regression workbench", () => {
   test("falls back to the default Y when the saved baseline is not offered by the release", async () => {
     mockApis();
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: savedRun("FDC_share", "外国重复计算项占比") } as never }} />);
-    await screen.findByText(/上次算的 Y（外国重复计算项占比）在当前课程数据里没有/);
+    await screen.findByText(/上次计算的 Y（外国重复计算项占比）不在当前课程数据中/);
     // The saved run for the missing Y is not shown as if it were the default's result.
     expect(document.querySelector(".reg-plain-verdict")).toBeNull();
     expect(screen.getByRole("heading", { name: /外国增加值项占比（Y）/ })).toBeTruthy();
@@ -428,7 +428,7 @@ describe("saving another Y from the bars", () => {
     spyOn(api, "runRegression").mockResolvedValue({ ...DVA(), benchmark } as never);
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
     const group = await screen.findByRole("group", { name: /（键盘：方向键切换，Enter 保存）/ });
-    expect(group.getAttribute("aria-label")).toContain("本类 2 个 Y · 点一条，换成它并保存（键盘：方向键切换，Enter 保存）");
+    expect(group.getAttribute("aria-label")).toContain("本类 2 个 Y · 点击任一条即改为保存该 Y（键盘：方向键切换，Enter 保存）");
     const tip = () => document.querySelector<HTMLElement>(".diverging-bars > div[style*='pointer-events']");
     const other = screen.getByRole("button", { name: "国内增加值出口占比：+0.56" });
     fireEvent.focus(other);

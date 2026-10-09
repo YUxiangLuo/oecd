@@ -886,7 +886,7 @@ test("the writing area shows the autosave state and says formatting marks stay a
 test("a blocked generate click marks the short analysis fields invalid at once; the gated hint is not contradicted", () => {
   const gate = [{ step: 8, title: "步骤 8", missing: ["记录报告材料"] }, { step: 15, title: "你的分析", missing: ["填写研究问题"] }];
   render(<ReportLab {...finishProps} reportGate={gate} state={{ ...finishProps.state, data: { research_question: "我比较了中国和美国的外国增加值项占比" } }} />);
-  expect(screen.getByText(/补齐上方清单中的缺项后，可以先只生成草稿看看/)).toBeTruthy();
+  expect(screen.getByText(/补齐上方清单中的缺项后，可以先生成草稿预览/)).toBeTruthy();
   const field = (name: string) => screen.getByRole("textbox", { name }).getAttribute("aria-invalid");
   expect(field("结果解释")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "生成并提交报告" }));

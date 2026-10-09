@@ -926,7 +926,7 @@ export function ReportLab({
       {report ? (
         <div className="report-body" ref={previewRef} tabIndex={-1} role="region" aria-label="报告正文"><ReportPrintGrade report={report} /><ReportMarkdown markdown={report.markdown} /></div>
       ) : (
-        <p className="muted">{gated ? "补齐上方清单中的缺项后，可以先只生成草稿看看，再提交。" : "可以先只生成草稿看看，再提交。"}区间包含 0、或者没算出估计值的结果，也要写进报告。</p>
+        <p className="muted">{gated ? "补齐上方清单中的缺项后，可以先生成草稿预览，再提交。" : "可以先生成草稿预览，再提交。"}区间包含 0、或者没算出估计值的结果，也要写进报告。</p>
       )}
       {confirmRegenerate && (
         <ConfirmModal

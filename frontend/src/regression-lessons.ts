@@ -48,7 +48,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     definition: "WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 总出口的比重。",
     downMeaning: "外国增加值项占比下降：出口价值中来自国外投入的部分变小。",
     upMeaning: "外国增加值项占比上升：出口价值中来自国外投入的部分变大。",
-    dontClaim: "不要写成“已经证明生产回流”。这一项占比较高或较低，不能说明企业是否把生产搬回国内。",
+    dontClaim: "不要写成“已经证明生产回流”。这一项占比较高或较低，不能说明企业是否将生产迁回国内。",
   },
   production: {
     outcome: "production",
@@ -76,7 +76,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     definition: "GVC 活动诱发的累计总产出除以关联增加值。",
     downMeaning: "前向 GVC 段长度缩短：增加值到最终吸收经过的生产环节减少。",
     upMeaning: "前向 GVC 段长度延长：增加值到最终吸收经过的生产环节增加。",
-    dontClaim: "不要拿它和贸易流回归的数字比大小：两者单位不同。",
+    dontClaim: "不要将它与贸易流回归的估计值直接比较：两者单位不同。",
   },
   network: {
     outcome: "network",
@@ -90,7 +90,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     definition: "全球国家×行业图上一个节点的加权入度加出度（买入 + 卖出；自环即行业卖给自己的部分，两侧各算一次）。",
     downMeaning: "加权总度下降：节点买入与卖出的总流量规模变小。",
     upMeaning: "加权总度上升：节点买入与卖出的总流量规模变大。",
-    dontClaim: "不要写成连接已经减少或脱钩，也不要拿它当作关税的“总影响”。",
+    dontClaim: "不要写成连接已经减少或脱钩，也不要将其视为关税的“总影响”。",
   },
 };
 
@@ -111,7 +111,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "被国外最终吸收的国内增加值占 VA+TLS 账户闭合总出口的比重。",
     downMeaning: "国内增加值出口占比下降：出口价值中由本国创造的部分变小。",
     upMeaning: "国内增加值出口占比上升：出口价值中由本国创造的部分变大。",
-    dontClaim: "不要写成“已经证明生产回流”。国内增加值出口占比较高，不能告诉我们企业是否把生产搬回国内。",
+    dontClaim: "不要写成“已经证明生产回流”。国内增加值出口占比较高，不能说明企业是否将生产迁回国内。",
   },
   "3_VA_GVC_share": {
     shortMetric: "前向 GVC 生产总份额",
@@ -167,7 +167,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "从最终产品端回溯 GVC 活动的初始增加值所经过的生产长度。",
     downMeaning: "后向 GVC 段长度缩短：从最终品回溯的 GVC 生产环节减少。",
     upMeaning: "后向 GVC 段长度延长：从最终品回溯的 GVC 生产环节增加。",
-    dontClaim: "不要拿它和贸易流回归的数字比大小（单位不同），也不要把后向长度和前向长度的估计值相减。",
+    dontClaim: "不要将它与贸易流回归的估计值直接比较（单位不同），也不要把后向长度和前向长度的估计值相减。",
   },
   GVCPs: {
     shortMetric: "GVC 位置指数",
@@ -175,7 +175,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界：大于 1 表示相对更上游。",
     downMeaning: "位置指数下降：相对更靠下游。",
     upMeaning: "位置指数上升：相对更上游。",
-    dontClaim: "不要写成“已经变得更上游 / 更下游”。位置指数不能和长度的估计值比大小。",
+    dontClaim: "不要写成“已经变得更上游 / 更下游”。位置指数不能与长度的估计值直接比较。",
   },
   weighted_indegree: {
     shortMetric: "加权入度",
@@ -183,7 +183,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "全球国家×行业图上一个节点的加权入度，即买入侧的流量规模。",
     downMeaning: "加权入度下降：买入侧的流量规模变小。",
     upMeaning: "加权入度上升：买入侧的流量规模变大。",
-    dontClaim: "不要写成买入已经减少或脱钩，也不要拿它当作关税的“总影响”。",
+    dontClaim: "不要写成买入已经减少或脱钩，也不要将其视为关税的“总影响”。",
   },
   weighted_outdegree: {
     shortMetric: "加权出度",
@@ -191,7 +191,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "全球国家×行业图上一个节点的加权出度，即卖出侧的流量规模。",
     downMeaning: "加权出度下降：卖出侧的流量规模变小。",
     upMeaning: "加权出度上升：卖出侧的流量规模变大。",
-    dontClaim: "不要写成卖出已经减少或脱钩，也不要拿它当作关税的“总影响”。",
+    dontClaim: "不要写成卖出已经减少或脱钩，也不要将其视为关税的“总影响”。",
   },
   betweenesscentrality: {
     shortMetric: "介数",

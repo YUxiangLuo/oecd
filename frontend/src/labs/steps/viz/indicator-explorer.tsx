@@ -469,7 +469,7 @@ export function IndicatorExplorer({
                 ? `${undefinedReasons.join("；")}（不是缺少数据）；请换一个${industry ? "行业或" : ""}国家。`
               : missingCountries.length
                 ? `${joinCountries(missingCountries)}在${timeView ? "所选年份范围" : ` ${year} 年`}${industry ? `（${sectorLabel(industry)}）` : ""}缺少数据（缺少的数据留空，不当作 0）；请${missingFix.join("、").replace(/、([^、]+)$/, "或$1")}。`
-                : `所选国家没有同一${timeView ? "组年份" : "年份"}的数据，无法放在一起比较；请${timeView ? "调整年份范围" : "换一个年份"}或换国家。`;
+                : `所选国家没有同一${timeView ? "组年份" : "年份"}的数据，无法并列比较；请${timeView ? "调整年份范围" : "换一个年份"}或换国家。`;
   const indicatorName = composition ? `${topic.themeLabel}${side === "alternate" ? " · 后向" : ""}` : view === "directions" ? "前后向 GVC 段长度与位置" : view === "positioning" ? `定位图（横轴 ${label(axes.x)} · 纵轴 ${label(axes.y)}）` : view === "structure" ? (topic.key === "production" ? "四类生产活动 · 行业" : "前向与后向 GVC 段长度 · 行业") : view === "segments" ? "前后向三段长度" : label(metric);
   const matches =
     canSave &&
