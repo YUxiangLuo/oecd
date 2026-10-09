@@ -196,6 +196,12 @@ describe("trend cards name the empty year and say why (round 12)", () => {
     expect(text).not.toContain("缺失");
   });
 
+  test("起始 = 结束 says the two years are the same, not that data is missing", () => {
+    const view = render(<TrendSummary readings={readings.filter((item) => item.year === 2020)} countries={["CHN", "MLT"]} years={[2020]} unit="%" />);
+    expect(view.container.textContent).toBe("起始年份和结束年份相同，请选两个不同年份。");
+    cleanup();
+  });
+
   test("really missing data still says so, with its year", () => {
     const view = render(<TrendSummary readings={readings} countries={["CHN", "MLT"]} years={[2016, 2020]} unit="%" />);
     const text = view.getByLabelText("趋势读数").textContent ?? "";

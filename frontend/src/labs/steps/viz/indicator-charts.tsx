@@ -108,6 +108,8 @@ export function TrendSummary({
       word: undefinedOnly && parts.every((part) => part.reason!.includes("无法定义")) ? "无法定义" : "无法计算",
     };
   };
+  // 起始 = 结束: one year is a choice, not missing data.
+  if (years.length === 1) return <p className="muted">起始年份和结束年份相同，请选两个不同年份。</p>;
   if (own.length < 2) {
     const empty = years.filter((year) => value(first, year) === null);
     const gap = gapText(first, empty);
