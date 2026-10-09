@@ -10,7 +10,7 @@ import {
 import type {
   RegressionOutcome, Step, StepStateApi, TeachingEstimate, TeachingGroupsResponse, TeachingOverviewResponse, TeachingPanelResponse,
 } from "./types";
-import { GENERATED_DATA_NOTE } from "./regression-lessons";
+import { GENERATED_DATA_NOTE, GENERATED_Y_DISCLOSURE } from "./regression-lessons";
 import { shownPerPoint } from "./regression-verdict";
 
 afterEach(() => { cleanup(); mock.restore(); });
@@ -150,6 +150,10 @@ describe("simple regression workbench", () => {
     expect(pressed[0].getAttribute("aria-label")).toBe(`${FVA_BAR}，已保存`);
     // The saved bar's label is the headline's number.
     expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("外国增加值项占比平均低 0.55 个百分点");
+    // The result card opens with the generated-data disclosure, before the headline.
+    const card = document.querySelector(".verdict-card")!;
+    expect(card.firstElementChild?.textContent).toBe(GENERATED_Y_DISCLOSURE);
+    expect(card.textContent?.split(GENERATED_DATA_NOTE)).toHaveLength(1);
     expect(screen.getByRole("group", { name: /X 每高 1 个百分点，Y 平均相差（个百分点）/ })).toBeTruthy();
     // Model and numbers are folded away.
     // (The 加税前后 chart's per-year table is folded under the chart.)

@@ -605,6 +605,13 @@ def _difference_words(kind: str) -> tuple[str, str]:
     return ("短", "长") if kind == "length" else ("低", "高")
 
 
+# The page shows the same words at the top of every step 11–14 result card (frontend ``GENERATED_Y_DISCLOSURE``).
+GENERATED_Y_DISCLOSURE = (
+    "教学数据：步骤 11–14 的 Y 由课程按设定生成，与 X 的关联是有意设计的，多数 Y 设得很清晰（区间窄、p 值小），"
+    "精度高于真实数据通常能得到的结果。结果用于练习读回归，不是真实关税影响的证据。"
+)
+
+
 def _evidence_summary(
     runs: list[dict[str, Any]],
     source_filter: dict[str, Any] | None = None,
@@ -615,6 +622,9 @@ def _evidence_summary(
     without it each chart shows the saved Y alone."""
     lines = [
         "## 关键证据摘要",
+        "",
+        # Bold body text, not a grey blockquote: the reader should see it before any number.
+        f"**{GENERATED_Y_DISCLOSURE}**",
         "",
         "本节用课堂上的读数单位说明估计结果；公式和详细数字见技术附录。",
         "",

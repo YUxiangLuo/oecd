@@ -99,6 +99,7 @@
 .verdict-card p { margin: 6px 0; line-height: 1.6; }
 .reg-plain-verdict { padding: 9px 11px; border-radius: 8px; background: #fff; color: #303747; }
 .verdict-card h3.reg-plain-verdict { font-size: 17px; }
+.verdict-card .reg-generated-disclosure { margin: 0 0 10px; padding: 7px 10px; border-left: 4px solid #c47f00; background: #fff6e0; color: #4a3500; font-size: 13px; font-weight: 600; line-height: 1.6; }
 .reg-result-points { margin: 10px 0 0; padding-left: 18px; color: #394258; font-size: 12.5px; line-height: 1.7; }
 .reg-result-points li + li { margin-top: 3px; }
 /* Result headline: the answer with its number first, the interval under it, the direction as a sub-line. */

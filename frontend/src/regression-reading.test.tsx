@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { exampleXText, RegressionCoefficientTable, RegressionResultCard, TEACHING_MODEL_VERSION } from "./regression";
-import { BASELINE_LESSONS, REGRESSION_LESSONS } from "./regression-lessons";
+import { BASELINE_LESSONS, GENERATED_Y_DISCLOSURE, REGRESSION_LESSONS } from "./regression-lessons";
 import type { RegressionResponse } from "./types";
 
 afterEach(cleanup);
@@ -30,12 +30,12 @@ describe("fixed teaching regression reading", () => {
     expect(html).not.toContain("模拟");
     // The charts are above the card (bars, trend), not in it: no plot, no 本步重点, no reading cards.
     expect(dom.querySelectorAll("svg")).toHaveLength(0);
-    // Without an example: two one-liners, what not to claim and the generated-data note.
+    // Without an example: one line, what not to claim; the generated-data disclosure opens the card instead.
     const points = [...dom.querySelectorAll(".reg-result-points > li")].map((item) => item.textContent);
     expect(points).toEqual([
       "解释限制 不要写成“已经证明生产回流”。这一项占比较高或较低，不能说明企业是否将生产迁回国内。",
-      "关税情景与步骤 11–14 的四个 Y 由课程按设定生成（参照真实指标的量级），用于练习读回归，不是真实关税或 OECD 发布的结果。",
     ]);
+    expect(dom.querySelector(".verdict-card")?.firstElementChild?.textContent).toBe(GENERATED_Y_DISCLOSURE);
     expect(html).not.toContain("估计值可能落在");
     expect(dom.querySelector("details")).toBeNull();
     expect(html).not.toMatch(/β|本次样本|置信区间|标称/);

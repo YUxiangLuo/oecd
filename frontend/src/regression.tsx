@@ -4,7 +4,7 @@ import { scrollIntoCourseContent } from "./content-scroll";
 import { api, ApiError } from "./api";
 import { percentagePoints, stripNegativeZero } from "./format";
 import { useAsync } from "./labs";
-import { DEFAULT_BASELINES, displayBaselineLabel, GENERATED_DATA_NOTE, lessonFor, lessonQuestion } from "./regression-lessons";
+import { DEFAULT_BASELINES, displayBaselineLabel, GENERATED_DATA_NOTE, GENERATED_Y_DISCLOSURE, lessonFor, lessonQuestion } from "./regression-lessons";
 import { nextRegressionSave } from "./regression-save";
 import { formatPValue } from "./regression-statistics";
 import {
@@ -207,6 +207,7 @@ export function RegressionResultCard({ outcome, response, examples = [], example
   const badgeColor = BADGE_COLORS[verdict.state];
   return (
     <section className={`verdict-card verdict-${verdict.state}`} aria-labelledby="reg-result-title">
+      <p className="reg-generated-disclosure" role="note">{GENERATED_Y_DISCLOSURE}</p>
       <h3 id="reg-result-title" tabIndex={-1} className="reg-plain-verdict">
         {verdict.coefficient
           ? <span className="reg-headline-main">关税暴露 X 每高 1 个百分点的国家×行业，{lesson.shortMetric}{metricGap}<b>{plainResult}</b></span>
@@ -258,7 +259,6 @@ export function RegressionResultCard({ outcome, response, examples = [], example
         {/* As the report says next to the number: step 14's unit is not the 百万美元 of steps 5 and 9. */}
         {kind === "network" && <li className="muted reg-unit-note">{NETWORK_UNIT_NOTE}</li>}
         <li className="reg-caveat"><b>解释限制</b> {lesson.dontClaim}</li>
-        <li className="muted reg-data-note">{GENERATED_DATA_NOTE}</li>
       </ul>
       {verdict.warnings.length > 0 && (!suppressed || !verdict.coefficient) && (
         <ul aria-label="本次计算的限制">{verdict.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>

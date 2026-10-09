@@ -1440,6 +1440,10 @@ def test_report_prints_automatically_saved_teaching_row(tmp_path, monkeypatch):
     # fixture panel is too small for the course estimates, so each shows the saved Y alone), per 1-pp increase in X.
     summary = markdown.split("## 关键证据摘要", 1)[1].split("## 理解题答题记录", 1)[0]
     assert summary.count('"type":"diverging-bar"') == 5
+    # The section opens with the generated-data disclosure in bold, before any number.
+    from gvcsim.report_render import GENERATED_Y_DISCLOSURE
+
+    assert summary.lstrip().startswith(f"**{GENERATED_Y_DISCLOSURE}**")
     regression = [chart for chart in charts if chart["type"] == "diverging-bar"]
     assert regression[0]["title"] == "四步保存的结果（都换算成标准差）"
     assert [item["sub"] for item in regression[0]["items"]] == ["步骤 11 · 贸易流", "步骤 12 · 生产", "步骤 13 · 长度", "步骤 14 · 网络"]
