@@ -551,7 +551,7 @@ export function DbSliceTable({
                 </th>
               );
             })}
-            {showSummaries && <th scope="col" title="本行在当前所选列上的合计">所选列之和</th>}
+            {showSummaries && <th scope="col">所选列之和<ColumnInfo label="所选列之和" text={ROW_SUM_HELP} /></th>}
             {showSummaries && <th scope="col">该行总产出 OUT<ColumnInfo label="该行总产出 OUT" text={ACCOUNT_HELP.OUT} /></th>}
           </tr>
         </thead>
@@ -624,7 +624,7 @@ export function DbSliceTable({
                   </td>
                 );
               })}
-              {showSummaries && <td>{fmtDb(slice?.row_summaries?.[rowIndex]?.slice_total ?? null)}</td>}
+              {showSummaries && <td>{dbRowSumText(dataColumns.map((column) => row[column]), slice?.row_summaries?.[rowIndex]?.slice_total ?? null)}</td>}
               {showSummaries && <td>{fmtDb(slice?.row_summaries?.[rowIndex]?.out ?? null)}</td>}
             </tr>
           ))}
@@ -645,6 +645,18 @@ export function DbSliceTable({
       </table>
     </ScrollableRegion>
   );
+}
+
+const ROW_SUM_HELP = "本行在当前所选列上的合计，按未四舍五入的数值相加；前面有“≈”时，与表中显示的各格相加略有差别，来自四舍五入。";
+
+/** 所选列之和 as shown, with "≈" in front when the cells as displayed do not add up to it (rounding), as steps 2–3 do. */
+export function dbRowSumText(cells: readonly unknown[], total: number | null): string {
+  const shown = String(fmtDb(total));
+  if (total == null || !Number.isFinite(total)) return shown;
+  const added = cells
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+    .reduce((sum, value) => sum + Number(String(fmtDb(value)).replace(/,/g, "").replace("−", "-")), 0);
+  return String(fmtDb(added)) === shown ? shown : `≈ ${shown}`;
 }
 
 export function ReleaseIntegrityStatus({ meta }: { meta: Meta | null }) {

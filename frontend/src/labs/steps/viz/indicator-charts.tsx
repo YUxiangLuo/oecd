@@ -1047,7 +1047,7 @@ export function IndicatorPairBars({
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
   const [hovered, setHovered] = useState<string | null>(null);
   const reading = (group: { values: (number | null)[]; reasons?: (string | null)[] }, index: number) =>
-    group.values[index] === null && group.reasons?.[index] ? group.reasons[index]! : indicatorNumber(group.values[index], unit);
+    group.values[index] === null && group.reasons?.[index] ? group.reasons[index]! : textNumber(group.values[index], unit);
   const linesFor = (group: { label: string; values: (number | null)[]; reasons?: (string | null)[] }): TipLine[] => [
     ["", group.label],
     ...group.values.map((_, index): TipLine => [countryLabel(countries[index]), reading(group, index), CAT[index]]),

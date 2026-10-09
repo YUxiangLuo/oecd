@@ -112,6 +112,21 @@ describe("mark-level hover layers", () => {
     expect(group.getAttribute("data-hovered")).toBeNull();
   });
 
+  test("pair bar labels read amounts under 10 at the cards' three decimals (8.765, -2.235, not 9, -2)", () => {
+    const view = render(
+      <IndicatorPairBars
+        countries={["CHN", "USA"]}
+        unit="百万美元"
+        groups={[{ key: "H51", label: "H51 航空运输", values: [8.765, -2.235] }, { key: "C26", label: "C26 计算机电子光学", values: [1234.4, 0.5] }]}
+      />,
+    );
+    const text = view.container.textContent ?? "";
+    expect(text).toContain("8.765");
+    expect(text).toContain("-2.235");
+    expect(text).toContain("1,234");
+    cleanup();
+  });
+
   test("pair bars name an undefined value and say both kinds of gap are left blank (round 12)", () => {
     const view = render(
       <IndicatorPairBars
