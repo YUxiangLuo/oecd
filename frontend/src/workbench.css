@@ -446,6 +446,9 @@
 .dot-plot-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
 /* Horizontal padding so the inset focus ring does not cut through the first character or the last value. */
 .dot-plot-row { display: grid; grid-template-columns: 170px minmax(0, 1fr) var(--dot-values, 110px); align-items: center; gap: 0; min-height: 30px; border-radius: 6px; padding: 2px 6px; }
+/* The dumbbell's row labels are short (纯国内段, 传统贸易段, GVC 段): a narrow label column leaves the track room. */
+.dumbbell .dot-plot-row { grid-template-columns: 84px minmax(0, 1fr) var(--dot-values, 110px); }
+.dumbbell .dot-plot-axis { margin-left: 90px; }
 .dot-plot-row[data-hovered], .dot-plot-row:focus-visible { background: #f4f6fb; outline: none; }
 .dot-plot-row:focus-visible { box-shadow: inset 0 0 0 2px #4b47e0; }
 .dot-plot-label { font-size: 12px; color: #374151; padding-right: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -1168,8 +1168,9 @@ export function IndicatorExplorer({
           {view === "segments" && (
             <>
               {selected.length > 1 && <p className="muted">各国使用同一坐标范围，点的位置可以跨国比较。</p>}
-              {/* Two dumbbells fit side by side; three or more squeezed each plot to ~45px. */}
-              <div className={`comparison-facets${selected.length > 2 ? " comparison-facets--stacked" : ""}`}>
+              {/* Each dumbbell needs about 440px for a readable track: two side by side only when they fit (at 1024
+                  two columns squeezed each plot to ~40px), three or more always stacked. */}
+              <div className={`comparison-facets ${selected.length > 2 ? "comparison-facets--stacked" : "comparison-facets--roomy"}`}>
                 {selected.map((country) => (
                   <section key={country} className="comparison-facet">
                     <h4>{countryLabel(country)} · {year}{industry ? ` · ${sectorLabel(industry)}` : ""}</h4>

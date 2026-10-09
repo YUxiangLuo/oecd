@@ -396,6 +396,10 @@ describe("indicator explorer with automatic report material", () => {
     expect(new Set(saved.observations!.map((item) => item.metric))).toEqual(new Set(["PLv_D", "PLy_D", "PLv_RT", "PLy_RT", "PLv_GVC", "PLy_GVC"]));
     expect(saved.observations!.every((item) => item.source === "explicit-indicator-comparison" && item.year === 2021)).toBe(true);
     expect(view.getAllByRole("region", { name: /段长度对照/ })).toHaveLength(2);
+    // Two dumbbells sit side by side only when each gets ~440px; at 1024 they stack instead of squeezing to ~40px.
+    expect(view.getAllByRole("region", { name: /段长度对照/ })[0].closest(".comparison-facets")?.classList.contains("comparison-facets--roomy")).toBe(true);
+    const css = await Bun.file(new URL("../../../workbench.css", import.meta.url)).text();
+    expect(css).toContain(".dumbbell .dot-plot-row { grid-template-columns: 84px minmax(0, 1fr)");
     const cards = view.getByRole("group", { name: "段长度读数" }).textContent ?? "";
     expect(cards).toContain("最长的一段");
     expect(cards).toContain("GVC 段 · 前向对后向");
