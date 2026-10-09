@@ -1173,6 +1173,9 @@ export function IndicatorExplorer({
           {view === "segments" && (
             <>
               {selected.length > 1 && <p className="muted">各国使用同一坐标范围，点的位置可以跨国比较。</p>}
+              {/* Summed over a country's industries, the domestic Leontief terms are the same whether read along rows
+                  (forward) or columns (backward), so these two pairs coincide by construction (round 21). */}
+              {!industry && <p className="muted">国家整体上，纯国内段与传统贸易段的前向长度和后向长度总是相等，这是恒等关系，不是数据错误：这两段的生产全部在本国内部完成（传统贸易只把最终品出口一次），按增加值来源（前向）和按最终品（后向）汇总的是同一批生产活动。只有 GVC 段涉及外国的生产环节，前后向长度一般不同。</p>}
               {/* Each dumbbell needs about 440px for a readable track: two side by side only when they fit (at 1024
                   two columns squeezed each plot to ~40px), three or more always stacked. */}
               <div className={`comparison-facets ${selected.length > 2 ? "comparison-facets--stacked" : "comparison-facets--roomy"}`}>

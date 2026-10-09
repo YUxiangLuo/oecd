@@ -406,6 +406,8 @@ describe("indicator explorer with automatic report material", () => {
     expect(cards).toContain("最长的一段");
     expect(cards).toContain("GVC 段 · 前向对后向");
     expect(cards).toContain("与对比国家 USA 美国");
+    // At country level 纯国内 and 传统贸易 read the same forward and backward: the page says why (round 21).
+    expect(view.container.textContent).toContain("国家整体上，纯国内段与传统贸易段的前向长度和后向长度总是相等，这是恒等关系，不是数据错误");
     rows.mockRestore();
     schema.mockRestore();
   });
