@@ -186,12 +186,12 @@ try {
     window.__select(s[0], "CAN"); window.__select(s[1], "CRI"); window.__select(s[2], "C29"); return true; })()`);
   await page.waitFor(`window.__find("CRI 哥斯达黎加 · C29") && document.querySelector(".teaching-example-summary")`);
   await Bun.sleep(2500);
-  await scrollTo(page, `window.__find("跟踪一个例子（可选）")`, 8);
-  await save("10-shocks.png", await page.screenshot(), student.username, "Step 10 followed example (Canada vs Mexico, motor vehicles).");
+  await scrollTo(page, `document.querySelector(".teaching-scenario")`, 8);
+  await save("10-shocks.png", await page.screenshot(), student.username, "Step 10 top: US-centred scenario, tiles and the 75-country exposure chart (example Canada vs Costa Rica, motor vehicles).");
 
   await open(page, 11, `document.querySelector(".diverging-bars svg") && document.querySelector(".reg-example-effect")`);
   await scrollTo(page, `document.querySelector(".verdict-card")`, 12);
-  await save("11-regression-result.png", await page.screenshot(), student.username, "Step 11 binned scatter, coefficient plot and reading.");
+  await save("11-regression-result.png", await page.screenshot(), student.username, "Step 11 after the run: group trends, one bar per Y and the headline.");
   if (onlyReg) {
     await page.close();
     throw new DoneEarly();
