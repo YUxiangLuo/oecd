@@ -39,7 +39,11 @@ def _session_fingerprint(session: dict[str, Any]) -> str:
 
 # What the student was looking at rather than what the report uses: changing these must not make a
 # submitted report look out of date (the report prints recorded material, never these view settings).
-_VIEW_ONLY_KEYS = frozenset({"slice", "year", "country", "chart", "drill", "heat_sort", "heat_coverage"})
+# `browse_selection` (steps 6–8) and `network_browse` (step 9) keep the countries and view a student left an
+# exploration-only chart on; the recorded material is `compared` / `indicator_selection` / `observations`.
+_VIEW_ONLY_KEYS = frozenset(
+    {"slice", "year", "country", "chart", "drill", "heat_sort", "heat_coverage", "browse_selection", "network_browse"}
+)
 
 
 def report_fingerprint(session: dict[str, Any]) -> str:

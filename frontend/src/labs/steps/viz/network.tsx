@@ -28,6 +28,7 @@ import {
 } from "../../../viz/views/network-heat";
 import { AsyncStateMessage, useAsync } from "../../shared";
 import { NetworkTrend } from "./network-trend";
+import { carriedCountryNote } from "../indicator/indicator-table";
 import { TradePartners } from "./trade-partners";
 import {
   ChartStory,
@@ -115,6 +116,8 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
   const drill = [pickedDrill, state.data?.compared?.[0], fallbackDrill].find((country) => country && meta.countries.includes(country)) ?? "";
   const [heatSort, setHeatSort] = useState<HeatSortMetric>(normalizeHeatSortMetric(state.data?.heat_sort));
   const [heatCoverage, setHeatCoverage] = useState<HeatCoverage>(normalizeHeatCoverage(state.data?.heat_coverage));
+  // Where the opening countries came from; kept from the first render, as the step records them right away.
+  const [carriedNote] = useState(() => carriedCountryNote(state.carriedFrom ?? undefined));
   const drillTouched = useRef(Boolean(state.data));
   useEffect(() => {
     if (drillTouched.current || !state.data) return;
@@ -148,6 +151,9 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
         schema={schema}
         initialCountry={drill}
         initialCountries={state.data?.compared ?? []}
+        initialBrowse={state.data?.network_browse}
+        onBrowse={(browse) => state.saveView?.({ network_browse: browse })}
+        carriedNote={carriedNote}
         observations={observations}
         syncing={state.syncing}
         syncError={state.syncError}

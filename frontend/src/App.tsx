@@ -87,6 +87,7 @@ function AppContent() {
   const stepState: StepStateApi = {
     data: session.getStep(current),
     save: (patch) => session.patchStep(current, patch),
+    saveView: (patch) => session.patchStep(current, patch),
     complete: currentCompletion?.complete ?? false,
     syncing: session.syncing,
     syncError: session.syncError,

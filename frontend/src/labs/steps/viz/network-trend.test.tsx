@@ -301,3 +301,38 @@ test("加权总度 of an industry with no flows anywhere (T) reads as real zeros
   expect(material.textContent).toContain("全部为 0");
   expect(save).not.toHaveBeenCalled();
 });
+
+test("step 9 keeps the countries, view and industry of an exploration view after leaving the step", async () => {
+  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([row(country, year, 10)]));
+  mockReference();
+  const browsed: unknown[] = [];
+  const first = render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={() => {}} onBrowse={(value) => browsed.push(value)} />);
+  fireEvent.click(screen.getByRole("button", { name: "流量与路径" }));
+  fireEvent.change(screen.getByLabelText("国家 A"), { target: { value: "DEU" } });
+  await waitFor(() => expect(browsed.at(-1)).toMatchObject({ countries: ["DEU", "USA"], view: "topology", industry: "C26" }));
+  first.unmount();
+  render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={() => {}} initialBrowse={{ ...(browsed.at(-1) as { countries: string[]; view: string; industry: string; metric: string; year: number }), industry: "C27" }} />);
+  expect((screen.getByLabelText("国家 A") as HTMLSelectElement).value).toBe("DEU");
+  expect(screen.getByRole("button", { name: "流量与路径" }).getAttribute("aria-pressed")).toBe("true");
+  fireEvent.click(screen.getByRole("button", { name: "历年变化" }));
+  expect((screen.getByLabelText("行业") as HTMLSelectElement).value).toBe("C27");
+});
+
+test("a recorded ranking does not change the trend's industry; a carried pair says where it came from", () => {
+  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([row(country, year, 10)]));
+  mockReference();
+  const release = "a".repeat(32);
+  const ranking: VizObservation[] = ["C27", "C26"].map((industry) => ({ entity: `CHN·${industry}`, country: "CHN", industry, year: 2020, value: 1, metric: "weighted degree", source: "explicit-network-ranking", release }));
+  render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} observations={ranking} carriedNote="沿用你在步骤 6 选的国家，可以更换。" onRecord={() => {}} />);
+  expect(screen.getByRole("button", { name: "行业排名" }).getAttribute("aria-pressed")).toBe("true");
+  fireEvent.click(screen.getByRole("button", { name: "历年变化" }));
+  // The top-ranked C27 is not the trend's industry: the trend keeps its default.
+  expect((screen.getByLabelText("行业") as HTMLSelectElement).value).toBe("C26");
+  expect(screen.queryByText("沿用你在步骤 6 选的国家，可以更换。")).toBeNull();
+  cleanup();
+  render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} carriedNote="沿用你在步骤 6 选的国家，可以更换。" onRecord={() => {}} />);
+  expect(screen.getByText("沿用你在步骤 6 选的国家，可以更换。")).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("国家 A"), { target: { value: "USA" } });
+  expect(screen.queryByText("沿用你在步骤 6 选的国家，可以更换。")).toBeNull();
+  expect(screen.getByText("已与对比国家 B 互换。")).toBeTruthy();
+});

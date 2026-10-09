@@ -66,6 +66,9 @@ describe("keeping and restoring unconfirmed edits", () => {
       // Saved against the server's current revision, not an old one: no conflict to resolve.
       expect(save).toHaveBeenLastCalledWith({ session: draft, base_updated_at: STAMP });
       expect(second.result.current.session).toEqual(draft);
+      // The workspace confirms it with a toast (已恢复上次未保存的修改).
+      expect(second.result.current.restoredEdits).toBe(1);
+      expect(first.result.current.restoredEdits).toBe(0);
       expect(second.result.current.unsynced).toBe(false);
       expect(sessionStorage.getItem(KEPT_EDITS_KEY)).toBeNull();
     } finally { first.unmount(); if (second) await finish(second); get.mockRestore(); save.mockRestore(); }
@@ -81,6 +84,8 @@ describe("keeping and restoring unconfirmed edits", () => {
       await waitFor(() => expect(hook.result.current.status).toBe("ready"));
       expect(hook.result.current.session).toEqual(draft);
       expect(save).not.toHaveBeenCalled();
+      // Nothing had to be put back: no "restored" toast.
+      expect(hook.result.current.restoredEdits).toBe(0);
       expect(sessionStorage.getItem(KEPT_EDITS_KEY)).toBeNull();
     } finally { await finish(hook); get.mockRestore(); save.mockRestore(); }
   });

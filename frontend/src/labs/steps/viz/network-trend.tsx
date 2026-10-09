@@ -6,12 +6,12 @@ import type { IndicatorSchema, Meta } from "../../../types";
 import { countryLabel, joinCountries, sectorLabel } from "../../../viz";
 import { HEAT_EVIDENCE_METRIC, PATH_UNDEFINED_LABEL, PATH_UNDEFINED_NOTE, pathMetricUndefined } from "../../../viz/views/network-heat";
 import { AsyncStateMessage, useAsync } from "../../shared";
-import { currentReleaseId, LensNav, Year2020Note, type Row, type VizObservation } from "./scaffold";
+import { currentReleaseId, LensNav, Year2020Note, type NetworkBrowse, type Row, type VizObservation } from "./scaffold";
 import { IndicatorTrendChart, indicatorNumber } from "./indicator-charts";
 import { AddCountryControl, MaxCountriesNote } from "./add-country";
 import { QuadrantScatter } from "../../../viz";
 import { Butterfly } from "./theme-charts";
-import { COMPARISON_LETTERS, DEFAULT_MARK, defaultComparison, defaultEntities, defaultPartner, MAX_ENTITIES, type YearDistribution } from "./indicator-model";
+import { COMPARISON_LETTERS, DEFAULT_MARK, defaultComparison, defaultEntities, defaultMarkFor, MAX_ENTITIES, pickFirst, type YearDistribution } from "./indicator-model";
 import { ScopeCard } from "./scope-card";
 import { NetworkRanking, networkRanking, networkValue } from "./network-ranking";
 
@@ -28,12 +28,18 @@ export function networkTrendPoints(rows: Row[], years: number[], countries: stri
   }));
 }
 
-export function NetworkTrend({ meta, schema, initialCountry, initialCountries = [], observations = [], syncing = false, syncError = null, onRetrySync, onRecord, locked = false, extraLenses = [], renderExtra, renderTable }: {
+export function NetworkTrend({ meta, schema, initialCountry, initialCountries = [], initialBrowse, onBrowse, carriedNote = null, observations = [], syncing = false, syncError = null, onRetrySync, onRecord, locked = false, extraLenses = [], renderExtra, renderTable }: {
   meta: Meta;
   schema?: IndicatorSchema | null;
   initialCountry: string;
   /** The saved (or carried-over) comparison pair, used when no readings are recorded yet. */
   initialCountries?: string[];
+  /** The countries, view, industry, indicator and year last on screen (recorded or not); they win over the rest. */
+  initialBrowse?: NetworkBrowse;
+  /** Called with the browsing state whenever the student changes it, so leaving the step keeps it. */
+  onBrowse?: (browse: NetworkBrowse) => void;
+  /** "沿用你在步骤 n 选的国家，可以更换。" while the opening countries are the carried ones. */
+  carriedNote?: string | null;
   observations?: VizObservation[];
   syncing?: boolean;
   syncError?: string | null;
@@ -53,16 +59,31 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   const restored = observations.filter((item) => (item.source === "explicit-network-trend" || item.source === "explicit-network-ranking") && item.release === currentReleaseId(meta));
   const restoredCountries = [...new Set(restored.map((item) => item.country))].filter((country) => countries.includes(country));
   // Saved readings or the carried-over list give the entities; a lone drill country still opens as a pair.
+  const browse = initialBrowse && Array.isArray(initialBrowse.countries) && countries.includes(initialBrowse.countries[0])
+    ? initialBrowse
+    : undefined;
+  const browseCountries = browse ? browse.countries.filter((country) => countries.includes(country)) : [];
   const [defaultFirst, ...defaultOthers] = defaultEntities(
     countries,
-    restoredCountries.length ? restoredCountries : initialCountries.length >= 2 ? initialCountries : defaultComparison(countries, [initialCountry]),
+    browseCountries.length ? browseCountries
+      : restoredCountries.length ? restoredCountries : initialCountries.length >= 2 ? initialCountries : defaultComparison(countries, [initialCountry]),
   );
   const [first, setFirst] = useState(defaultFirst);
   const [others, setOthers] = useState<string[]>(defaultOthers);
-  const [industry, setIndustry] = useState(meta.sectors.includes(restored[0]?.industry ?? "") ? restored[0].industry! : meta.sectors.includes("C26") ? "C26" : meta.sectors[0] ?? "");
-  const [pickedMetric, setMetric] = useState(restored[0]?.metric ?? "weighted degree");
-  // 历年变化 opens first so a first visit records material; saved material reopens on the view that recorded it.
-  const [view, setView] = useState<string>(restored[0]?.source === "explicit-network-ranking" ? "ranking" : "trend");
+  // The trend's industry comes from trend material only: a recorded ranking lists many industries, and its first
+  // one (the top-ranked industry) must not replace the industry the trend was read in.
+  const trendIndustry = restored.find((item) => item.source === "explicit-network-trend")?.industry;
+  const [industry, setIndustry] = useState([browse?.industry, trendIndustry, "C26", meta.sectors[0]]
+    .find((sector) => sector && meta.sectors.includes(sector)) ?? "");
+  const [pickedMetric, setMetric] = useState(browse?.metric || (restored[0]?.metric ?? "weighted degree"));
+  // 历年变化 opens first so a first visit records material; saved material reopens on the view that recorded it,
+  // and a view the student left (recorded or not) reopens as it was.
+  const [view, setView] = useState<string>(browse?.view || (restored[0]?.source === "explicit-network-ranking" ? "ranking" : "trend"));
+  const [countriesChosen, setCountriesChosen] = useState(false);
+  const [swapNote, setSwapNote] = useState<string | null>(null);
+  const shownCarriedNote = carriedNote && !countriesChosen
+    && [defaultFirst, ...defaultOthers].join(",") === initialCountries.join(",") ? carriedNote : null;
+  const changeOthers = (next: string[]) => { setCountriesChosen(true); setSwapNote(null); setOthers(next); };
   // Only the two comparison views record material; the extra views are exploration.
   const recordable = view === "trend" || view === "ranking";
   // Picking an industry in the ranking unmounts the clicked button; move focus to the new scope line.
@@ -75,7 +96,8 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     scopeRef.current?.focus();
     setFocusScope(false);
   }, [focusScope]);
-  const [year, setYear] = useState(restored[0]?.source === "explicit-network-ranking" && years.includes(restored[0].year) ? restored[0].year : years.at(-1)!);
+  const [year, setYear] = useState(browse && years.includes(browse.year) ? browse.year
+    : restored[0]?.source === "explicit-network-ranking" && years.includes(restored[0].year) ? restored[0].year : years.at(-1)!);
   const [limit, setLimit] = useState(new Set(restored.map((item) => item.industry)).size > 10 ? 200 : 10);
   // 买入与卖出 has its own length (前 15 个), separate from the ranking's 前 10 个.
   const [flowsLimit, setFlowsLimit] = useState(15);
@@ -87,6 +109,16 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   const label = schema?.fields[metric]?.label ?? (metric === "weighted degree" ? "加权总度" : metric);
   const unit = metric.startsWith("weighted ") ? "百万美元" : metric === HEAT_EVIDENCE_METRIC ? "未归一化介数" : ["degree", "indegree", "outdegree"].includes(metric) ? "连接数" : metric === "Eccentricity" ? "路径长度" : "无量纲";
   const selected = [first, ...others.filter((country, index, all) => country !== first && all.indexOf(country) === index)].slice(0, MAX_ENTITIES);
+  // Every change of what is on screen is kept as browsing state, recorded or not (see `onBrowse`).
+  const browseNow: NetworkBrowse = { countries: selected, view, industry, metric: pickedMetric, year };
+  const browseKey = JSON.stringify(browseNow);
+  const browseSaved = useRef(browseKey);
+  useEffect(() => {
+    if (browseSaved.current === browseKey) return;
+    browseSaved.current = browseKey;
+    onBrowse?.(browseNow);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [browseKey]);
   const release = currentReleaseId(meta);
   const requestKey = `${release}:network-trend:${selected.join(",")}:${years.join(",")}`;
   const query = useAsync<Row[]>(async () => {
@@ -192,22 +224,25 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   }, [pendingKey, matchesSaved, syncing]);
   return <section className="reg-section-card" aria-label="行业网络指标趋势">
     <h3>行业的网络位置怎样变化？在全部经济体的同一行业中处于什么位置？</h3>
+    {shownCarriedNote && <p className="muted indicator-carried-note" role="note">{shownCarriedNote}</p>}
     <div className="controls" role="group" aria-label="所选国家">
       <LabeledControl label="国家 A">{(id) => <select id={id} ref={firstRef} name="network-country-a" value={first} onChange={(event) => {
         const next = event.target.value;
         // Choosing a comparison country as A swaps it with the old A rather than dropping it.
-        setOthers(others.map((country) => (country === next ? first : country)));
+        const picked = pickFirst(first, others, next);
+        changeOthers(picked.others);
+        setSwapNote(picked.note);
         setFirst(next);
       }}>{countries.map((country) => <option key={country} value={country}>{countryLabel(country)}</option>)}</select>}</LabeledControl>
       {others.map((country, index) => (
         <LabeledControl key={index} label={`对比国家 ${COMPARISON_LETTERS[index]}`}>{(id) => (
           <span className="add-country">
-            <select id={id} name={index ? undefined : "network-country-b"} value={country} onChange={(event) => setOthers(others.map((item, at) => (at === index ? event.target.value : item)))}>
-              {countries.filter((candidate) => candidate === country || !selected.includes(candidate)).map((candidate) => <option key={candidate} value={candidate}>{countryLabel(candidate)}{index === 0 && candidate === defaultPartner(countries, first) ? DEFAULT_MARK : ""}</option>)}
+            <select id={id} name={index ? undefined : "network-country-b"} value={country} onChange={(event) => changeOthers(others.map((item, at) => (at === index ? event.target.value : item)))}>
+              {countries.filter((candidate) => candidate === country || !selected.includes(candidate)).map((candidate) => <option key={candidate} value={candidate}>{countryLabel(candidate)}{index === 0 && candidate === defaultMarkFor(countries, first) ? DEFAULT_MARK : ""}</option>)}
             </select>
             {/* A separate button: as the select's first option, arrow keys could remove a country unnoticed. */}
             <button type="button" className="secondary" aria-label={`移除对比国家 ${COMPARISON_LETTERS[index]}：${countryLabel(country)}`} onClick={() => {
-              setOthers(others.filter((_, at) => at !== index));
+              changeOthers(others.filter((_, at) => at !== index));
               window.requestAnimationFrame(() => (addRef.current ?? firstRef.current)?.focus());
             }}>移除</button>
           </span>
@@ -220,11 +255,12 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
           emptyLabel="选择国家…"
           name={others.length ? undefined : "network-country-b"}
           candidates={countries.filter((candidate) => !selected.includes(candidate))}
-          onAdd={(country) => setOthers([...others, country])}
+          onAdd={(country) => changeOthers([...others, country])}
           focusAfterAdd={() => (addRef.current ?? firstRef.current)?.focus()}
         />
       )}
       {selected.length >= MAX_ENTITIES && <MaxCountriesNote />}
+      {swapNote && <span className="muted" role="status">{swapNote}</span>}
     </div>
     {/* The two recording views lead, in the task card's order (① 历年变化, ② 行业排名); exploration follows. */}
     <LensNav

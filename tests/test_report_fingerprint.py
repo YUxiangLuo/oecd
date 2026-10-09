@@ -45,3 +45,13 @@ def test_reports_saved_before_the_view_exclusion_keep_the_full_session_check():
     browsed = copy.deepcopy(session)
     browsed["steps"]["2"]["data"]["year"] = 2017
     assert not records.report_matches_session(browsed, legacy)
+
+
+def test_exploration_view_selections_do_not_outdate_a_report():
+    """Steps 6–9 keep the countries and view of an exploration-only chart; that is browsing, not material."""
+    session = _session()
+    report = _report_for(session)
+    browsed = copy.deepcopy(session)
+    browsed["steps"]["9"]["data"]["network_browse"] = {"countries": ["BRN", "USA"], "view": "topology"}
+    browsed["steps"]["2"]["data"]["browse_selection"] = {"first": "BRN", "others": ["USA"], "view": "structure"}
+    assert records.report_matches_session(browsed, report)

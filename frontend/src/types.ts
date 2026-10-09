@@ -487,6 +487,12 @@ export interface StepStateApi<T = Record<string, unknown>> {
   data: T | undefined;
   /** 合并写入（与该步已有状态合并，不整份覆盖）。 */
   save: (patch: Partial<T>) => void;
+  /**
+   * Saves browsing state that is not report material (the selected countries and view of an exploration-only
+   * chart), so leaving the step and coming back keeps it. The server leaves these keys out of the report
+   * fingerprint, so this also works after the report is submitted.
+   */
+  saveView?: (patch: Partial<T>) => void;
   complete: boolean;
   syncing: boolean;
   syncError: string | null;
