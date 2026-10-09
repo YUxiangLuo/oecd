@@ -246,6 +246,36 @@ describe("simple regression workbench", () => {
     expect(screen.getByRole("button", { name: "重新计算贸易流回归" })).toBeTruthy();
   });
 
+  test("a failed bar click shows its error and retry under the bars, brought into view, worded as saving", async () => {
+    // Offline at 1440×900 with the bars at the top: the error and the retry (up in the run card) were out of view.
+    mockApis();
+    spyOn(api, "runRegression").mockRejectedValue(new TypeError("Failed to fetch"));
+    const scrolled: Element[] = [];
+    const scrollIntoView = spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (this: HTMLElement) { scrolled.push(this); });
+    try {
+      render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
+      fireEvent.click(await screen.findByRole("button", { name: /^国内增加值出口占比：/ }));
+      const alert = await screen.findByRole("alert");
+      expect(alert.closest(".reg-family-bars")).not.toBeNull();
+      expect(alert.textContent).toContain("保存国内增加值出口占比没有成功：网络连接中断，请检查连接后重试。");
+      expect(alert.textContent).toContain("图和下面仍是上次保存的结果（外国增加值项占比）。");
+      expect(alert.textContent).not.toContain("计算");
+      // One retry, next to the error; the run button above recalculates the saved Y as usual.
+      expect(alert.querySelector("button")?.textContent).toBe("重试：保存国内增加值出口占比");
+      expect(screen.getByRole("button", { name: "重新计算贸易流回归" }).className).toBe("run-btn secondary");
+      expect(screen.getAllByRole("alert")).toHaveLength(1);
+      expect(document.querySelector(".reg-stale-note")).toBeNull();
+      await waitFor(() => expect(scrolled).toContain(alert));
+      expect(scrollIntoView.mock.calls.at(-1)?.[0]).toMatchObject({ block: "nearest" });
+    } finally {
+      scrollIntoView.mockRestore();
+    }
+    // At full strength while the bars fade, with room above it when scrolled into view.
+    const css = await Bun.file(new URL("./workbench.css", import.meta.url)).text();
+    expect(css).toContain(".reg-results-stale .reg-family-bars > :not(.reg-bar-error) { opacity: .62; }");
+    expect(css).toMatch(/\.reg-bar-error \{[^}]*scroll-margin: 16px 0 16px;/);
+  });
+
   test("after a submitted report, clicking another bar says the material has already been replaced", async () => {
     mockApis();
     spyOn(api, "runRegression").mockResolvedValue({ ...DVA(), benchmark } as never);

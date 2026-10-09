@@ -119,7 +119,11 @@
 }
 .reg-rerun-warning b { margin-right: 8px; }
 .reg-stale-note { margin: 0 0 8px; padding: 7px 10px; border-radius: 7px; background: #fff0db; color: #8b4f00; font-size: 12px; font-weight: 700; }
-.reg-results-stale .verdict-anchor { opacity: .62; }
+/* The stale bars and reading fade; a failed bar click's error under the bars stays at full strength. */
+.reg-results-stale .verdict-anchor > :not(.reg-family-bars), .reg-results-stale .reg-family-bars > :not(.reg-bar-error) { opacity: .62; }
+/* Brought into view after a failed bar click: a little room above it and above the sticky step footer below. */
+.reg-bar-error { margin: 8px 0 0; scroll-margin: 16px 0 16px; }
+.reg-bar-error-note { display: block; margin-top: 2px; color: #8b4f00; font-size: 12px; font-weight: 700; }
 .stale-result { margin: 8px 0; padding: 7px 9px; border-radius: 7px; background: #fff0db; color: #8b4f00; font-weight: 700; font-size: 11.5px; }
 .reg-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .reg-section-heading h3 { margin: 4px 0; }

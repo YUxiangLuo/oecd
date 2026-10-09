@@ -548,6 +548,8 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
   const [failedRequest, setFailedRequest] = useState<{ key: string | null; fromBar: boolean } | null>(null);
   const replacedNoticeRef = useRef<HTMLParagraphElement>(null);
   const revealReplacedNotice = useRef(false);
+  const barErrorRef = useRef<HTMLDivElement>(null);
+  const revealBarError = useRef(false);
   // The bars are fetched with the first run (or with a restored one), never before.
   const [overviewWanted, setOverviewWanted] = useState(false);
   // A 429 carries Retry-After: the retry button waits it out with a visible countdown.
@@ -679,8 +681,11 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
     } catch (cause) {
       focusSavedBarAfterRun.current = false;
       if (mountedRef.current) {
-        setError(userFacingRequestError(cause, `${runName}未完成`));
+        // A bar (or 恢复默认) was saving another Y: said so ("保存国内增加值出口占比没有成功"), not as a calculation.
+        const failedLabel = lessonFor(outcome, key ?? defaultKey, baselineOptions.find((option) => option.key === (key ?? defaultKey))?.label).shortMetric;
+        setError(userFacingRequestError(cause, fromButton ? `${runName}未完成` : `保存${failedLabel}没有成功`));
         setFailedRequest({ key, fromBar: !fromButton });
+        revealBarError.current = !fromButton;
         if (cause instanceof ApiError && cause.status === 429 && cause.retryAfter) {
           setNow(Date.now());
           setRetryAt(Date.now() + cause.retryAfter * 1000);
@@ -732,6 +737,18 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
   }, [showReplaced, result]);
 
   const bars = result && overviewItems.length > 0 ? familyBarRows(outcome, overviewItems, selectedKey, result) : null;
+  // A failed bar click: the error and its retry sit under the bars, where the click happened (the run card and
+  // its button can be far above, out of view), and are brought into view; keyboard focus stays on the bars.
+  const errorAtBars = Boolean(error && failedRequest?.fromBar && bars);
+  useEffect(() => {
+    if (!errorAtBars || !revealBarError.current) return;
+    revealBarError.current = false;
+    const frame = window.requestAnimationFrame(() => {
+      const reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      barErrorRef.current?.scrollIntoView?.({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [errorAtBars, error]);
   const identity = !bars ? null : outcome === "production" ? forwardShareIdentity(overviewItems) : outcome === "network" ? degreeIdentity(overviewItems) : null;
   const defaultLabel = lessonFor(outcome, defaultKey, baselineOptions.find((option) => option.default)?.label).shortMetric;
   const latinGap = /^[A-Za-z]/.test(lesson.shortMetric) ? " " : "";
@@ -752,18 +769,19 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
         {/* Said before the run (the result card repeats it), so the Y is never read as OECD data first. */}
         {!result && <p className="muted reg-data-note reg-data-note-before" role="note">{GENERATED_DATA_NOTE}</p>}
         {/* Once a result exists, recalculating is a secondary action; it replaces saved material. */}
+        {/* After a failed bar click the retry sits under the bars; this button recalculates the saved Y as usual. */}
         <button
-          className={result && !error ? "run-btn secondary" : "run-btn"}
+          className={result && (!error || errorAtBars) ? "run-btn secondary" : "run-btn"}
           onClick={() => {
             if (running || retryWait > 0) return;
-            void run(failedRequest ? failedRequest.key : result ? selectedKey : null, true);
+            void run(failedRequest && !errorAtBars ? failedRequest.key : result ? selectedKey : null, true);
           }}
           // aria-disabled while running keeps keyboard focus on the button instead of dropping it to the page.
           aria-disabled={running || retryWait > 0}
         >
           {running ? "正在计算…"
             : retryWait > 0 ? `重试（${retryWait} 秒后）`
-              : error ? (failedBarLabel ? `重试：保存${failedBarLabel}` : `重试：计算${runName}`)
+              : error && !errorAtBars ? (failedBarLabel ? `重试：保存${failedBarLabel}` : `重试：计算${runName}`)
                 : result ? `重新计算${runName}`
                   : groups ? `计算${runName}（用全部 ${groups.sample.rows.toLocaleString("zh-CN")} 条记录）` : `计算${runName}`}
         </button>
@@ -812,11 +830,11 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
       </section>
 
       {/* One action: the run button above doubles as the retry (it shows the wait after "too many requests"). */}
-      {error && <div className="error-box async-error" role="alert"><span>{error}</span></div>}
+      {error && !errorAtBars && <div className="error-box async-error" role="alert"><span>{error}</span></div>}
 
       {result && (
         <div className={error ? "reg-results reg-results-stale" : "reg-results"}>
-          {error && <p className="reg-stale-note" role="note">这次计算没有成功；下面仍是上次保存的结果。</p>}
+          {error && !errorAtBars && <p className="reg-stale-note" role="note">这次计算没有成功；下面仍是上次保存的结果。</p>}
           <div ref={verdictAnchorRef} className="verdict-anchor">
             {bars ? (
               <div className="reg-family-bars">
@@ -844,6 +862,23 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
                     <p ref={replacedNoticeRef} className="reg-rerun-warning reg-replaced-notice" role="status">{replacedNotice}</p>
                   )}
                 </DivergingBarChart>
+                {/* Under the bars, not faded with them: what failed, that the bars still show the saved Y, and the retry. */}
+                {errorAtBars && (
+                  <div ref={barErrorRef} className="error-box async-error reg-bar-error" role="alert">
+                    <span>{error}<span className="reg-bar-error-note">图和下面仍是上次保存的结果（{lesson.shortMetric}）。</span></span>
+                    <button type="button" className="secondary" aria-disabled={running || retryWait > 0 || undefined}
+                      onClick={() => {
+                        if (running || retryWait > 0 || !failedRequest) return;
+                        // The button goes with the error: keyboard focus moves to the bar being saved, then (on success)
+                        // to the saved bar.
+                        verdictAnchorRef.current?.querySelector<SVGGElement>(`[data-bar="${failedKey}"]`)?.focus();
+                        focusSavedBarAfterRun.current = true;
+                        void run(failedRequest.key, false);
+                      }}>
+                      {retryWait > 0 ? `重试（${retryWait} 秒后）` : `重试：保存${failedBarLabel}`}
+                    </button>
+                  </div>
+                )}
               </div>
             ) : overviewQuery.status === "error" && overviewQuery.error
               ? <RegressionRequestError label="条形图" error={overviewQuery.error} onRetry={overviewQuery.retry} />
