@@ -251,6 +251,17 @@ describe("fixed teaching regression reading", () => {
   });
 });
 
+test("step 14's raw coefficients group thousands, as the report's appendix", () => {
+  const data = response();
+  data.design.outcome = "network";
+  data.design.depvar_kind = "network";
+  Object.assign(data.result.coefs[0], { coef: -4080.37226, ci_low: -4158.542, ci_high: -4002.2026, se: 39.88, t: -102.3 });
+  data.result.depvar_std = 850;
+  const table = render(<RegressionCoefficientTable response={data} />);
+  const cells = [...table.container.querySelectorAll("tbody td")].map((cell) => cell.textContent);
+  expect(cells.slice(1, 6)).toEqual(["-40.80 个中心性原始单位", "-4,080.3723", "[-4,158.5420, -4,002.2026]", "39.8800", "-102.30"]);
+});
+
 test("the coefficient table never prints a negative zero", () => {
   const data = response();
   Object.assign(data.result.coefs[0], { coef: -0.00001, ci_low: -0.00004, ci_high: 0.00002, se: 0.00001, t: -0.001 });

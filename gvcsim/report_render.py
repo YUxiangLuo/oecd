@@ -737,11 +737,11 @@ def _reported_inference_cells(
 
 
 def _fixed4(value: Any) -> str:
-    """A coefficient, SE or interval end as the page's 详细数字 table prints it (``toFixed(4)``): four decimals,
-    both interval ends alike ("[-0.4109, -0.3790]", not "[-0.4109, -0.379]")."""
+    """A coefficient, SE or interval end as the page's 详细数字 table prints it (``fixed4``): four decimals, both
+    interval ends alike ("[-0.4109, -0.3790]", not "[-0.4109, -0.379]"), thousands grouped ("-4,080.3723")."""
     if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(float(value)):
         return "—"
-    return _no_negative_zero(f"{float(value):.4f}")
+    return _no_negative_zero(f"{float(value):,.4f}")
 
 
 def _technical_estimate_tables(

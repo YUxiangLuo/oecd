@@ -20,6 +20,7 @@ import {
   globalInferenceIsSuppressed,
   networkDigits,
   signed,
+  signedEffect,
   type BarEstimate,
 } from "./regression-verdict";
 import { workedNumbers } from "./labs/steps/shock-lab";
@@ -257,8 +258,11 @@ export function RegressionResultCard({ outcome, response, examples = [], example
   );
 }
 
-/** A raw coefficient, SE or interval end at four decimals (report ``_fixed4``), never "-0.0000". */
-const fixed4 = (value: number) => stripNegativeZero(value.toFixed(4));
+/**
+ * A raw coefficient, SE or interval end at four decimals with thousands grouped (report ``_fixed4``): step 14's
+ * "-4,080.3723"; never "-0.0000".
+ */
+const fixed4 = (value: number) => groupedFixed(value, 4);
 
 /** Column names in the coefficient table, as the page names them (the code stays in the report appendix). */
 const COEFFICIENT_NAMES: Record<string, string> = { teaching_tariff_exposure: "关税暴露 X" };
@@ -302,7 +306,7 @@ export function RegressionCoefficientTable({ response }: { response: RegressionR
               <td>{fixed4(coef.coef)}</td>
               <td>{ciLow != null && ciHigh != null ? `[${fixed4(ciLow)}, ${fixed4(ciHigh)}]` : "—"}</td>
               {/* With inference suppressed, SE and t are not read either (the backend keeps them for integrity checks). */}
-              <td>{inferenceAllowed && coef.se != null ? fixed4(coef.se) : "—"}</td><td>{inferenceAllowed && coef.t != null ? stripNegativeZero(coef.t.toFixed(2)) : "—"}</td><td>{formatPValue(p)}</td>
+              <td>{inferenceAllowed && coef.se != null ? fixed4(coef.se) : "—"}</td><td>{inferenceAllowed && coef.t != null ? groupedFixed(coef.t, 2) : "—"}</td><td>{formatPValue(p)}</td>
             </tr>
           );
         })}</tbody>
@@ -462,6 +466,14 @@ export function stepMaterialChanged(
   const saved = new Set([data?.run, data?.qualified_run].filter((run) => run != null).map(identity));
   const reported = new Set((reportRuns ?? []).filter((run) => run.step === stepNumber).map(identity));
   return saved.size !== reported.size || [...saved].some((item) => !reported.has(item));
+}
+
+/**
+ * The bracket's label on the 加税前后 chart, in the headline's digits for the Y's kind (estimateDigits): every network
+ * Y reads "-147.12" and "-73.80" alike (by size they read "-147" and "-73.8"), grouped from 1,000.
+ */
+export function gapLabel(kind: DepvarKind, shown: number): string {
+  return `回归估计的差距 ${signedEffect(shown, kind)} ${countUnit(kind)}`;
 }
 
 /** The line under the 加税前后 chart: what its dashed bracket is (β × the taxed group's mean X), as an association. */
@@ -768,8 +780,6 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
           const coefficient = result ? runEstimate(result) : null;
           const gap = coefficient?.coef != null && groups.mean_exposure_taxed != null && !coefficient.suppressed
             ? coefficient.coef * groups.mean_exposure_taxed : null;
-          // Network Y ranges from closeness (~0.01) to weighted degree (thousands), so its decimals follow the gap.
-          const digits = kind === "network" ? networkDigits(Math.abs((gap ?? 0) * levelScale)) : kind === "position" ? 4 : kind === "length" ? 3 : 2;
           const shown = (gap ?? 0) * levelScale;
           // The weak Y's interval includes 0: the gap's sign is not settled, as the verdict says.
           const uncertain = coefficient?.ci_low != null && coefficient.ci_high != null && coefficient.ci_low <= 0 && coefficient.ci_high >= 0;
@@ -783,7 +793,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
                 scale={levelScale}
                 unit={display.unit ?? lesson.unit}
                 title={`加税前后：两组${latinGap}${lesson.shortMetric}的平均变化`}
-                estimate={gap == null ? null : { gap, label: `回归估计的差距 ${shown > 0 ? "+" : ""}${groupedFixed(shown, digits)} ${countUnit(kind)}`, uncertain }}
+                estimate={gap == null ? null : { gap, label: gapLabel(kind, shown), uncertain }}
               />
               {gap != null && groups.mean_exposure_taxed != null && <p className="muted reg-gap-caption">{gapCaption(groups.mean_exposure_taxed)}</p>}
             </div>

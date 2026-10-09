@@ -57,10 +57,13 @@ interface RegressionVerdict {
   warnings: string[];
 }
 
-/** A signed number as the headline prints it; a nonzero value that rounds to 0 keeps 2 significant digits. */
+/**
+ * A signed number as the headline prints it; a nonzero value that rounds to 0 keeps 2 significant digits. Thousands
+ * are grouped ("-1,140.25"), as the report's `_signed` does.
+ */
 export const signed = (value: number, digits = 3) => {
   const fixed = value.toFixed(digits);
-  const text = value !== 0 && Number(fixed) === 0 ? value.toPrecision(2) : fixed;
+  const text = value !== 0 && Number(fixed) === 0 ? value.toPrecision(2) : fixed.replace(/^-?\d{4,}/, (whole) => whole.replace(/\B(?=(\d{3})+$)/g, ","));
   return `${value >= 0 ? "+" : ""}${text}`;
 };
 

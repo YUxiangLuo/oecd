@@ -4,7 +4,7 @@ import { useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api";
 import {
-  degreeIdentity, exampleEffect, familyBarRows, forwardShareIdentity, groupedFixed, INTERRUPTED_RUN_NOTE, networkDigits, RegressionRequestError,
+  degreeIdentity, exampleEffect, familyBarRows, forwardShareIdentity, gapLabel, groupedFixed, INTERRUPTED_RUN_NOTE, networkDigits, RegressionRequestError,
   RegressionRunLab, scrollRegressionVerdict, stepMaterialChanged, TEACHING_MODEL_VERSION,
 } from "./regression";
 import type {
@@ -445,6 +445,16 @@ describe("simple regression workbench", () => {
     expect(groupedFixed(12.345, 2)).toBe("12.35");
     // Rounds to zero: no negative zero.
     expect(groupedFixed(-0.0004, 2)).toBe("0.00");
+  });
+
+  test("the 加税前后 bracket uses the headline's digits for every network Y", () => {
+    // Weighted degree read "-147" and weighted out-degree "-73.8": decimals by size.
+    expect(gapLabel("network", -147.1234)).toBe("回归估计的差距 -147.12 个中心性原始单位");
+    expect(gapLabel("network", -73.8)).toBe("回归估计的差距 -73.80 个中心性原始单位");
+    expect(gapLabel("network", -1147.1234)).toBe("回归估计的差距 -1,147.12 个中心性原始单位");
+    expect(gapLabel("network", -0.00491)).toBe("回归估计的差距 -0.0049 个中心性原始单位");
+    expect(gapLabel("share", -1.6512)).toBe("回归估计的差距 -1.65 个百分点");
+    expect(gapLabel("length", 0.0164)).toBe("回归估计的差距 +0.016 个长度单位");
   });
 
   test("step 14 says weighted degree is in + out once all three are in the family", () => {

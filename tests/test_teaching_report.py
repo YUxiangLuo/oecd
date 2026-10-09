@@ -2768,6 +2768,25 @@ def test_report_appendix_numbers_match_the_page_detail_table():
     assert row == "| 关税暴露 X | -1.8414 | -0.018 个长度单位 | 0.0399 | [-0.4109, -0.3790] | <0.0001 |"
 
 
+def test_report_appendix_groups_thousands_like_the_page_detail_table():
+    """Step 14's raw coefficients are in the thousands: "-4,080.3723 [-4,158.5420, -4,002.2026]", as the page prints
+    them (``fixed4``), with the per-point reading in the headline's digits."""
+    from gvcsim.report_render import _technical_estimate_tables
+
+    result = {
+        "status": "ok",
+        "depvar_std": 850,
+        "coefs": [
+            {"name": X_COLUMN, "coef": -4080.37226, "se": 39.88, "p": 0.00001, "ci_low": -4158.542, "ci_high": -4002.2026}
+        ],
+    }
+    lines = _technical_estimate_tables({"depvar_kind": "network"}, result, suppressed=False, outcome="network")
+    row = next(line for line in lines if line.startswith("| 关税暴露 X |"))
+    assert row == (
+        "| 关税暴露 X | -4,080.3723 | -40.80 个中心性原始单位 | 39.8800 | [-4,158.5420, -4,002.2026] | <0.0001 |"
+    )
+
+
 def test_report_example_conversion_groups_thousands_like_the_page():
     from gvcsim.report_render import _example_size
 
