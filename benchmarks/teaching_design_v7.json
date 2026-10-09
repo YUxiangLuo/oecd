@@ -1,0 +1,650 @@
+{
+  "seeds": [
+    1000,
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010,
+    1011,
+    1012,
+    1013,
+    1014,
+    1015,
+    1016,
+    1017,
+    1018,
+    1019,
+    1020,
+    1021,
+    1022,
+    1023,
+    1024,
+    1025,
+    1026,
+    1027,
+    1028,
+    1029,
+    1030,
+    1031,
+    1032,
+    1033,
+    1034,
+    1035,
+    1036,
+    1037,
+    1038,
+    1039,
+    1040,
+    1041,
+    1042,
+    1043,
+    1044,
+    1045,
+    1046,
+    1047,
+    1048,
+    1049,
+    1050,
+    1051,
+    1052,
+    1053,
+    1054,
+    1055,
+    1056,
+    1057,
+    1058,
+    1059,
+    1060,
+    1061,
+    1062,
+    1063,
+    1064,
+    1065,
+    1066,
+    1067,
+    1068,
+    1069,
+    1070,
+    1071,
+    1072,
+    1073,
+    1074,
+    1075,
+    1076,
+    1077,
+    1078,
+    1079,
+    1080,
+    1081,
+    1082,
+    1083,
+    1084,
+    1085,
+    1086,
+    1087,
+    1088,
+    1089,
+    1090,
+    1091,
+    1092,
+    1093,
+    1094,
+    1095,
+    1096,
+    1097,
+    1098,
+    1099,
+    1100,
+    1101,
+    1102,
+    1103,
+    1104,
+    1105,
+    1106,
+    1107,
+    1108,
+    1109,
+    1110,
+    1111,
+    1112,
+    1113,
+    1114,
+    1115,
+    1116,
+    1117,
+    1118,
+    1119,
+    1120,
+    1121,
+    1122,
+    1123,
+    1124,
+    1125,
+    1126,
+    1127,
+    1128,
+    1129,
+    1130,
+    1131,
+    1132,
+    1133,
+    1134,
+    1135,
+    1136,
+    1137,
+    1138,
+    1139,
+    1140,
+    1141,
+    1142,
+    1143,
+    1144,
+    1145,
+    1146,
+    1147,
+    1148,
+    1149,
+    1150,
+    1151,
+    1152,
+    1153,
+    1154,
+    1155,
+    1156,
+    1157,
+    1158,
+    1159,
+    1160,
+    1161,
+    1162,
+    1163,
+    1164,
+    1165,
+    1166,
+    1167,
+    1168,
+    1169,
+    1170,
+    1171,
+    1172,
+    1173,
+    1174,
+    1175,
+    1176,
+    1177,
+    1178,
+    1179,
+    1180,
+    1181,
+    1182,
+    1183,
+    1184,
+    1185,
+    1186,
+    1187,
+    1188,
+    1189,
+    1190,
+    1191,
+    1192,
+    1193,
+    1194,
+    1195,
+    1196,
+    1197,
+    1198,
+    1199
+  ],
+  "release_seed_unchanged": 20260913,
+  "source_panel_sha256": "0e93a953964268a0be695150879087fc984110433c111ed76e08423f04b6a2d6",
+  "source_exposure": {
+    "path": "export_exposure_2016.csv",
+    "sha256": "05abf328b1af27b119a8a3e20746235bcdebb84717c28821518528845c4455d3"
+  },
+  "generator_snapshots": {
+    "trade": {
+      "version": "step10-tariff-teaching-v7",
+      "randomization_version": "step10-tariff-teaching-v1",
+      "x_columns": [
+        "teaching_tariff_exposure"
+      ],
+      "y_column": "teaching_y_trade",
+      "baseline": "FVA_share",
+      "baseline_label": "\u5916\u56fd\u589e\u52a0\u503c\u9879\u5360\u6bd4",
+      "baseline_source": "FVA_share",
+      "baseline_kind": "share",
+      "entity": "entity_id",
+      "time": "year",
+      "fixed_effects": [
+        "entity_id",
+        "year"
+      ],
+      "controls": [],
+      "interactions": [],
+      "seed": 20260913,
+      "beta": -0.55,
+      "tariff_path": [
+        0.0,
+        0.0,
+        0.25,
+        0.25,
+        0.25
+      ],
+      "market": "USA",
+      "taxed_rule": {
+        "basis": "first-year goods trade surplus with the market (ICIO sectors A-C)",
+        "min_million_usd": 1000.0
+      },
+      "calibration": [
+        0.25,
+        0.3,
+        0.006
+      ],
+      "disclaimer": "\u8bfe\u7a0b\u5173\u7a0e\u5b9e\u9a8c\u6570\u636e\u96c6\uff1aX \u4e0e\u56db\u4e2a Y \u6309\u8bfe\u7a0b\u6570\u636e\u5951\u7ea6\u751f\u6210\uff0c\u4e0d\u662f OECD \u53d1\u5e03\u7ed3\u679c\u3002"
+    },
+    "production": {
+      "version": "step10-tariff-teaching-v7",
+      "randomization_version": "step10-tariff-teaching-v1",
+      "x_columns": [
+        "teaching_tariff_exposure"
+      ],
+      "y_column": "teaching_y_production",
+      "baseline": "3b_VA_GVC_C_share",
+      "baseline_label": "\u590d\u6742 GVC \u751f\u4ea7\u4efd\u989d",
+      "baseline_source": "3b_VA_GVC_C_share",
+      "baseline_kind": "share",
+      "entity": "entity_id",
+      "time": "year",
+      "fixed_effects": [
+        "entity_id",
+        "year"
+      ],
+      "controls": [],
+      "interactions": [],
+      "seed": 20260913,
+      "beta": -0.4,
+      "tariff_path": [
+        0.0,
+        0.0,
+        0.25,
+        0.25,
+        0.25
+      ],
+      "market": "USA",
+      "taxed_rule": {
+        "basis": "first-year goods trade surplus with the market (ICIO sectors A-C)",
+        "min_million_usd": 1000.0
+      },
+      "calibration": [
+        0.14,
+        0.16,
+        0.005
+      ],
+      "disclaimer": "\u8bfe\u7a0b\u5173\u7a0e\u5b9e\u9a8c\u6570\u636e\u96c6\uff1aX \u4e0e\u56db\u4e2a Y \u6309\u8bfe\u7a0b\u6570\u636e\u5951\u7ea6\u751f\u6210\uff0c\u4e0d\u662f OECD \u53d1\u5e03\u7ed3\u679c\u3002"
+    },
+    "length": {
+      "version": "step10-tariff-teaching-v7",
+      "randomization_version": "step10-tariff-teaching-v1",
+      "x_columns": [
+        "teaching_tariff_exposure"
+      ],
+      "y_column": "teaching_y_length",
+      "baseline": "PLv_GVC",
+      "baseline_label": "\u524d\u5411 GVC \u6bb5\u957f\u5ea6",
+      "baseline_source": "PLv_GVC",
+      "baseline_kind": "length",
+      "entity": "entity_id",
+      "time": "year",
+      "fixed_effects": [
+        "entity_id",
+        "year"
+      ],
+      "controls": [],
+      "interactions": [],
+      "seed": 20260913,
+      "beta": -1.8,
+      "tariff_path": [
+        0.0,
+        0.0,
+        0.25,
+        0.25,
+        0.25
+      ],
+      "market": "USA",
+      "taxed_rule": {
+        "basis": "first-year goods trade surplus with the market (ICIO sectors A-C)",
+        "min_million_usd": 1000.0
+      },
+      "calibration": [
+        3.0,
+        2.0,
+        0.03
+      ],
+      "disclaimer": "\u8bfe\u7a0b\u5173\u7a0e\u5b9e\u9a8c\u6570\u636e\u96c6\uff1aX \u4e0e\u56db\u4e2a Y \u6309\u8bfe\u7a0b\u6570\u636e\u5951\u7ea6\u751f\u6210\uff0c\u4e0d\u662f OECD \u53d1\u5e03\u7ed3\u679c\u3002"
+    }
+  },
+  "legacy_noise_scales": {
+    "trade": 0.012,
+    "production": 0.01,
+    "length": 0.06
+  },
+  "implementation_sha256": {
+    "benchmark": "8f3abfdc9d0824d90c47dbcf34a1db8cce92b36d82083d68f72c3537103949c6",
+    "generator": "300795b03138beb49f1c41b624d2dbd52d04b178869b74e466fa8b81e67c4dbe"
+  },
+  "candidates": {
+    "legacy": {
+      "tariff_rate": null,
+      "noise_multiplier": 1.0
+    },
+    "flat_10pct": {
+      "tariff_rate": 0.1,
+      "noise_multiplier": 1.0
+    },
+    "flat_half_noise": {
+      "tariff_rate": 0.1,
+      "noise_multiplier": 0.5
+    },
+    "flat_quarter_noise": {
+      "tariff_rate": 0.1,
+      "noise_multiplier": 0.25
+    },
+    "flat_25pct_half_noise": {
+      "tariff_rate": 0.25,
+      "noise_multiplier": 0.5
+    }
+  },
+  "summary": {
+    "legacy": {
+      "trade": {
+        "mean_bias": 0.0025412625175960206,
+        "rmse": 0.03731980956555608,
+        "coverage_95": 0.965,
+        "power": 1.0,
+        "null_false_positive_rate": 0.035
+      },
+      "production": {
+        "mean_bias": 0.001032665379957247,
+        "rmse": 0.03279567223094423,
+        "coverage_95": 0.925,
+        "power": 1.0,
+        "null_false_positive_rate": 0.075
+      },
+      "length": {
+        "mean_bias": 0.015052510555733369,
+        "rmse": 0.1966251683416867,
+        "coverage_95": 0.94,
+        "power": 1.0,
+        "null_false_positive_rate": 0.06
+      }
+    },
+    "flat_10pct": {
+      "trade": {
+        "mean_bias": 0.0010355091861202776,
+        "rmse": 0.0448376066433031,
+        "coverage_95": 0.935,
+        "power": 1.0,
+        "null_false_positive_rate": 0.065
+      },
+      "production": {
+        "mean_bias": 0.0005243432800413428,
+        "rmse": 0.03693322844377729,
+        "coverage_95": 0.925,
+        "power": 1.0,
+        "null_false_positive_rate": 0.075
+      },
+      "length": {
+        "mean_bias": 0.02074726362840605,
+        "rmse": 0.22699659499129918,
+        "coverage_95": 0.93,
+        "power": 1.0,
+        "null_false_positive_rate": 0.07
+      }
+    },
+    "flat_half_noise": {
+      "trade": {
+        "mean_bias": 0.0005177545930603724,
+        "rmse": 0.0224188033216515,
+        "coverage_95": 0.935,
+        "power": 1.0,
+        "null_false_positive_rate": 0.065
+      },
+      "production": {
+        "mean_bias": 0.0002621716400206997,
+        "rmse": 0.018466614221888774,
+        "coverage_95": 0.925,
+        "power": 1.0,
+        "null_false_positive_rate": 0.075
+      },
+      "length": {
+        "mean_bias": 0.010373631814202802,
+        "rmse": 0.11349829749564995,
+        "coverage_95": 0.93,
+        "power": 1.0,
+        "null_false_positive_rate": 0.07
+      }
+    },
+    "flat_quarter_noise": {
+      "trade": {
+        "mean_bias": 0.0002588772965303643,
+        "rmse": 0.01120940166082581,
+        "coverage_95": 0.935,
+        "power": 1.0,
+        "null_false_positive_rate": 0.065
+      },
+      "production": {
+        "mean_bias": 0.00013108582001038872,
+        "rmse": 0.009233307110944307,
+        "coverage_95": 0.925,
+        "power": 1.0,
+        "null_false_positive_rate": 0.075
+      },
+      "length": {
+        "mean_bias": 0.005186815907101239,
+        "rmse": 0.056749148747824885,
+        "coverage_95": 0.93,
+        "power": 1.0,
+        "null_false_positive_rate": 0.07
+      }
+    },
+    "flat_25pct_half_noise": {
+      "trade": {
+        "mean_bias": 0.00020710183722372878,
+        "rmse": 0.008967521328660693,
+        "coverage_95": 0.935,
+        "power": 1.0,
+        "null_false_positive_rate": 0.065
+      },
+      "production": {
+        "mean_bias": 0.00010486865600822487,
+        "rmse": 0.007386645688755581,
+        "coverage_95": 0.925,
+        "power": 1.0,
+        "null_false_positive_rate": 0.075
+      },
+      "length": {
+        "mean_bias": 0.004149452725680697,
+        "rmse": 0.04539931899825971,
+        "coverage_95": 0.93,
+        "power": 1.0,
+        "null_false_positive_rate": 0.07
+      }
+    }
+  },
+  "baselines": {
+    "trade:FVA_share": {
+      "beta": -0.55,
+      "entities": 3200,
+      "mean_bias": 0.00042214205607767616,
+      "rmse": 0.00894450189690944,
+      "coverage_95": 0.905,
+      "power": 1.0,
+      "null_false_positive_rate": 0.095
+    },
+    "trade:DVAex_share": {
+      "beta": 0.55,
+      "entities": 3200,
+      "mean_bias": -0.0003798293822330312,
+      "rmse": 0.00845412695252117,
+      "coverage_95": 0.92,
+      "power": 1.0,
+      "null_false_positive_rate": 0.08
+    },
+    "production:3b_VA_GVC_C_share": {
+      "beta": -0.4,
+      "entities": 3200,
+      "mean_bias": -0.0005714448156315436,
+      "rmse": 0.007241875373199478,
+      "coverage_95": 0.925,
+      "power": 1.0,
+      "null_false_positive_rate": 0.075
+    },
+    "production:3_VA_GVC_share": {
+      "beta": -0.7,
+      "entities": 3200,
+      "mean_bias": -0.0007803599693217372,
+      "rmse": 0.010139194055319588,
+      "coverage_95": 0.93,
+      "power": 1.0,
+      "null_false_positive_rate": 0.07
+    },
+    "production:3_FGY_GVC_share": {
+      "beta": -0.45,
+      "entities": 3200,
+      "mean_bias": -0.00043177032557864927,
+      "rmse": 0.008916843178775441,
+      "coverage_95": 0.94,
+      "power": 1.0,
+      "null_false_positive_rate": 0.06
+    },
+    "production:3a_VA_GVC_S_share": {
+      "beta": -0.3,
+      "entities": 3200,
+      "mean_bias": -0.00020891515369014346,
+      "rmse": 0.007600596906117337,
+      "coverage_95": 0.91,
+      "power": 1.0,
+      "null_false_positive_rate": 0.09
+    },
+    "production:2_VA_RT_share": {
+      "beta": -0.3,
+      "entities": 3200,
+      "mean_bias": 0.00014887198511354393,
+      "rmse": 0.005998254210561509,
+      "coverage_95": 0.915,
+      "power": 1.0,
+      "null_false_positive_rate": 0.085
+    },
+    "production:1_VA_D_share": {
+      "beta": 1.0,
+      "entities": 3200,
+      "mean_bias": 0.0006314879842081739,
+      "rmse": 0.01166799403429892,
+      "coverage_95": 0.945,
+      "power": 1.0,
+      "null_false_positive_rate": 0.055
+    },
+    "production:3b_FGY_GVC_C_share": {
+      "beta": 0.0,
+      "entities": 3200,
+      "mean_bias": 0.0008630491275984375,
+      "rmse": 0.00954607361911594,
+      "coverage_95": 0.895,
+      "power": 0.105,
+      "null_false_positive_rate": 0.105
+    },
+    "length:PLv_GVC": {
+      "beta": -1.8,
+      "entities": 3200,
+      "mean_bias": -0.0007190190029147248,
+      "rmse": 0.040732979494930724,
+      "coverage_95": 0.94,
+      "power": 1.0,
+      "null_false_positive_rate": 0.06
+    },
+    "length:PLy_GVC": {
+      "beta": -1.5,
+      "entities": 3200,
+      "mean_bias": 0.002813690821535768,
+      "rmse": 0.04332230109970905,
+      "coverage_95": 0.915,
+      "power": 1.0,
+      "null_false_positive_rate": 0.085
+    },
+    "length:GVCPs": {
+      "beta": -0.08,
+      "entities": 3200,
+      "mean_bias": 0.0008951214397656144,
+      "rmse": 0.014364329564603496,
+      "coverage_95": 0.945,
+      "power": 1.0,
+      "null_false_positive_rate": 0.055
+    },
+    "network:weighted_degree": {
+      "beta": -4000.0,
+      "entities": 3200,
+      "mean_bias": 2.6725250268315266,
+      "rmse": 38.548557152971824,
+      "coverage_95": 0.96,
+      "power": 1.0,
+      "null_false_positive_rate": 0.04
+    },
+    "network:weighted_indegree": {
+      "beta": -2000.0,
+      "entities": 3200,
+      "mean_bias": 1.6170440710212495,
+      "rmse": 28.55171220650523,
+      "coverage_95": 0.945,
+      "power": 1.0,
+      "null_false_positive_rate": 0.055
+    },
+    "network:weighted_outdegree": {
+      "beta": -2000.0,
+      "entities": 3200,
+      "mean_bias": 1.0554809558103215,
+      "rmse": 29.050198059982637,
+      "coverage_95": 0.94,
+      "power": 1.0,
+      "null_false_positive_rate": 0.06
+    },
+    "network:betweenesscentrality": {
+      "beta": -6000.0,
+      "entities": 3200,
+      "mean_bias": -1.0821647213487449,
+      "rmse": 89.49264895858421,
+      "coverage_95": 0.92,
+      "power": 1.0,
+      "null_false_positive_rate": 0.08
+    },
+    "network:closnesscentrality": {
+      "beta": -0.5,
+      "entities": 3200,
+      "mean_bias": 0.0005574898281506019,
+      "rmse": 0.007482250246054933,
+      "coverage_95": 0.89,
+      "power": 1.0,
+      "null_false_positive_rate": 0.11
+    }
+  },
+  "domain_failures": {
+    "legacy": 0,
+    "flat_10pct": 0,
+    "flat_half_noise": 0,
+    "flat_quarter_noise": 0,
+    "flat_25pct_half_noise": 0
+  },
+  "independent_benchmark_checks": [
+    "legacy",
+    "flat_10pct",
+    "flat_half_noise",
+    "flat_quarter_noise",
+    "flat_25pct_half_noise"
+  ],
+  "notes": "Paired noise draws; fixed beta; country-clustered CR1 and t(G-1). Null uses the same residuals with beta=0. Coverage is empirical, not a guarantee."
+}
