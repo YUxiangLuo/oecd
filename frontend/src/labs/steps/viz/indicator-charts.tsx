@@ -620,7 +620,8 @@ const stripLabelWidth = (text: string) => [...text].reduce((width, ch) => width 
  * at its dot on the same row; only when even that collides do they go on two rows.
  */
 export function layoutStripLabels<T extends { px: number; text: string }>(points: T[]) {
-  const clamp = (left: number, width: number) => Math.min(796 - width, Math.max(4, left));
+  // 12 units clear of each edge, so a focused label's ring (2px outline + 2px offset) is not cut by the SVG.
+  const clamp = (left: number, width: number) => Math.min(788 - width, Math.max(12, left));
   const laid = points.map((point) => {
     const width = stripLabelWidth(point.text);
     return { ...point, width, labelX: clamp(point.px - width / 2, width), row: 0 };
@@ -833,7 +834,8 @@ export function DistributionStrip({
             />
           </g>
         ))}
-        {marked.map((point) => (
+        {/* Left to right in the DOM, so Tab reads the marked economies in the order they are drawn. */}
+        {[...marked].sort((a, b) => a.px - b.px).map((point) => (
           <g
             key={point.country}
             data-hit={point.country}

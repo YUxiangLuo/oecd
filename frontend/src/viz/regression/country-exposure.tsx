@@ -82,6 +82,11 @@ export function countryTipLines(row: CountryRow, year: number, rule?: TeachingCo
   ];
 }
 
+/** About how tall the readout is (a 12px padding, about 19px a line), to place it above a focused item. */
+export function focusTipHeight(lines: readonly TipLine[]): number {
+  return 16 + lines.length * 19;
+}
+
 /** Taxed countries split into two side-by-side columns (left: ranks 1…half, right: the rest), highest first. */
 export function splitColumns<T>(rows: readonly T[]): [T[], T[]] {
   const half = Math.ceil(rows.length / 2);
@@ -146,6 +151,17 @@ export function CountryExposureChart({ data, highlight = [], highlightLabel = "�
     const text = goodsBalanceText(row, rule);
     return text ? `，${text}` : "";
   };
+  // The keyboard readout sits under an item in the upper half of the chart and above one in the lower half, so it
+  // never covers the rule line and the table summary under the chart (it did for the last rows and the codes).
+  const focusTip = (element: Element, lines: TipLine[]) => {
+    const wrap = wrapRef.current?.getBoundingClientRect();
+    const rect = element.getBoundingClientRect();
+    if (wrap && wrap.height > 0 && rect.top < wrap.top + wrap.height / 2) {
+      showFor(element, lines);
+      return;
+    }
+    show({ clientX: rect.left + rect.width / 2, clientY: rect.top - focusTipHeight(lines) - 16 }, lines);
+  };
   const itemProps = (row: CountryRow, index: number) => ({
     tabIndex: index === activeIndex ? 0 : -1,
     "aria-label": `${countryLabel(row.country)}${badge(row.country) ? `（例子 ${badge(row.country)}）` : ""}：${data.year} 年各行业平均 X = ${points(row.mean_exposure)} 个百分点，${countryIndustryNote(row)}${balanceText(row)}；方向键切换国家`,
@@ -155,7 +171,7 @@ export function CountryExposureChart({ data, highlight = [], highlightLabel = "�
     onFocus: (event: { currentTarget: Element }) => {
       setActiveIndex(index);
       setFocused(index);
-      showFor(event.currentTarget, countryTipLines(row, data.year, rule));
+      focusTip(event.currentTarget, countryTipLines(row, data.year, rule));
     },
     onBlur: () => { setFocused(null); hide(); },
   });

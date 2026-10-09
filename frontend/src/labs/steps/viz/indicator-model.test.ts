@@ -317,6 +317,20 @@ describe("global reference for steps 6–8", () => {
   });
 });
 
+test("step 7 国家对比 strip: Tab goes left to right, and no focusable label touches the SVG edge", () => {
+  // Country A (USA) is far right, B (BRN) near the left edge.
+  const data = ["USA", "BRN", ...Array.from({ length: 20 }, (_, i) => `C${i}`)]
+    .map((country, i) => ({ country, year: 2020, FVA_share: country === "USA" ? 0.9 : country === "BRN" ? 0 : 0.3 + i / 100 })) as Row[];
+  const [distribution] = countryDistribution(data, "FVA_share", [2020]);
+  const html = renderToStaticMarkup(createElement(DistributionStrip, {
+    rows: data, metric: "FVA_share", unit: "%", label: "外国增加值项占比", year: 2020, highlight: ["USA", "BRN"], distribution,
+  }));
+  const focusable = [...html.matchAll(/<g data-hit="([A-Z]+)" tabindex="0"/g)].map((m) => m[1]);
+  expect(focusable).toEqual(["BRN", "USA"]);
+  const labelXs = [...html.matchAll(/<text x="([0-9.]+)" y="[0-9.]+" text-anchor="start"/g)].map((m) => Number(m[1]));
+  expect(Math.min(...labelXs)).toBeGreaterThanOrEqual(12);
+});
+
 describe("tied ranks", () => {
   test("a shared reading is 并列, and a reading every economy shares has no rank", () => {
     expect(rankText(3, 1, 76)).toBe("第 3 位");
