@@ -586,6 +586,10 @@ export function IndicatorExplorer({
   // Single-year composition bars leave out a total of 0 or below in the share view (shares are undefined);
   // the amount view still draws it, negative parts left of zero.
   const droppedBars = view === "composition" && !amountMode ? totalIssues : [];
+  // The note mentions negative parts only when one is on the chart (step 7's activities are almost never negative).
+  const compositionHasNegative = Boolean(activeComposition) && scoped.some((row) =>
+    selected.includes(String(row.country)) && chartYears.includes(Number(row.year))
+    && activeComposition!.segments.some((segment) => typeof row[segment.key] === "number" && (row[segment.key] as number) < 0));
   // "切换到‘金额’可看各分项" only helps when some part is not 0 (LUX T: every part is 0, the amount view is empty too).
   const droppedHaveParts = droppedBars.some((item) => activeComposition?.segments.some((segment) => {
     const value = scoped.find((row) => row.country === item.country && row.year === item.year)?.[segment.key];
@@ -1118,7 +1122,9 @@ export function IndicatorExplorer({
                   : amountMode ? activeComposition.amountNote ?? activeComposition.note : activeComposition.note}
                 {view === "evolution"
                   ? "每个国家一张图，颜色和年份顺序都相同；先看各国自己的变化，再比较国家之间的差别。"
-                  : amountMode ? "所选国家使用同一金额刻度，条长与总量成比例；负分项画在零轴左侧。" : "所选国家使用相同分项颜色和共同刻度；金额和份额不能混读。"}
+                  : amountMode ? `所选国家使用同一金额刻度，条长与总量成比例${compositionHasNegative ? "；负分项画在零轴左侧" : ""}。`
+                  // A note that already says when a part turns red (出口构成's 产品税减补贴) is not repeated.
+                  : `所选国家使用相同分项颜色和共同刻度；金额和份额不能混读。${compositionHasNegative && !/为负/.test(activeComposition.note) ? "负分项画成红色，放在 0 的左边。" : ""}`}
                 {view !== "evolution" && `条形右侧的数字是${withUnitNote(label(activeComposition.total), unit(activeComposition.total))}。`}
               </p>
               {view === "evolution" ? (

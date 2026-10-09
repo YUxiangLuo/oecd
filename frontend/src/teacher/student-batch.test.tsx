@@ -174,7 +174,7 @@ test("any line naming 学号 and 姓名 is a header, and 姓名 first swaps the 
 test("one message when every line lacks its two columns, line numbers otherwise", () => {
   expect(() => parseRoster("学号 姓名\n0012 张 三\n0013 李 四\n0014 王 五")).toThrow(new Error(ROSTER_COLUMNS_MISSING));
   // A line still unreadable on its own (three single-spaced words) is named by its number.
-  expect(() => parseRoster("0012\t张三\n0013 Li Si")).toThrow(new Error("第 2 行：需要学号和姓名两列"));
+  expect(() => parseRoster("0012\t张三\n0013 Li Si")).toThrow(new Error("第 2 行：需要学号和姓名两列（姓名含空格时，请用制表符或逗号分隔学号和姓名）"));
   expect(() => parseRoster(`0012\t${"名".repeat(61)}`)).toThrow(new Error("第 1 行：姓名不能超过 60 字"));
 });
 

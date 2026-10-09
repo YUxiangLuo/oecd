@@ -71,7 +71,8 @@ export const PRODUCTION_TOPIC: IndicatorTopic = {
     ],
     focus: "3b_VA_GVC_C",
     focusLabel: "复杂 GVC 生产份额",
-    note: "四类生产活动各占本国总增加值的份额：纯国内不跨境，传统贸易随最终品跨境一次，简单 GVC 随中间品跨境一次，复杂 GVC 至少跨境两次。负分项画成红色，放在 0 的左边。",
+    // A negative part (negative value added, e.g. MLT H51) is explained under the chart only when one is drawn.
+    note: "四类生产活动各占本国总增加值的份额：纯国内不跨境，传统贸易随最终品跨境一次，简单 GVC 随中间品跨境一次，复杂 GVC 至少跨境两次。",
     amountNote: "本国总增加值按四类生产活动分成的金额：纯国内不跨境，传统贸易随最终品跨境一次，简单 GVC 随中间品跨境一次，复杂 GVC 至少跨境两次。",
     // The same four activities read from the final-goods side (step 7 四类生产活动 · 后向).
     alternate: {

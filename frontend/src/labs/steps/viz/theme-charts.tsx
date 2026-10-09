@@ -39,6 +39,7 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
       return { year, shares: ok ? segments.map((segment) => (row![segment.key] as number) / (base as number)) : null, total: ok ? (base as number) : null };
     }),
   }));
+  const anyNegative = facetData.some((facet) => facet.points.some((point) => point.shares?.some((share) => share < 0)));
   const extremes = facetData.flatMap((facet) => facet.points.flatMap((point) => {
     if (!point.shares) return [];
     const positive = point.shares.filter((share) => share > 0).reduce((sum, share) => sum + share, 0);
@@ -117,7 +118,8 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
         {segments.map((segment) => (
           <span key={segment.key}><i style={{ background: segment.color }} />{segment.name}</span>
         ))}
-        <span><i style={{ background: NEGATIVE }} />负分项（零轴下方）</span>
+        {/* Only when some part is negative (e.g. negative value added): step 7's parts usually never are. */}
+        {anyNegative && <span><i style={{ background: NEGATIVE }} />负分项（零轴下方）</span>}
       </div>
       <div className="comparison-facets">
         {facetData.map((facet, facetIndex) => (
@@ -158,7 +160,7 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
                 })}
               </svg>
             </div>
-            <p className="muted" style={{ fontSize: 11.5, margin: "4px 0 0" }}>{facetIndex === 0 ? `每一色带是该分项占${totalLabel}的比重；负分项（红）画在零轴下方。` : "同一刻度、同一分项颜色。"}</p>
+            <p className="muted" style={{ fontSize: 11.5, margin: "4px 0 0" }}>{facetIndex === 0 ? `每一色带是该分项占${totalLabel}的比重${anyNegative ? "；负分项（红）画在零轴下方" : ""}。` : "同一刻度、同一分项颜色。"}</p>
           </section>
         ))}
       </div>

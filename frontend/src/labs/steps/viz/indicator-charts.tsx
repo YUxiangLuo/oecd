@@ -419,7 +419,8 @@ export function IndicatorTrendChart({
   const linesFor = (year: number): TipLine[] => {
     const reference = band.find((entry) => entry.year === year);
     return [
-      ["", `${year} 年`],
+      // The unit once, in the heading ("2020 年 · 百万美元"): shares carry their own "%".
+      ["", `${year} 年${unit && unit !== "%" && unit !== "无量纲" ? ` · ${unit}` : ""}`],
       ...countries.map((country, index): TipLine => [
         index && context ? `${countryLabel(country)}（对比）` : countryLabel(country),
         (() => {

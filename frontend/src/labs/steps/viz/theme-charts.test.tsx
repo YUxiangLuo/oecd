@@ -48,6 +48,18 @@ describe("stacked area facets", () => {
     fireEvent.keyDown(group, { key: "End" });
     expect(readout.textContent).toContain("USA 美国 · 2020");
   });
+
+  test("the negative-part legend and caption appear only when a part is negative", () => {
+    const facets = (taxsub: number) => [{ key: "CHN", label: "CHN 中国", rows: [2018, 2019].map((year) => ({
+      country: "CHN", year, gross_exports: 100, DVAex: 70, FVA: 30 - taxsub, taxsub,
+    })) }];
+    const positive = render(<StackedAreaFacets facets={facets(2)} years={[2018, 2019]} segments={segments} total="gross_exports" totalLabel="总出口" />);
+    expect(positive.container.textContent).not.toContain("负分项");
+    positive.unmount();
+    const negative = render(<StackedAreaFacets facets={facets(-3)} years={[2018, 2019]} segments={segments} total="gross_exports" totalLabel="总出口" />);
+    expect(negative.container.textContent).toContain("负分项（零轴下方）");
+    expect(negative.container.textContent).toContain("负分项（红）画在零轴下方");
+  });
 });
 
 describe("industry dot plot", () => {
