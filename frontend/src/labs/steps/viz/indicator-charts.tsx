@@ -108,6 +108,8 @@ export function TrendSummary({
       word: undefinedOnly && parts.every((part) => part.reason!.includes("无法定义")) ? "无法定义" : "无法计算",
     };
   };
+  // 起始 = 结束: one year is a choice, not missing data.
+  if (years.length === 1) return <p className="muted">起始年份和结束年份相同，请选两个不同年份。</p>;
   if (own.length < 2) {
     const empty = years.filter((year) => value(first, year) === null);
     const gap = gapText(first, empty);
@@ -245,7 +247,10 @@ export function ComparisonSummary({
   const gapChange = Math.abs(endGap) - Math.abs(startGap);
   const gapMagnitude = magnitudeReading(gapChange, unit, digits);
   const reversed = startGap !== 0 && endGap !== 0 && Math.sign(startGap) !== Math.sign(endGap);
-  const gapStory = reversed
+  // Two equal readings at both ends (step 10: both X = 0) have no gap at all, not an unchanged one.
+  const gapStory = startGap === 0 && endGap === 0
+    ? "差距为 0"
+    : reversed
     ? "高低位置互换"
     : gapMagnitude === null
       ? "差距基本不变"
@@ -489,9 +494,11 @@ export function IndicatorTrendChart({
         {markYear && years.includes(markYear.year) && markYear.year > years[0] && (
           <g data-mark-year={markYear.year}>
             <line x1={x(markYear.year - 0.5)} x2={x(markYear.year - 0.5)} y1={34} y2={250} stroke="#4b5563" strokeDasharray="5 4" />
-            {/* Left of the line: before the marked year the step 10 X is 0 for every country, so the top-left
-                corner is empty; to the right the taxed line jumps to the top and covered the label. */}
-            <text x={x(markYear.year - 0.5) - 6} y={46} textAnchor="end" fontSize={12} fill="#374151">{markYear.label}</text>
+            {/* Left of the line and halfway up: before the marked year the step 10 X is 0 for every country, so that
+                area is empty. To the right the taxed line jumps up; at the top-left it touched the jump when X
+                reached the top of the axis. */}
+            <text x={x(markYear.year - 0.5) - 10} y={149} textAnchor="end" fontSize={12} fill="#374151"
+              stroke="#fff" strokeWidth={3} strokeLinejoin="round" paintOrder="stroke">{markYear.label}</text>
           </g>
         )}
         {bandPath && <path d={bandPath} fill={REFERENCE_FILL} fillOpacity={0.22} stroke="none" />}
@@ -613,7 +620,8 @@ const stripLabelWidth = (text: string) => [...text].reduce((width, ch) => width 
  * at its dot on the same row; only when even that collides do they go on two rows.
  */
 export function layoutStripLabels<T extends { px: number; text: string }>(points: T[]) {
-  const clamp = (left: number, width: number) => Math.min(796 - width, Math.max(4, left));
+  // 12 units clear of each edge, so a focused label's ring (2px outline + 2px offset) is not cut by the SVG.
+  const clamp = (left: number, width: number) => Math.min(788 - width, Math.max(12, left));
   const laid = points.map((point) => {
     const width = stripLabelWidth(point.text);
     return { ...point, width, labelX: clamp(point.px - width / 2, width), row: 0 };
@@ -826,7 +834,8 @@ export function DistributionStrip({
             />
           </g>
         ))}
-        {marked.map((point) => (
+        {/* Left to right in the DOM, so Tab reads the marked economies in the order they are drawn. */}
+        {[...marked].sort((a, b) => a.px - b.px).map((point) => (
           <g
             key={point.country}
             data-hit={point.country}
@@ -937,7 +946,7 @@ export function LengthPositionTrajectory({
             onMouseLeave={() => setFocusSeries(null)}
           >
             <svg width={30} height={10} aria-hidden="true"><line x1={0} x2={24} y1={5} y2={5} stroke={CAT[index]} strokeWidth={2.5} /><circle cx={25} cy={5} r={4} fill={CAT[index]} /></svg>
-            {countryLabel(countries[index])}{points.length ? ` · ${points[0].year}→${points.at(-1)!.year}` : ""}
+            {countryLabel(countries[index])}{points.length ? ` · ${points[0].year}→${points.at(-1)!.year}` : " · 无轨迹"}
           </span>
         ))}
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#596173" }}>
@@ -950,6 +959,12 @@ export function LengthPositionTrajectory({
           </span>
         )}
       </div>
+      {/* A legend entry with no line needs a reason (ISL B09: every backward length is undefined). */}
+      {series.some((points) => !points.length) && (
+        <p className="muted" role="note">
+          {joinCountries(countries.filter((_, index) => !series[index].length))}没有轨迹：轨迹需要同一年的前向和后向 GVC 段长度都有读数，原因见下方趋势图。
+        </p>
+      )}
       <div ref={wrapRef} className="hover-wrap" onMouseLeave={() => { setActive(null); hide(); }}>
       <svg
         viewBox="0 0 720 650"
@@ -1039,7 +1054,7 @@ export function IndicatorPairBars({
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
   const [hovered, setHovered] = useState<string | null>(null);
   const reading = (group: { values: (number | null)[]; reasons?: (string | null)[] }, index: number) =>
-    group.values[index] === null && group.reasons?.[index] ? group.reasons[index]! : indicatorNumber(group.values[index], unit);
+    group.values[index] === null && group.reasons?.[index] ? group.reasons[index]! : textNumber(group.values[index], unit);
   const linesFor = (group: { label: string; values: (number | null)[]; reasons?: (string | null)[] }): TipLine[] => [
     ["", group.label],
     ...group.values.map((_, index): TipLine => [countryLabel(countries[index]), reading(group, index), CAT[index]]),

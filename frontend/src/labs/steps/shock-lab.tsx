@@ -24,6 +24,9 @@ export interface ShockStepState extends QuizCompletionState, Record<string, unkn
   teaching_panel_version?: string;
   /** True once the student picked the example here (see TeachingExampleSelection). */
   teaching_example_chosen?: boolean;
+  /** The countries and industry last on screen, saved with `saveView` whether or not they were recorded (after
+   *  the report is submitted the example changes only on request), so leaving the step keeps them. */
+  browse_selection?: { first: string; second: string; industry: string };
   teaching_observation?: {
     country: string;
     industry: string;
@@ -144,6 +147,14 @@ export function workedNumbers(w: number, tau: number, x: number): { w: string; x
   return { w: wAt(wBase), x: (x * 100).toFixed(xBase), xDecimals: xBase };
 }
 
+/** A saved step 10 browsing selection, if its countries and industry still exist. */
+export function browsedExample(raw: unknown, countries: readonly string[], sectors: readonly string[]) {
+  if (typeof raw !== "object" || raw === null) return null;
+  const { first, second, industry } = raw as Record<string, unknown>;
+  if (typeof first !== "string" || !countries.includes(first) || typeof industry !== "string" || !sectors.includes(industry)) return null;
+  return { first, second: typeof second === "string" && second !== first && countries.includes(second) ? second : "", industry };
+}
+
 export function ShockLab({ meta, step: _step, state }: {
   meta: Meta;
   step: Step;
@@ -155,11 +166,21 @@ export function ShockLab({ meta, step: _step, state }: {
   const savedChosen = exampleWasChosen(state.data, defaults);
   const example = teachingExample(meta, state.data);
   const countries = example.countries;
-  const [first, setFirst] = useState(example.first);
-  const [second, setSecond] = useState(example.second);
-  const [industry, setIndustry] = useState(example.industry);
-  const [chosen, setChosen] = useState(savedChosen);
-  const choose = () => setChosen(true);
+  const browsed = browsedExample(state.data?.browse_selection, countries, meta.sectors);
+  const opening = browsed ?? example;
+  const [first, setFirst] = useState(opening.first);
+  const [second, setSecond] = useState(opening.second);
+  const [industry, setIndustry] = useState(opening.industry);
+  const [chosen, setChosen] = useState(savedChosen || (browsed != null
+    && !sameJsonValue([browsed.first, browsed.second, browsed.industry], [example.first, example.second, example.industry])));
+  const touched = useRef(false);
+  const choose = () => { touched.current = true; setChosen(true); };
+  // Save the selection on screen as browsing state (not report material), as steps 6–9 do.
+  useEffect(() => {
+    if (!touched.current) return;
+    state.saveView?.({ browse_selection: { first, second, industry } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [first, second, industry]);
   const groups = useAsync<TeachingGroupsResponse>(() => api.teachingGroups(), ["teaching-groups"]);
   const sample = groups.status === "success" ? groups.data?.sample : undefined;
   // The whole sample comes first: every country's X in the last year, before any example.
@@ -347,7 +368,8 @@ export function ShockLab({ meta, step: _step, state }: {
     if (!panel || complete) return `${parts.join("；")}。`;
     const action = otherMissing.length ? (otherMissing.length > 1 ? "请换国家或行业" : "请换一个国家或行业") : "请换一个国家";
     const recorded = shownExample?.recorded && recordedExample
-      ? `当前选择不在回归样本中，下面仍显示已记录的例子 ${recordedExample}。`
+      // The parts above already say why the selection is out of the sample: no second "不在回归样本中".
+      ? `下面仍显示已记录的例子 ${recordedExample}。`
       : state.data?.teaching_observation ? "已记录的例子保持不变。" : "";
     return `${parts.join("；")}。${action}。${recorded}`;
   })();
@@ -514,7 +536,8 @@ export function ShockLab({ meta, step: _step, state }: {
         <summary>逐年读数 · {rows.length} 条</summary>
         <ScrollableRegion className="table-wrap bounded-data-table" label="所选例子的五年关税暴露表">
           <table className="data-table"><thead><tr><th>国家</th><th>行业</th><th>年份</th><th>首年对美出口份额 w</th><th>加征税率 τ</th><th>关税暴露 X = w × τ</th></tr></thead>
-            <tbody>{rows.map((row) => {
+            {/* Country A first, then B (the rows arrive in alphabetical order). */}
+            <tbody>{[...rows].sort((a, b) => shownCountries.indexOf(a.country) - shownCountries.indexOf(b.country) || a.year - b.year).map((row) => {
               // w is fixed at its first-year value, so every year of a unit shows it at the same digits: those its
               // last (taxed) year needs to check by hand, not two decimals in the zero-rate years.
               const w = sharedW(row);

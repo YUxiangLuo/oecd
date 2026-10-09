@@ -56,7 +56,9 @@ test("step 9 records the main comparison automatically; the exploration views si
   await waitFor(() => expect(save.mock.calls.length).toBeGreaterThan(callsBefore));
   expect(save.mock.calls.slice(callsBefore).every(([patch]) => !("observations" in patch))).toBe(true);
   fireEvent.click(within(bar).getByRole("button", { name: "买入与卖出" }));
-  expect(screen.getByLabelText("当前图表范围").textContent).toContain("探索视角，不记录材料");
+  expect(screen.getByLabelText("当前图表范围").textContent).toContain("探索视角，不记录报告材料");
+  expect(screen.getByRole("region", { name: "步骤9报告材料" }).textContent).toContain("这个视角只供探索，不记录报告材料。");
+  expect(screen.getByRole("region", { name: "步骤9报告材料" }).textContent).not.toContain("暂不能记录");
   expect(screen.getAllByRole("region", { name: /行业买入与卖出/ })).toHaveLength(2);
   fireEvent.click(within(bar).getByRole("button", { name: "流量与路径" }));
   expect(screen.getAllByText(/行业的流量与路径/)).toHaveLength(2);

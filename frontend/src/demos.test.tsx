@@ -259,6 +259,7 @@ describe("the unavailable step 4 split names undefined parts as such (round 12)"
   test("LUX B09: SVA is 0, so the dash means 无法计算 and no total is claimed", () => {
     expect(unavailableDashNote(model("zero-weight-denominator", null))).toBe("“—”表示这一项无法计算（不是缺少数据），不按 0 计算。");
     expect(unavailableTotalNote(model("zero-weight-denominator", null), cfg)).toBeNull();
+    expect(decompositionModelReason(model("zero-weight-denominator", null), "SVA")).toBe("SVA 为 0（没有这类活动），无法计算加权长度。");
   });
 
   test("missing fields still read as missing data", () => {
@@ -602,6 +603,54 @@ describe("one country only", () => {
       cleanup();
       countryRequest.mockRestore();
       industryRequest.mockRestore();
+    }
+  });
+});
+
+describe("steps 2–4 decomposition demo: all-zero rows and the remembered level", () => {
+  const tradeRow = (country: string, industry: string, scale: number) => ({
+    country, industry, year: 2020, gross_exports: 12 * scale, DVAex: 5 * scale, DVArt: 1 * scale, DDC: 1 * scale, FVA: 3 * scale, FDC: 1 * scale, taxsub: 1 * scale,
+  });
+  const mockRows = (rows: ReturnType<typeof tradeRow>[]) => [
+    spyOn(api, "countryIndicatorsForCountry").mockResolvedValue([tradeRow("CHN", "", 1)]),
+    spyOn(api, "industryIndicatorsAll").mockResolvedValue({ total: rows.length, page: 1, page_size: 200, rows }),
+  ];
+
+  test("step 2: an industry with every part 0 shows no empty grey bar", async () => {
+    const mocks = mockRows([tradeRow("CHN", "B05", 0)]);
+    try {
+      const view = render(
+        <DecompositionDemo step={4} meta={{ years: [2020], countries: ["CHN"], sectors: ["B05"], dataset: null }}
+          primaryYear={2020} primaryCountry="CHN" initialView={{ level: "sector", industry: "B05" }} />,
+      );
+      await waitFor(() => expect(view.container.textContent).toContain("所有分项都是 0"));
+      expect(view.container.querySelector(".decomp-bar")).toBeNull();
+    } finally {
+      cleanup();
+      mocks.forEach((mock) => mock.mockRestore());
+    }
+  });
+
+  test("单个行业 and the chosen industry are saved and reopen where the student left them", async () => {
+    const mocks = mockRows([tradeRow("CHN", "C26", 1), tradeRow("CHN", "C29", 2)]);
+    const meta = { years: [2020], countries: ["CHN"], sectors: ["C26", "C29"], dataset: null };
+    const views: unknown[] = [];
+    try {
+      const view = render(<DecompositionDemo step={4} meta={meta} primaryYear={2020} primaryCountry="CHN" onViewChange={(saved) => views.push(saved)} />);
+      await waitFor(() => expect(view.container.querySelector(".decomp-bar")).toBeTruthy());
+      fireEvent.click(view.getByRole("button", { name: "单个行业" }));
+      await waitFor(() => expect(view.getAllByLabelText("行业")).toHaveLength(1));
+      fireEvent.change(view.getByLabelText("行业"), { target: { value: "C29" } });
+      expect(views).toEqual([{ level: "sector", industry: "C26" }, { level: "sector", industry: "C29" }]);
+      cleanup();
+      // Coming back: the saved view may arrive after the first render.
+      const back = render(<DecompositionDemo step={4} meta={meta} primaryYear={2020} primaryCountry="CHN" />);
+      back.rerender(<DecompositionDemo step={4} meta={meta} primaryYear={2020} primaryCountry="CHN" initialView={{ level: "sector", industry: "C29" }} />);
+      await waitFor(() => expect((back.getByLabelText("行业") as HTMLSelectElement).value).toBe("C29"));
+      expect(back.getByRole("button", { name: "单个行业" }).getAttribute("aria-pressed")).toBe("true");
+    } finally {
+      cleanup();
+      mocks.forEach((mock) => mock.mockRestore());
     }
   });
 });

@@ -185,7 +185,8 @@ export function placeScatterLabels(
   const placed: LabelBox[] = [];
   const dots = avoid.map((dot) => ({ x0: dot.x - 7, x1: dot.x + 7, y0: dot.y - 7, y1: dot.y + 7 }));
   return [...labels].sort((a, b) => b.priority - a.priority).map((label) => {
-    const width = label.text.length * 6.2;
+    // Selected and key economies are bold capitals (about 7 units a letter); ordinary ones regular.
+    const width = label.text.length * (label.priority > 0 ? 7 : 6.2);
     const candidates = [
       { x: label.x + 7, y: label.y + 3.5, anchor: "start" as const, box: { x0: label.x + 7, x1: label.x + 7 + width, y0: label.y - 5, y1: label.y + 5 } },
       { x: label.x - 7, y: label.y + 3.5, anchor: "end" as const, box: { x0: label.x - 7 - width, x1: label.x - 7, y0: label.y - 5, y1: label.y + 5 } },
@@ -203,11 +204,12 @@ export function placeScatterLabels(
       && !dots.some((dot) => boxesOverlap(box, dot) && !(Math.abs((dot.x0 + dot.x1) / 2 - label.x) < 0.5 && Math.abs((dot.y0 + dot.y1) / 2 - label.y) < 0.5));
     const fitting = candidates.find((candidate) => free(candidate.box));
     // An ordinary economy's label is left out rather than drawn over another (its dot keeps its tooltip and
-    // the data table); selected and key economies always keep theirs.
+    // the data table); selected and key economies always keep theirs, where they overlap the fewest labels.
     if (!fitting && label.priority === 0) return null;
-    const choice = fitting ?? candidates[0];
+    const overlaps = (box: LabelBox) => (inside(box) ? 0 : 100) + placed.filter((other) => boxesOverlap(box, other)).length;
+    const choice = fitting ?? candidates.reduce((best, candidate) => (overlaps(candidate.box) < overlaps(best.box) ? candidate : best));
     placed.push(choice.box);
-    return { id: label.id, text: label.text, x: choice.x, y: choice.y, anchor: choice.anchor };
+    return { id: label.id, text: label.text, x: choice.x, y: choice.y, anchor: choice.anchor, box: choice.box };
   }).filter((label): label is NonNullable<typeof label> => label !== null);
 }
 
@@ -240,29 +242,33 @@ function segmentCrossesBox(a: { x: number; y: number }, b: { x: number; y: numbe
 }
 
 /**
- * A corner label the equal-length line would run through (the line meets the top-right and bottom-left corners
- * when both axes share a range) moves inward, down or up along its edge, or sideways, to the nearest clear place.
+ * A corner label that the equal-length line would run through (the line meets the top-right and bottom-left
+ * corners when both axes share a range), or that would cover a selected dot or a point label (`avoid`), moves
+ * down or up along its edge, or inward, to the nearest clear place inside its own quadrant. When there is none
+ * it stays in its corner with `clear: false` and is drawn behind the points.
  */
 export function placeCornerLabel(
   text: string,
   corner: { x: number; y: number; anchor: "start" | "end" },
   line: { from: { x: number; y: number }; to: { x: number; y: number } } | null,
   bounds: { left: number; right: number; top: number; bottom: number },
-): { x: number; y: number } {
-  if (!line) return { x: corner.x, y: corner.y };
-  const clear = (x: number, y: number) => {
+  avoid: readonly LabelBox[] = [],
+  quadrant: { left: number; right: number; top: number; bottom: number } = bounds,
+): { x: number; y: number; clear: boolean } {
+  const clear = (x: number, y: number, area: typeof bounds) => {
     const box = cornerLabelBox(text, x, y, corner.anchor);
-    return box.x0 >= bounds.left && box.x1 <= bounds.right && box.y0 >= bounds.top && box.y1 <= bounds.bottom
-      && !segmentCrossesBox(line.from, line.to, box);
+    return box.x0 >= area.left && box.x1 <= area.right && box.y0 >= area.top && box.y1 <= area.bottom
+      && !(line && segmentCrossesBox(line.from, line.to, box))
+      && !avoid.some((other) => boxesOverlap(box, other));
   };
-  if (clear(corner.x, corner.y)) return { x: corner.x, y: corner.y };
+  if (clear(corner.x, corner.y, bounds)) return { x: corner.x, y: corner.y, clear: true };
   const down = corner.y < (bounds.top + bounds.bottom) / 2 ? 1 : -1;
   const inward = corner.anchor === "end" ? -1 : 1;
   for (let step = 1; step <= 24; step += 1) {
-    if (clear(corner.x, corner.y + down * step * 6)) return { x: corner.x, y: corner.y + down * step * 6 };
-    if (clear(corner.x + inward * step * 6, corner.y)) return { x: corner.x + inward * step * 6, y: corner.y };
+    if (clear(corner.x, corner.y + down * step * 6, quadrant)) return { x: corner.x, y: corner.y + down * step * 6, clear: true };
+    if (clear(corner.x + inward * step * 6, corner.y, quadrant)) return { x: corner.x + inward * step * 6, y: corner.y, clear: true };
   }
-  return { x: corner.x, y: corner.y };
+  return { x: corner.x, y: corner.y, clear: false };
 }
 
 /** 象限散点图:两条参考线(默认中位数)把平面切成四象限,四角标注角色。
@@ -326,6 +332,32 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
   const equalityPixels = equalityLine && !log && Math.max(x0, y0) < Math.min(x1, y1)
     ? { from: { x: px(Math.max(x0, y0)), y: py(Math.max(x0, y0)) }, to: { x: px(Math.min(x1, y1)), y: py(Math.min(x1, y1)) } }
     : null;
+  const plotBounds = { left: m.l, right: W - m.r, top: m.t, bottom: H - m.b };
+  const highlightedDots = pts.filter((p) => highlight?.has(p.c)).map((p) => ({ x: px(p.x), y: py(p.y) }));
+  const pointLabels = placeScatterLabels(
+    pts.filter((p) => showLabels || highlight?.has(p.c) || KEY_ECONOMIES.has(p.tag))
+      .map((p) => ({ id: p.c, text: p.tag, x: px(p.x), y: py(p.y), priority: highlight?.has(p.c) ? 2 : KEY_ECONOMIES.has(p.tag) ? 1 : 0 })),
+    highlightedDots,
+    plotBounds,
+  );
+  // Corner labels keep clear of the selected dots and every point label (a USA label under "两项均较低" could
+  // not be read); one that finds no clear place in its quadrant is drawn behind the points instead.
+  const cornerAvoid = [...highlightedDots.map((dot) => ({ x0: dot.x - 7, x1: dot.x + 7, y0: dot.y - 7, y1: dot.y + 7 })), ...pointLabels.map((label) => label.box)];
+  const refX = px(xRef), refY = py(yRef);
+  const quadrantBounds = [
+    { left: refX, right: W - m.r, top: m.t, bottom: refY },
+    { left: m.l, right: refX, top: m.t, bottom: refY },
+    { left: m.l, right: refX, top: refY, bottom: H - m.b },
+    { left: refX, right: W - m.r, top: refY, bottom: H - m.b },
+  ];
+  const cornerLabels = showReference && quadrantLabels
+    ? quadrantLabels.map((lab, i) => ({ lab, i, at: placeCornerLabel(lab, corners[i], equalityPixels, plotBounds, cornerAvoid, quadrantBounds[i]) }))
+    : [];
+  const cornerText = ({ lab, i, at }: (typeof cornerLabels)[number]) => (
+    <text key={i} data-corner={i} data-behind={at.clear ? undefined : "true"} x={at.x} y={at.y} textAnchor={corners[i].anchor} pointerEvents="none"
+      stroke="#fff" strokeWidth={3} strokeLinejoin="round" paintOrder="stroke"
+      fontSize="10.5" fill="#5f6677" fontWeight={600}>{lab}</text>
+  );
   return (
     <div style={cardStyle} ref={wrapRef}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>横轴 {xLabel} · 纵轴 {yLabel}</div>
@@ -359,6 +391,8 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
         <text x={(m.l + W - m.r) / 2} y={H - 6} textAnchor="middle" fontSize="11.5" fill="#5a6070">{xLabel}</text>
         <text x={14} y={(m.t + H - m.b) / 2} textAnchor="middle" fontSize="11.5" fill="#5a6070"
           transform={`rotate(-90 14 ${(m.t + H - m.b) / 2})`}>{yLabel}</text>
+        {/* A corner label with no clear place gives way: drawn before the points, they and their labels cover it. */}
+        {cornerLabels.filter(({ at }) => !at.clear).map(cornerText)}
         {/* Highlighted points are drawn last so ordinary points never cover them. */}
         {[...pts].sort((a, b) => Number(highlight?.has(a.c) ?? false) - Number(highlight?.has(b.c) ?? false)).map((p) => {
           const hi = highlight?.has(p.c);
@@ -387,12 +421,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
             </g>
           );
         })}
-        {placeScatterLabels(
-          pts.filter((p) => showLabels || highlight?.has(p.c) || KEY_ECONOMIES.has(p.tag))
-            .map((p) => ({ id: p.c, text: p.tag, x: px(p.x), y: py(p.y), priority: highlight?.has(p.c) ? 2 : KEY_ECONOMIES.has(p.tag) ? 1 : 0 })),
-          pts.filter((p) => highlight?.has(p.c)).map((p) => ({ x: px(p.x), y: py(p.y) })),
-          { left: m.l, right: W - m.r, top: m.t, bottom: H - m.b },
-        ).map((label) => {
+        {pointLabels.map((label) => {
           const hi = highlight?.has(label.id);
           const key = KEY_ECONOMIES.has(label.text);
           return (
@@ -401,12 +430,8 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
               fill={hi ? "#1b1f2b" : key ? "#3a4050" : "#5f6677"} fontWeight={hi || key ? 700 : 400}>{label.text}</text>
           );
         })}
-        {/* 四角角色标签：画在点之上，白色描边保证可读 */}
-        {showReference && quadrantLabels?.map((lab, i) => ({ lab, i, at: placeCornerLabel(lab, corners[i], equalityPixels, { left: m.l, right: W - m.r, top: m.t, bottom: H - m.b }) })).map(({ lab, i, at }) => (
-          <text key={i} data-corner={i} x={at.x} y={at.y} textAnchor={corners[i].anchor} pointerEvents="none"
-            stroke="#fff" strokeWidth={3} strokeLinejoin="round" paintOrder="stroke"
-            fontSize="10.5" fill="#5f6677" fontWeight={600}>{lab}</text>
-        ))}
+        {/* 四角角色标签：有空位时画在点之上，白色描边保证可读 */}
+        {cornerLabels.filter(({ at }) => at.clear).map(cornerText)}
       </svg>
       )}
       {equalityLine && pts.length > 0 && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}><span style={{ color: "var(--text-warning)", fontWeight: 700 }}>橙色虚线是等长线（前向 = 后向）</span>：线上方前向 GVC 段更长（GVC 位置指数 &gt; 1，更偏上游）；线下方更偏下游。{showReference && "灰色虚线是中位数，只表示相对高低。"}</div>}

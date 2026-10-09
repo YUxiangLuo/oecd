@@ -277,10 +277,28 @@ test("a path metric undefined in every year names the economy instead of saying 
   };
   render(<NetworkTrend meta={meta} schema={schema} initialCountry="CHN" onRecord={mock(() => {})} />);
   fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "Eccentricity" } });
-  const note = await screen.findByText(/离心率都无法定义/);
-  expect(note.textContent).toContain("CHN 中国的该行业在所选年份都");
+  const note = await screen.findByText(/都没有离心率读数/);
+  expect(note.textContent).toContain("CHN 中国在所选年份都没有离心率读数（原因见上）");
   expect(note.textContent).not.toContain("有的年份");
   expect(note.textContent).not.toContain("至少需要两个共同有效年份");
+  // The reason is said once, by the chart's reading for country A.
+  expect(document.body.textContent!.split("离心率无法定义").length - 1).toBe(1);
+});
+
+test("T 离心率: undefined for every selected economy, the reason is said once", async () => {
+  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) =>
+    page([{ country, year, industry: "C26", Eccentricity: 0 } as unknown as ReturnType<typeof row>]),
+  );
+  mockReference();
+  const schema = {
+    groups: [{ key: "network", label: "生产网络指标", fields: ["weighted degree", "Eccentricity"] }],
+    fields: { Eccentricity: { label: "离心率", format: "count" as const, desc: "" } },
+  };
+  render(<NetworkTrend meta={meta} schema={schema} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={mock(() => {})} />);
+  fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "Eccentricity" } });
+  await screen.findByText(/都没有离心率读数/);
+  expect(document.body.textContent!.split("离心率无法定义").length - 1).toBe(1);
+  expect(screen.queryByText(/图上留空/)).toBeNull();
 });
 
 test("加权总度 of an industry with no flows anywhere (T) reads as real zeros, with its 指标 named (round 12)", async () => {
@@ -333,7 +351,8 @@ test("undefined path metrics: economies with the same years share one clause", a
     initialBrowse={{ countries: ["CHN", "USA", "DEU"], view: "trend", industry: "C26", metric: "closnesscentrality", year: 2020 }} />);
   await waitFor(() => expect(screen.getByText(/无法定义（不是 0，不参与排名和中位数，图上留空）/)).toBeTruthy());
   const note = screen.getByText(/无法定义（不是 0，不参与排名和中位数，图上留空）/).textContent!;
-  expect(note.startsWith("CHN 中国、USA 美国 历年，DEU 德国 2018 年的 C26")).toBe(true);
+  // CHN (country A) is named by the chart's own reading; the note covers the others.
+  expect(note.startsWith("USA 美国 历年，DEU 德国 2018 年的 C26")).toBe(true);
   expect(note).not.toContain("中国历年");
 });
 

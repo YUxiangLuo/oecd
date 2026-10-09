@@ -116,6 +116,23 @@ export function carriedComparisonFor(
   return carriedComparisonSource(step, current, savedComparison, countries)?.compared ?? [];
 }
 
+/**
+ * The countries a step 2–9 left on screen: steps 6–8 save their selection (`browse_selection`) and step 9 its
+ * countries (`network_browse`) whether or not the chart could be recorded, so these win over the recorded `compared`.
+ */
+export function latestComparison(data: unknown): unknown {
+  if (typeof data !== "object" || data === null) return undefined;
+  const { browse_selection: browse, network_browse: network, compared } = data as Record<string, unknown>;
+  if (typeof browse === "object" && browse !== null && typeof (browse as { first?: unknown }).first === "string") {
+    const { first, second, others } = browse as { first: string; second?: unknown; others?: unknown };
+    return [first, ...(Array.isArray(others) ? others : typeof second === "string" ? [second] : [])];
+  }
+  if (typeof network === "object" && network !== null && Array.isArray((network as { countries?: unknown }).countries)) {
+    return (network as { countries: unknown[] }).countries;
+  }
+  return compared;
+}
+
 function firstCountry(candidates: unknown): string | null {
   if (!Array.isArray(candidates)) return null;
   const first = candidates.find((code) => typeof code === "string" && code !== "" && code !== "ROW");
@@ -235,7 +252,7 @@ export function StudentWorkspace({
   // visited for the first time starts from the country used in the latest earlier step instead of the default
   // CHN (and USA). Once the step saves its own, that one is used.
   const carried = carriedComparisonSource(step.n, currentComparison,
-    (prior) => session.getStep<{ compared?: string[] }>(prior)?.compared, meta?.countries ?? []);
+    (prior) => latestComparison(session.getStep(prior)), meta?.countries ?? []);
   const carriedComparison = carried?.compared ?? [];
   const labState: typeof stepState = carried && carriedComparison.length >= 1
     ? {

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { DistributionStrip, IndicatorPairBars, IndicatorTrendChart, LengthPositionTrajectory, TrendSummary } from "./indicator-charts";
+import { ComparisonSummary, DistributionStrip, IndicatorPairBars, IndicatorTrendChart, LengthPositionTrajectory, TrendSummary } from "./indicator-charts";
 import { countryDistribution } from "./indicator-model";
 import type { Row } from "./scaffold";
 
@@ -112,6 +112,30 @@ describe("mark-level hover layers", () => {
     expect(group.getAttribute("data-hovered")).toBeNull();
   });
 
+  test("step 10 with both X = 0: the gap card says 差距为 0, not 差距基本不变", () => {
+    const readings = [2016, 2020].flatMap((year) => ["MEX", "CRI"].map((country) => ({ country, year, value: 0 })));
+    const view = render(<ComparisonSummary readings={readings} countries={["MEX", "CRI"]} years={[2016, 2020]} unit="个百分点" gapNote="两国都未被加税：X 一直为 0，没有差距" />);
+    const text = view.getByRole("group", { name: "两国趋势结论" }).textContent ?? "";
+    expect(text).toContain("差距为 0");
+    expect(text).not.toContain("差距基本不变");
+    cleanup();
+  });
+
+  test("pair bar labels read amounts under 10 at the cards' three decimals (8.765, -2.235, not 9, -2)", () => {
+    const view = render(
+      <IndicatorPairBars
+        countries={["CHN", "USA"]}
+        unit="百万美元"
+        groups={[{ key: "H51", label: "H51 航空运输", values: [8.765, -2.235] }, { key: "C26", label: "C26 计算机电子光学", values: [1234.4, 0.5] }]}
+      />,
+    );
+    const text = view.container.textContent ?? "";
+    expect(text).toContain("8.765");
+    expect(text).toContain("-2.235");
+    expect(text).toContain("1,234");
+    cleanup();
+  });
+
   test("pair bars name an undefined value and say both kinds of gap are left blank (round 12)", () => {
     const view = render(
       <IndicatorPairBars
@@ -194,6 +218,12 @@ describe("trend cards name the empty year and say why (round 12)", () => {
     expect(text).toContain("2020 年该行业总增加值为负，复杂 GVC 生产份额无法计算（不是缺少数据），暂不比较差距");
     expect(text).not.toContain("2016 或 2020");
     expect(text).not.toContain("缺失");
+  });
+
+  test("起始 = 结束 says the two years are the same, not that data is missing", () => {
+    const view = render(<TrendSummary readings={readings.filter((item) => item.year === 2020)} countries={["CHN", "MLT"]} years={[2020]} unit="%" />);
+    expect(view.container.textContent).toBe("起始年份和结束年份相同，请选两个不同年份。");
+    cleanup();
   });
 
   test("really missing data still says so, with its year", () => {

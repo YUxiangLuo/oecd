@@ -22,6 +22,7 @@ import {
   sliceAutosave,
   STEP1_ACCOUNT_LEGEND,
   STEP1_OUT_IDENTITY_GUIDE,
+  dbRowSumText,
 } from "./db-lab";
 
 test("Step 1 shows a compact automatic integrity status without student action", () => {
@@ -349,4 +350,12 @@ test("Step 1 header plain names never repeat a code that has no name", () => {
   expect(codePlainName("TLS")).toBe("产品税减补贴");
   expect(codePlainName("USA_X99")).toBeUndefined();
   expect(codePlainName("X99")).toBeUndefined();
+});
+
+test("step 1 所选列之和 reads ≈ when the cells as shown do not add up to it", () => {
+  // 12.344 + 3.1234 = 15.4674 → "15.47", but the cells read 12.34 + 3.123 = 15.463.
+  expect(dbRowSumText([12.344, 3.1234], 15.4674)).toBe("≈ 15.47");
+  expect(dbRowSumText([12.34, 3.12], 15.46)).toBe("15.46");
+  expect(dbRowSumText([null, 0], 0)).toBe("0");
+  expect(dbRowSumText([1200.004, 0.001], 1200.005)).toBe("≈ 1,200.01");
 });

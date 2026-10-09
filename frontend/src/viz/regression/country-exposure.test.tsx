@@ -232,3 +232,29 @@ test("marking an untaxed chip A or B does not change its width, so the rows neve
     cleanup();
   }
 });
+
+test("keyboard focus in the lower half puts the readout above the item, clear of the rule line and the table summary", async () => {
+  const box = (top: number, height: number) => ({ top, bottom: top + height, left: 0, right: 700, width: 700, height, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+  try {
+    const view = render(<CountryExposureChart data={{ ...countriesFixture, taxed_rule: RULE }} />);
+    const wrap = view.container.querySelector(".country-exposure") as HTMLElement;
+    wrap.getBoundingClientRect = () => box(100, 400);
+    const aut = document.querySelector('[data-country="AUT"]') as HTMLElement;
+    aut.getBoundingClientRect = () => box(380, 20);
+    act(() => aut.focus());
+    fireEvent.focus(aut);
+    const tip = view.container.querySelector(".hover-tip") as HTMLElement;
+    // Its top (relative to the chart) is above AUT's top (280) by the readout's estimated height (three lines).
+    expect(Number.parseFloat(tip.style.top)).toBeLessThanOrEqual(280 - 16 - 19 * 3);
+    // An item in the upper half keeps the readout under it.
+    const can = document.querySelector('[data-country="CAN"]') as HTMLElement;
+    can.getBoundingClientRect = () => box(120, 17);
+    act(() => can.focus());
+    fireEvent.focus(can);
+    expect(Number.parseFloat(tip.style.top)).toBeGreaterThanOrEqual(37);
+    const css = await Bun.file(new URL("../../workbench.css", import.meta.url)).text();
+    expect(css).toContain(".country-exposure-table { margin-top: 10px; }");
+  } finally {
+    cleanup();
+  }
+});

@@ -181,13 +181,20 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   const undefinedThroughout = [...new Set(undefinedPoints.map((point) => point.country))]
     .filter((country) => undefinedPoints.filter((point) => point.country === country).length === years.length);
   // Economies with the same years share one clause: "KHM 柬埔寨、MLT 马耳他 历年的 H51 …", not "KHM 柬埔寨历年、MLT 马耳他历年".
+  // The reason is said once: an economy undefined in every year is already named by the chart (its status when
+  // nothing is drawn, its reading for country A, or the gap card of a comparison country when A has two readings),
+  // so the note under the chart covers only the others. (T 离心率 said the same reason three times.)
+  const ownReadings = points.filter((point) => point.country === selected[0] && point.value !== null).length;
+  const namedByChart = (country: string) => undefinedThroughout.includes(country)
+    && (finite.length === 0 || country === selected[0] || ownReadings >= 2);
   const undefinedGroups = new Map<string, string[]>();
   for (const country of new Set(undefinedPoints.map((point) => point.country))) {
+    if (namedByChart(country)) continue;
     const at = undefinedPoints.filter((point) => point.country === country).map((point) => point.year);
     const when = at.length === years.length ? "历年" : `${at.join("、")} 年`;
     undefinedGroups.set(when, [...(undefinedGroups.get(when) ?? []), country]);
   }
-  const undefinedNote = undefinedPoints.length
+  const undefinedNote = undefinedGroups.size
     ? `${[...undefinedGroups].map(([when, codes]) => `${codes.map(countryLabel).join("、")} ${when}`).join("，")}的 ${sectorLabel(industry)}${PATH_UNDEFINED_NOTE}，${label}无法定义（不是 0，不参与排名和中位数，图上留空）。`
     : "";
   // 流量与路径 reads 加权总度 on a log scale: an industry with no trade (0) or no reading cannot be placed. Say how
@@ -294,8 +301,8 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       active={view}
       onPick={setView}
     />
-    {view === "topology" && <p className="muted lens-hint">流量与路径：每个点是一个行业。横轴是买卖总金额（加权总度，对数刻度），纵轴是有多少最短路线经过它（介数）。两种排序是否一致？选了多个国家时每国一张。只供探索，不记录材料。</p>}
-    {view === "flows" && <p className="muted lens-hint">买入与卖出：每行一个行业，左边是加权入度（买入），右边是加权出度（卖出），按加权总度排序；左边条长的行业主要是买方，右边条长的主要是卖方。只供探索，不记录材料。</p>}
+    {view === "topology" && <p className="muted lens-hint">流量与路径：每个点是一个行业。横轴是买卖总金额（加权总度，对数刻度），纵轴是有多少最短路线经过它（介数）。两种排序是否一致？选了多个国家时每国一张。只供探索，不记录报告材料。</p>}
+    {view === "flows" && <p className="muted lens-hint">买入与卖出：每行一个行业，左边是加权入度（买入），右边是加权出度（卖出），按加权总度排序；左边条长的行业主要是买方，右边条长的主要是卖方。只供探索，不记录报告材料。</p>}
     {(view === "topology" || view === "flows") && <div className="controls">
       <LabeledControl label="年份">{(id) => <select id={id} value={year} onChange={(event) => setYear(Number(event.target.value))}>{years.map((value) => <option key={value} value={value}>{value}</option>)}</select>}</LabeledControl>
       {view === "flows" && <LabeledControl label="显示行业">{(id) => <select id={id} value={flowsLimit} onChange={(event) => setFlowsLimit(Number(event.target.value))}><option value={15}>前 15 个</option><option value={200}>全部行业</option></select>}</LabeledControl>}
@@ -323,7 +330,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         { label: "所选国家", value: joinCountries(selected) },
         { label: "年份", value: String(year) },
         { label: "视角", value: view === "topology" ? "流量与路径" : view === "flows" ? "买入与卖出" : extraLenses.find((lens) => lens.key === view)?.label ?? view },
-        { label: "材料", value: "探索视角，不记录材料" },
+        { label: "材料", value: "探索视角，不记录报告材料" },
       ]}
       note={flash && flash.key === pendingKey && !syncError ? <span key={flash.id} className="scope-flash">✓ {flash.text}</span> : undefined}
     />
@@ -422,9 +429,11 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     <section className="qualified-run-card" aria-label="步骤9报告材料">
       <h3>报告材料 · {observations.length ? `已${locked ? "" : "自动"}记录（${observations.length} 条读数）` : "尚未记录"}</h3>
       <p role="status">{!canRecord
-        ? `当前图表暂不能记录：${!recordable ? "探索视角不记录材料。"
+        // An exploration view never records: it says so plainly, not as a temporary "暂不能记录".
+        ? `${!recordable ? "这个视角只供探索，不记录报告材料。"
+          : "当前图表暂不能记录："}${!recordable ? ""
           : flatValue !== null && query.status === "success" ? `图上${view === "trend" ? `所选国家历年的${label}` : `显示的行业的${label}`}全部${flatValue === 0 ? "为 0（真实的 0，例如没有生产或连接，不是缺少数据）" : `相同（都是 ${indicatorNumber(flatValue, unit)}）`}，没有可比较的差别，不记录为报告材料；请换一个${view === "trend" ? "行业" : "年份"}或指标。`
-          : view === "trend" ? (undefinedThroughout.length ? `${joinCountries(undefinedThroughout)}的该行业在所选年份都${PATH_UNDEFINED_NOTE}，${label}都无法定义；请换一个行业、指标或国家。`
+          : view === "trend" ? (undefinedThroughout.length ? `${joinCountries(undefinedThroughout)}在所选年份都没有${label}读数（原因见上）；请换一个行业、指标或国家。`
             : undefinedPoints.length ? `有的年份该行业${PATH_UNDEFINED_NOTE}，${label}无法定义；所选国家至少需要两个共同有效年份，请换一个行业、指标或国家。` : "所选国家至少需要两个共同有效年份。") : "显示的行业里，至少要有一个行业所有所选国家都有数据。"}${observations.length ? "已记录的材料保持不变。" : ""}`
         : locked
           ? `${MATERIAL_LOCKED_NOTE}${matchesSaved ? `当前图表就是已记录的材料。${rechosen ? MATERIAL_RECHOSEN_NEXT : ""}` : ""}`

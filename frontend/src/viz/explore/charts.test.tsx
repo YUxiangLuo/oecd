@@ -111,6 +111,30 @@ describe("Steps 6-9 chart semantic data equivalents", () => {
     }
   });
 
+  test("定位图: a corner label keeps clear of a selected economy's dot and label", () => {
+    const quadrants: [string, string, string, string] = ["两项均较高", "纵轴较高", "两项均较低", "横轴较高"];
+    // USA (selected) sits in the bottom-left corner, right where "两项均较低" is written.
+    const points = [
+      { country: "USA", x: 0.05, y: 0.1 },
+      ...["AAA", "BBB", "CCC", "DDD", "EEE"].map((country, i) => ({ country, x: 3 + i, y: 3 + i })),
+      { country: "FFF", x: 10, y: 10 },
+    ];
+    const html = renderToStaticMarkup(
+      <QuadrantScatter rows={points} xKey="x" yKey="y" xLabel="横轴" yLabel="纵轴" xFormat="number" yFormat="number" quadrantLabels={quadrants} highlight={new Set(["USA"])} />,
+    );
+    const corner = html.match(/<text data-corner="2"( data-behind="true")? x="([\d.]+)" y="([\d.]+)"/)!;
+    const usaDot = html.match(/<circle cx="([\d.]+)" cy="([\d.]+)" r="6"/)!.slice(1).map(Number);
+    const usaLabel = html.match(/<text x="([\d.]+)" y="([\d.]+)" text-anchor="(start|end|middle)"[^>]*>USA<\/text>/)!;
+    expect(corner[1]).toBeUndefined();
+    const [x, y] = [Number(corner[2]), Number(corner[3])];
+    const box = { x0: x, x1: x + 5 * 10.5, y0: y - 10, y1: y + 3 };
+    const overlaps = (other: { x0: number; x1: number; y0: number; y1: number }) => box.x0 < other.x1 && other.x0 < box.x1 && box.y0 < other.y1 && other.y0 < box.y1;
+    expect(overlaps({ x0: usaDot[0] - 7, x1: usaDot[0] + 7, y0: usaDot[1] - 7, y1: usaDot[1] + 7 })).toBe(false);
+    const lx = Number(usaLabel[1]), ly = Number(usaLabel[2]);
+    const lx0 = usaLabel[3] === "start" ? lx : usaLabel[3] === "end" ? lx - 21 : lx - 10.5;
+    expect(overlaps({ x0: lx0, x1: lx0 + 21, y0: ly - 8.5, y1: ly + 1.5 })).toBe(false);
+  });
+
   test("composition table exposes signed segments and a distinct sort metric", () => {
     const html = renderToStaticMarkup(
       <CompositionBar

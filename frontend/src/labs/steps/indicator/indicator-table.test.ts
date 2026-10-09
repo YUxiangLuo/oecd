@@ -4,6 +4,7 @@ import {
   INDICATOR_TABLE_DISPLAY,
   countryObservation,
   countryRowsForYear,
+  fmtIndicatorCell,
   indicatorMaterialPatch,
   indicatorMetricColumns,
   indicatorRequestKey,
@@ -165,4 +166,17 @@ describe("indicator table request and display contracts", () => {
     expect(sortNetworkRows(rows, "betweenesscentrality").map((row) => row.industry)).toEqual(["B", "D", "A", "C"]);
     expect(rows.map((row) => row.industry)).toEqual(["A", "B", "C", "D"]);
   });
+});
+
+test("加权总度、入度、出度 share one precision per row so the identity reads from the shown values", () => {
+  const schema = { groups: [], fields: { "weighted degree": { format: "amount" }, "weighted indegree": { format: "amount" }, "weighted outdegree": { format: "amount" } } } as never;
+  const small = { "weighted degree": 1.407, "weighted indegree": 0.715, "weighted outdegree": 0.692 };
+  expect(["weighted degree", "weighted indegree", "weighted outdegree"].map((key) => fmtIndicatorCell(small, key, schema))).toEqual(["1.407", "0.715", "0.692"]);
+  // One of three under 10: all three keep 3 decimals.
+  expect(fmtIndicatorCell({ "weighted degree": 12.4, "weighted indegree": 11.7, "weighted outdegree": 0.7 }, "weighted degree", schema)).toBe("12.400");
+  const large = { "weighted degree": 5321.6, "weighted indegree": 2000.2, "weighted outdegree": 3321.4 };
+  expect(fmtIndicatorCell(large, "weighted degree", schema)).toBe("5,322");
+  // An exact 0 stays 0 and does not force decimals onto the others.
+  expect(fmtIndicatorCell({ "weighted degree": 30, "weighted indegree": 0, "weighted outdegree": 30 }, "weighted outdegree", schema)).toBe("30");
+  expect(fmtIndicatorCell({ "weighted degree": 30, "weighted indegree": 0, "weighted outdegree": 30 }, "weighted indegree", schema)).toBe("0");
 });

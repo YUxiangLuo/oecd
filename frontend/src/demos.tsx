@@ -10,7 +10,7 @@
  *           分项显示为"VA份额×段长度"的贡献值,贡献加总 = 总长度)
  * NetworkCentralityDemo(步骤5):在一个小网络上演示度/介数中心性怎么算出来。
  */
-import { useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { LabeledControl, ScrollableRegion } from "./a11y";
 import {
   buildDecompositionModel,
@@ -42,6 +42,12 @@ type Part = {
   /** 加权模式:分项贡献 = row[key] × row[weightKey] / row[weightTotal](见步骤4) */
   weightKey?: string;
 };
+/** Steps 2–4: the decomposition demo's 国家整体／单个行业 and industry, saved as browsing state (not report material). */
+export interface DecompositionView {
+  level: "country" | "sector";
+  industry: string;
+}
+
 type DecompCfg = {
   /** Heading of the hands-on card. */
   title: string;
@@ -488,7 +494,7 @@ export function zeroTotalDecompositionHint(model: DecompositionModel, totalLabel
 export function decompositionModelReason(model: DecompositionModel, weightLabel?: string): string {
   const weight = weightLabel ?? "权重";
   if (model.reason === "zero-weight-denominator") {
-    return cjkJoin(weight, "为 0（没有这类活动），无法算加权长度。");
+    return cjkJoin(weight, "为 0（没有这类活动），无法计算加权长度。");
   }
   if (model.reason === "negative-weight-denominator") {
     return cjkJoin(weight, "小于 0，无法按份额加权平均。");
@@ -615,6 +621,8 @@ export function DecompositionDemo({
   primaryYear,
   primaryCountry,
   onPrimaryChange,
+  initialView,
+  onViewChange,
 }: {
   step: number;
   meta: Meta;
@@ -622,13 +630,37 @@ export function DecompositionDemo({
   primaryYear: number;
   primaryCountry: string | null;
   onPrimaryChange?: (year: number, country: string) => void;
+  /** 国家整体／单个行业 and the industry the student left the demo on, so coming back keeps them. */
+  initialView?: DecompositionView;
+  onViewChange?: (view: DecompositionView) => void;
 }) {
   const cfg = DECOMP[step];
   // Country level first: the same figures the report material records; industries are one click away.
-  const [gran, setGran] = useState<"country" | "sector">("country");
+  const [gran, setGranState] = useState<"country" | "sector">(initialView?.level === "sector" ? "sector" : "country");
   const year = meta.years.includes(primaryYear) ? primaryYear : meta.years.at(-1)!;
   const country = explicitDemoCountry(meta.countries, primaryCountry) ?? "";
-  const [selectedSector, setSector] = useState("");
+  const [selectedSector, setSectorState] = useState(typeof initialView?.industry === "string" ? initialView.industry : "");
+  // A saved view that arrives after the first render (the step's record loads later) is applied once, unless the
+  // student has already changed the level or industry here.
+  const viewTouched = useRef(false);
+  const viewApplied = useRef(initialView != null);
+  useEffect(() => {
+    if (viewApplied.current || viewTouched.current || initialView == null) return;
+    viewApplied.current = true;
+    if (initialView.level === "sector") setGranState("sector");
+    if (typeof initialView.industry === "string") setSectorState(initialView.industry);
+  }, [initialView]);
+  const setGran = (level: "country" | "sector") => {
+    viewTouched.current = true;
+    setGranState(level);
+    // The industry on screen (the first one until the student picks another).
+    onViewChange?.({ level, industry: sector });
+  };
+  const setSector = (industry: string) => {
+    viewTouched.current = true;
+    setSectorState(industry);
+    onViewChange?.({ level: gran, industry });
+  };
   const [hover, setHover] = useState<string | null>(null);
 
   const demoAvailable = country !== "";
@@ -765,7 +797,8 @@ export function DecompositionDemo({
           {cfg.totalLabel} = <b>{amount(model.total)}</b>{cfg.unit === "amount" && <span className="muted">（百万美元）</span>}
         </div>
         <IndicatorCalculationDisclosure step={step} row={row} decimals={precision?.decimals} />
-        <div className="decomp-bar" style={{ position: "relative", display: "block", overflow: "hidden" }}>
+        {/* All parts 0: nothing to stack, so no empty grey bar (the line below says why). */}
+        {model.values.some((value) => value !== 0) && <div className="decomp-bar" style={{ position: "relative", display: "block", overflow: "hidden" }}>
           {panelDomain.negative > 0 && <span aria-hidden style={{ position: "absolute", zIndex: 3, left: `${layout.zeroPct}%`, top: -2, bottom: -2, borderLeft: "2px solid #4b5263" }} />}
           {cfg.parts.map((part, index) => {
             const value = model.values![index];
@@ -778,7 +811,7 @@ export function DecompositionDemo({
               onMouseEnter={() => setHover(part.key)} onMouseLeave={() => setHover(null)}
               title={`${part.label} · 当前值 ${amount(value)} · ${shareText}${segment.negative ? "（负值，位于零轴左侧）" : ""}`} />;
           })}
-        </div>
+        </div>}
         {model.closure != null ? (
           <div className={`decomp-identity ${model.closure ? "ok" : "bad"}`}>
             {model.closure ? "✓" : "✗"} {cfg.parts.length} 项相加 {sumLine(model.closure, displayedRowsAddUp(model.values, model.sum, shownDecimals), amount(model.sum), cfg.totalLabel, displayedSumNote(model.values, model.sum, shownDecimals))}{model.error < 1e-6 ? "" : `（差 ${model.error.toPrecision(2)}）`}

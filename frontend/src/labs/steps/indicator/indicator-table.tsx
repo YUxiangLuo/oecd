@@ -13,6 +13,7 @@ import type { IndicatorSchema, IndustryPage, Meta, QuizCompletionState, StepStat
 import { userFacingRequestError } from "../../../user-facing-error";
 import { countryLabel, sectorLabel } from "../../../viz";
 import { PATH_UNDEFINED_LABEL, PATH_UNDEFINED_NOTE, pathMetricUndefined } from "../../../viz/views/network-heat";
+import type { DecompositionView } from "../../../demos";
 import { AsyncStateMessage, Pager, fieldLabel, fmtField, useAsync } from "../../shared";
 
 const BASE_DESC: Record<string, string> = {
@@ -144,6 +145,9 @@ export interface IndicatorStepState extends QuizCompletionState, Record<string, 
   observations?: IndicatorObservation[];
   /** The student recorded this material explicitly after submitting the report (automatic saves clear it). */
   material_chosen?: boolean;
+  /** Steps 2–4: 国家整体／单个行业 and the industry of the decomposition demo, saved with `saveView` (browsing state,
+   *  not report material; the server leaves `browse_selection` out of the report fingerprint). */
+  browse_selection?: DecompositionView;
 }
 
 export interface IndicatorObservation {
@@ -306,6 +310,26 @@ export function useIndicatorControls(meta: Meta, state: StepStateApi<IndicatorSt
   return { year, country, page, interacted, carriedNote, setYear, setCountry, setPage, setPrimary };
 }
 
+const DEGREE_TRIO = ["weighted degree", "weighted indegree", "weighted outdegree"];
+
+/**
+ * A table cell. 加权总度、加权入度、加权出度 share one precision per row, so 总度 = 入度 + 出度 reads from the shown
+ * values: 3 decimals when any of the three is under 10 (the amount rule), whole numbers otherwise. (Per value,
+ * 0.715 + 0.692 showed as “1”.)
+ */
+export function fmtIndicatorCell(row: Record<string, string | number | null>, column: string, schema?: IndicatorSchema | null) {
+  const value = row[column];
+  if (DEGREE_TRIO.includes(column) && typeof value === "number" && Number.isFinite(value) && Math.abs(value) >= 0.0005) {
+    const small = DEGREE_TRIO.some((key) => {
+      const other = row[key];
+      return typeof other === "number" && other !== 0 && Math.abs(other) < 10;
+    });
+    const digits = small ? 3 : 0;
+    return value.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  }
+  return fmtField(value, column, schema);
+}
+
 export function indicatorRowHeaderLabel(row: Record<string, string | number | null>): string {
   const country = row.country == null ? "未定义国家" : countryLabel(String(row.country));
   const industry = row.industry == null ? "未定义行业" : sectorLabel(String(row.industry));
@@ -376,7 +400,7 @@ export function IndicatorDataTable({
                   // undefined, as step 9 says ("无连接，无法定义"), not a closeness of 0.
                   : pathMetricUndefined(column, row[column])
                     ? <span data-metric-undefined="true" title={`${fieldLabel(column, schema)}：${PATH_UNDEFINED_NOTE}`}>{PATH_UNDEFINED_LABEL}</span>
-                    : fmtField(row[column], column, schema);
+                    : fmtIndicatorCell(row, column, schema);
               const left = stickyLeft(index);
               const stickyStyle = left != null
                 ? {

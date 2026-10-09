@@ -349,7 +349,9 @@ describe("indicator explorer with automatic report material", () => {
     const before = view.saves.length;
     fireEvent.click(view.getByRole("button", { name: "定位图" }));
     expect(view.getByLabelText("当前图表范围").textContent).toContain("定位图");
-    expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("定位图只供探索，不记录材料");
+    expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("定位图只供探索，不记录报告材料");
+    // A view that never records does not say "暂不能记录".
+    expect(view.getByRole("region", { name: "报告材料" }).textContent).not.toContain("暂不能记录");
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
     expect(view.saves).toHaveLength(before);
     rows.mockRestore();
@@ -396,10 +398,33 @@ describe("indicator explorer with automatic report material", () => {
     expect(new Set(saved.observations!.map((item) => item.metric))).toEqual(new Set(["PLv_D", "PLy_D", "PLv_RT", "PLy_RT", "PLv_GVC", "PLy_GVC"]));
     expect(saved.observations!.every((item) => item.source === "explicit-indicator-comparison" && item.year === 2021)).toBe(true);
     expect(view.getAllByRole("region", { name: /段长度对照/ })).toHaveLength(2);
+    // Two dumbbells sit side by side only when each gets ~440px; at 1024 they stack instead of squeezing to ~40px.
+    expect(view.getAllByRole("region", { name: /段长度对照/ })[0].closest(".comparison-facets")?.classList.contains("comparison-facets--roomy")).toBe(true);
+    const css = await Bun.file(new URL("../../../workbench.css", import.meta.url)).text();
+    expect(css).toContain(".dumbbell .dot-plot-row { grid-template-columns: 84px minmax(0, 1fr)");
     const cards = view.getByRole("group", { name: "段长度读数" }).textContent ?? "";
     expect(cards).toContain("最长的一段");
     expect(cards).toContain("GVC 段 · 前向对后向");
     expect(cards).toContain("与对比国家 USA 美国");
+    rows.mockRestore();
+    schema.mockRestore();
+  });
+
+  test("length 前后向位置: a country with no backward GVC length says why it has no trajectory, once", async () => {
+    // CHN plays ISL B09: no backward GVC production in any year, so every PLy_GVC is undefined.
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) =>
+      countryRows(year).map((row) => (row.country === "CHN" ? { ...row, PLy_GVC: null, "3_FGY_GVC": 0 } : row)) as never,
+    );
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    const view = setup(LengthVizStep);
+    const legend = await waitFor(() => { const found = view.container.querySelector('[data-legend="CHN"]'); expect(found).toBeTruthy(); return found!; });
+    expect(legend.textContent).toBe("CHN 中国 · 无轨迹");
+    expect(view.getByRole("note", { name: "" }).textContent ?? "").toContain("CHN 中国没有轨迹");
+    await waitFor(() => expect(view.container.textContent).toContain("暂不能读出期间变化"));
+    // The trend chart's reading says it; the note below the charts does not repeat it.
+    const material = view.getByRole("region", { name: "报告材料" }).textContent ?? "";
+    const outside = (view.container.textContent ?? "").replace(material, "");
+    expect(outside.split("后向 GVC 段长度无法计算").length - 1).toBe(1);
     rows.mockRestore();
     schema.mockRestore();
   });
@@ -524,7 +549,7 @@ describe("readouts and update notes follow the chart on screen (round 10)", () =
       view.accept();
       // 定位图 records nothing: the note about the previous chart must not stay beside it.
       fireEvent.click(view.getByRole("button", { name: "定位图" }));
-      await view.findByText(/定位图只供探索，不记录材料。/, { selector: "[role=status]" });
+      await view.findByText(/定位图只供探索，不记录报告材料。/, { selector: "[role=status]" });
       expect(view.container.querySelector(".scope-flash")).toBeNull();
       // Back on the recorded chart nothing was replaced, so no note comes back.
       fireEvent.click(view.getByRole("button", { name: "历年变化" }));
