@@ -230,12 +230,12 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
           </button>
           <ul className="intro-card-facts">
             <li>X 由首年对美出口份额和加征税率算出。</li>
-            <li>前两年税率为 0，加税国家后三年为 25%。</li>
+            <li>前两年税率为 0，被加税国家后三年为 25%。</li>
             <li>Y 是贸易流、生产、长度、网络四类结果指标。</li>
           </ul>
           {openCards.shock && (
             <div className="intro-card-body" id={shockPanelId}>
-              <p>关税暴露 X 等于首年对美出口份额 w 乘以加征税率 τ；未加税国家的 X 始终为 0。步骤 11–14 用同一个 X 对四个结果指标 Y 做回归。</p>
+              <p>关税暴露 X 等于首年对美出口份额 w 乘以加征税率 τ；未被加税国家的 X 始终为 0。步骤 11–14 用同一个 X 对四个结果指标 Y 做回归。</p>
             </div>
           )}
         </div>
@@ -285,7 +285,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
     <div key={3} className="intro-scene">
       <div className="intro-scene-kicker">分析示例</div>
       <h2 className="intro-h2">先看加税前后的差距，再用回归量化</h2>
-      <p className="intro-lede">在步骤 10 选一个例子：它是 44 个加税国家之一，可再加一个未加税的对比国家。回归用的是全部国家×行业，结果会换算到你的例子上。</p>
+      <p className="intro-lede">在步骤 10 选一个例子：它是被加税的国家之一，可再加一个未被加税的对比国家。回归用的是全部国家×行业，结果会换算到你的例子上。</p>
       <div className="intro-preview-selection" role="group" aria-label="分析对象示意">
         <span><small>国家 A</small>在步骤 10 选择</span>
         <span><small>国家 B</small>在步骤 10 选择</span>
@@ -293,7 +293,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       </div>
       <div className="intro-evidence-preview">
         <div className="intro-trend-card">
-          <div className="intro-preview-heading"><b>01 · 你的例子：X 只在加税后出现</b><span><span className="intro-legend-item"><i className="country-a" />国家 A（加税）</span> <span className="intro-legend-item"><i className="country-b" />国家 B（未加税）</span></span></div>
+          <div className="intro-preview-heading"><b>01 · 你的例子：X 只在加税后出现</b><span><span className="intro-legend-item"><i className="country-a" />国家 A（被加税）</span> <span className="intro-legend-item"><i className="country-b" />国家 B（未被加税）</span></span></div>
           <svg viewBox="0 0 520 180" role="img" aria-label="国家 A 与国家 B 的五年关税暴露 X 趋势界面示意，线条不代表实际读数">
             <path className="grid" d="M42 30H500M42 75H500M42 120H500" />
             <path className="country-a" d="M50 120L270 120L270 40L490 40" />
@@ -320,7 +320,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
         <b>03 · 四步各估一项，报告中汇总</b>
         <span>贸易流</span><span>生产</span><span>长度</span><span>网络</span>
       </div>
-      <p className="intro-note intro-preview-note">图示：国家 A 被加税，前两年 X 为零、之后为正；国家 B 未加税，X 始终为零。线条不是实际读数。方向不确定或没算出估计值，也要如实报告。</p>
+      <p className="intro-note intro-preview-note">图示：国家 A 被加税，前两年 X 为零、之后为正；国家 B 未被加税，X 始终为零。线条不是实际读数。方向不确定或没算出估计值，也要如实报告。</p>
     </div>,
 
     /* ---- 5 就绪 ---- */

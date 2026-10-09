@@ -135,13 +135,13 @@ describe("fixed teaching regression reading", () => {
     };
     const untaxed = sentence([{ label: "GBR 英国·C29", x: 0, tau: 0 }, { label: "FRA 法国·C29", x: 0, tau: 0 }]);
     expect(untaxed).toBe("按你在步骤 10 选的例子换算：GBR 英国·C29 未被加税；FRA 法国·C29 未被加税。"
-      + "两个例子的 X 都是 0，换算不出与 X 相关的差异。想看换算，回步骤 10 选一个加税的国家（如加拿大）。");
+      + "两个例子的 X 都是 0，换算不出与 X 相关的差异。想看换算，回步骤 10 选一个被加税的国家（如加拿大）。");
     const unexposed = sentence([{ label: "BRN 文莱·C22", x: 0, tau: 0.25 }, { label: "MEX 墨西哥·C22", x: 0, tau: 0 }]);
     expect(unexposed).toContain("BRN 文莱·C22 被加税但首年不向美国出口（w = 0）；MEX 墨西哥·C22 未被加税。两个例子的 X 都是 0");
-    expect(unexposed).toContain("换一个向美国出口的加税国家或行业");
+    expect(unexposed).toContain("换一个向美国出口的被加税国家或行业");
     const single = sentence([{ label: "GBR 英国·C29", x: 0, tau: 0 }]);
     expect(single).toBe("按你在步骤 10 选的例子换算：GBR 英国·C29 未被加税。"
-      + "这个例子的 X = 0，换算不出与 X 相关的差异。想看换算，回步骤 10 换成加税的国家（如加拿大），或再选一个加税的对比国家。");
+      + "这个例子的 X = 0，换算不出与 X 相关的差异。想看换算，回步骤 10 换成被加税的国家（如加拿大），或再选一个被加税的对比国家。");
     for (const text of [untaxed, unexposed, single]) {
       expect(text).not.toContain("区间包含 0");
       expect(text).not.toContain("按估计没有与 X 相关的差异");

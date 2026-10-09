@@ -25,7 +25,7 @@ describe("two-group chart labels", () => {
       estimate: { gap: 0.0002, label: "回归估计的差距 +0.02 个百分点" },
     }));
     const at = (text: string) => Number(new RegExp(`y="([\\d.]+)"[^>]*>(?:<tspan[^>]*>)?${text}`).exec(markup)?.[1]);
-    const taxed = at("加税国家组"), untaxed = at("未加税国家组");
+    const taxed = at("被加税国家组"), untaxed = at("未被加税国家组");
     expect(Math.abs(taxed - untaxed)).toBeGreaterThanOrEqual(16);
   });
 });

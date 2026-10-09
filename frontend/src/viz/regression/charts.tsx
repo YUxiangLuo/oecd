@@ -81,7 +81,7 @@ export function GroupChangeChart({
   };
   const [estimateHead, ...estimateRest] = (estimate?.label ?? "").split(" ");
   const estimateValue = estimateRest.join(" ");
-  const description = `${title}：加税组与未加税组相对加税前平均水平的变化，${policyYear} 年起加税`;
+  const description = `${title}：被加税组与未被加税组相对加税前平均水平的变化，${policyYear} 年起加税`;
   return (
     <div className="group-change-chart" style={{ ...cardStyle, flex: "1 1 320px", minWidth: 280 }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3a4050" }}>{title}</div>
@@ -127,8 +127,8 @@ export function GroupChangeChart({
             ))}
           </g>
         ))}
-        {label(taxed, "加税国家组", TAXED, "taxed")}
-        {label(untaxed, "未加税国家组", UNTAXED, "untaxed")}
+        {label(taxed, "被加税国家组", TAXED, "taxed")}
+        {label(untaxed, "未被加税国家组", UNTAXED, "untaxed")}
       </svg>
     </div>
   );

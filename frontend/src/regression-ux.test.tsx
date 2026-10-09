@@ -106,7 +106,8 @@ describe("simple regression workbench", () => {
     render(<RegressionRunLab step={step} meta={meta} state={state} />);
     const figure = await screen.findByRole("img", { name: /加税前后：两组外国增加值项占比的平均变化/ });
     expect(figure.getAttribute("aria-label")).toContain("2018 年起加税");
-    expect(figure.textContent).toContain("加税国家组");
+    expect(figure.textContent).toContain("被加税国家组");
+    expect(figure.textContent).toContain("未被加税国家组");
     await waitFor(() => expect(screen.getByRole("button", { name: "计算贸易流回归（用全部 16,220 条记录）" })).toBeTruthy());
     expect(api.teachingSeries).toHaveBeenCalledWith(["CAN", "MEX"], "C29");
     // No bars and no reading cards before the run; the generated-data note is said already.

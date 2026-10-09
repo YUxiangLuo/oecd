@@ -217,8 +217,8 @@ export function RegressionResultCard({ outcome, response, examples = [], example
             return <span key={example.label}>{index ? "；" : ""}{text}</span>;
           })}。
             {noConversion && `${examples.length === 1 ? "这个例子的 X = 0" : "两个例子的 X 都是 0"}，换算不出与 X 相关的差异。想看换算，回步骤 10 ${unexposedTaxed
-              ? "换一个向美国出口的加税国家或行业（如加拿大的汽车行业）"
-              : examples.length === 1 ? "换成加税的国家（如加拿大），或再选一个加税的对比国家" : "选一个加税的国家（如加拿大）"}。`}</li>;
+              ? "换一个向美国出口的被加税国家或行业（如加拿大的汽车行业）"
+              : examples.length === 1 ? "换成被加税的国家（如加拿大），或再选一个被加税的对比国家" : "选一个被加税的国家（如加拿大）"}。`}</li>;
         })()}
         <li className="reg-caveat"><b>解释限制</b> {lesson.dontClaim}</li>
         <li className="muted reg-data-note">{GENERATED_DATA_NOTE}</li>
