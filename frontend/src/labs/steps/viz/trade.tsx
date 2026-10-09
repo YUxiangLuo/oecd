@@ -1,5 +1,5 @@
 import type { Meta, Step, StepStateApi } from "../../../types";
-import { CAT } from "../../../viz/shared";
+import { COMPONENT_COLORS } from "../../../viz/shared";
 import { IndicatorExplorer } from "./indicator-explorer";
 import type { IndicatorTopic } from "./indicator-model";
 import type { VizStepState } from "./scaffold";
@@ -47,13 +47,13 @@ export const TRADE_TOPIC: IndicatorTopic = {
   composition: {
     total: "gross_exports",
     segments: [
-      { key: "DVAex", name: "国内增加值出口", color: CAT[0] },
-      { key: "DVArt", name: "返回国内的增加值", color: CAT[1] },
-      { key: "DDC", name: "国内重复计算", color: CAT[2] },
-      { key: "FVA", name: "外国增加值", color: CAT[3] },
-      { key: "FDC", name: "外国重复计算", color: CAT[4] },
-      // Grey as in step 2; red is reserved for negative parts (left of zero).
-      { key: "taxsub", name: "产品税减补贴", color: "#98a0b3" },
+      // The colours step 2 gives the same parts; red is reserved for negative parts (left of zero).
+      { key: "DVAex", name: "国内增加值出口", color: COMPONENT_COLORS.DVAex },
+      { key: "DVArt", name: "返回国内的增加值", color: COMPONENT_COLORS.DVArt },
+      { key: "DDC", name: "国内重复计算", color: COMPONENT_COLORS.DDC },
+      { key: "FVA", name: "外国增加值", color: COMPONENT_COLORS.FVA },
+      { key: "FDC", name: "外国重复计算", color: COMPONENT_COLORS.FDC },
+      { key: "taxsub", name: "产品税减补贴", color: COMPONENT_COLORS.taxsub },
     ],
     focus: "FVA",
     focusLabel: "外国增加值项占比",

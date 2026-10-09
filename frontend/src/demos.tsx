@@ -26,6 +26,7 @@ import { api } from "./api";
 import { AsyncStateMessage, type AsyncStatus, useAsync } from "./labs/shared";
 import { userFacingRequestError } from "./user-facing-error";
 import { countryLabel, sectorLabel } from "./viz";
+import { COMPONENT_COLORS } from "./viz/shared";
 import { signedDomain, signedStack } from "./viz/signed-layout";
 import type { IndustryPage, Meta } from "./types";
 
@@ -63,19 +64,19 @@ type DecompCfg = {
   negativeNote?: string;
 };
 
-const DECOMP: Record<number, DecompCfg> = {
+export const DECOMP: Record<number, DecompCfg> = {
   4: {
     title: "各分项的金额、占比与含义",
     total: "gross_exports",
     totalLabel: "总出口",
     unit: "amount",
     parts: [
-      { key: "DVAex", label: "DVAex 国内增加值出口", color: "#4b47e0", desc: "出口中由本国创造、在国外被最终使用的增加值。" },
-      { key: "DVArt", label: "DVArt 返回国内的增加值", color: "#7a6bff", desc: "随出口离境，经他国加工后返回本国并被最终使用的国内增加值。" },
-      { key: "DDC", label: "DDC 国内重复计算", color: "#b6b1f2", desc: "本国增加值在出口统计中被重复计入的部分（中间品多次跨境造成）。" },
-      { key: "FVA", label: "FVA 外国增加值", color: "#159a86", desc: "出口中由其他国家创造的增加值（例如进口零部件的价值），不包括外国重复计算 FDC。" },
-      { key: "FDC", label: "FDC 外国重复计算", color: "#e0982a", desc: "外国增加值在出口统计中被重复计入的部分。" },
-      { key: "taxsub", label: "taxsub 产品税减补贴", color: "#98a0b3", desc: "出口中直接和间接包含的产品税减补贴（来自 ICIO 的 TLS 账户）。可为负，表示净补贴。" },
+      { key: "DVAex", label: "DVAex 国内增加值出口", color: COMPONENT_COLORS.DVAex, desc: "出口中由本国创造、在国外被最终使用的增加值。" },
+      { key: "DVArt", label: "DVArt 返回国内的增加值", color: COMPONENT_COLORS.DVArt, desc: "随出口离境，经他国加工后返回本国并被最终使用的国内增加值。" },
+      { key: "DDC", label: "DDC 国内重复计算", color: COMPONENT_COLORS.DDC, desc: "本国增加值在出口统计中被重复计入的部分（中间品多次跨境造成）。" },
+      { key: "FVA", label: "FVA 外国增加值", color: COMPONENT_COLORS.FVA, desc: "出口中由其他国家创造的增加值（例如进口零部件的价值），不包括外国重复计算 FDC。" },
+      { key: "FDC", label: "FDC 外国重复计算", color: COMPONENT_COLORS.FDC, desc: "外国增加值在出口统计中被重复计入的部分。" },
+      { key: "taxsub", label: "taxsub 产品税减补贴", color: COMPONENT_COLORS.taxsub, desc: "出口中直接和间接包含的产品税减补贴（来自 ICIO 的 TLS 账户）。可为负，表示净补贴。" },
     ],
     note: (_r, values, decimals) =>
       `出口中的国内增加值合计（EXDVA）= DVAex + DVArt = ${sumText(values[0], values[1], decimals)}。` +
@@ -87,10 +88,10 @@ const DECOMP: Record<number, DecompCfg> = {
     totalLabel: "总增加值 SVA",
     unit: "amount",
     parts: [
-      { key: "1_VA_D", label: "1_VA_D 纯国内增加值", short: "纯国内", color: "#4b47e0", desc: "增加值只服务本国最终需求，完全不跨境。" },
-      { key: "2_VA_RT", label: "2_VA_RT 传统贸易增加值", short: "传统贸易", color: "#159a86", desc: "增加值随最终产品直接出口，只跨境一次。" },
-      { key: "3a_VA_GVC_S", label: "3a_VA_GVC_S 简单 GVC 增加值", short: "简单 GVC", color: "#e0982a", desc: "增加值随中间品跨境一次后，在国外被最终使用。" },
-      { key: "3b_VA_GVC_C", label: "3b_VA_GVC_C 复杂 GVC 增加值", short: "复杂 GVC", color: "#f4693b", desc: "增加值至少两次跨越国境。" },
+      { key: "1_VA_D", label: "1_VA_D 纯国内增加值", short: "纯国内", color: COMPONENT_COLORS.domestic, desc: "增加值只服务本国最终需求，完全不跨境。" },
+      { key: "2_VA_RT", label: "2_VA_RT 传统贸易增加值", short: "传统贸易", color: COMPONENT_COLORS.traditional, desc: "增加值随最终产品直接出口，只跨境一次。" },
+      { key: "3a_VA_GVC_S", label: "3a_VA_GVC_S 简单 GVC 增加值", short: "简单 GVC", color: COMPONENT_COLORS.simpleGvc, desc: "增加值随中间品跨境一次后，在国外被最终使用。" },
+      { key: "3b_VA_GVC_C", label: "3b_VA_GVC_C 复杂 GVC 增加值", short: "复杂 GVC", color: COMPONENT_COLORS.complexGvc, desc: "增加值至少两次跨越国境。" },
     ],
     negativeNote: "负值表示这部分增加值为负（例如行业亏损），所以其他分项的比重之和可能超过 100%。",
     note: (_r, values, decimals) =>
@@ -104,9 +105,9 @@ const DECOMP: Record<number, DecompCfg> = {
     unit: "number",
     weightTotal: "SVA",
     parts: [
-      { key: "PLv_D", label: "纯国内加权贡献", short: "纯国内", color: "#4b47e0", desc: "纯国内这一段的长度 × 它的增加值份额，就是这一段对总长度的贡献。", weightKey: "1_VA_D" },
-      { key: "PLv_RT", label: "传统贸易加权贡献", short: "传统贸易", color: "#159a86", desc: "传统贸易这一段的长度 × 它的增加值份额，就是这一段对总长度的贡献。", weightKey: "2_VA_RT" },
-      { key: "PLv_GVC", label: "GVC 加权贡献", short: "GVC", color: "#f4693b", desc: "GVC 这一段的长度 × 它的增加值份额，就是这一段对总长度的贡献；段长度和贡献不是同一个数。", weightKey: "3_VA_GVC" },
+      { key: "PLv_D", label: "纯国内加权贡献", short: "纯国内", color: COMPONENT_COLORS.domestic, desc: "纯国内这一段的长度 × 它的增加值份额，就是这一段对总长度的贡献。", weightKey: "1_VA_D" },
+      { key: "PLv_RT", label: "传统贸易加权贡献", short: "传统贸易", color: COMPONENT_COLORS.traditional, desc: "传统贸易这一段的长度 × 它的增加值份额，就是这一段对总长度的贡献。", weightKey: "2_VA_RT" },
+      { key: "PLv_GVC", label: "GVC 加权贡献", short: "GVC", color: COMPONENT_COLORS.gvc, desc: "GVC 这一段的长度 × 它的增加值份额，就是这一段对总长度的贡献；段长度和贡献不是同一个数。", weightKey: "3_VA_GVC" },
     ],
     note: (r) => {
       const segment = (lengthKey: string, weightKey: string) => {
@@ -464,16 +465,16 @@ export function DecompositionDetailTable({
   );
 }
 
-const PLY_DECOMP: DecompCfg = {
+export const PLY_DECOMP: DecompCfg = {
   title: "后向总生产长度 PLy",
   total: "PLy",
   totalLabel: "后向总生产长度 PLy",
   unit: "number",
   weightTotal: "FGY",
   parts: [
-    { key: "PLy_D", label: "纯国内段", color: "#4b47e0", desc: "按 1_FGY_D / FGY 加权。", weightKey: "1_FGY_D" },
-    { key: "PLy_RT", label: "传统贸易段", color: "#159a86", desc: "按 2_FGY_RT / FGY 加权。", weightKey: "2_FGY_RT" },
-    { key: "PLy_GVC", label: "GVC 段", color: "#f4693b", desc: "按 3_FGY_GVC / FGY 加权。", weightKey: "3_FGY_GVC" },
+    { key: "PLy_D", label: "纯国内段", color: COMPONENT_COLORS.domestic, desc: "按 1_FGY_D / FGY 加权。", weightKey: "1_FGY_D" },
+    { key: "PLy_RT", label: "传统贸易段", color: COMPONENT_COLORS.traditional, desc: "按 2_FGY_RT / FGY 加权。", weightKey: "2_FGY_RT" },
+    { key: "PLy_GVC", label: "GVC 段", color: COMPONENT_COLORS.gvc, desc: "按 3_FGY_GVC / FGY 加权。", weightKey: "3_FGY_GVC" },
   ],
 };
 

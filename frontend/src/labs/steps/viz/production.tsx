@@ -1,5 +1,5 @@
 import type { Meta, Step, StepStateApi } from "../../../types";
-import { CAT } from "../../../viz/shared";
+import { COMPONENT_COLORS } from "../../../viz/shared";
 import { IndicatorExplorer } from "./indicator-explorer";
 import type { IndicatorTopic } from "./indicator-model";
 import type { VizStepState } from "./scaffold";
@@ -63,10 +63,11 @@ export const PRODUCTION_TOPIC: IndicatorTopic = {
   composition: {
     total: "SVA",
     segments: [
-      { key: "1_VA_D", name: "纯国内", color: CAT[0] },
-      { key: "2_VA_RT", name: "传统贸易", color: CAT[1] },
-      { key: "3a_VA_GVC_S", name: "简单 GVC", color: CAT[2] },
-      { key: "3b_VA_GVC_C", name: "复杂 GVC", color: CAT[4] },
+      // The colours step 3 gives the same activities.
+      { key: "1_VA_D", name: "纯国内", color: COMPONENT_COLORS.domestic },
+      { key: "2_VA_RT", name: "传统贸易", color: COMPONENT_COLORS.traditional },
+      { key: "3a_VA_GVC_S", name: "简单 GVC", color: COMPONENT_COLORS.simpleGvc },
+      { key: "3b_VA_GVC_C", name: "复杂 GVC", color: COMPONENT_COLORS.complexGvc },
     ],
     focus: "3b_VA_GVC_C",
     focusLabel: "复杂 GVC 生产份额",
@@ -78,10 +79,10 @@ export const PRODUCTION_TOPIC: IndicatorTopic = {
       primaryLabel: "前向（按增加值来源）",
       total: "FGY",
       segments: [
-        { key: "1_FGY_D", name: "纯国内", color: CAT[0] },
-        { key: "2_FGY_RT", name: "传统贸易", color: CAT[1] },
-        { key: "3a_FGY_GVC_S", name: "简单 GVC", color: CAT[2] },
-        { key: "3b_FGY_GVC_C", name: "复杂 GVC", color: CAT[4] },
+        { key: "1_FGY_D", name: "纯国内", color: COMPONENT_COLORS.domestic },
+        { key: "2_FGY_RT", name: "传统贸易", color: COMPONENT_COLORS.traditional },
+        { key: "3a_FGY_GVC_S", name: "简单 GVC", color: COMPONENT_COLORS.simpleGvc },
+        { key: "3b_FGY_GVC_C", name: "复杂 GVC", color: COMPONENT_COLORS.complexGvc },
       ],
       focus: "3b_FGY_GVC_C",
       focusLabel: "后向复杂 GVC 生产份额",
