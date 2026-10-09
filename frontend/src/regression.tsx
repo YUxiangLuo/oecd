@@ -13,6 +13,7 @@ import {
   barUnitFor,
   buildRegressionVerdict,
   differenceWords,
+  familyChartDigits,
   teachingEffect,
   chartDisplayScale,
   countUnit,
@@ -422,11 +423,17 @@ export function familyBarRows(
   selected?: Pick<RegressionResponse, "design" | "result" | "model_snapshot"> | null,
 ): { rows: DivergingBarRow[]; unitTitle: string } {
   const unit = barUnitFor(items.map((item) => kindOf(item.kind, outcome)));
-  const rows = items.map((item): DivergingBarRow => {
-    const kind = kindOf(item.kind, outcome);
+  const estimates = items.map((item) => ({
+    kind: kindOf(item.kind, outcome),
+    estimate: item.key === selectedKey && selected ? runEstimate(selected) : overviewEstimate(item),
+  }));
+  // One decimal count for the whole chart ("-0.0184", "-0.0152", "-0.0006"), as the report's chart.
+  const digits = familyChartDigits(estimates);
+  const rows = items.map((item, index): DivergingBarRow => {
+    const { kind, estimate } = estimates[index];
     const isSelected = item.key === selectedKey;
-    const figures = barFigures(isSelected && selected ? runEstimate(selected) : overviewEstimate(item), kind, unit);
-    const suppressed = isSelected && selected ? runEstimate(selected).suppressed : overviewEstimate(item).suppressed;
+    const figures = barFigures(estimate, kind, unit, false, digits);
+    const suppressed = estimate.suppressed;
     return {
       key: item.key,
       label: displayBaselineLabel(item.label),

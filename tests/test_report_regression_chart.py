@@ -93,7 +93,11 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
         table = section.split("| 项目 | 结果 |", 1)[1]
         assert f"**{effect}**" in table
         native = bar["text"].split("（", 1)[0]
-        assert effect.startswith(native + " ")
+        # The same number; the chart may give it more decimals than the table (one count for all its bars).
+        shown = effect.split(" ", 1)[0]
+        decimals = len(shown.split(".")[1]) if "." in shown else 0
+        assert len(native.split(".")[1]) >= decimals
+        assert float(native.replace(",", "")) == pytest.approx(float(shown.replace(",", "")), abs=0.51 * 10**-decimals)
         if outcome in ("trade", "production"):
             # Shares: per 1 percentage point of X in percentage points, the table's interval too.
             assert chart["x_label"].endswith("（个百分点）")
@@ -112,7 +116,10 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
             assert bar["ci_high"] == pytest.approx(bounds[1], rel=1e-3)
             # Signed: the bar, its whisker and its label sit on a signed axis.
             sd = _signed(point, standardized_digits(point, bounds))
-            assert bar["text"] == f"{native}（{sd} 个标准差）"
+            # In the chart's one decimal count, at least the table's.
+            bar_sd = bar["text"].removeprefix(f"{native}（").removesuffix(" 个标准差）")
+            assert len(bar_sd.split(".")[1]) >= len(sd.split(".")[1])
+            assert float(bar_sd) == pytest.approx(float(sd), abs=0.51 * 10 ** -len(sd.split(".")[1]))
             assert (
                 bar["sub"]
                 == {"length": "长度单位", "position": "位置指数单位", "network": "中心性原始单位"}[
@@ -273,3 +280,65 @@ def test_interval_end_never_reads_as_the_estimate():
     assert "约短 0.0184 个长度单位" in _association("length", length, coefficient, negative=True)
     (bar,) = json.loads(family_chart(13, "length", length, result, coefficient, None)[1])["items"]
     assert bar["text"].startswith("-0.0184（")
+
+
+def _row(key: str, kind: str, coef: float, low: float, high: float, std: float) -> dict:
+    label = next(item.label for items in BASELINES.values() for item in items if item.key == key)
+    return {
+        "key": key,
+        "label": label,
+        "kind": kind,
+        "coef": coef,
+        "ci_low": low,
+        "ci_high": high,
+        "status": "ok",
+        "suppress_inference": False,
+        "depvar_std": std,
+    }
+
+
+def test_one_decimal_count_per_family_chart_as_on_the_page():
+    """Step 13 printed "-0.0184（-0.032 个标准差）", "-0.015（-0.026 个标准差）" and "-0.0006" in one chart; the page
+    (``familyBarRows``, regression-ux.test.tsx) and the report now give every bar the same decimals."""
+    from gvcsim.report_regression_chart import chart_digits
+
+    def texts(step: int, outcome: str, rows: list[dict]) -> list[str]:
+        saved = rows[0]
+        design = _design_info(RegressionDesign(outcome, teaching=True, baseline=saved["key"]))
+        coefficient = {"name": X_COLUMN, **{key: saved[key] for key in ("coef", "ci_low", "ci_high")}}
+        result = {
+            "status": "ok",
+            "support": {"status": "ok"},
+            "depvar_std": saved["depvar_std"],
+            "coefs": [coefficient],
+        }
+        chart = json.loads(family_chart(step, outcome, design, result, coefficient, {"outcomes": {outcome: rows}})[1])
+        return [item["text"] for item in chart["items"]]
+
+    length = [
+        _row("PLv_GVC", "length", -1.8414, -1.92, -1.76, 0.58),
+        _row("PLy_GVC", "length", -1.5231, -1.62, -1.43, 0.58),
+        _row("GVCPs", "position", -0.0612, -0.08, -0.04, 0.17),
+    ]
+    assert texts(13, "length", length) == [
+        "-0.0184（-0.032 个标准差）",
+        "-0.0152（-0.026 个标准差）",
+        "-0.0006（-0.004 个标准差）",
+    ]
+    # Step 12: a small estimate gives the shares three decimals ("+0.008", never "+0.01").
+    production = [
+        _row("3b_VA_GVC_C_share", "share", -0.4012, -0.42, -0.38, 0.1),
+        _row("1_VA_D_share", "share", 1.0031, 0.98, 1.03, 0.1),
+        _row("3b_FGY_GVC_C_share", "share", 0.0081, -0.002, 0.018, 0.1),
+    ]
+    assert texts(12, "production", production) == ["-0.401", "+1.003", "+0.008"]
+    # Step 14: the degrees keep two decimals; closeness, too small for them, keeps two significant digits.
+    network = [
+        _row("weighted_degree", "network", -4080.37, -4158.54, -4002.2, 856),
+        _row("betweenesscentrality", "network", -6011.39, -6400, -5600, 1300),
+        _row("closnesscentrality", "network", -0.4884, -0.5045, -0.4722, 0.11),
+    ]
+    assert [text.split("（")[0] for text in texts(14, "network", network)] == ["-40.80", "-60.11", "-0.0049"]
+    assert chart_digits([]) is None
+    assert chart_digits([(-0.0184, 4), (-0.0152, 3), (-0.0006, 4)]) == 4
+    assert chart_digits([(-40.8, 2), (-0.0049, 4)]) == 2

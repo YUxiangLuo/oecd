@@ -406,7 +406,8 @@ describe("simple regression workbench", () => {
     ], "PLv_GVC");
     expect(length.unitTitle).toBe("X 每高 1 个百分点，Y 平均相差（个标准差）");
     expect(length.rows.map((row) => [row.sublabel, row.valueLabel])).toEqual([
-      ["长度单位", "-0.018（-0.045 个标准差）"],
+      // One decimal count per chart: the position index's four.
+      ["长度单位", "-0.0181（-0.045 个标准差）"],
       ["位置指数单位", "-0.0008（-0.015 个标准差）"],
     ]);
     const network = familyBarRows("network", [
@@ -419,6 +420,35 @@ describe("simple regression workbench", () => {
     ]);
     expect([network.rows[1].low, network.rows[1].high]).toEqual([null, null]);
     expect(network.rows[1].note).toBe("这次的数据不够判断方向，不显示 95% 区间");
+  });
+
+  test("one decimal count per family chart (end labels, tooltips and what is read aloud)", () => {
+    // Step 13 as the testers saw it: "-0.0184（-0.032 个标准差）", "-0.015（-0.026 个标准差）", "-0.0006".
+    const length = familyBarRows("length", [
+      estimate("PLv_GVC", "前向 GVC 段长度", -1.8414, -1.92, -1.76, { kind: "length", default: true, depvar_std: 0.58 }),
+      estimate("PLy_GVC", "后向 GVC 段长度", -1.5231, -1.62, -1.43, { kind: "length", depvar_std: 0.58 }),
+      estimate("GVCPs", "GVC 位置指数", -0.0612, -0.08, -0.04, { kind: "position", depvar_std: 0.17 }),
+    ], "PLv_GVC");
+    expect(length.rows.map((row) => row.valueLabel)).toEqual([
+      "-0.0184（-0.032 个标准差）", "-0.0152（-0.026 个标准差）", "-0.0006（-0.004 个标准差）",
+    ]);
+    expect(length.rows[1].spokenLabel).toBe("-0.0152 个长度单位（-0.026 个标准差），95% 区间 [-0.028, -0.025] 个标准差");
+    expect(length.rows[1].intervalLabel).toBe("[-0.028, -0.025] 个标准差");
+    // Step 12: a small estimate gives the shares three decimals ("+0.008", never "+0.01").
+    const production = familyBarRows("production", [
+      estimate("3b_VA_GVC_C_share", "复杂 GVC 生产份额", -0.4012, -0.42, -0.38, { default: true }),
+      estimate("1_VA_D_share", "纯国内生产份额", 1.0031, 0.98, 1.03),
+      estimate("3b_FGY_GVC_C_share", "后向复杂 GVC 生产份额", 0.0081, -0.002, 0.018),
+    ], "3b_VA_GVC_C_share");
+    expect(production.rows.map((row) => row.valueLabel)).toEqual(["-0.401", "+1.003", "+0.008"]);
+    expect(production.rows[0].intervalLabel).toBe("[-0.420, -0.380] 个百分点");
+    // Step 14: the degrees keep two decimals; closeness, too small for them, keeps two significant digits.
+    const network = familyBarRows("network", [
+      estimate("weighted_degree", "加权总度（入+出）", -4080.37, -4158.54, -4002.2, { kind: "network", default: true, depvar_std: 856 }),
+      estimate("betweenesscentrality", "网络介数（全正边二值）", -6011.39, -6400, -5600, { kind: "network", depvar_std: 1300 }),
+      estimate("closnesscentrality", "接近中心性", -0.4884, -0.5045, -0.4722, { kind: "network", depvar_std: 0.11 }),
+    ], "weighted_degree");
+    expect(network.rows.map((row) => row.valueLabel.split("（")[0])).toEqual(["-40.80", "-60.11", "-0.0049"]);
   });
 
   test("converts the estimate to the example's X in each step's own units", () => {

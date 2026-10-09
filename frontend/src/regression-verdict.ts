@@ -211,48 +211,95 @@ export function standardizedEffect(coef: number, depvarStd: number | null | unde
   return typeof depvarStd === "number" && Number.isFinite(depvarStd) && depvarStd > 0 ? (coef * 0.01) / depvarStd : null;
 }
 
-/**
- * The bar of one estimate. In 个百分点 (shares) the label is the headline's signed number ("-0.55"); in 个标准差
- * the bar is the standardized size and the label the native value with the signed size ("-40.11（-0.047 个标准差）";
- * with `withUnit`, "-0.55 个百分点（-0.062 个标准差）" for charts that mix units).
- */
-export function barFigures(estimate: BarEstimate, kind: DepvarKind, unit: BarUnit, withUnit = false): BarFigures {
+/** One estimate's numbers as a bar reads them: per 1 percentage point of X in Y's own unit, and in standard deviations. */
+function barParts(estimate: BarEstimate, kind: DepvarKind) {
   const { coef } = estimate;
-  if (coef == null || !Number.isFinite(coef)) {
-    return { value: 0, low: null, high: null, uncertain: true, valueLabel: "没算出估计值", intervalLabel: "—", spokenLabel: "没算出估计值" };
-  }
+  if (coef == null || !Number.isFinite(coef)) return null;
   const low = estimate.suppressed ? null : estimate.ci_low;
   const high = estimate.suppressed ? null : estimate.ci_high;
   const hasCi = low != null && high != null && Number.isFinite(low) && Number.isFinite(high);
-  const uncertain = estimate.suppressed || !hasCi || (low! <= 0 && high! >= 0);
-  // The value per 1 percentage point of X in the Y's own display unit (shares ×1 in points, others ×0.01), in the
-  // headline's digits (with its interval, so it reads as the headline does).
+  // The value per 1 percentage point of X in the Y's own display unit (shares ×1 in points, others ×0.01).
   const toNative = kind === "share" ? 1 : 0.01;
-  const native = coef * toNative;
-  const nativeBounds: [number, number] | null = hasCi ? [low! * toNative, high! * toNative] : null;
-  const nativeValue = signedEffect(native, kind, nativeBounds);
+  const sd = standardizedEffect(coef, estimate.depvar_std);
+  return {
+    coef, low, high, hasCi,
+    uncertain: estimate.suppressed || !hasCi || (low! <= 0 && high! >= 0),
+    native: coef * toNative,
+    nativeBounds: hasCi ? [low! * toNative, high! * toNative] as [number, number] : null,
+    sd,
+    sdBounds: sd != null && hasCi ? [standardizedEffect(low!, estimate.depvar_std)!, standardizedEffect(high!, estimate.depvar_std)!] as [number, number] : null,
+  };
+}
+
+/** Decimals for every bar of one chart: the end labels (native value; size in standard deviations). */
+export interface ChartDigits {
+  native?: number;
+  sd?: number;
+}
+
+/**
+ * One decimal count for a chart's values (report `chart_digits`): as many as the bar needing the most has on its own
+ * (step 13: "-0.0184" makes "-0.015" read "-0.0152", next to the position index's "-0.0006"), but no more than gives the
+ * largest value four significant figures (or its own digits), so step 14's weighted degree stays "-40.80" beside
+ * closeness; a value too small for that keeps two significant digits, as signed() does everywhere.
+ */
+export function chartDigits(items: { value: number; digits: number }[]): number | undefined {
+  const finite = items.filter((item) => Number.isFinite(item.value));
+  if (finite.length === 0) return undefined;
+  const largest = finite.reduce((best, item) => (Math.abs(item.value) > Math.abs(best.value) ? item : best));
+  const cap = largest.value !== 0 ? Math.max(0, 3 - Math.floor(Math.log10(Math.abs(largest.value)))) : Infinity;
+  return Math.max(largest.digits, Math.min(cap, Math.max(...finite.map((item) => item.digits))));
+}
+
+/** The decimals of a chart of these estimates (chartDigits), for barFigures. */
+export function familyChartDigits(estimates: { estimate: BarEstimate; kind: DepvarKind }[]): ChartDigits {
+  const parts = estimates.flatMap(({ estimate, kind }) => {
+    const part = barParts(estimate, kind);
+    return part ? [{ kind, part }] : [];
+  });
+  return {
+    native: chartDigits(parts.map(({ kind, part }) => ({ value: part.native, digits: estimateDigits(kind, part.native, part.nativeBounds) }))),
+    sd: chartDigits(parts.flatMap(({ part }) => (part.sd == null ? [] : [{ value: part.sd, digits: standardizedDigits(part.sd, part.sdBounds) }]))),
+  };
+}
+
+/**
+ * The bar of one estimate. In 个百分点 (shares) the label is the headline's signed number ("-0.55"); in 个标准差
+ * the bar is the standardized size and the label the native value with the signed size ("-40.11（-0.047 个标准差）";
+ * with `withUnit`, "-0.55 个百分点（-0.062 个标准差）" for charts that mix units). Alone, a bar has the headline's
+ * digits; a family chart passes one count for all its bars (`chart`, familyChartDigits).
+ */
+export function barFigures(estimate: BarEstimate, kind: DepvarKind, unit: BarUnit, withUnit = false, chart: ChartDigits = {}): BarFigures {
+  const parts = barParts(estimate, kind);
+  if (!parts) {
+    return { value: 0, low: null, high: null, uncertain: true, valueLabel: "没算出估计值", intervalLabel: "—", spokenLabel: "没算出估计值" };
+  }
+  const { low, high, hasCi, uncertain, native, nativeBounds } = parts;
+  // In the headline's digits (with its interval, so it reads as the headline does), or the chart's.
+  const nativeDigits = chart.native ?? estimateDigits(kind, native, nativeBounds);
+  const nativeValue = signed(native, nativeDigits);
   const nativeText = `${nativeValue}${withUnit ? ` ${countUnit(kind)}` : ""}`;
   // Spoken with its unit even where the drawing leaves it to the axis title or the name's second line.
   const spokenNative = `${nativeValue} ${countUnit(kind)}`;
   if (unit === "points") {
-    const digits = estimateDigits(kind, coef, hasCi ? [low!, high!] : null);
+    // Shares: the native value is the coefficient, so its interval has the same digits.
+    const digits = nativeDigits;
     const interval = hasCi ? `[${signed(low!, digits)}, ${signed(high!, digits)}]` : null;
     return {
-      value: coef, low: hasCi ? low : null, high: hasCi ? high : null, uncertain,
+      value: native, low: hasCi ? low : null, high: hasCi ? high : null, uncertain,
       valueLabel: nativeText,
       intervalLabel: interval ? `${interval} 个百分点` : "—",
       spokenLabel: interval ? `${spokenNative}，95% 区间 ${interval}` : spokenNative,
     };
   }
-  const sd = standardizedEffect(coef, estimate.depvar_std);
+  const { sd, sdBounds: bounds } = parts;
   if (sd == null) {
     return {
       value: 0, low: null, high: null, uncertain: true, valueLabel: `${nativeText}（没有标准差）`, intervalLabel: "—",
       spokenLabel: `${spokenNative}（没有标准差）`,
     };
   }
-  const bounds: [number, number] | null = hasCi ? [standardizedEffect(low!, estimate.depvar_std)!, standardizedEffect(high!, estimate.depvar_std)!] : null;
-  const digits = standardizedDigits(sd, bounds);
+  const digits = chart.sd ?? standardizedDigits(sd, bounds);
   return {
     value: sd, low: bounds?.[0] ?? null, high: bounds?.[1] ?? null, uncertain,
     // Signed, as the bar and its interval are on a signed axis ("-40.11（-0.047 个标准差）"); only the headline's
