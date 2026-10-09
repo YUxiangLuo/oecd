@@ -10,10 +10,7 @@ export const TARIFF_IMPOSER = "USA";
 export interface TeachingExampleSelection {
   compared?: string[];
   teaching_industry?: string;
-  /**
-   * True once the student picked the example on step 10 themselves. An example saved only because the page
-   * was shown (the default, or the industry followed from step 9) is false, so a later step 9 choice still leads.
-   */
+  /** True once the student picked the example on step 10 themselves; false for the default saved because the page was shown. */
   teaching_example_chosen?: boolean;
 }
 
@@ -22,12 +19,11 @@ export interface TeachingExampleSelection {
  * Defaults to Canada vs Costa Rica in motor vehicles: both sell most of those exports to the US, but only Canada
  * has a goods surplus with the US and is taxed (v7 rule), so the pair shows that X comes from the tariff, not from
  * export dependence alone. Peru is the fallback untaxed comparison. A saved selection with one country stays a single example (second is "").
+ * The industry is the saved one, else always C29 (the autos reason above), never the industry last seen on step 9.
  */
 export function teachingExample(
   meta: Pick<Meta, "countries" | "sectors">,
   saved?: TeachingExampleSelection,
-  /** The industry followed in step 9, used when step 10 has not recorded its own yet. */
-  priorIndustry?: string | null,
 ) {
   const countries = meta.countries.filter((code) => code !== "ROW");
   const carried = saved?.compared?.filter((code) => countries.includes(code)) ?? [];
@@ -38,8 +34,6 @@ export function teachingExample(
       ?? countries.find((code) => code !== first) ?? "";
   const industry = saved?.teaching_industry && meta.sectors.includes(saved.teaching_industry)
     ? saved.teaching_industry
-    : priorIndustry && meta.sectors.includes(priorIndustry)
-      ? priorIndustry
-      : meta.sectors.includes("C29") ? "C29" : meta.sectors[0] ?? "";
+    : meta.sectors.includes("C29") ? "C29" : meta.sectors[0] ?? "";
   return { countries, first, second, industry };
 }

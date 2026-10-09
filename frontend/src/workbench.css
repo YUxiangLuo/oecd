@@ -346,12 +346,16 @@
 .country-exposure-untaxed { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; align-items: start; margin: 10px 0 0; padding-top: 9px; border-top: 1px dashed #dde1ea; }
 .country-exposure-untaxed > b { display: inline-flex; align-items: center; gap: 6px; padding-top: 3px; color: #3a4050; font-size: 12px; white-space: nowrap; }
 .country-exposure-untaxed > b i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
-.country-exposure-codes { display: flex; flex-wrap: wrap; gap: 4px; }
+.country-exposure-codes { display: flex; flex-wrap: wrap; gap: 4px; padding-top: 4px; }
 .country-exposure-codes > span {
-  display: inline-flex; align-items: center; padding: 2px 6px; border: 1px solid #d5d9e2; border-bottom: 3px solid #6b7487;
+  position: relative; display: inline-flex; align-items: center; padding: 2px 6px; border: 1px solid #d5d9e2; border-bottom: 3px solid #6b7487;
   border-radius: 5px; background: #fff; color: #4a5265; font-size: 11px; font-variant-numeric: tabular-nums;
 }
-.country-exposure-codes > span.selected { border-color: #1f2430; color: #1b1f2b; font-weight: 800; }
+/* A marked chip keeps its width (no bold, the badge sits over its corner), so the rows never re-wrap when A/B move. */
+.country-exposure-codes > span.selected { border-color: #1f2430; background: #fff1e3; color: #1b1f2b; box-shadow: inset 0 0 0 1px #1f2430; }
+.country-exposure-codes > span > .country-exposure-badge { position: absolute; top: -7px; left: -7px; width: 13px; height: 13px; margin: 0; font-size: 8.5px; }
+/* The hover readout wraps a long value instead of running past its 260 px box. */
+.country-exposure .hover-tip > div > b { white-space: normal; }
 .country-exposure-codes > span:focus-visible { outline: 2px solid #4b47e0; outline-offset: 1px; }
 .country-exposure-rule { margin: 10px 0 0; color: #3a4050; font-size: 12px; }
 .country-exposure-note { margin: 8px 0 0; color: #5a6274; font-size: 11.5px; }

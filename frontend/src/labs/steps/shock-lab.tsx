@@ -9,7 +9,7 @@ import type {
 } from "../../types";
 import { TARIFF_IMPOSER, teachingExample } from "../../teaching-example";
 import { GENERATED_DATA_NOTE } from "../../regression-lessons";
-import { percentagePoints } from "../../format";
+import { stripNegativeZero } from "../../format";
 import { countryLabel, sectorLabel } from "../../viz";
 import { CountryExposureChart, taxedRuleText, yiUsd } from "../../viz/regression/country-exposure";
 import { useAsync } from "../shared";
@@ -98,40 +98,68 @@ export function exampleWasChosen(
   return !sameJsonValue([saved.compared ?? [], saved.teaching_industry], [[defaults.first, defaults.second].filter(Boolean), defaults.industry]);
 }
 
-export function ShockLab({ meta, step: _step, state, getStep }: {
+/** Decimals `percentagePoints` (format.ts) prints a share with: two, or two significant digits for a tiny positive one. */
+function shownDecimals(share: number): number {
+  const points = share * 100;
+  return points > 0 && points < 0.005 ? Math.min(10, Math.ceil(-Math.log10(points)) + 1) : 2;
+}
+
+/** A shown decimal ("0.10", "25") as an integer and its number of decimals. */
+function scaledDecimal(text: string): [bigint, number] {
+  const [whole, fraction = ""] = text.split(".");
+  return [BigInt(whole + fraction), fraction.length];
+}
+
+/** Whether the shown w (in %) times the shown τ (in %), rounded half up to the shown X's decimals, is the shown X. */
+function productChecks(wText: string, tauText: string, xText: string): boolean {
+  const [w, wScale] = scaledDecimal(wText);
+  const [tau, tauScale] = scaledDecimal(tauText);
+  const [x, xScale] = scaledDecimal(xText);
+  // w% × τ% in percentage points is w × τ / 100.
+  const product = w * tau;
+  const scale = wScale + tauScale + 2;
+  if (scale <= xScale) return product * 10n ** BigInt(xScale - scale) === x;
+  const unit = 10n ** BigInt(scale - xScale);
+  const rounded = product / unit + (2n * (product % unit) >= unit ? 1n : 0n);
+  return rounded === x;
+}
+
+/**
+ * w (a share, shown in %) and X (a share, shown in percentage points) for "X = w × τ = X" on step 10, with just enough
+ * decimals that the shown w times the shown τ gives the shown X by hand: 0.0985% × 25% reads "0.10% × 25% = 0.025",
+ * never "0.10% × 25% = 0.02" (0.10 × 0.25 = 0.025). Normal values keep two decimals; an exact zero X reads "0".
+ */
+export function workedNumbers(w: number, tau: number, x: number): { w: string; x: string; xDecimals: number } {
+  const wBase = shownDecimals(w);
+  const xBase = shownDecimals(x);
+  const wAt = (decimals: number) => stripNegativeZero((w * 100).toFixed(decimals));
+  if (x === 0) return { w: wAt(wBase), x: "0", xDecimals: 2 };
+  const tauText = String(Number((tau * 100).toFixed(2)));
+  for (let extra = 0; extra <= 6; extra += 1) {
+    for (const [wDecimals, xDecimals] of [[wBase + extra, xBase + extra], [wBase + extra, xBase + extra + 1]]) {
+      const shown = { w: wAt(wDecimals), x: (x * 100).toFixed(xDecimals), xDecimals };
+      if (productChecks(shown.w, tauText, shown.x)) return shown;
+    }
+  }
+  return { w: wAt(wBase), x: (x * 100).toFixed(xBase), xDecimals: xBase };
+}
+
+export function ShockLab({ meta, step: _step, state }: {
   meta: Meta;
   step: Step;
   state: StepStateApi<ShockStepState>;
-  /** Read-only: step 9's recorded industry seeds the example's industry. */
-  getStep?: <T>(step: number) => T | undefined;
 }) {
-  const priorNetwork = getStep?.<{ observations?: { industry?: string }[] }>(9);
-  // Only a material about one industry (a trend) seeds the example; a ranking covers many industries,
-  // and its first row would be an arbitrary choice the student never made.
-  const priorIndustries = new Set((priorNetwork?.observations ?? []).map((item) => item.industry).filter(Boolean));
-  const priorIndustry = priorIndustries.size === 1 ? [...priorIndustries][0] : undefined;
   const defaults = teachingExample(meta);
-  // A saved example leads only once the student picked it here: an example saved because step 10 was merely
-  // shown (a quick click through) still lets a later one-industry step 9 choice lead. After submission the
-  // saved example stays put.
+  // A saved example always leads; a fresh one is the default CAN vs CRI in C29 (not the industry last seen on step 9,
+  // which would contradict the autos reason in the lead text).
   const savedChosen = exampleWasChosen(state.data, defaults);
-  const followStepNine = Boolean(priorIndustry) && !savedChosen && !state.materialLocked;
-  const example = teachingExample(meta, followStepNine ? { compared: state.data?.compared } : state.data, priorIndustry);
+  const example = teachingExample(meta, state.data);
   const countries = example.countries;
   const [first, setFirst] = useState(example.first);
   const [second, setSecond] = useState(example.second);
   const [industry, setIndustry] = useState(example.industry);
   const [chosen, setChosen] = useState(savedChosen);
-  // Why step 9's industry was not used, said once in a line (it used to fall back silently).
-  const [fallbackNote, setFallbackNote] = useState<string | null>(null);
-  const choose = () => {
-    setChosen(true);
-    setFallbackNote(null);
-    inheritedIndustry.current = false;
-  };
-  // The industry came from step 9 rather than from the student here: if the pair is not in the regression
-  // sample for it, fall back to the default industry instead of an unusable example.
-  const inheritedIndustry = useRef(followStepNine && example.industry === priorIndustry);
+  const choose = () => setChosen(true);
   const groups = useAsync<TeachingGroupsResponse>(() => api.teachingGroups(), ["teaching-groups"]);
   const sample = groups.status === "success" ? groups.data?.sample : undefined;
   // The whole sample comes first: every country's X in the last year, before any example.
@@ -154,14 +182,6 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
     ? selectedCountries.filter((country) => !panel.rows.some((row) => row.country === country && row.year === lastYear))
     : [];
   const complete = Boolean(panel) && selectedCountries.length >= 1 && missing.length === 0;
-  const fallbackIndustry = defaults.industry;
-  useEffect(() => {
-    if (!panel || complete || !inheritedIndustry.current || industry === fallbackIndustry) return;
-    inheritedIndustry.current = false;
-    setFallbackNote(`步骤 9 看的是 ${sectorLabel(industry)}，但 ${missing.map(countryLabel).join("、")} 的这个行业不在回归样本里，所以这里先用默认的 ${sectorLabel(fallbackIndustry)}；也可以在下面换行业或国家。`);
-    setIndustry(fallbackIndustry);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panel, complete, industry, fallbackIndustry]);
   const sampleIndustries = groups.status === "success" ? groups.data?.industries : undefined;
   const industryOptions = meta.sectors.filter((code) => !sampleIndustries || sampleIndustries.includes(code) || code === industry);
 
@@ -224,17 +244,15 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
     .map((country) => rows.find((row) => row.country === country && row.year === years.at(-1)))
     .filter((row): row is NonNullable<typeof row> => row != null);
   const exampleRow = representativeRow(rows, selectedCountries, years.at(-1));
-  // Shares and X in percentage points with two decimals everywhere on this step; the tariff rate as set.
-  const pct = (value: number) => `${percentagePoints(value)}%`;
-  // X in percentage points; an exact zero (untaxed, or w = 0) reads "0", not "0.00".
-  const xPoints = (value: number) => (value === 0 ? "0" : percentagePoints(value));
+  // The tariff rate as set; shares and X in percentage points come from workedNumbers (two decimals, more only where
+  // needed, and an exact zero X reads "0", not "0.00").
   const rate = (value: number) => `${Number((value * 100).toFixed(2))}%`;
-  // A tiny X (w of a few thousandths of a percent) keeps two significant digits on the chart cards, so they
-  // read "0.00083" rather than "不到 0.01"; normal values keep two decimals.
-  const positiveX = chartRows.map((row) => row.teaching_tariff_exposure).filter((value) => value > 0);
-  const chartDigits = positiveX.length && Math.max(...positiveX) < 0.005
-    ? Math.min(10, Math.ceil(-Math.log10(Math.min(...positiveX))) + 1)
-    : 2;
+  // "X = w × τ" with w and X at the digits that check by hand (see workedNumbers).
+  const worked = (row: { teaching_export_share_w: number; teaching_tariff_rate_tau: number; teaching_tariff_exposure: number }) =>
+    workedNumbers(row.teaching_export_share_w, row.teaching_tariff_rate_tau, row.teaching_tariff_exposure);
+  // The chart cards read X at the same digits as the summary above them: two decimals, more for a tiny X
+  // ("0.00083" rather than "不到 0.01") or where two would not check by hand ("0.025", not "0.02").
+  const chartDigits = Math.max(2, ...lastRows.filter((row) => row.teaching_tariff_exposure > 0).map((row) => worked(row).xDecimals));
   const isImposer = (country: string) => country === TARIFF_IMPOSER;
   const imposerMissing = missing.filter(isImposer);
   const otherMissing = missing.filter((country) => !isImposer(country));
@@ -245,9 +263,38 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
     ? exampleRow
     : undefined;
   const workedCountry = workedExample ? undefined : fallbackWorkedCountry(overview);
+  const names = (codes: readonly string[]) => codes.map(countryLabel).join("、");
+  // Why the worked card does not use the student's example: every case is named, never a silent switch.
+  // The imposer has no rows in the teaching data (an older server sent X = 0 rows for it); either way it is named.
+  const imposers = selectedCountries.filter(isImposer);
+  const untaxedRows = lastRows.filter((row) => !isImposer(row.country));
+  const fallbackReasons = !workedCountry ? [] : [
+    ...(imposers.length ? [`你的例子里的 ${names(imposers)} 是加征关税的一方，不在回归样本中`] : []),
+    ...(otherMissing.length ? [`你的例子 ${names(otherMissing)} · ${sectorLabel(industry)} 不在回归样本里`] : []),
+    ...(complete && untaxedRows.length
+      ? [`你的例子 ${names(untaxedRows.map((row) => row.country))} ${untaxedRows.length > 1 ? "都" : ""}未被加税，X 一直是 0`]
+      : []),
+    ...(query.status === "error" ? ["你的例子的关税数据没有读到"] : []),
+  ];
+  // The worked row is country B when A has no exposure (untaxed, taxed with w = 0, or the imposer): say so.
+  const firstRow = lastRows.find((row) => row.country === first);
+  const switchedToB = workedExample && workedExample.country !== first && firstRow
+    ? `国家 A ${countryLabel(first)}${isImposer(first)
+      ? " 是加征关税的一方，X 记为 0 只是定义"
+      : firstRow.teaching_tariff_rate_tau > 0
+        ? " 被加税，但该行业首年不向美国出口（w = 0），X 一直是 0"
+        : " 未被加税，X 一直是 0"}，所以这里用对比国家 B ${countryLabel(workedExample.country)} 算。`
+    : null;
+  // The chart marks the example the report records: the current selection once it can be recorded (or while it
+  // loads), else the recorded one, so the A/B marks never disagree with the "已记录的例子" line below.
+  const marksRecorded = Boolean(panel) && !complete && savedCompared.length > 0;
+  const highlight = marksRecorded ? savedCompared : selectedCountries;
+  const highlightLabel = marksRecorded
+    ? "已记录的例子（当前选择不在回归样本中）"
+    : state.materialLocked && recordedExample && !savedExample ? "当前选的例子（不是已记录的报告材料）" : "你跟踪的例子";
   const taxedCount = overview?.taxed_countries ?? sample?.taxed_countries;
   // The data rule that picks the taxed countries (teaching data v7 on); an older server sends none.
-  const ruleClause = taxedRuleText(overview?.taxed_rule, "超过 ");
+  const ruleClause = taxedRuleText(overview?.taxed_rule, "达到或超过 ");
   const ruleMin = overview?.taxed_rule?.min_million_usd;
   const sampleRows = sample?.rows ?? (overview ? overview.entities * years.length : undefined);
 
@@ -272,42 +319,41 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
         <p className="teaching-one-line">
           回归样本：{overview.countries.length} 国的 {overview.entities.toLocaleString("zh-CN")} 个国家×行业{sampleRows ? ` × ${years.length} 年 = ${sampleRows.toLocaleString("zh-CN")} 条记录` : ""}。下图是每个国家 {overview.year} 年各行业的平均 X。
         </p>
-        <CountryExposureChart data={overview} highlight={selectedCountries} />
+        <CountryExposureChart data={overview} highlight={highlight} highlightLabel={highlightLabel} />
       </>}
-      {workedExample && (
-        <div className="teaching-x-card" role="group" aria-label="用所选例子算一次 X">
+      {workedExample && (() => {
+        const shown = worked(workedExample);
+        return <div className="teaching-x-card" role="group" aria-label="用所选例子算一次 X">
           <b>算一次：X = w × τ</b>
           <p>
             {countryLabel(workedExample.country)} · {sectorLabel(industry)} · {workedExample.year} 年：{" "}
-            <span className="teaching-x-formula">X = {pct(workedExample.teaching_export_share_w)} × {rate(workedExample.teaching_tariff_rate_tau)} = <b>{xPoints(workedExample.teaching_tariff_exposure)} 个百分点</b></span>
+            <span className="teaching-x-formula">X = {shown.w}% × {rate(workedExample.teaching_tariff_rate_tau)} = <b>{shown.x} 个百分点</b></span>
             {workedExample.teaching_tariff_exposure === 0 ? "（被加税了，但 w = 0，所以 X 仍是 0）" : bothTaxed ? "（税率相同时，对美出口份额 w 不同，X 也不同）" : ""}
           </p>
-          <p className="muted">w = 首年（{years[0]} 年）对美出口份额 {pct(workedExample.teaching_export_share_w)}，之后各年不变；τ = 加征税率。</p>
-        </div>
-      )}
-      {workedCountry && overview && (
-        <div className="teaching-x-card" role="group" aria-label="用被加税国家算一次 X">
+          {switchedToB && <p className="muted teaching-x-reason">{switchedToB}</p>}
+          <p className="muted">w = 首年（{years[0]} 年）对美出口份额 {shown.w}%，之后各年不变；τ = 加征税率。</p>
+        </div>;
+      })()}
+      {workedCountry && overview && (() => {
+        const shown = workedNumbers(workedCountry.mean_w, overview.tariff_rate, workedCountry.mean_exposure);
+        return <div className="teaching-x-card" role="group" aria-label="用被加税国家算一次 X">
           <b>算一次：X = w × τ</b>
           <p>
             {countryLabel(workedCountry.country)} · {overview.year} 年 · {workedCountry.industries} 个行业平均：{" "}
-            <span className="teaching-x-formula">X = {pct(workedCountry.mean_w)} × {rate(overview.tariff_rate)} = <b>{xPoints(workedCountry.mean_exposure)} 个百分点</b></span>
+            <span className="teaching-x-formula">X = {shown.w}% × {rate(overview.tariff_rate)} = <b>{shown.x} 个百分点</b></span>
           </p>
-          {exampleRow && complete && (
-            <p className="muted">
-              {isImposer(exampleRow.country)
-                ? "你的例子是美国：它是加征关税的一方，X 记为 0 只是定义"
-                : `你的例子 ${countryLabel(exampleRow.country)} 未被加税，X 一直是 0`}，所以这里用 {countryLabel(workedCountry.country)} 算。
-            </p>
+          {fallbackReasons.length > 0 && (
+            <p className="muted teaching-x-reason">{fallbackReasons.join("；")}，所以这里用 {countryLabel(workedCountry.country)} 各行业的平均算。</p>
           )}
           <p className="muted">w = 首年（{years[0]} 年）对美出口份额，之后各年不变；同一国家各行业的 τ 相同，所以平均 X = 平均 w × τ。</p>
-        </div>
-      )}
+        </div>;
+      })()}
       <p className="teaching-one-line">步骤 11–14 用每个国家×行业的 X 对照四类指标 Y，读“X 每高 1 个百分点，Y 平均相差多少”。</p>
     </section>
     <section className="reg-run-card">
       <span className="reg-section-step">跟踪一个例子（可选）</span>
       <p className="teaching-example-lead">
-        看 X 在加税那年怎样跳起来。默认的加拿大是{taxedCount ? ` ${taxedCount} 个` : ""}被加税国家之一，对比的哥斯达黎加未被加税（两国汽车业都主要卖给美国）；行业沿用步骤 9 最后看的行业。步骤 11–14 会把回归结果换算到你选的例子上。
+        看 X 在加税那年怎样跳起来。默认的加拿大是{taxedCount ? ` ${taxedCount} 个` : ""}被加税国家之一，对比的哥斯达黎加未被加税（两国汽车业都主要卖给美国），行业默认是 C29 汽车及零部件。步骤 11–14 会把回归结果换算到你选的例子上。
       </p>
       <div className="controls" role="group" aria-label="跟随的例子">
         <label className="model-control"><span className="model-control-label">国家 A</span>
@@ -347,7 +393,6 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
           }}>改用当前例子作为报告材料（之后需在步骤 15 更新报告）</button>
         )}
       </div>
-      {fallbackNote && <p className="reg-boundary teaching-fallback-note" role="status">{fallbackNote}</p>}
       {selectedCountries.some(isImposer) && (
         <p className="reg-boundary" role="note">
           美国是加征关税的一方，按设计不在回归样本中，X 记为 0 只是定义（w 是“对美出口份额”，美国不会向自己出口），不是数据缺失。
@@ -359,7 +404,9 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
     {panel && !complete && (
       <div className="reg-boundary" role="status">
         {otherMissing.length > 0
-          ? <>{otherMissing.map(countryLabel).join("、")} · {sectorLabel(industry)} 不在回归样本里：这个国家的这个行业在首年（{years[0]} 年）缺少必要数据，回归没有用到它。请换一个国家或行业</>
+          ? <>{otherMissing.map(countryLabel).join("、")} · {sectorLabel(industry)} 不在回归样本里：{otherMissing.length > 1
+            ? `这两个国家的这个行业在首年（${years[0]} 年）都缺少必要数据，回归没有用到它们。请换国家或行业`
+            : `这个国家的这个行业在首年（${years[0]} 年）缺少必要数据，回归没有用到它。请换一个国家或行业`}</>
           : <>{imposerMissing.map(countryLabel).join("、")} 不在回归样本里（见上面的说明），不能作为例子。请换一个国家</>}
         {state.data?.teaching_observation ? "；已记录的例子保持不变" : ""}。
       </div>
@@ -372,7 +419,7 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
             const taxed = row.teaching_tariff_rate_tau > 0;
             return <li key={row.country}>
               <b>{countryLabel(row.country)} · {sectorLabel(industry)}</b>
-              {isImposer(row.country) ? "加征关税的一方（不在回归样本中）" : taxed ? "被加税" : "未被加税"}：w = {pct(row.teaching_export_share_w)}，{years.at(-1)} 年 X = {xPoints(row.teaching_tariff_exposure)} 个百分点{taxed && row.teaching_tariff_exposure === 0 ? "（不向美国出口：w = 0，所以 X = 0）" : ""}
+              {isImposer(row.country) ? "加征关税的一方（不在回归样本中）" : taxed ? "被加税" : "未被加税"}：w = {worked(row).w}%，{years.at(-1)} 年 X = {worked(row).x} 个百分点{taxed && row.teaching_tariff_exposure === 0 ? "（不向美国出口：w = 0，所以 X = 0）" : ""}
             </li>;
           })}
         </ul>
@@ -424,7 +471,7 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
         <summary>逐年读数 · {rows.length} 条</summary>
         <ScrollableRegion className="table-wrap bounded-data-table" label="所选例子的五年关税暴露表">
           <table className="data-table"><thead><tr><th>国家</th><th>行业</th><th>年份</th><th>首年对美出口份额 w</th><th>加征税率 τ</th><th>关税暴露 X = w × τ</th></tr></thead>
-            <tbody>{rows.map((row) => <tr key={`${row.country}-${row.industry}-${row.year}`}><td>{countryLabel(row.country)}</td><td>{sectorLabel(row.industry)}</td><td>{row.year}</td><td>{pct(row.teaching_export_share_w)}</td><td>{rate(row.teaching_tariff_rate_tau)}</td><td><b>{pct(row.teaching_export_share_w)} × {rate(row.teaching_tariff_rate_tau)} = {xPoints(row.teaching_tariff_exposure)} 个百分点</b></td></tr>)}</tbody>
+            <tbody>{rows.map((row) => <tr key={`${row.country}-${row.industry}-${row.year}`}><td>{countryLabel(row.country)}</td><td>{sectorLabel(row.industry)}</td><td>{row.year}</td><td>{worked(row).w}%</td><td>{rate(row.teaching_tariff_rate_tau)}</td><td><b>{worked(row).w}% × {rate(row.teaching_tariff_rate_tau)} = {worked(row).x} 个百分点</b></td></tr>)}</tbody>
           </table>
         </ScrollableRegion>
       </details>

@@ -43,7 +43,7 @@ export function LabRouter({
   getConfirmedStep,
 }: LabRouterProps) {
   if (step.lab === "db") return <DbLab state={state} releaseMeta={meta} />;
-  if (step.lab === "shock") return meta ? <ShockLab meta={meta} step={step} state={state} getStep={getStep} /> : null;
+  if (step.lab === "shock") return meta ? <ShockLab meta={meta} step={step} state={state} /> : null;
   // 同一实验台横跨多步时必须按步重挂载，否则步内状态会泄漏到下一步。
   if (step.lab === "ind") return meta ? <IndicatorLab key={step.n} meta={meta} step={step} state={state} /> : null;
   if (step.lab === "viz") return meta ? <VizLab key={step.n} meta={meta} step={step} state={state} /> : null;

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { TeachingCountriesResponse } from "../../types";
-import { countryIndustryNote, CountryExposureChart, goodsBalanceText, splitColumns, taxedRuleText, yiUsd } from "./country-exposure";
+import { countryIndustryLines, countryIndustryNote, CountryExposureChart, countryTipLines, goodsBalanceText, splitColumns, taxedRuleText, yiUsd } from "./country-exposure";
 import { TAXED } from "./palette";
 
 const row = (country: string, mean: number, taxed = mean > 0, exposed = taxed ? 44 : 0, industries = 44) => ({
@@ -74,7 +74,9 @@ test("hover and keyboard focus show the country, X and the industry count; arrow
     fireEvent.mouseMove(cri, { clientX: 10, clientY: 10 });
     expect(tip()).toContain("CRI 哥斯达黎加");
     expect(tip()).toContain("7.82 个百分点");
-    expect(tip()).toContain("43/43 个行业被加税");
+    expect(tip()).toContain("行业43/43 个被加税");
+    expect(tip()).toContain("其中 X > 042 个");
+    expect(tip()).toContain("其余 1 个对美无出口：w = 0");
     fireEvent.mouseLeave(cri);
     // One tab stop: the first bar; arrows walk through the bars, then into the untaxed codes.
     const stops = [...document.querySelectorAll("[data-country]")].filter((item) => item.getAttribute("tabindex") === "0");
@@ -87,7 +89,8 @@ test("hover and keyboard focus show the country, X and the industry count; arrow
     fireEvent.focus(document.activeElement!);
     expect(tip()).toContain("AUT 奥地利");
     expect(tip()).toContain("0 个百分点");
-    expect(tip()).toContain("0/44 个行业被加税");
+    expect(tip()).toContain("行业0/44 个被加税");
+    expect(tip()).not.toContain("其中");
     fireEvent.keyDown(document.activeElement!, { key: "Home" });
     expect(document.activeElement?.getAttribute("data-country")).toBe("CAN");
     expect(document.activeElement?.getAttribute("aria-label")).toBe(
@@ -112,7 +115,7 @@ test("amounts in million USD read in 亿美元, and the goods balance names a su
   // No rule year: the first year, in words.
   expect(goodsBalanceText({ market_goods_surplus: 1500 }, { min_million_usd: 1000 })).toBe("首年对美货物顺差 15 亿美元");
   expect(taxedRuleText(RULE)).toBe("2016 年对美货物贸易顺差 ≥ 10 亿美元");
-  expect(taxedRuleText(RULE, "超过 ")).toBe("2016 年对美货物贸易顺差超过 10 亿美元");
+  expect(taxedRuleText(RULE, "达到或超过 ")).toBe("2016 年对美货物贸易顺差达到或超过 10 亿美元");
   expect(taxedRuleText(undefined)).toBeUndefined();
   expect(taxedRuleText(null)).toBeUndefined();
 });
@@ -125,7 +128,7 @@ test("with the taxed rule, the chart states it and every country's readout gives
   };
   try {
     render(<CountryExposureChart data={data} highlight={["CAN"]} />);
-    expect(document.querySelector(".country-exposure-rule")!.textContent).toBe("被加税的规则来自 ICIO 数据：2016 年对美货物贸易顺差 ≥ 10 亿美元。");
+    expect(document.querySelector(".country-exposure-rule")!.textContent).toBe("被加税的规则来自 ICIO 数据：2016 年对美货物贸易顺差达到或超过 10 亿美元。");
     const tip = () => document.querySelector(".hover-tip")!.textContent;
     // A taxed bar on hover.
     fireEvent.mouseMove(document.querySelector('[data-country="CAN"]')!, { clientX: 10, clientY: 10 });
@@ -185,6 +188,40 @@ test("44 taxed countries keep every label inside its column at the 700-unit widt
     // The value labels never run into the next column or past the right edge.
     expect(valueEnds.slice(0, 22).every((end) => end < 336)).toBe(true);
     expect(valueEnds.slice(22).every((end) => end <= 700)).toBe(true);
+  } finally {
+    cleanup();
+  }
+});
+
+test("the readout fits its 260 px box: the industry count is split into short lines, and long values wrap", async () => {
+  // CHN: 41 industries taxed, 40 with X > 0. One line read "41/41 个行业被加税（40 个 X > 0，其余对美无出口：w = 0）", 334 px.
+  const chn = { ...row("CHN", 0.0512, true, 40, 41), market_goods_surplus: 248900 };
+  const lines = countryTipLines(chn, 2020, RULE);
+  expect(lines.slice(2, 5)).toEqual([["行业", "41/41 个被加税"], ["其中 X > 0", "40 个"], ["其余 1 个", "对美无出口：w = 0"]]);
+  // A rough width at 11.5 px: CJK and full-width characters ~11.5 px, the rest ~6.6 px, plus the key and the gap.
+  const width = (text: string) => [...text].reduce((sum, char) => sum + (/[　-￿]/.test(char) ? 11.5 : 6.6), 0);
+  for (const [label, value] of lines.slice(1)) expect(18 + width(label) + 6 + width(value)).toBeLessThanOrEqual(236);
+  // Every country fully exposed keeps one line.
+  expect(countryIndustryLines(row("CAN", 0.143))).toEqual([["行业", "44/44 个被加税"]]);
+  expect(countryIndustryLines(row("MEX", 0, false, 0, 43))).toEqual([["行业", "0/43 个被加税"]]);
+  // And whatever the text, a value in this readout wraps instead of overflowing the box.
+  const css = await Bun.file(new URL("../../workbench.css", import.meta.url)).text();
+  expect(css).toContain(".country-exposure .hover-tip > div > b { white-space: normal; }");
+});
+
+test("marking an untaxed chip A or B does not change its width, so the rows never re-wrap", async () => {
+  const css = await Bun.file(new URL("../../workbench.css", import.meta.url)).text();
+  const rule = (selector: string) => css.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{([^}]*)\\}`))?.[1] ?? "";
+  // The badge sits over the chip's corner instead of taking room inside it.
+  expect(rule(".country-exposure-codes > span > .country-exposure-badge")).toContain("position: absolute");
+  expect(rule(".country-exposure-codes > span")).toContain("position: relative");
+  // The selected chip is not bold (bold digits are wider).
+  expect(rule(".country-exposure-codes > span.selected")).not.toContain("font-weight");
+  try {
+    render(<CountryExposureChart data={countriesFixture} highlight={["CAN", "MEX"]} />);
+    const mex = document.querySelector('[data-country="MEX"]')!;
+    expect(mex.className).toBe("selected");
+    expect(mex.querySelector(".country-exposure-badge")!.textContent).toBe("B");
   } finally {
     cleanup();
   }

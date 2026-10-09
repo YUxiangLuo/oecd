@@ -49,13 +49,24 @@ export function taxedRuleText(rule: TeachingCountriesResponse["taxed_rule"], rel
   return `${ruleYear(rule)}对美货物贸易顺差${relation}${yiUsd(rule.min_million_usd)}`;
 }
 
-/** The readout for one country, shared by hover, keyboard focus and the aria label. */
+/** The industry count as short readout lines that fit the 260 px readout: "行业 41/41 个被加税", and for a taxed
+ * country with industries that export nothing to the US, "其中 X > 0 40 个" and "其余 1 个 对美无出口：w = 0". */
+export function countryIndustryLines(row: CountryRow): TipLine[] {
+  const lines: TipLine[] = [["行业", `${row.taxed ? row.industries : 0}/${row.industries} 个被加税`]];
+  if (row.taxed && row.exposed_industries < row.industries) {
+    lines.push(["其中 X > 0", `${row.exposed_industries} 个`]);
+    lines.push([`其余 ${row.industries - row.exposed_industries} 个`, "对美无出口：w = 0"]);
+  }
+  return lines;
+}
+
+/** The hover and keyboard readout for one country (the aria label says the same in one sentence). */
 export function countryTipLines(row: CountryRow, year: number, rule?: TeachingCountriesResponse["taxed_rule"]): TipLine[] {
   const balance = goodsBalance(row, rule);
   return [
     ["", countryLabel(row.country)],
     [`${year} 年各行业平均 X`, `${points(row.mean_exposure)} 个百分点`, row.taxed ? TAXED : UNTAXED],
-    ["行业", countryIndustryNote(row)],
+    ...countryIndustryLines(row),
     ...(balance ? [balance as TipLine] : []),
   ];
 }
@@ -73,10 +84,12 @@ export function splitColumns<T>(rows: readonly T[]): [T[], T[]] {
  * (A, B) are marked. Every bar and code is a keyboard stop (one tab stop, arrows move) with the same readout as
  * hover; a collapsed table lists all countries.
  */
-export function CountryExposureChart({ data, highlight = [] }: {
+export function CountryExposureChart({ data, highlight = [], highlightLabel = "你跟踪的例子" }: {
   data: TeachingCountriesResponse;
   /** The example countries in order (A, then B); either may be absent from the sample. */
   highlight?: readonly string[];
+  /** What the A/B marks stand for, in the legend (e.g. the recorded example rather than the current selection). */
+  highlightLabel?: string;
 }) {
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
   const [activeIndex, setActiveIndex] = useState(0);
@@ -88,6 +101,9 @@ export function CountryExposureChart({ data, highlight = [] }: {
   // Keyboard order: the taxed bars as read (left column, then right), then the untaxed codes.
   const order = [...taxed, ...untaxed];
   const badge = (country: string) => (highlight[0] === country ? "A" : highlight[1] === country ? "B" : null);
+  // A marked country with no bar or code (the imposer, or one outside the sample) is named in the legend instead.
+  const offChart = highlight.slice(0, 2).map((code, i) => [i === 0 ? "A" : "B", code] as const)
+    .filter(([, code]) => code && !data.countries.some((row) => row.country === code));
   const [left, right] = splitColumns(taxed);
   const rows = Math.max(left.length, 1);
 
@@ -113,7 +129,8 @@ export function CountryExposureChart({ data, highlight = [] }: {
     focusAt(next);
   };
   const rule = data.taxed_rule;
-  const ruleText = taxedRuleText(rule);
+  // A full sentence under the chart: in words, as the scenario line says it (the tile keeps the compact "≥").
+  const ruleText = taxedRuleText(rule, "达到或超过 ");
   const balanceText = (row: CountryRow) => {
     const text = goodsBalanceText(row, rule);
     return text ? `，${text}` : "";
@@ -184,7 +201,7 @@ export function CountryExposureChart({ data, highlight = [] }: {
       <div className="country-exposure-legend" aria-hidden="true">
         <span><i style={{ background: TAXED }} />被加税（{taxed.length} 国，按 X 从高到低）</span>
         <span><i className="line" style={{ background: UNTAXED }} />未被加税（{untaxed.length} 国，X = 0）</span>
-        {highlight.length > 0 && <span><b className="country-exposure-badge">A</b>{highlight[1] ? <b className="country-exposure-badge">B</b> : null}你跟踪的例子</span>}
+        {highlight.length > 0 && <span className="country-exposure-legend-example"><b className="country-exposure-badge">A</b>{highlight[1] ? <b className="country-exposure-badge">B</b> : null}{highlightLabel}{offChart.length > 0 && `；${offChart.map(([mark, code]) => `${mark} = ${countryLabel(code)}`).join("，")} 不在图上`}</span>}
       </div>
       {taxed.length > 0 && (
         <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={summary}          style={{ display: "block", width: "100%", maxWidth: 820, height: "auto" }}>
