@@ -84,7 +84,7 @@ describe("shared step task card", () => {
   });
 
   for (const [index, outcome] of (["trade", "production", "length", "network"] as const).entries()) {
-    test(`step ${11 + index} has a single-line task and truthful statuses, without a second start button`, () => {
+    test(`step ${11 + index} shows its goal, short tasks and truthful statuses, without a second start button`, () => {
       const step: Step = {
         n: 11 + index, stage: 4, lab: "reg", regression_outcome: outcome, status: "demo",
         title: "回归", goal: "原来很长的任务目标", tasks: ["旧任务一", "旧任务二", "旧任务三"],
@@ -96,9 +96,10 @@ describe("shared step task card", () => {
         const html = renderToStaticMarkup(<StepTaskCard step={step} complete={false} materialStatus={status} />);
         const dom = new DOMParser().parseFromString(html, "text/html");
         expect(dom.querySelector(".step-task-card.compact")).not.toBeNull();
-        expect(dom.querySelector("button, details, ol")).toBeNull();
+        expect(dom.querySelector("button, details")).toBeNull();
         expect(html).toContain("原来很长的任务目标");
-        expect(html).not.toContain("先运行回归，再看结果、完成理解题");
+        // The short task lines show here too (step 12 tells the student to hover, not click, the grey bar).
+        expect(html).toContain("旧任务一");
         expect(html).toContain("理解题：未完成");
         expect(html).toContain(`报告材料：${label}`);
         expect(dom.querySelector("h3")?.id).toBe(stepTaskTitleId(step.n));

@@ -580,7 +580,7 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
                 )
             else:
                 scope = "前后向指标" if view == "directions" else "已保存指标"
-                lines.extend((f"> {scope}按指标拆成多张趋势图，保留每项读数与变化。", ""))
+                lines.extend((f"> {scope}拆成多张趋势图（每项指标一张），保留每项读数与变化。", ""))
         countries_saved = [str(item) for item in _list_values(data.get("compared"))]
         for chart in charts:
             unit = _chart_unit(chart)

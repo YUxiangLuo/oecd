@@ -120,7 +120,7 @@ const METHOD: Record<MethodTopic, MethodContent> = {
       },
       {
         title: "流量规模：加权总度",
-        body: "加权总度（买入 + 卖出）= 加权入度 + 加权出度，即流入与流出的中间品金额之和；自环在买入和卖出各算一次。它衡量规模，不是去重后的贸易额。",
+        body: "加权总度（买入 + 卖出）= 加权入度 + 加权出度，即流入与流出的中间品金额之和；自环在买入和卖出各计一次。它衡量规模，不是去重后的贸易额。",
         source: "source-network-note",
         sourceLabel: "原始方法说明",
       },

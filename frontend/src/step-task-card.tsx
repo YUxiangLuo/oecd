@@ -131,13 +131,11 @@ export function StepTaskCard({
         </div>
       </div>
       {materialLocked && <p className="step-task-locked" role="note">{TASK_LOCKED_NOTE}</p>}
-      {!compact && <>
-      {/* Tasks read as one light flow line. The step's reading caveat (step.tip) is deliberately not
-          shown: it distracted students. The concept is taught on the page itself. */}
+      {/* Tasks read as one light flow line (steps 11–14 have two short ones). The step's reading caveat
+          (step.tip) is deliberately not shown: it distracted students. The concept is taught on the page itself. */}
       <ol className="step-task-list">
         {step.tasks.map((task) => <li key={task}>{task}</li>)}
       </ol>
-      </>}
     </section>
   );
 }

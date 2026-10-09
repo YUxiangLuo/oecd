@@ -87,7 +87,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "中心性原始单位（另附标准差换算）",
     priorStep: 5,
     priorLabel: "全球生产网络指标",
-    definition: "全球国家×行业图上一个节点的加权入度加出度（买入 + 卖出；自环即行业卖给自己的部分，两侧各算一次）。",
+    definition: "全球国家×行业图上一个节点的加权入度加出度（买入 + 卖出；自环即行业卖给自己的部分，两侧各计一次）。",
     downMeaning: "加权总度下降：节点买入与卖出的总流量规模变小。",
     upMeaning: "加权总度上升：节点买入与卖出的总流量规模变大。",
     dontClaim: "不要写成连接已经减少或脱钩，也不要将其视为关税的“总影响”。",

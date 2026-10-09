@@ -274,6 +274,10 @@ export function ShockLab({ meta, step: _step, state }: {
   // "X = w × τ" with w and X at the digits that check by hand (see workedNumbers).
   const worked = (row: { teaching_export_share_w: number; teaching_tariff_rate_tau: number; teaching_tariff_exposure: number }) =>
     workedNumbers(row.teaching_export_share_w, row.teaching_tariff_rate_tau, row.teaching_tariff_exposure);
+  const sharedW = (row: { country: string; industry: string } & Parameters<typeof worked>[0]) => {
+    const last = rows.find((other) => other.country === row.country && other.industry === row.industry && other.year === years.at(-1));
+    return worked(last ?? row).w;
+  };
   // The chart cards read X at the same digits as the summary above them: two decimals, more for a tiny X
   // ("0.00083" rather than "不到 0.01") or where two would not check by hand ("0.025", not "0.02").
   const chartDigits = Math.max(2, ...lastRows.filter((row) => row.teaching_tariff_exposure > 0).map((row) => worked(row).xDecimals));
@@ -380,7 +384,7 @@ export function ShockLab({ meta, step: _step, state }: {
             <span className="teaching-x-formula">X = {shown.w}% × {rate(workedExample.teaching_tariff_rate_tau)} = <b>{shown.x} 个百分点</b></span>
             {workedExample.teaching_tariff_exposure === 0 ? "（被加税了，但 w = 0，所以 X 仍是 0）" : bothTaxed ? "（税率相同时，对美出口份额 w 不同，X 也不同）" : ""}
           </p>
-          {shownExample?.recorded && <p className="muted teaching-x-reason">当前选择不在回归样本中，这里用已记录的例子算。</p>}
+          {shownExample?.recorded && <p className="muted teaching-x-reason">当前选择不在回归样本中，这里用已记录的例子计算。</p>}
           {switchedToB && <p className="muted teaching-x-reason">{switchedToB}</p>}
           <p className="muted">w = 首年（{years[0]} 年）对美出口份额 {shown.w}%，之后各年不变；τ = 加征税率。</p>
         </div>;
@@ -510,7 +514,12 @@ export function ShockLab({ meta, step: _step, state }: {
         <summary>逐年读数 · {rows.length} 条</summary>
         <ScrollableRegion className="table-wrap bounded-data-table" label="所选例子的五年关税暴露表">
           <table className="data-table"><thead><tr><th>国家</th><th>行业</th><th>年份</th><th>首年对美出口份额 w</th><th>加征税率 τ</th><th>关税暴露 X = w × τ</th></tr></thead>
-            <tbody>{rows.map((row) => <tr key={`${row.country}-${row.industry}-${row.year}`}><td>{countryLabel(row.country)}</td><td>{sectorLabel(row.industry)}</td><td>{row.year}</td><td>{worked(row).w}%</td><td>{rate(row.teaching_tariff_rate_tau)}</td><td><b>{worked(row).w}% × {rate(row.teaching_tariff_rate_tau)} = {worked(row).x} 个百分点</b></td></tr>)}</tbody>
+            <tbody>{rows.map((row) => {
+              // w is fixed at its first-year value, so every year of a unit shows it at the same digits: those its
+              // last (taxed) year needs to check by hand, not two decimals in the zero-rate years.
+              const w = sharedW(row);
+              return <tr key={`${row.country}-${row.industry}-${row.year}`}><td>{countryLabel(row.country)}</td><td>{sectorLabel(row.industry)}</td><td>{row.year}</td><td>{w}%</td><td>{rate(row.teaching_tariff_rate_tau)}</td><td><b>{w}% × {rate(row.teaching_tariff_rate_tau)} = {worked(row).x} 个百分点</b></td></tr>;
+            })}</tbody>
           </table>
         </ScrollableRegion>
       </details>

@@ -238,6 +238,18 @@ describe("simple regression workbench", () => {
     } finally { scrollIntoView.mockRestore(); }
   });
 
+  test("after a submitted report, going back to the Y saved when the page opened withdraws the update notice", async () => {
+    mockApis();
+    const run = spyOn(api, "runRegression").mockResolvedValue({ ...DVA(), benchmark } as never);
+    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, materialLocked: true, data: { run: FVA() } as never }} />);
+    fireEvent.click(await screen.findByRole("button", { name: "国内增加值出口占比：+0.56" }));
+    await waitFor(() => expect(document.querySelector(".reg-replaced-notice")).not.toBeNull());
+    // Clicking the bar of the Y the report was built from (here FVA) restores that material: no update is needed.
+    run.mockResolvedValue({ ...FVA(), benchmark } as never);
+    fireEvent.click(await screen.findByRole("button", { name: /^外国增加值项占比：/ }));
+    await waitFor(() => expect(document.querySelector(".reg-replaced-notice")).toBeNull(), { timeout: 4000 });
+  }, 15000);
+
   test("the 加税前后 chart says what its dashed gap is, and the gap reads with a space", async () => {
     mockApis();
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);

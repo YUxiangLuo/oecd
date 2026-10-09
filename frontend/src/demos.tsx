@@ -1327,7 +1327,7 @@ export function NetworkCentralityDemo() {
                 = {C.indeg[sel]} + {C.outdeg[sel]} = <b>{C.deg[sel]}</b>
               </div>
               <p className="ndp-note">
-                高亮的是全部入边和出边。（真实数据里还有自环，即行业卖给自己的部分，它在入度和出度中各算一次。）
+                高亮的是全部入边和出边。（真实数据里还有自环，即行业卖给自己的部分，它在入度和出度中各计一次。）
               </p>
             </>
           ) : mode === "betweenness" ? (

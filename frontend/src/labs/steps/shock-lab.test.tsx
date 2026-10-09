@@ -694,3 +694,15 @@ test("each country's trend card reads X at its own digits; the marker sits betwe
   series.mockRestore();
   cleanup();
 });
+
+test("the yearly table shows w at one precision for every year of a unit (w is fixed at its first-year value)", async () => {
+  const meta: Meta = { years: tenYears, countries: ["CRI", "ISR", "USA"], sectors: ["C29"] };
+  const groups = tenGroups();
+  // 0.248953 × 25% needs three decimals of w to check by hand; the zero-rate years must not drop back to two.
+  const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.248953, country === "ISR")));
+  render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["ISR"], teaching_industry: "C29", teaching_example_chosen: true })} />);
+  await waitFor(() => expect(document.querySelectorAll(".bounded-data-table tbody tr").length).toBe(5));
+  const wCells = [...document.querySelectorAll(".bounded-data-table tbody tr")].map((tr) => tr.children[3]?.textContent);
+  expect(new Set(wCells).size).toBe(1);
+  groups.mockRestore(); series.mockRestore();
+});

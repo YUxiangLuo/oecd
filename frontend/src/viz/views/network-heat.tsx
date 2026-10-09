@@ -58,7 +58,7 @@ export function heatCoverageLabel(coverage: HeatCoverage): string {
 }
 
 const HEAT_COLS = [
-  { key: HEAT_WEIGHTED_DEGREE_METRIC, name: "加权总度", fmt: "amount", desc: "买入 + 卖出的金额（百万美元）；自环（行业卖给自己的部分）在两边各算一次。" },
+  { key: HEAT_WEIGHTED_DEGREE_METRIC, name: "加权总度", fmt: "amount", desc: "买入 + 卖出的金额（百万美元）；自环（行业卖给自己的部分）在两边各计一次。" },
   { key: HEAT_EVIDENCE_METRIC, name: "介数", fmt: "count", desc: "只看连接、不看金额：其他节点之间的最短路线有多少经过这个行业。" },
   { key: "closnesscentrality", name: "接近中心性", fmt: "num", desc: "沿出边可达节点数除以到这些节点的最短距离之和。" },
   { key: "harmonicclosnesscentrality", name: "调和中心性", fmt: "num", desc: "沿出边到可达节点的距离倒数平均值。" },

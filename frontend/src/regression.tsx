@@ -539,6 +539,9 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
 
   // 会话异步到达：刷新或换设备后恢复本步上次算出的结果（也就是报告材料里的那个 Y），而不是空白面板。
   const savedRun = state.data?.run;
+  // The Y saved when the page opened (undefined until a saved run is known).
+  const openingBaseline = useRef<string | null | undefined>(undefined);
+  if (openingBaseline.current === undefined && savedRun?.design) openingBaseline.current = savedRun.design.baseline ?? null;
   const savedRunIdentity = savedRun ? regressionRunSnapshotIdentity(savedRun) : null;
   const savedUsable = savedRun?.model_snapshot?.version === TEACHING_MODEL_VERSION && Boolean(savedRun.variable_catalog);
   const savedKey = savedRun?.design?.baseline ?? defaultKey;
@@ -595,9 +598,13 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         setSavedAnnouncement(`已保存：${lessonFor(outcome, response.design.baseline, response.design.baseline_label).shortMetric}`);
       }
       // After the report was submitted, this run has already replaced the saved material: the notice says so.
+      // Going back to the Y that was saved when the page opened (e.g. 恢复默认 after a trial click) restores the
+      // material the report was built from, so the "update your report" notice is withdrawn.
       if (state.materialLocked) {
-        setReplacedBy(fromButton ? "button" : "bar");
-        revealReplacedNotice.current = !fromButton;
+        const backToOpening = openingBaseline.current !== undefined
+          && (response.design.baseline ?? null) === openingBaseline.current;
+        setReplacedBy(backToOpening ? null : fromButton ? "button" : "bar");
+        revealReplacedNotice.current = !fromButton && !backToOpening;
       }
       setResult(response);
     } catch (cause) {
@@ -776,7 +783,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
             {/* Only when the table actually shows one (the table hides p when inference is suppressed). */}
             {!globalInferenceIsSuppressed(result.result.status, result.result.support)
               && result.result.coefs.some((coef) => formatPValue(coef.p) === "<0.0001")
-              && <p className="muted">很小的 p 值显示为 &lt;0.0001，不是说概率为零。</p>}
+              && <p className="muted">很小的 p 值显示为 &lt;0.0001，不表示概率为零。</p>}
             <p className="muted">表里的“系数”按 X 以份额计：X 每高 1（即 100 个百分点），Y 平均相差多少。{depvarKind(outcome, result.design) === "share"
               ? "这一步的 Y 是份额，页面也按百分点读，X 和 Y 都换成百分点后倍数正好抵消：两列是同一个数，左列按页面精度四舍五入。"
               : "除以 100 即为页面上“X 每高 1 个百分点”对应的数值。"}</p>
