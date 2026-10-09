@@ -448,9 +448,9 @@ export function IndicatorExplorer({
   // Name the actual reason the material cannot be saved instead of one catch-all sentence.
   const blockedReason =
     view === "positioning"
-      ? "定位图只供探索，不记录材料。"
+      ? "定位图只供探索，不记录报告材料。"
       : view === "structure"
-      ? "行业结构只供探索，不记录材料。"
+      ? "行业结构只供探索，不记录报告材料。"
       : selected.length < 2 && !singleAllowed
       ? "只选一个国家时，要把“比较范围”设为“国家整体”才会记录；看某个行业或“行业排名”时，请再加一个对比国家。"
       : query.status === "error"
@@ -784,9 +784,9 @@ export function IndicatorExplorer({
       {themeActive && <p className="muted lens-hint">{side === "alternate"
         ? "后向：同样分为四类生产活动，从最终品端回溯；先看复杂 GVC 的占比，再比较与对比国家差异最大的类别。"
         : topic.themeHint}</p>}
-      {view === "positioning" && <p className="muted lens-hint">定位图：每个点是一个经济体{industry ? `（${sectorLabel(industry)}）` : ""}，横轴、纵轴各是一项指标，所选国家高亮；{industry ? "轨迹只在“国家整体”下提供" : `可勾选显示 ${years[0]}→${years.at(-1)} 的轨迹`}。只供探索，不记录材料。</p>}
+      {view === "positioning" && <p className="muted lens-hint">定位图：每个点是一个经济体{industry ? `（${sectorLabel(industry)}）` : ""}，横轴、纵轴各是一项指标，所选国家高亮；{industry ? "轨迹只在“国家整体”下提供" : `可勾选显示 ${years[0]}→${years.at(-1)} 的轨迹`}。只供探索，不记录报告材料。</p>}
       {view === "segments" && <p className="muted lens-hint">段长度对照：每行一段（纯国内、传统贸易、GVC），前向点和后向点用线相连，便于比较哪一段、哪个方向更长；选了多个国家时每国一张。三段长度不能相加。</p>}
-      {view === "structure" && <p className="muted lens-hint">{topic.key === "production" ? "行业结构：所选国家每个行业的四类生产活动份额，按复杂 GVC 生产份额排序；选了多个国家时每国一张。只供探索，不记录材料。" : "行业结构：所选国家每个行业的前向与后向 GVC 段长度，等长线（前向 = 后向）上方更偏上游；选了多个国家时每国一张。只供探索，不记录材料。"}</p>}
+      {view === "structure" && <p className="muted lens-hint">{topic.key === "production" ? "行业结构：所选国家每个行业的四类生产活动份额，按复杂 GVC 生产份额排序；选了多个国家时每国一张。只供探索，不记录报告材料。" : "行业结构：所选国家每个行业的前向与后向 GVC 段长度，等长线（前向 = 后向）上方更偏上游；选了多个国家时每国一张。只供探索，不记录报告材料。"}</p>}
       <div className="controls">
         {view !== "industry" && view !== "structure" && (
           <LabeledControl label="比较范围">
@@ -1306,7 +1306,8 @@ export function IndicatorExplorer({
         <h3>报告材料 · {saved.length ? `已${state.materialLocked ? "" : "自动"}记录（${saved.length} 条读数）` : "尚未记录"}</h3>
         <p role="status">
           {!validYears ? "请先修正年份范围，当前图表才能被记录。" : !canSave
-            ? `当前图表暂不能记录：${blockedReason}${saved.length ? "已记录的材料保持不变。" : ""}`
+            // 定位图 and 行业结构 never record: no "暂不能记录" in front of their reason.
+            ? `${view === "positioning" || view === "structure" ? "" : "当前图表暂不能记录："}${blockedReason}${saved.length ? "已记录的材料保持不变。" : ""}`
             : state.materialLocked
               ? `${MATERIAL_LOCKED_NOTE}${matches ? `当前图表就是已记录的材料。${rechosen ? MATERIAL_RECHOSEN_NEXT : ""}` : ""}`
               : matches ? "当前图表已自动记录为本步报告材料；换视角、国家或年份后会自动更新为最后查看的完整图表。" : "正在记录当前图表…"}

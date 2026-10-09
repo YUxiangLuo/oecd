@@ -349,7 +349,9 @@ describe("indicator explorer with automatic report material", () => {
     const before = view.saves.length;
     fireEvent.click(view.getByRole("button", { name: "定位图" }));
     expect(view.getByLabelText("当前图表范围").textContent).toContain("定位图");
-    expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("定位图只供探索，不记录材料");
+    expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("定位图只供探索，不记录报告材料");
+    // A view that never records does not say "暂不能记录".
+    expect(view.getByRole("region", { name: "报告材料" }).textContent).not.toContain("暂不能记录");
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
     expect(view.saves).toHaveLength(before);
     rows.mockRestore();
@@ -547,7 +549,7 @@ describe("readouts and update notes follow the chart on screen (round 10)", () =
       view.accept();
       // 定位图 records nothing: the note about the previous chart must not stay beside it.
       fireEvent.click(view.getByRole("button", { name: "定位图" }));
-      await view.findByText(/定位图只供探索，不记录材料。/, { selector: "[role=status]" });
+      await view.findByText(/定位图只供探索，不记录报告材料。/, { selector: "[role=status]" });
       expect(view.container.querySelector(".scope-flash")).toBeNull();
       // Back on the recorded chart nothing was replaced, so no note comes back.
       fireEvent.click(view.getByRole("button", { name: "历年变化" }));

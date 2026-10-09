@@ -61,6 +61,14 @@ def test_step_ten_task_names_the_keyboard_readout_too():
     assert "悬停或用方向键查看各国的 X 与对美货物顺差" in tasks
 
 
+def test_task_cards_count_what_the_page_shows():
+    """步骤 2 的六项不再说成“四类”（方法卡 3 写的是 WWZ 五类加 taxsub）；步骤 10 的第三块是国家，不是数字。"""
+    goal = next(step for step in STEPS if step["n"] == 2)["goal"]
+    assert "六项" in goal and "四类" not in goal
+    tasks = "".join(next(step for step in STEPS if step["n"] == 10)["tasks"])
+    assert "看四个摘要" in tasks and "四个数字" not in tasks
+
+
 def test_student_copy_never_leaks_internal_field_names():
     copy = _student_copy()
     assert "EXGR_FVASH" not in copy

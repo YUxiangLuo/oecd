@@ -494,7 +494,7 @@ export function zeroTotalDecompositionHint(model: DecompositionModel, totalLabel
 export function decompositionModelReason(model: DecompositionModel, weightLabel?: string): string {
   const weight = weightLabel ?? "权重";
   if (model.reason === "zero-weight-denominator") {
-    return cjkJoin(weight, "为 0（没有这类活动），无法算加权长度。");
+    return cjkJoin(weight, "为 0（没有这类活动），无法计算加权长度。");
   }
   if (model.reason === "negative-weight-denominator") {
     return cjkJoin(weight, "小于 0，无法按份额加权平均。");

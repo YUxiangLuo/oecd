@@ -259,6 +259,7 @@ describe("the unavailable step 4 split names undefined parts as such (round 12)"
   test("LUX B09: SVA is 0, so the dash means 无法计算 and no total is claimed", () => {
     expect(unavailableDashNote(model("zero-weight-denominator", null))).toBe("“—”表示这一项无法计算（不是缺少数据），不按 0 计算。");
     expect(unavailableTotalNote(model("zero-weight-denominator", null), cfg)).toBeNull();
+    expect(decompositionModelReason(model("zero-weight-denominator", null), "SVA")).toBe("SVA 为 0（没有这类活动），无法计算加权长度。");
   });
 
   test("missing fields still read as missing data", () => {
