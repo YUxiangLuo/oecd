@@ -686,7 +686,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
       if (mountedRef.current) {
         // A bar (or 恢复默认) was saving another Y: said so ("保存国内增加值出口占比没有成功"), not as a calculation.
         const failedLabel = lessonFor(outcome, key ?? defaultKey, baselineOptions.find((option) => option.key === (key ?? defaultKey))?.label).shortMetric;
-        setError(userFacingRequestError(cause, fromButton ? `${runName}未完成` : `保存${failedLabel}没有成功`));
+        setError(userFacingRequestError(cause, fromButton ? `${runName}未完成` : `保存“${failedLabel}”没有成功`));
         setFailedRequest({ key, fromBar: !fromButton });
         revealBarError.current = !fromButton;
         if (cause instanceof ApiError && cause.status === 429 && cause.retryAfter) {
@@ -784,7 +784,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
         >
           {running ? "正在计算…"
             : retryWait > 0 ? `重试（${retryWait} 秒后）`
-              : error && !errorAtBars ? (failedBarLabel ? `重试：保存${failedBarLabel}` : `重试：计算${runName}`)
+              : error && !errorAtBars ? (failedBarLabel ? `重试：保存“${failedBarLabel}”` : `重试：计算${runName}`)
                 : result ? `重新计算${runName}`
                   : groups ? `计算${runName}（用全部 ${groups.sample.rows.toLocaleString("zh-CN")} 条记录）` : `计算${runName}`}
         </button>
@@ -878,7 +878,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
                         focusSavedBarAfterRun.current = true;
                         void run(failedRequest.key, false);
                       }}>
-                      {retryWait > 0 ? `重试（${retryWait} 秒后）` : `重试：保存${failedBarLabel}`}
+                      {retryWait > 0 ? `重试（${retryWait} 秒后）` : `重试：保存“${failedBarLabel}”`}
                     </button>
                   </div>
                 )}

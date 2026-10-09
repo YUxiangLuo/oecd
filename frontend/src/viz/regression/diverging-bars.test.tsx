@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { barFigures, barUnitFor, type BarEstimate } from "../../regression-verdict";
 import type { DepvarKind } from "../../types";
 import { svgTextWidth } from "./charts";
-import { DivergingBarChart, endLabel, endLabelLines, layoutDivergingBars, spokenBar, unitTitleX, type DivergingBarRow } from "./diverging-bars";
+import { DivergingBarChart, endLabel, endLabelLines, layoutDivergingBars, SELECT_TIP, spokenBar, unitTitleX, type DivergingBarRow } from "./diverging-bars";
 import { NEGATIVE, POSITIVE, UNCERTAIN, ZERO_LINE } from "./palette";
 
 afterEach(cleanup);
@@ -259,6 +259,17 @@ describe("DivergingBarChart", () => {
     fireEvent.click(busy);
     fireEvent.keyDown(busy, { key: "Enter" });
     expect(onSelect).toHaveBeenCalledTimes(3);
+  });
+
+  test("an open tooltip closes when the saved Y changes without a click on the chart", () => {
+    const { container, rerender } = render(<DivergingBarChart rows={STEP11} unitTitle="个百分点" onSelect={() => {}} width={650} />);
+    const tip = container.querySelector<HTMLElement>(".diverging-bars > div[style*='pointer-events']")!;
+    fireEvent.mouseEnter(container.querySelectorAll<SVGGElement>('[role="button"]')[1], { clientX: 300, clientY: 200 });
+    expect(tip.style.opacity).toBe("1");
+    expect(tip.textContent).toContain(SELECT_TIP);
+    // A retry button saved that Y: the tooltip offering to save it must not stay up.
+    rerender(<DivergingBarChart rows={STEP11.map((row) => ({ ...row, selected: !row.selected }))} unitTitle="个百分点" onSelect={() => {}} width={650} />);
+    expect(tip.style.opacity).toBe("0");
   });
 
   test("keyboard focus puts the tooltip above the row, not over the lines under the chart", () => {

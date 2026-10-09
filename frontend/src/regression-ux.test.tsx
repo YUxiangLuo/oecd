@@ -237,7 +237,7 @@ describe("simple regression workbench", () => {
     const run = spyOn(api, "runRegression").mockRejectedValue(new TypeError("Failed to fetch"));
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
     fireEvent.click(await screen.findByRole("button", { name: /^国内增加值出口占比：/ }));
-    const retry = await screen.findByRole("button", { name: "重试：保存国内增加值出口占比" });
+    const retry = await screen.findByRole("button", { name: "重试：保存“国内增加值出口占比”" });
     run.mockResolvedValue({ ...DVA(), benchmark } as never);
     fireEvent.click(retry);
     await waitFor(() => expect(run).toHaveBeenCalledTimes(2));
@@ -257,11 +257,11 @@ describe("simple regression workbench", () => {
       fireEvent.click(await screen.findByRole("button", { name: /^国内增加值出口占比：/ }));
       const alert = await screen.findByRole("alert");
       expect(alert.closest(".reg-family-bars")).not.toBeNull();
-      expect(alert.textContent).toContain("保存国内增加值出口占比没有成功：网络连接中断，请检查连接后重试。");
+      expect(alert.textContent).toContain("保存“国内增加值出口占比”没有成功：网络连接中断，请检查连接后重试。");
       expect(alert.textContent).toContain("图和下面仍是上次保存的结果（外国增加值项占比）。");
       expect(alert.textContent).not.toContain("计算");
       // One retry, next to the error; the run button above recalculates the saved Y as usual.
-      expect(alert.querySelector("button")?.textContent).toBe("重试：保存国内增加值出口占比");
+      expect(alert.querySelector("button")?.textContent).toBe("重试：保存“国内增加值出口占比”");
       expect(screen.getByRole("button", { name: "重新计算贸易流回归" }).className).toBe("run-btn secondary");
       expect(screen.getAllByRole("alert")).toHaveLength(1);
       expect(document.querySelector(".reg-stale-note")).toBeNull();

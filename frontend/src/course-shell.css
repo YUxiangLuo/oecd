@@ -271,7 +271,8 @@ button.footer-next:hover { text-decoration: underline; }
 .ndp-calc b { color: #4b47e0; font-size: 15px; }
 .ndp-note { font-size: 12px; color: var(--text-muted); line-height: 1.65; margin: 2px 0; }
 .ndp-edges { max-width: 100%; overflow-x: auto; }
-.net-demo-edge-table { min-width: 430px; font-size: 11px; }
+.net-demo-edge-table { width: 100%; font-size: 11px; }
+.data-table.net-demo-edge-table th, .data-table.net-demo-edge-table td { white-space: nowrap; }
 /* Direction, neighbour and edge are text; only the weight column is a number. */
 .data-table.net-demo-edge-table th, .data-table.net-demo-edge-table td { text-align: left; }
 .data-table.net-demo-edge-table td:last-child, .data-table.net-demo-edge-table th:last-child { text-align: right; }
