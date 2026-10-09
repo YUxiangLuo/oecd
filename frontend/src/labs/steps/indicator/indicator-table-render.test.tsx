@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { cleanup, render } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { IndicatorSchema, Meta, StepStateApi } from "../../../types";
 import {
@@ -99,14 +100,45 @@ describe("indicator table semantics", () => {
     expect(html.match(/scope="row"/g)).toHaveLength(1);
     expect(html).toContain('aria-label="国家 CHN 中国；行业 A');
     expect(html).toMatch(/<th[^>]*scope="row"[^>]*style="position:sticky;left:0;z-index:2;background:#fff"[^>]*>CHN 中国<\/th>/);
-    // 行业 stays in view too, right after the (measured) country column, with the edge of the sticky block.
-    expect(html).toMatch(/<td[^>]*style="position:sticky;left:0;z-index:2;background:#fff;box-shadow:inset -1px 0 #e8eaf0"[^>]*>A[^<]*<\/td>/);
+    // 行业 and 年份 stay in view too, each right after the (measured) columns before it; 年份 carries the edge of the
+    // sticky block, so no part of it slides under 行业 (round 21: a stray "0" of 2020 showed there).
+    expect(html).toMatch(/<td[^>]*style="position:sticky;left:0;z-index:2;background:#fff"[^>]*>A[^<]*<\/td>/);
+    expect(html).toMatch(/<td[^>]*style="position:sticky;left:0;z-index:2;background:#fff;box-shadow:inset -1px 0 #e8eaf0"[^>]*>2020<\/td>/);
+    expect(html).toMatch(/<th[^>]*style="position:sticky;left:0;z-index:4;background:#fafbfd"[^>]*>年份/);
+    expect(html).not.toMatch(/<td[^>]*style="[^"]*sticky[^"]*"[^>]*>-13/);
     expect(html).toContain("-13");
     // The definition is a focusable ⓘ described by its text, not a hover-only title.
     expect(html).toMatch(/外国增加值<button type="button" class="column-info" aria-label="外国增加值的说明" aria-describedby="(column-info-[^"]+)"/);
     const tipId = html.match(/aria-describedby="(column-info-[^"]+)"/)![1];
     expect(html).toContain(`<span id="${tipId}" role="tooltip" class="sr-only">`);
     expect(html).not.toMatch(/<th[^>]*title="[^"]*外国增加值/);
+  });
+
+  test("年份 sticks right after the measured 国家 and 行业 columns (round 21)", () => {
+    const widths: Record<string, number> = { 国家: 92.5, 行业: 118 };
+    const measure = spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return { width: widths[this.textContent ?? ""] ?? 0 } as DOMRect;
+    });
+    const schema: IndicatorSchema = {
+      groups: [{ key: "network", label: "生产网络", fields: ["weighted degree"] }],
+      fields: {
+        country: { label: "国家", format: "number", desc: "" },
+        industry: { label: "行业", format: "number", desc: "" },
+        year: { label: "年份", format: "number", desc: "" },
+        "weighted degree": { label: "加权总度", format: "amount", desc: "" },
+      },
+    };
+    const view = render(
+      <IndicatorDataTable groupLabel="生产网络" schema={schema} columns={["country", "industry", "year", "weighted degree"]}
+        rows={[{ country: "JPN", industry: "G", year: 2020, "weighted degree": 982056 }]} year={2020} country="JPN" page={1} />,
+    );
+    const [, industryCell, yearCell, valueCell] = view.container.querySelectorAll("tbody tr > *");
+    expect((industryCell as HTMLElement).style.left).toBe("92.5px");
+    expect((yearCell as HTMLElement).style.left).toBe("210.5px");
+    expect((yearCell as HTMLElement).style.position).toBe("sticky");
+    expect((valueCell as HTMLElement).style.position).toBe("");
+    measure.mockRestore();
+    cleanup();
   });
 });
 
