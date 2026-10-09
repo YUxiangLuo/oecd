@@ -36,6 +36,8 @@ describe("student-facing chart copy", () => {
     expect(TRADE_TOPIC.composition!.note).toContain("六项之和等于总出口");
     expect(TRADE_TOPIC.composition!.evolutionNote).toContain("六项之和等于总出口");
     expect(PRODUCTION_TOPIC.themeHint).toContain("四类份额之和为 100%");
+    // Shares of a positive total sum to 100% even with a negative part; a total at or below 0 is not drawn (round 27).
+    expect(PRODUCTION_TOPIC.themeHint).not.toContain("有负值时除外");
     const copy = [TRADE_TOPIC.composition!.note, TRADE_TOPIC.composition!.evolutionNote, PRODUCTION_TOPIC.themeHint].join("");
     expect(copy).not.toContain("加起来");
   });
