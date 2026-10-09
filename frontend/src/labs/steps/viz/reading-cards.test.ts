@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { compositionCards, gapReading, positioningCards, segmentCards } from "./reading-cards";
+import { comparisonCards, compositionCards, gapReading, positioningCards, segmentCards } from "./reading-cards";
 import { textNumber } from "./indicator-charts";
 
 describe("段长度对照 cards name an undefined GVC length (round 12)", () => {
@@ -17,6 +17,52 @@ describe("段长度对照 cards name an undefined GVC length (round 12)", () => 
     expect(cards[1].small).toBe("该行业没有这类 GVC 生产，PLy_GVC 无法计算（不是缺少数据）");
     expect(cards[2].big).toBe("对比国家无法计算");
     expect(JSON.stringify(cards)).not.toContain("缺失");
+  });
+});
+
+describe("cards name the industry when the scope is one industry (round 21)", () => {
+  const composition = {
+    total: "FGY",
+    segments: [{ key: "d", name: "纯国内", color: "#000" }, { key: "c", name: "复杂 GVC", color: "#111" }],
+    focus: "c", focusLabel: "后向复杂 GVC 生产份额", note: "",
+  };
+  const rows = [
+    { country: "JPN", year: 2020, industry: "C26", FGY: 100, d: 94.2, c: 5.8 },
+    { country: "USA", year: 2020, industry: "C26", FGY: 100, d: 98.2, c: 1.8 },
+  ];
+
+  test("step 7 JPN C26 · 后向: both own-country cards read country · industry", () => {
+    const cards = compositionCards({ rows, countries: ["JPN", "USA"], composition, totalLabel: "最终品生产", year: 2020, industry: "C26" });
+    expect(cards[0].eyebrow).toBe("JPN 日本 · C26 计算机电子光学 · 2020 · 最大分项");
+    expect(cards[1].eyebrow).toBe("JPN 日本 · C26 计算机电子光学 · 后向复杂 GVC 生产份额");
+    // A comparison card reads within the observed country's scope; the industry is not repeated there.
+    expect(cards[2].eyebrow).toBe("与对比国家 USA 美国 · 后向复杂 GVC 生产份额");
+  });
+
+  test("country level keeps the plain country label", () => {
+    const country = rows.map((row) => ({ ...row, industry: "" }));
+    const cards = compositionCards({ rows: country, countries: ["JPN"], composition, totalLabel: "最终品生产", year: 2020, industry: "" });
+    expect(cards[0].eyebrow).toBe("JPN 日本 · 2020 · 最大分项");
+  });
+
+  test("国家对比, 段长度对照 and 定位图 cards read the industry the same way", () => {
+    const comparison = comparisonCards({
+      rows: [{ country: "JPN", year: 2020, industry: "C26", m: 0.1 }], countries: ["JPN"], metric: "m", label: "份额", unit: "%", year: 2020, industry: "C26",
+    });
+    expect(comparison[0].eyebrow).toBe("JPN 日本 · C26 计算机电子光学 · 2020");
+    const segments = segmentCards({
+      rows: [{ country: "JPN", year: 2020, industry: "C26", PLv_GVC: 4.1, PLy_GVC: 4.0 }], countries: ["JPN"], year: 2020, industry: "C26",
+      segments: [{ key: "gvc", label: "GVC 段", forward: "PLv_GVC", backward: "PLy_GVC" }],
+    });
+    expect(segments.map((card) => card.eyebrow)).toEqual([
+      "JPN 日本 · C26 计算机电子光学 · 2020 · 最长的一段",
+      "JPN 日本 · C26 计算机电子光学 · GVC 段 · 前向对后向",
+    ]);
+    const [position] = positioningCards({
+      reference: [{ country: "JPN", x: 1, y: 1 }], countries: ["JPN"], xKey: "x", yKey: "y",
+      xLabel: "横", yLabel: "纵", xFormat: "number", yFormat: "number", industry: "C26",
+    });
+    expect(position.eyebrow).toBe("JPN 日本 · C26 计算机电子光学");
   });
 });
 

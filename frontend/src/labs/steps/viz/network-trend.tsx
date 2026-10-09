@@ -410,6 +410,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         distribution={distribution}
         mode="context"
         sameIndustry
+        industry={industry}
       /> : <p role="status">{undefinedPoints.length ? `所选国家的该行业${PATH_UNDEFINED_NOTE}，${label}无法定义；请更换行业、指标或国家。` : "该行业没有数据，请更换行业、指标或国家。"}</p>}
       {undefinedNote && <p className="muted">{undefinedNote}</p>}
       {flatValue === 0 && <p className="muted">所选国家历年的 {sectorLabel(industry)} {label}都是 0：这是真实的 0（该行业没有这类买卖或连接），不是缺少数据。</p>}

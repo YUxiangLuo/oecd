@@ -1,5 +1,5 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
-import { countryLabel, joinCountries } from "../../../viz";
+import { countryLabel, joinCountries, sectorLabel } from "../../../viz";
 import { useHoverTip, type TipLine } from "../../../viz/hover";
 import { CAT } from "../../../viz/shared";
 import { changeReading, finiteValue, NO_RANK, NO_RANK_NOTE, rankText, readingDigits, type YearDistribution } from "./indicator-model";
@@ -19,6 +19,11 @@ export const indicatorTick = (value: number | null, unit: string) => {
     : shown.toLocaleString("zh-CN", { maximumFractionDigits: digits });
   return stripNegativeZero(`${text}${unit === "%" ? "%" : ""}`);
 };
+
+/** The observed economy as a reading card opens with it: "JPN 日本 · C26 计算机电子光学" when the scope is one
+ * industry, so an industry reading is not taken for the country's own (round 21). */
+export const scopeLabel = (country: string, industry?: string | null) =>
+  industry ? `${countryLabel(country)} · ${sectorLabel(industry)}` : countryLabel(country);
 
 /** Readings in labels, tables and tooltips keep fixed decimals, so values side by side line up
  * ("11.730%" next to "15.613%", not "11.73%"); an exact zero reads "0". */
@@ -73,9 +78,12 @@ export function TrendSummary({
   sameIndustry = false,
   digits,
   metricLabel,
+  industry,
   reasonFor,
 }: {
   readings: ComparisonReading[];
+  /** The industry the readings belong to, when the scope is one industry; the observed country's card names it. */
+  industry?: string;
   countries: string[];
   years: number[];
   unit: string;
@@ -169,7 +177,7 @@ export function TrendSummary({
   return (
     <div className="comparison-summary" role="group" aria-label="趋势读数">
       <div>
-        <span>{countryLabel(first)} · {metricLabel ? `${metricLabel} · ` : ""}{firstYear}→{lastYear}</span>
+        <span>{scopeLabel(first, industry)} · {metricLabel ? `${metricLabel} · ` : ""}{firstYear}→{lastYear}</span>
         <b>{changeReading(start, end, unit, digits)}</b>
         {/* An exact zero end reads "0" ("0 → 0.00039"), not "0.00000" at a tiny-value precision. */}
         <small>{start === 0 && end === 0 ? indicatorNumber(0, unit) : [start, end].map((value) => (value === 0 ? indicatorNumber(0, unit) : fixedIndicatorNumber(value, unit, digits ?? smallAmountDigits(value, unit)))).join(" → ")}</small>
@@ -302,7 +310,10 @@ export function IndicatorTrendChart({
   emptyReading,
   emptyStatus,
   reasonFor,
+  industry,
 }: {
+  /** Context mode: the industry the rows belong to, named on the observed country's card. */
+  industry?: string;
   /** Replaces "缺失" in the readout where a value is undefined rather than missing (step 9: no outgoing links). */
   emptyReading?: (country: string, year: number) => string | null;
   /** The whole clause the trend cards give for an undefined reading (see TrendSummary). */
@@ -597,7 +608,7 @@ export function IndicatorTrendChart({
       {Tip}
       </div>
       {context
-        ? <TrendSummary readings={readings} countries={countries} years={years} unit={unit} distribution={band} sameIndustry={sameIndustry} digits={digits} reasonFor={reasonFor} />
+        ? <TrendSummary readings={readings} countries={countries} years={years} unit={unit} distribution={band} sameIndustry={sameIndustry} digits={digits} industry={industry} reasonFor={reasonFor} />
         : <ComparisonSummary
           readings={readings}
           countries={countries}

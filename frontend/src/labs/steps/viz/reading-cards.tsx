@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { cjkJoin } from "../../../format";
-import { countryLabel, medianSkipReason, sectorLabel } from "../../../viz";
+import { countryLabel, medianSkipReason } from "../../../viz";
 import { finiteValue, NO_RANK, NO_RANK_NOTE, rankText, type CompositionSpec, type YearDistribution } from "./indicator-model";
-import { fixedIndicatorNumber, textNumber } from "./indicator-charts";
+import { fixedIndicatorNumber, scopeLabel, textNumber } from "./indicator-charts";
 import type { Row } from "./scaffold";
 
 /* Reading cards (design doc 4.5): every view ends with the same three-sentence frame under its chart:
@@ -61,10 +61,10 @@ export function comparisonCards({ rows, countries, metric, label, unit, year, in
   const own = valueOf(rows, first, year, metric, industry);
   const ownReason = own === null ? reasonFor?.(first) : null;
   if (own === null) return [ownReason
-    ? { eyebrow: `${countryLabel(first)} · ${year}${industry ? ` · ${sectorLabel(industry)}` : ""}`, big: "无法计算", small: `${label}：${ownReason}` }
-    : { eyebrow: `${countryLabel(first)} · ${year}`, big: "缺失", small: `${label}在该年没有有效读数（缺少的数据留空，不当作 0）` }];
+    ? { eyebrow: `${scopeLabel(first, industry)} · ${year}`, big: "无法计算", small: `${label}：${ownReason}` }
+    : { eyebrow: `${scopeLabel(first, industry)} · ${year}`, big: "缺失", small: `${label}在该年没有有效读数（缺少的数据留空，不当作 0）` }];
   const cards: ReadingCard[] = [{
-    eyebrow: `${countryLabel(first)} · ${year}${industry ? ` · ${sectorLabel(industry)}` : ""}`,
+    eyebrow: `${scopeLabel(first, industry)} · ${year}`,
     big: textNumber(own, unit),
     small: label,
   }];
@@ -116,25 +116,25 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
   // data: the shares are undefined, and the card says why.
   const totalCard = (country: string, comparison: boolean): ReadingCard | null => {
     const total = valueOf(rows, country, year, composition.total, industry);
-    const prefix = comparison ? `与对比国家 ${countryLabel(country)} · ${focusLabel}` : `${countryLabel(country)} · ${year}`;
+    const prefix = comparison ? `与对比国家 ${countryLabel(country)} · ${focusLabel}` : `${scopeLabel(country, industry)} · ${year}`;
     if (total === 0) return { eyebrow: prefix, big: `${comparison ? `${countryLabel(country)} ` : ""}${totalLabel}为 0`, small: "没有可分解的总量，构成份额无定义；可换一个行业或国家" };
     if (total !== null && total < 0) return { eyebrow: prefix, big: `${comparison ? `${countryLabel(country)} ` : ""}${totalLabel}为负`, small: `总量为负（${textNumber(total, "百万美元")} 百万美元），无法算比重${amountShown ? "" : "；切到“金额”可看各分项"}` };
     return null;
   };
   if (ownShares.some((item) => item.share === null)) {
     return [totalCard(first, false)
-      ?? { eyebrow: `${countryLabel(first)} · ${year}`, big: "构成不完整", small: "分项或总量缺失，暂不能读出构成（缺少的数据留空，不当作 0）" }];
+      ?? { eyebrow: `${scopeLabel(first, industry)} · ${year}`, big: "构成不完整", small: "分项或总量缺失，暂不能读出构成（缺少的数据留空，不当作 0）" }];
   }
   const largest = ownShares.reduce((best, item) => (item.share! > best.share! ? item : best));
   const ownFocus = share(first, focus)!;
   const cards: ReadingCard[] = [
     {
-      eyebrow: `${countryLabel(first)} · ${year} · 最大分项`,
+      eyebrow: `${scopeLabel(first, industry)} · ${year} · 最大分项`,
       big: `${largest.segment.name} ${textNumber(largest.share!, "%")}`,
       small: `占${totalLabel}的比重`,
     },
     {
-      eyebrow: `${countryLabel(first)} · ${focusLabel}`,
+      eyebrow: `${scopeLabel(first, industry)} · ${focusLabel}`,
       big: textNumber(ownFocus, "%"),
       small: `${cjkJoin(focusName, "占")}${totalLabel}的比重`,
     },
@@ -160,8 +160,10 @@ const side = (value: number, median: number) =>
   value === median ? "等于" : value > median ? "高于" : "低于";
 
 /** 定位图: where each selected country sits relative to the two medians of the shown economies. */
-export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLabel, xFormat, yFormat, xScale = "linear", reasonFor }: {
+export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLabel, xFormat, yFormat, xScale = "linear", industry, reasonFor }: {
   reference: Row[]; countries: string[]; xKey: string; yKey: string; xLabel: string; yLabel: string;
+  /** The industry every point reads, when the scope is one industry. */
+  industry?: string;
   xFormat: "pct" | "number" | "amount"; yFormat: "pct" | "number" | "amount";
   /** A log x axis leaves out economies whose x is 0 or below, as the scatter does. */
   xScale?: "linear" | "log";
@@ -177,7 +179,7 @@ export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLa
     const reason = reasonFor?.(country);
     const zeroOnLog = all.some((point) => point.country === country && point.x <= 0);
     return {
-      eyebrow: countryLabel(country),
+      eyebrow: scopeLabel(country, industry),
       big: "不在图上",
       small: reason ? `${reason}（不是缺少数据）` : zeroOnLog ? `${xLabel}为 0 或负，无法在对数横轴上显示` : "该国缺少其中一项指标的读数",
     };
@@ -190,7 +192,7 @@ export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLa
       const point = points.find((item) => item.country === country);
       if (!point) return absent(country);
       return {
-        eyebrow: `${index ? "对比国家 " : ""}${countryLabel(country)}`,
+        eyebrow: `${index ? "对比国家 " : ""}${scopeLabel(country, industry)}`,
         big: `横轴 ${textNumber(point.x, unitOf(xFormat))}，纵轴 ${textNumber(point.y, unitOf(yFormat))}`,
         small: `${skipMedian}，不比较中位数`,
       };
@@ -207,7 +209,7 @@ export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLa
     const point = points.find((item) => item.country === country);
     if (!point) return absent(country);
     return {
-      eyebrow: `${index ? "对比国家 " : ""}${countryLabel(country)}`,
+      eyebrow: `${index ? "对比国家 " : ""}${scopeLabel(country, industry)}`,
       big: `${xLabel}${side(point.x, xMedian)}中位数，${yLabel}${side(point.y, yMedian)}中位数`,
       small: `横轴 ${textNumber(point.x, unitOf(xFormat))}，纵轴 ${textNumber(point.y, unitOf(yFormat))}；中位数按图上 ${points.length} 个经济体计算`,
     };
@@ -238,12 +240,12 @@ export function segmentCards({ rows, countries, year, industry, segments, reason
     : null;
   const cards: ReadingCard[] = [
     {
-      eyebrow: `${countryLabel(first)} · ${year} · 最长的一段`,
+      eyebrow: `${scopeLabel(first, industry)} · ${year} · 最长的一段`,
       big: `${longest.segment.label} · ${longestSide}`,
       small: `${textNumber(longestSide === "前向" ? longest.forward : longest.backward, unit)}；三段长度不能相加，总长度是三段按增加值份额加权的平均`,
     },
     {
-      eyebrow: `${countryLabel(first)} · ${gvc.segment.label} · 前向对后向`,
+      eyebrow: `${scopeLabel(first, industry)} · ${gvc.segment.label} · 前向对后向`,
       big: gvcGap ? (gvcGap.every((item) => item.reason) ? "无法计算" : "缺失") : gvc.forward! > gvc.backward! ? "前向更长（更偏上游）" : gvc.forward! < gvc.backward! ? "后向更长（更偏下游）" : "前后向相等",
       small: gvcGap ? gvcGap.map((item) => item.reason ?? "缺失留空").join("；") : `${textNumber(gvc.forward, unit)} 对 ${textNumber(gvc.backward, unit)}`,
     },

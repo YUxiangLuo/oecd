@@ -46,6 +46,7 @@ import {
   LengthPositionTrajectory,
   TrendSummary,
   indicatorNumber,
+  scopeLabel,
   textNumber,
 } from "./indicator-charts";
 import { ScopeCard } from "./scope-card";
@@ -995,6 +996,7 @@ export function IndicatorExplorer({
               emptyStatus={emptyStatus(metric)}
               emptyReading={trendEmpty(metric)}
               reasonFor={trendReason(metric)}
+              industry={industry}
             />
           )}
           {view === "directions" &&
@@ -1020,6 +1022,7 @@ export function IndicatorExplorer({
                   emptyStatus={emptyStatus(key)}
                   emptyReading={trendEmpty(key)}
                   reasonFor={trendReason(key)}
+                  industry={industry}
                 />
               ))}
             </>}
@@ -1073,7 +1076,7 @@ export function IndicatorExplorer({
                 highlightColors={Object.fromEntries(selected.map((country, index) => [country, CAT[index]]))}
                 trails={trails}
               />
-              <ReadingCards label="定位读数" cards={positioningCards({ reference, countries: selected, xKey: axes.x, yKey: axes.y, xLabel: label(axes.x), yLabel: label(axes.y), xFormat: formatOf(axes.x), yFormat: formatOf(axes.y), xScale: axes.xScale, reasonFor: (country) => {
+              <ReadingCards label="定位读数" cards={positioningCards({ reference, countries: selected, xKey: axes.x, yKey: axes.y, xLabel: label(axes.x), yLabel: label(axes.y), xFormat: formatOf(axes.x), yFormat: formatOf(axes.y), xScale: axes.xScale, industry, reasonFor: (country) => {
                 const reasons = [axes.x, axes.y].flatMap((key) => {
                   const reason = undefinedReason(country, key, exploreYear);
                   return reason ? [`${reason}，${label(key)}无法计算`] : [];
@@ -1163,7 +1166,7 @@ export function IndicatorExplorer({
                         ? `${industry ? "该行业" : "该国"}${label(activeComposition!.total)}${total === 0 ? "为 0" : "为负"}，${focusLabel ?? "构成份额"}无法计算（不是缺少数据）`
                         : null;
                     };
-                    return <TrendSummary readings={readings} countries={selected} years={chartYears} unit="%" metricLabel={focusLabel} reasonFor={totalReason} />;
+                    return <TrendSummary readings={readings} countries={selected} years={chartYears} unit="%" metricLabel={focusLabel} industry={industry} reasonFor={totalReason} />;
                   })()}
             </>
           )}
@@ -1175,7 +1178,7 @@ export function IndicatorExplorer({
               <div className={`comparison-facets ${selected.length > 2 ? "comparison-facets--stacked" : "comparison-facets--roomy"}`}>
                 {selected.map((country) => (
                   <section key={country} className="comparison-facet">
-                    <h4>{countryLabel(country)} · {year}{industry ? ` · ${sectorLabel(industry)}` : ""}</h4>
+                    <h4>{scopeLabel(country, industry)} · {year}</h4>
                     <Dumbbell
                       title={`${countryLabel(country)} 段长度对照`}
                       unit="长度单位"
