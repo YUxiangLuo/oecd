@@ -296,10 +296,9 @@ def _row(key: str, kind: str, coef: float, low: float, high: float, std: float) 
     }
 
 
-def test_one_decimal_count_per_family_chart_as_on_the_page():
-    """Step 13 printed "-0.0184（-0.032 个标准差）", "-0.015（-0.026 个标准差）" and "-0.0006" in one chart; the page
-    (``familyBarRows``, regression-ux.test.tsx) and the report now give every bar the same decimals."""
-    from gvcsim.report_regression_chart import chart_digits
+def test_each_bar_keeps_its_headline_digits_as_on_the_page():
+    """A shared decimal count per chart printed step 12's -0.3949 as "-0.395" beside the headline's "-0.39"; each bar
+    now reads as its step's headline and table, on the page (``familyBarRows``, regression-ux.test.tsx) and here."""
 
     def texts(step: int, outcome: str, rows: list[dict]) -> list[str]:
         saved = rows[0]
@@ -321,16 +320,16 @@ def test_one_decimal_count_per_family_chart_as_on_the_page():
     ]
     assert texts(13, "length", length) == [
         "-0.0184（-0.032 个标准差）",
-        "-0.0152（-0.026 个标准差）",
+        "-0.015（-0.026 个标准差）",
         "-0.0006（-0.004 个标准差）",
     ]
-    # Step 12: a small estimate gives the shares three decimals ("+0.008", never "+0.01").
+    # Step 12: only the small estimate takes three decimals ("+0.008", never "+0.01"); the others read as their headlines.
     production = [
         _row("3b_VA_GVC_C_share", "share", -0.4012, -0.42, -0.38, 0.1),
         _row("1_VA_D_share", "share", 1.0031, 0.98, 1.03, 0.1),
         _row("3b_FGY_GVC_C_share", "share", 0.0081, -0.002, 0.018, 0.1),
     ]
-    assert texts(12, "production", production) == ["-0.401", "+1.003", "+0.008"]
+    assert texts(12, "production", production) == ["-0.40", "+1.00", "+0.008"]
     # Step 14: the degrees keep two decimals; closeness, too small for them, keeps two significant digits.
     network = [
         _row("weighted_degree", "network", -4080.37, -4158.54, -4002.2, 856),
@@ -338,6 +337,3 @@ def test_one_decimal_count_per_family_chart_as_on_the_page():
         _row("closnesscentrality", "network", -0.4884, -0.5045, -0.4722, 0.11),
     ]
     assert [text.split("（")[0] for text in texts(14, "network", network)] == ["-40.80", "-60.11", "-0.0049"]
-    assert chart_digits([]) is None
-    assert chart_digits([(-0.0184, 4), (-0.0152, 3), (-0.0006, 4)]) == 4
-    assert chart_digits([(-40.8, 2), (-0.0049, 4)]) == 2

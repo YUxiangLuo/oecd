@@ -61,33 +61,6 @@ def _standardized(coef: float, ci: tuple[float, float] | None, depvar_std: Any) 
     return float(coef) * 0.01 / std, ((ci[0] * 0.01 / std, ci[1] * 0.01 / std) if ci is not None else None)
 
 
-def chart_digits(items: list[tuple[float, int]]) -> int | None:
-    """One decimal count for a chart's (value, digits) pairs (frontend ``chartDigits``): as many as the bar needing
-    the most has on its own, but no more than gives the largest value four significant figures (or its own digits);
-    a value too small for that keeps two significant digits, as ``_signed`` does everywhere."""
-    finite = [(value, digits) for value, digits in items if math.isfinite(value)]
-    if not finite:
-        return None
-    largest_value, largest_digits = max(finite, key=lambda item: abs(item[0]))
-    cap = max(0, 3 - math.floor(math.log10(abs(largest_value)))) if largest_value != 0 else math.inf
-    return int(max(largest_digits, min(cap, max(digits for _, digits in finite))))
-
-
-def _chart_digits(entries: list[dict[str, Any]]) -> tuple[int | None, int | None]:
-    """The native and standard-deviation decimals of a family chart (frontend ``familyChartDigits``)."""
-    native: list[tuple[float, int]] = []
-    sd: list[tuple[float, int]] = []
-    for entry in entries:
-        if not _finite(entry["coef"]):
-            continue
-        value, bounds = _native(entry["kind"], entry["coef"], entry["ci"])
-        native.append((value, estimate_digits(entry["kind"], value, bounds)))
-        standardized = _standardized(entry["coef"], entry["ci"], entry["depvar_std"])
-        if standardized is not None:
-            sd.append((standardized[0], standardized_digits(*standardized)))
-    return chart_digits(native), chart_digits(sd)
-
-
 def _bar(
     kind: str,
     coef: Any,
@@ -96,16 +69,15 @@ def _bar(
     *,
     standardized: bool,
     with_unit: bool = False,
-    digits: tuple[int | None, int | None] = (None, None),
 ) -> dict[str, Any]:
     """One bar per 1 percentage point of X (frontend ``barFigures``). Without an estimate or a standard deviation
-    the bar is 0 and its label says so; the renderer draws it grey with "方向不确定". Alone, a bar has the result
-    table's digits; a family chart passes one (native, standard deviation) count for all its bars."""
+    the bar is 0 and its label says so; the renderer draws it grey with "方向不确定". A bar has the result table's
+    digits, so each number reads as in its step's headline and table."""
     if not _finite(coef):
         return {"value": 0.0, "text": "没算出估计值"}
     native, native_bounds = _native(kind, coef, ci)
-    # In the result table's digits (``_natural_effect``), with its interval, or the chart's.
-    native_digits = digits[0] if digits[0] is not None else estimate_digits(kind, native, native_bounds)
+    # In the result table's digits (``_natural_effect``), with its interval.
+    native_digits = estimate_digits(kind, native, native_bounds)
     native_text = _signed(native, native_digits)
     if with_unit:
         native_text = with_count_unit(native_text, kind)
@@ -118,7 +90,7 @@ def _bar(
     if standardized_value is None:
         return {"value": 0.0, "text": f"{native_text}（没有标准差）"}
     sd_point, sd_bounds = standardized_value
-    sd_digits = digits[1] if digits[1] is not None else standardized_digits(sd_point, sd_bounds)
+    sd_digits = standardized_digits(sd_point, sd_bounds)
     # Signed, as the bar and its interval sit on a signed axis ("-40.11（-0.047 个标准差）"); only the table's
     # "幅度约 0.047 个标准差" is an unsigned size.
     item = {"value": _shown(sd_point), "text": f"{native_text}（{_signed(sd_point, sd_digits)} 个标准差）"}
@@ -211,8 +183,8 @@ def family_chart(
     # of the family is a share; otherwise 个标准差 (lengths with the position index; centralities of any size).
     kinds = [item.kind for item in BASELINES.get(outcome, ())] or [entry["kind"] for entry in entries]
     standardized = not all(kind == "share" for kind in kinds)
-    # One decimal count for the whole chart ("-0.0184", "-0.0152", "-0.0006"), as on the page.
-    digits = _chart_digits(entries)
+    # Each bar keeps its own headline's digits (step 12: "-0.39" beside "+0.006"), so a number never reads one way in
+    # the chart and another in the text.
     items = [
         {
             "label": str(entry["label"]),
@@ -224,7 +196,6 @@ def family_chart(
                 entry["ci"],
                 entry["depvar_std"],
                 standardized=standardized,
-                digits=digits,
             ),
             **({"saved": True} if entry["saved"] else {}),
         }
