@@ -19,6 +19,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from gvcsim import quizzes
+from gvcsim.report_gate import AUTO_COMPARISON_SOURCE
 from gvcsim.report_saved_run import _result_is_qualified, _result_is_reportable
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 from gvcsim.session import empty_session, make_record
@@ -131,26 +132,21 @@ def _step_one_observation(
     }
 
 
-# The metric each visualization/indicator step reports, matching what the UI
-# captures automatically when a student picks countries.
-_STEP_METRICS = {
-    2: "FVA_share",
-    3: "3b_VA_GVC_C_share",
-    4: "GVCPs",
-    5: "weighted degree",
-    6: "FVA_share",
-    7: "3b_VA_GVC_C_share",
-    8: "GVCPs",
+# Steps 2-5 record one country's country-level reading of the step's headline indicator, automatically, as the
+# page does (``COUNTRY_METRIC`` and ``indicatorMaterialPatch`` in frontend/src/labs/steps/indicator/): the metric
+# and its unit for each step.
+_SINGLE_COUNTRY_STEPS = {
+    2: ("FVA_share", "%"),
+    3: ("3b_VA_GVC_C_share", "%"),
+    4: ("GVCPs", "无量纲"),
+    5: ("weighted degree", "百万美元"),
 }
 
-_EXPLICIT_INDICATOR_UNITS = {
-    2: "%",
-    3: "%",
-    4: "无量纲",
-    5: "百万美元",
-    6: "%",
-    7: "%",
-    8: "无量纲",
+# Steps 6-8 compare country A with country B on the step's indicator: the metric and its unit for each step.
+_COMPARISON_STEPS = {
+    6: ("FVA_share", "%"),
+    7: ("3b_VA_GVC_C_share", "%"),
+    8: ("GVCPs", "无量纲"),
 }
 
 
@@ -254,30 +250,31 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
     session = empty_session()
     session["steps"] = {str(step): make_record({"quiz": quizzes.correct_quiz(step)}) for step in range(1, 15)}
     session["steps"]["1"]["data"]["observation"] = _step_one_observation(base_url, token, year, left, right)
-    # Steps 2-8 record the country comparison and the country values for that step's
-    # metric, mirroring what the UI captures when students pick countries. Seeding
-    # ``compared`` alone would leave the report's per-step value tables empty and
-    # unlike a real student's report.
+    # Steps 2-8 record the country values for that step's metric, mirroring what the UI captures. Seeding
+    # ``compared`` alone would leave the report's per-step value tables empty and unlike a real student's report.
     country_rows = _country_value_rows(base_url, token, year)
-    for step, metric in _STEP_METRICS.items():
+    # Steps 2-5 record the one country being viewed (country A), as the page does when it opens.
+    for step, (metric, unit) in _SINGLE_COUNTRY_STEPS.items():
+        observation = _country_observation(
+            country_rows, left, year, metric, release_id, unit=unit, source=AUTO_COMPARISON_SOURCE
+        )
+        session["steps"][str(step)]["data"].update(
+            {
+                "year": year,
+                "country": left,
+                "compared": [left],
+                "metric": metric,
+                "observations": [{**observation, "industry": ""}],
+            }
+        )
+    # Steps 6-8 record countries A and B.
+    for step, (metric, unit) in _COMPARISON_STEPS.items():
         session["steps"][str(step)]["data"].update(
             {
                 "compared": [left, right],
                 "metric": metric,
                 "observations": [
-                    _country_observation(
-                        country_rows,
-                        country,
-                        year,
-                        metric,
-                        release_id,
-                        unit=_EXPLICIT_INDICATOR_UNITS.get(step),
-                        source=(
-                            "explicit-indicator-table-comparison"
-                            if step in (2, 3, 4, 5)
-                            else "explicit-indicator-comparison"
-                        ),
-                    )
+                    _country_observation(country_rows, country, year, metric, release_id, unit=unit)
                     for country in (left, right)
                 ],
             }

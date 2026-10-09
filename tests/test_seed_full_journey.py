@@ -6,6 +6,7 @@ import pytest
 from scipy import stats
 
 from scripts import seed_full_journey as journey
+from gvcsim.report_gate import _table_comparison_complete, check_material_gate
 from gvcsim.regression.teaching import X_COLUMN, model_snapshot, variable_catalog
 
 
@@ -119,32 +120,55 @@ def test_seed_json_helpers_enforce_expected_shape(api, monkeypatch):
 
 
 def test_seed_records_step_observations_like_the_ui(api):
-    """Steps 2-8 carry their metric and country values, not just ``compared``."""
+    """Steps 2-5 record one country's reading as the page does; steps 6-8 compare two countries."""
     journey.seed_full_journey("http://test", "student", "test-password")
 
     saved = api["saved"]
-    for step, metric in journey._STEP_METRICS.items():
+    # Steps 2-5: the shape of indicatorMaterialPatch (frontend/src/labs/steps/indicator/indicator-table.tsx).
+    for step, (metric, unit) in journey._SINGLE_COUNTRY_STEPS.items():
+        data = saved["steps"][str(step)]["data"]
+        assert {key: data[key] for key in ("year", "country", "compared", "metric")} == {
+            "year": 2020,
+            "country": "CHN",
+            "compared": ["CHN"],
+            "metric": metric,
+        }
+        [observation] = data["observations"]
+        assert observation == {
+            "entity": "CHN",
+            "country": "CHN",
+            "industry": "",
+            "year": 2020,
+            "value": observation["value"],
+            "metric": metric,
+            "unit": unit,
+            "release": "a" * 32,
+            "scope": "country",
+            "source": "auto-indicator-comparison",
+        }
+        assert isinstance(observation["value"], float)
+        assert _table_comparison_complete(data, allow_auto=True)
+    for step, (metric, unit) in journey._COMPARISON_STEPS.items():
         data = saved["steps"][str(step)]["data"]
         assert data["metric"] == metric
         assert data["compared"] == ["CHN", "USA"]
         assert [item["entity"] for item in data["observations"]] == ["CHN", "USA"]
-        assert all(item["metric"] == metric and item["value"] is not None for item in data["observations"])
-        if step in journey._EXPLICIT_INDICATOR_UNITS:
-            assert all(
-                item
-                == {
-                    **item,
-                    "unit": journey._EXPLICIT_INDICATOR_UNITS[step],
-                    "release": "a" * 32,
-                    "scope": "country",
-                    "source": (
-                        "explicit-indicator-table-comparison"
-                        if step in (2, 3, 4, 5)
-                        else "explicit-indicator-comparison"
-                    ),
-                }
-                for item in data["observations"]
-            )
+        assert all(
+            item
+            == {
+                **item,
+                "metric": metric,
+                "unit": unit,
+                "release": "a" * 32,
+                "scope": "country",
+                "source": "explicit-indicator-comparison",
+            }
+            and item["value"] is not None
+            for item in data["observations"]
+        )
+    # The server's material gate accepts steps 1-10. (The fake regression runs of steps 11-14 are not bound to
+    # a release, so the gate leaves those to the live seed.)
+    assert [block["step"] for block in check_material_gate(saved) if block["step"] <= 10] == []
     # Step 9 records one industry betweenness ranking row per country.
     step_nine = saved["steps"]["9"]["data"]
     assert step_nine["compared"] == ["CHN", "USA"]
