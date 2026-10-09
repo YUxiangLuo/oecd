@@ -190,7 +190,7 @@ try {
   await save("10-shocks.png", await page.screenshot(), student.username, "Step 10 top: US-centred scenario, tiles and the 75-country exposure chart (example Canada vs Costa Rica, motor vehicles).");
 
   await open(page, 11, `document.querySelector(".diverging-bars svg") && document.querySelector(".reg-example-effect")`);
-  await scrollTo(page, `document.querySelector(".verdict-card")`, 12);
+  await scrollTo(page, `document.querySelector(".reg-family-bars") ?? document.querySelector(".diverging-bars")`, 12);
   await save("11-regression-result.png", await page.screenshot(), student.username, "Step 11 after the run: group trends, one bar per Y and the headline.");
   if (onlyReg) {
     await page.close();
