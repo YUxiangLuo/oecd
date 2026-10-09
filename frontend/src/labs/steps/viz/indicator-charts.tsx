@@ -395,6 +395,11 @@ export function IndicatorTrendChart({
   const readings = countries.flatMap((country, index) =>
     series[index].map((point) => ({ country, ...point })),
   );
+  // A reference far below the selected countries (step 9 加权总度 of CHN·C26) lies on the 0 line: say so, the
+  // readouts below still give the median and the middle 50%.
+  const referenceFlat = band.length >= 2 && lo === 0
+    && Math.max(...band.map((item) => item.p75)) < 0.02 * extent
+    && values.some((value) => value >= 0.5 * extent);
   const bandPath = band.length >= 2
     ? `M${band.map((item) => `${x(item.year)},${y(item.p75)}`).join(" L")} L${[...band].reverse().map((item) => `${x(item.year)},${y(item.p25)}`).join(" L")} Z`
     : "";
@@ -608,6 +613,11 @@ export function IndicatorTrendChart({
       </svg>
       {Tip}
       </div>
+      {referenceFlat && (
+        <p className="muted" role="note" data-reference-flat>
+          {referenceLabel}与中间 50% 远小于所选国家，图中贴近 0；中位数见下方读数，中间 50% 的范围悬停可读。
+        </p>
+      )}
       {context
         ? <TrendSummary readings={readings} countries={countries} years={years} unit={unit} distribution={band} sameIndustry={sameIndustry} digits={digits} industry={industry} reasonFor={reasonFor} />
         : <ComparisonSummary

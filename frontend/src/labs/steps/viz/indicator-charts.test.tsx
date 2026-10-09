@@ -268,6 +268,26 @@ describe("trend cards name the industry when the scope is one industry (round 21
     cleanup();
   });
 
+  test("a reference squashed onto 0 gets a note; a readable one does not (step 9 CHN·C26 加权总度)", () => {
+    const years = [2016, 2020];
+    const rows: Row[] = years.flatMap((year) => [
+      { country: "CHN", year, m: 2_000_000 + (year - 2016) * 100_000 },
+      ...["USA", "DEU", "JPN", "KOR", "MEX"].map((country, index) => ({ country, year, m: 1000 * (index + 1) })),
+    ]);
+    const view = render(
+      <IndicatorTrendChart rows={rows} countries={["CHN", "USA"]} years={years} metric="m" label="加权总度" unit="百万美元"
+        distribution={countryDistribution(rows, "m", years)} mode="context" sameIndustry industry="C26" />,
+    );
+    expect(view.getByRole("note").textContent).toContain("同行业全球中位数与中间 50% 远小于所选国家，图中贴近 0");
+    cleanup();
+    const shares = render(
+      <IndicatorTrendChart rows={trendRows} countries={["CHN", "USA"]} years={[2018, 2019, 2020]} metric="FVA_share" label="外国增加值项占比"
+        unit="%" distribution={countryDistribution(trendRows, "FVA_share", [2018, 2019, 2020])} mode="context" />,
+    );
+    expect(shares.container.querySelector("[data-reference-flat]")).toBeNull();
+    cleanup();
+  });
+
   test("the context trend chart passes its industry to the cards (step 9 C26)", () => {
     const rows = [2016, 2020].map((year) => ({ country: "JPN", year, industry: "C26", m: year === 2016 ? 158133 : 151048 }));
     const view = render(
