@@ -977,6 +977,11 @@ describe("steps 2–4 notes read plainly (round 17)", () => {
       await waitFor(() => expect(view.container.textContent).toContain("前向各段长度：纯国内 3.263、传统贸易 3.525、GVC 5.622"));
       const text = view.container.textContent!;
       expect(text.indexOf("前向各段长度")).toBeLessThan(text.indexOf("后向 PLy"));
+      // Round 27: GVCPs is another indicator; its card follows the PLv bar, its identity line and the backward box.
+      const position = text.indexOf("GVC 位置指数 GVCPs");
+      expect(text.indexOf("项相加")).toBeGreaterThan(-1);
+      expect(position).toBeGreaterThan(text.indexOf("项相加"));
+      expect(position).toBeGreaterThan(text.indexOf("后向 PLy"));
     } finally {
       countryRequest.mockRestore();
       industryRequest.mockRestore();

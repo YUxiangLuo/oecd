@@ -765,7 +765,7 @@ export function DecompositionDemo({
             {cfg.totalLabel} = <b>{model.total == null ? "—（未定义）" : fmt(model.total, cfg.unit)}</b>
             {cfg.unit === "amount" && model.total != null && <span className="muted">（百万美元）</span>}
           </div>
-          <IndicatorCalculationDisclosure step={step} row={row} />
+          {step !== 6 && <IndicatorCalculationDisclosure step={step} row={row} />}
           <div className="decomp-unavailable" role="status">
             <b>当前分解不可用</b>
             <div>{decompositionModelReason(model, cfg.weightTotal)}</div>
@@ -786,6 +786,7 @@ export function DecompositionDemo({
             <div className="decomp-note">{forwardSegmentLengths(row)}（段长度不需要份额，仍可读）。</div>
           )}
           {step === 6 && <MiniBackwardBar row={row} />}
+          {step === 6 && <IndicatorCalculationDisclosure step={step} row={row} />}
         </div>
       );
     }
@@ -812,7 +813,9 @@ export function DecompositionDemo({
         <div className="decomp-total-line">
           {cfg.totalLabel} = <b>{amount(model.total)}</b>{cfg.unit === "amount" && <span className="muted">（百万美元）</span>}
         </div>
-        <IndicatorCalculationDisclosure step={step} row={row} decimals={precision?.decimals} />
+        {/* Step 4's GVCPs is another indicator (forward over backward GVC length): it follows both bars below, not
+            between the PLv heading and the PLv bar it does not decompose. */}
+        {step !== 6 && <IndicatorCalculationDisclosure step={step} row={row} decimals={precision?.decimals} />}
         {/* All parts 0: nothing to stack, so no empty grey bar (the line below says why). */}
         {model.values.some((value) => value !== 0) && <div className="decomp-bar" style={{ position: "relative", display: "block", overflow: "hidden" }}>
           {panelDomain.negative > 0 && <span aria-hidden style={{ position: "absolute", zIndex: 3, left: `${layout.zeroPct}%`, top: -2, bottom: -2, borderLeft: "2px solid #4b5263" }} />}
@@ -856,6 +859,7 @@ export function DecompositionDemo({
         />
         {cfg.note && sharesAvailable && <div className="decomp-note">{cfg.note(row, model.values, precision?.decimals)}</div>}
         {step === 6 && <MiniBackwardBar row={row} />}
+        {step === 6 && <IndicatorCalculationDisclosure step={step} row={row} />}
       </div>
     );
   };
