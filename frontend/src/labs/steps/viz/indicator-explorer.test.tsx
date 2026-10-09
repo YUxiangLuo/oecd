@@ -4,6 +4,7 @@ import { api } from "../../../api";
 import type { Meta, Step, StepStateApi } from "../../../types";
 import type { VizStepState } from "./scaffold";
 import { LengthPositionTrajectory } from "./indicator-charts";
+import { COMPOSITION_MATERIAL_SCALE_NOTE } from "./indicator-explorer";
 import { LengthVizStep } from "./length";
 import { ProductionVizStep } from "./production";
 import { TradeVizStep } from "./trade";
@@ -724,6 +725,36 @@ test("step 7 行业结构 says how many industries it leaves out and why (round 
     fireEvent.click(view.getByRole("button", { name: "行业结构" }));
     await waitFor(() => expect(view.getAllByText("另有 2 个行业没有画出：H51 总增加值为负；B09 总增加值为 0（没有这类生产活动），份额无法计算（不是缺少数据）。")).toHaveLength(2));
   } finally { rows.mockRestore(); perCountry.mockRestore(); schema.mockRestore(); }
+});
+
+test("step 7 四类生产活动 in 金额 describes amounts, and the material says the report draws shares", async () => {
+  const part = { "1_VA_D": 4, "2_VA_RT": 2, "3a_VA_GVC_S": 1, "3b_VA_GVC_C": 3 };
+  const backward = { FGY: 12, "1_FGY_D": 5, "2_FGY_RT": 2, "3a_FGY_GVC_S": 2, "3b_FGY_GVC_C": 3 };
+  const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year).map((row) => ({ ...row, SVA: 10, ...part, ...backward })));
+  const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+  try {
+    const view = setup(ProductionVizStep);
+    await view.findByRole("button", { name: "四类生产活动" });
+    await waitFor(() => expect(view.saves).toHaveLength(1));
+    view.accept();
+    await waitFor(() => expect(view.container.textContent).toContain("四类生产活动各占本国总增加值的份额"));
+    const material = view.getByRole("region", { name: "报告材料" });
+    await waitFor(() => expect(material.textContent).toContain(COMPOSITION_MATERIAL_SCALE_NOTE));
+    expect(material.textContent).not.toContain("本页现在按金额显示");
+
+    fireEvent.click(view.getByRole("button", { name: "金额" }));
+    expect(view.container.textContent).toContain("本国总增加值按四类生产活动分成的金额");
+    expect(view.container.textContent).not.toContain("四类生产活动各占本国总增加值的份额");
+    expect(material.textContent).toContain("本页现在按金额显示。");
+    // Switching the bars records nothing new: the material is the same readings.
+    expect(view.saves).toHaveLength(1);
+
+    // The backward side's note in 金额 does not speak of shares either.
+    fireEvent.click(view.getByRole("button", { name: "后向（按最终品）" }));
+    await waitFor(() => expect(view.saves).toHaveLength(2));
+    expect(view.container.textContent).toContain("前向、后向的金额不能逐项对照");
+    expect(view.container.querySelector(".scope-flash")?.textContent).toContain("报告材料已更新为：四类生产活动 · 后向 · 报告按占比作图 · ");
+  } finally { rows.mockRestore(); schema.mockRestore(); }
 });
 
 describe("undefined lengths and medians that say nothing (round 11)", () => {

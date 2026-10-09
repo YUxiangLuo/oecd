@@ -69,6 +69,12 @@ export function browsedSelection(raw: unknown, countries: readonly string[]): In
   return normalizeSelection({ ...selection, others, second: others[0] ?? "" });
 }
 
+/**
+ * Under a recorded single-year composition: the material is the parts' and the total's amounts, and the report
+ * draws them as shares, whichever of 占比 / 金额 the page shows.
+ */
+export const COMPOSITION_MATERIAL_SCALE_NOTE = "记录的是各分项与总量的金额读数，报告中的构成图按占比作图；“占比 / 金额”只切换本页的显示方式，不改变记录的材料。";
+
 /** "2020" for a single-year material (composition / same-year), "2016–2020" for a range. */
 function savedYearSpan(years: number[]): string {
   const first = Math.min(...years);
@@ -530,7 +536,9 @@ export function IndicatorExplorer({
   useEffect(() => {
     if (!canSave || matches || state.syncing || state.materialLocked) return;
     if (saved.length) {
-      const what = composition ? `${viewName}${side === "alternate" ? " · 后向" : ""}${view === "evolution" ? " · 历年构成" : ""}` : `${viewName} · ${indicatorName}`;
+      // The report draws a composition as shares whichever way the page shows it (占比 or 金额), so the material
+      // is named by that: the 占比/金额 switch only changes this page's bars.
+      const what = composition ? `${viewName}${side === "alternate" ? " · 后向" : ""}${view === "evolution" ? " · 历年构成" : ""} · 报告按占比作图` : `${viewName} · ${indicatorName}`;
       setFlash((old) => ({ text: `报告材料已更新为：${what} · ${pending.length} 条读数`, key: pendingKey, id: (old?.id ?? 0) + 1 }));
     }
     recordCurrent();
@@ -1106,7 +1114,8 @@ export function IndicatorExplorer({
           {composition && activeComposition && (
             <>
               <p>
-                {view === "evolution" ? activeComposition.evolutionNote ?? activeComposition.note : activeComposition.note}
+                {view === "evolution" ? activeComposition.evolutionNote ?? activeComposition.note
+                  : amountMode ? activeComposition.amountNote ?? activeComposition.note : activeComposition.note}
                 {view === "evolution"
                   ? "每个国家一张图，颜色和年份顺序都相同；先看各国自己的变化，再比较国家之间的差别。"
                   : amountMode ? "所选国家使用同一金额刻度，条长与总量成比例；负分项画在零轴左侧。" : "所选国家使用相同分项颜色和共同刻度；金额和份额不能混读。"}
@@ -1319,6 +1328,9 @@ export function IndicatorExplorer({
               : matches ? "当前图表已自动记录为本步报告材料；换视角、国家或年份后会自动更新为最后查看的完整图表。" : "正在记录当前图表…"}
         </p>
         {validYears && !canSave && view === "industry" && !rankComplete.length && rankGapList}
+        {view === "composition" && canSave && matches && (
+          <p className="muted composition-material-scale">{COMPOSITION_MATERIAL_SCALE_NOTE}{amountMode ? "本页现在按金额显示。" : ""}</p>
+        )}
         {state.materialLocked && canSave && !matches && (
           <button type="button" className="secondary" onClick={() => { setRechosen(true); recordCurrent(true); }}>{MATERIAL_LOCKED_ACTION}</button>
         )}
