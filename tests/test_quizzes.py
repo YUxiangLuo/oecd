@@ -143,3 +143,15 @@ def test_betweenness_reads_as_a_sum_of_shares_and_shortest_routes_have_one_name_
     assert "最短路线条数" not in FIELD_DESCRIPTIONS["betweenesscentrality"]
     assert "对所有节点对求和（未归一化）" in FIELD_DESCRIPTIONS["betweenesscentrality"]
     assert all("最短路径" not in text for text in FIELD_DESCRIPTIONS.values())
+
+
+def test_quizzes_read_x_as_exposure_an_association_and_step_14_y_as_no_amount_round_27():
+    every = " ".join(_quiz_text(question) for question in QUIZ_BY_ID.values())
+    assert "受新关税影响" not in every and "面对的新关税暴露越强" in QUIZ_BY_ID["s10-unit-v8"]["explanation"]
+    assert "没有影响" not in every and "没有关联" in QUIZ_BY_ID["s12-compare"]["explanation"]
+    # Step 14's Y is generated on the real 加权总度 ranking, in 中心性原始单位: not an amount.
+    assert "中心性原始单位" in QUIZ_BY_ID["s14-metric-v9"]["explanation"]
+    assert "不是金额" in QUIZ_BY_ID["s14-metric-v9"]["explanation"]
+    assert "金额" not in quizzes.HINTS["s14-metric-v9"]
+    # The options and correct answers stay as the owner kept them.
+    assert [q["correct"] for q in QUIZ_BY_ID.values() if q["id"] in ("s12-compare", "s14-metric-v9")] == ["b", "a"]
