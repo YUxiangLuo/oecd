@@ -22,7 +22,9 @@ import {
   signed,
   type BarEstimate,
 } from "./regression-verdict";
+import { workedNumbers } from "./labs/steps/shock-lab";
 import type {
+  ClassroomReport,
   DepvarKind,
   Meta,
   QuizCompletionState,
@@ -116,6 +118,8 @@ export interface RegressionExample {
   label: string;
   x: number;
   tau?: number;
+  /** The first-year export share to the USA: with τ, X is shown at step 10's digits (workedNumbers). */
+  w?: number;
   /** The country that imposes the tariff (the USA): X = 0 by definition, and it is not in the regression sample. */
   imposer?: boolean;
 }
@@ -126,6 +130,16 @@ export { networkDigits };
 /** A number with fixed decimals and thousands separators: 1382.4 → "1,382" (0 digits), -12.5 → "-12.50" (2). */
 export function groupedFixed(value: number, digits: number): string {
   return value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+/**
+ * An example's X in percentage points with the digits step 10 shows for it ("0.22444", not "0.22"), so the
+ * conversion can be checked by hand; without w and τ, two decimals.
+ */
+export function exampleXText(example: Pick<RegressionExample, "x" | "w" | "tau">): string {
+  return example.w != null && example.tau != null && Number.isFinite(example.w) && Number.isFinite(example.tau)
+    ? workedNumbers(example.w, example.tau, example.x).x
+    : percentagePoints(example.x);
 }
 
 /** Y change implied by the estimate for an example's X, in the step's display units. */
@@ -217,7 +231,7 @@ export function RegressionResultCard({ outcome, response, examples = [], example
                 // "与 X 相关的差异约为 -12.83 个百分点（Y 偏低）"; below the shown precision it reads "不到 0.01 个百分点".
                 // With an interval that includes 0 the sign is not settled, so 偏低/偏高 is left out and the open
                 // direction is said once, after the last conversion.
-                return <>{example.label} 的 X 为 {percentagePoints(example.x)} 个百分点，按估计与 X 相关的差异{tiny ? "" : "约为 "}<b>{tiny ? effect : `${lower ? "-" : "+"}${effect}`}</b>{directional ? `（Y 偏${lower ? words.lower : words.higher}）` : ""}{verdict.state === "insufficient" && example === lastConverted ? "，但区间包含 0，差异的高低方向并不确定" : ""}</>;
+                return <>{example.label} 的 X 为 {exampleXText(example)} 个百分点，按估计与 X 相关的差异{tiny ? "" : "约为 "}<b>{tiny ? effect : `${lower ? "-" : "+"}${effect}`}</b>{directional ? `（Y 偏${lower ? words.lower : words.higher}）` : ""}{verdict.state === "insufficient" && example === lastConverted ? "，但区间包含 0，差异的高低方向并不确定" : ""}</>;
               })()
               : (example.tau ?? 0) > 0
                 ? <>{example.label} 被加税但首年不向美国出口（w = 0）{zeroNote}</>
@@ -412,11 +426,34 @@ export function familyBarRows(
   return { rows, unitTitle: BAR_UNIT_TITLES[unit] };
 }
 
-/** After the report was submitted, a run has already replaced the saved material; said by what replaced it. */
+/**
+ * After the report was submitted, this step's saved material differs from what the report used; said by what
+ * replaced it on this visit (a bar click or the run button), or plainly after a reload.
+ */
 export const REPLACED_NOTICE = {
   bar: "已改为保存这个 Y 的结果；报告已提交，请到步骤 15 更新报告并重新提交给老师。",
   button: "已改为保存这次算出的结果；报告已提交，请到步骤 15 更新报告并重新提交给老师。",
+  saved: "本步保存的结果与已提交报告里的不同；请到步骤 15 更新报告并重新提交给老师。",
 } as const;
+
+/** What the report was built from: its frozen copy of each step's saved runs. */
+export type ReportRuns = ClassroomReport["provenance"]["runs"];
+
+/**
+ * Whether this step's saved runs (`run`, and `qualified_run` when it differs, as the report reads them) differ from
+ * the runs the report was built from. Together with the report being out of date (the signal the sidebar and
+ * step 15 use), this says the update is needed because of this step.
+ */
+export function stepMaterialChanged(
+  stepNumber: number,
+  data: { run?: Pick<SavedRegressionRun, "design" | "result">; qualified_run?: Pick<SavedRegressionRun, "design" | "result"> } | undefined,
+  reportRuns: ReportRuns | undefined,
+): boolean {
+  const identity = (run: { design: unknown; result: unknown }) => canonicalSnapshot({ design: run.design, result: run.result });
+  const saved = new Set([data?.run, data?.qualified_run].filter((run) => run != null).map(identity));
+  const reported = new Set((reportRuns ?? []).filter((run) => run.step === stepNumber).map(identity));
+  return saved.size !== reported.size || [...saved].some((item) => !reported.has(item));
+}
 
 /** The line under the 加税前后 chart: what its dashed bracket is (β × the taxed group's mean X), as an association. */
 export function gapCaption(meanExposureTaxed: number): string {
@@ -455,12 +492,16 @@ export function familyBarsTitle(count: number): string {
  * step's default Y and draws a bar for every Y of the family; clicking a bar runs that Y, which becomes the
  * headline and the saved report material.
  */
-export function RegressionRunLab({ step, meta, state, getStep }: {
+export function RegressionRunLab({ step, meta, state, getStep, reportRuns, reportOutdated = false }: {
   step: Step;
   meta: Pick<Meta, "countries" | "sectors">;
   state: StepStateApi<RegressionStepState>;
   /** Read-only: the example the student chose in step 10. */
   getStep?: <T>(step: number) => T | undefined;
+  /** The runs the current report was built from (its provenance). */
+  reportRuns?: ReportRuns;
+  /** The report needs updating: the same signal as the sidebar and step 15 (unsaved edits, or the server says so). */
+  reportOutdated?: boolean;
 }) {
   const outcome = step.regression_outcome;
   // The button names the step's regression ("计算贸易流回归"), as the step title does.
@@ -473,8 +514,10 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   const [interrupted, setInterrupted] = useState(() => interruptedRuns.has(outcome));
   // Said by the polite live region after a bar saved its Y ("已保存：…"): keyboard focus stays on the bars.
   const [savedAnnouncement, setSavedAnnouncement] = useState("");
-  // What replaced the saved material after the report was submitted: a bar click or the run button.
+  // What replaced the saved material on this visit, for the notice's wording: a bar click or the run button.
   const [replacedBy, setReplacedBy] = useState<"bar" | "button" | null>(null);
+  // A failed request is retried as it was: the Y of a failed bar click, not the Y saved before it.
+  const [failedRequest, setFailedRequest] = useState<{ key: string | null; fromBar: boolean } | null>(null);
   const replacedNoticeRef = useRef<HTMLParagraphElement>(null);
   const revealReplacedNotice = useRef(false);
   // The bars are fetched with the first run (or with a restored one), never before.
@@ -521,7 +564,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
       const row = exampleQuery.data!.rows.find((item) => item.country === country && item.year === lastYear);
       const label = `${countryLabel(country)}·${sectorLabel(example.industry)}`;
       if (country === TARIFF_IMPOSER) return [{ label, x: 0, imposer: true }];
-      return row ? [{ label, x: row.teaching_tariff_exposure, tau: row.teaching_tariff_rate_tau }] : [];
+      return row ? [{ label, x: row.teaching_tariff_exposure, tau: row.teaching_tariff_rate_tau, w: row.teaching_export_share_w }] : [];
     })
     : [];
 
@@ -539,9 +582,10 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
 
   // 会话异步到达：刷新或换设备后恢复本步上次算出的结果（也就是报告材料里的那个 Y），而不是空白面板。
   const savedRun = state.data?.run;
-  // The Y saved when the page opened (undefined until a saved run is known).
-  const openingBaseline = useRef<string | null | undefined>(undefined);
-  if (openingBaseline.current === undefined && savedRun?.design) openingBaseline.current = savedRun.design.baseline ?? null;
+  // After submission: the report is out of date and this step's saved runs are not the ones it was built from.
+  // Going back to the Y the report used (e.g. 恢复默认 after a trial click) withdraws the notice, as the sidebar does.
+  const showReplaced = Boolean(state.materialLocked && savedRun && reportOutdated
+    && stepMaterialChanged(step.n, state.data, reportRuns));
   const savedRunIdentity = savedRun ? regressionRunSnapshotIdentity(savedRun) : null;
   const savedUsable = savedRun?.model_snapshot?.version === TEACHING_MODEL_VERSION && Boolean(savedRun.variable_catalog);
   const savedKey = savedRun?.design?.baseline ?? defaultKey;
@@ -574,6 +618,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
     setRunning(true);
     setOverviewWanted(true);
     setError(null);
+    setFailedRequest(null);
     setInterrupted(false);
     setSavedAnnouncement("");
     try {
@@ -597,20 +642,17 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
       if (!fromButton) {
         setSavedAnnouncement(`已保存：${lessonFor(outcome, response.design.baseline, response.design.baseline_label).shortMetric}`);
       }
-      // After the report was submitted, this run has already replaced the saved material: the notice says so.
-      // Going back to the Y that was saved when the page opened (e.g. 恢复默认 after a trial click) restores the
-      // material the report was built from, so the "update your report" notice is withdrawn.
+      // After the report was submitted, the notice (shown while this differs from the report) says what replaced it.
       if (state.materialLocked) {
-        const backToOpening = openingBaseline.current !== undefined
-          && (response.design.baseline ?? null) === openingBaseline.current;
-        setReplacedBy(backToOpening ? null : fromButton ? "button" : "bar");
-        revealReplacedNotice.current = !fromButton && !backToOpening;
+        setReplacedBy(fromButton ? "button" : "bar");
+        revealReplacedNotice.current = !fromButton;
       }
       setResult(response);
     } catch (cause) {
       focusSavedBarAfterRun.current = false;
       if (mountedRef.current) {
         setError(userFacingRequestError(cause, `${runName}未完成`));
+        setFailedRequest({ key, fromBar: !fromButton });
         if (cause instanceof ApiError && cause.status === 429 && cause.retryAfter) {
           setNow(Date.now());
           setRetryAt(Date.now() + cause.retryAfter * 1000);
@@ -652,19 +694,25 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   // A bar click after submission: the notice under the bars is brought into view (never focused, so keyboard focus
   // stays on the bars). The run button's path scrolls to the verdict anchor, which holds the bars and the notice.
   useEffect(() => {
-    if (!replacedBy || !revealReplacedNotice.current) return;
+    if (!showReplaced || !revealReplacedNotice.current) return;
     revealReplacedNotice.current = false;
     const frame = window.requestAnimationFrame(() => {
       const reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       replacedNoticeRef.current?.scrollIntoView?.({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [replacedBy, result]);
+  }, [showReplaced, result]);
 
   const bars = result && overviewItems.length > 0 ? familyBarRows(outcome, overviewItems, selectedKey, result) : null;
   const identity = !bars ? null : outcome === "production" ? forwardShareIdentity(overviewItems) : outcome === "network" ? degreeIdentity(overviewItems) : null;
   const defaultLabel = lessonFor(outcome, defaultKey, baselineOptions.find((option) => option.default)?.label).shortMetric;
   const latinGap = /^[A-Za-z]/.test(lesson.shortMetric) ? " " : "";
+  const replacedNotice = REPLACED_NOTICE[replacedBy ?? "saved"];
+  // The retry repeats the failed request; a failed bar click names its Y ("重试：保存国内增加值出口占比").
+  const failedKey = failedRequest?.key ?? defaultKey;
+  const failedBarLabel = failedRequest?.fromBar
+    ? lessonFor(outcome, failedKey, baselineOptions.find((option) => option.key === failedKey)?.label).shortMetric
+    : null;
 
   return (
     <div className="reg-workbench">
@@ -678,13 +726,16 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         {/* Once a result exists, recalculating is a secondary action; it replaces saved material. */}
         <button
           className={result && !error ? "run-btn secondary" : "run-btn"}
-          onClick={() => { if (!running && retryWait === 0) void run(result ? selectedKey : null, true); }}
+          onClick={() => {
+            if (running || retryWait > 0) return;
+            void run(failedRequest ? failedRequest.key : result ? selectedKey : null, true);
+          }}
           // aria-disabled while running keeps keyboard focus on the button instead of dropping it to the page.
           aria-disabled={running || retryWait > 0}
         >
           {running ? "正在计算…"
             : retryWait > 0 ? `重试（${retryWait} 秒后）`
-              : error ? `重试：计算${runName}`
+              : error ? (failedBarLabel ? `重试：保存${failedBarLabel}` : `重试：计算${runName}`)
                 : result ? `重新计算${runName}`
                   : groups ? `计算${runName}（用全部 ${groups.sample.rows.toLocaleString("zh-CN")} 条记录）` : `计算${runName}`}
         </button>
@@ -692,9 +743,9 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         <span className={running ? "muted reg-inline-status" : "sr-only"} role="status" aria-live="polite">{running ? "正在计算…" : savedAnnouncement}</span>
         {interrupted && !running && <p className="reg-boundary reg-interrupted-note" role="status">{INTERRUPTED_RUN_NOTE}</p>}
         {/* Before a replacement; afterwards the notice sits under the bars, where the click happened. */}
-        {!running && savedRun && state.materialLocked && (!replacedBy || !bars) && (
-          replacedBy
-            ? <p className="reg-rerun-warning reg-replaced-notice" role="status">{REPLACED_NOTICE[replacedBy]}</p>
+        {!running && savedRun && state.materialLocked && (!showReplaced || !bars) && (
+          showReplaced
+            ? <p className="reg-rerun-warning reg-replaced-notice" role="status">{replacedNotice}</p>
             : <p className="reg-rerun-warning" role="note"><b>报告已提交</b>重新计算或点击另一条，会替换报告材料里保存的结果；之后要到步骤 15 更新报告，并重新提交给老师。</p>
         )}
         {groups && (() => {
@@ -763,8 +814,8 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
                   )}
                   {identity && <p className="muted reg-identity-note">{identity}</p>}
                   {/* Next to the bar that was clicked, so the student sees it without scrolling up. */}
-                  {replacedBy && state.materialLocked && (
-                    <p ref={replacedNoticeRef} className="reg-rerun-warning reg-replaced-notice" role="status">{REPLACED_NOTICE[replacedBy]}</p>
+                  {showReplaced && (
+                    <p ref={replacedNoticeRef} className="reg-rerun-warning reg-replaced-notice" role="status">{replacedNotice}</p>
                   )}
                 </DivergingBarChart>
               </div>

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { RegressionCoefficientTable, RegressionResultCard, TEACHING_MODEL_VERSION } from "./regression";
+import { exampleXText, RegressionCoefficientTable, RegressionResultCard, TEACHING_MODEL_VERSION } from "./regression";
 import { BASELINE_LESSONS, REGRESSION_LESSONS } from "./regression-lessons";
 import type { RegressionResponse } from "./types";
 
@@ -105,6 +105,18 @@ describe("fixed teaching regression reading", () => {
     // An association with X, not a tariff effect; X = 0 implies no X-related difference (not "Y 不变").
     expect(sentence).toBe("按你在步骤 10 选的例子换算：CAN 加拿大·C29 的 X 为 9.32 个百分点，按估计与 X 相关的差异约为 -5.13 个百分点（Y 偏低）；MEX 墨西哥·C29 未被加税，X = 0，按估计没有与 X 相关的差异。");
     expect(sentence).not.toMatch(/下降|不变|X 为 0 时/);
+    // With w and τ, X reads at step 10's digits, so the conversion checks by hand: 0.22444 × 40.80 ≈ 9.16.
+    cleanup();
+    const network = response();
+    network.design.outcome = "network";
+    network.design.depvar_kind = "network";
+    Object.assign(network.result.coefs[0], { coef: 4080, ci_low: 3000, ci_high: 5000 });
+    const checked = render(<RegressionResultCard outcome="network" response={network} examples={[
+      { label: "SVK 斯洛伐克·C26", x: 0.00224440, w: 0.0089776, tau: 0.25 },
+    ]} />);
+    expect(checked.container.querySelector(".reg-example-effect")!.textContent)
+      .toContain("SVK 斯洛伐克·C26 的 X 为 0.22444 个百分点，按估计与 X 相关的差异约为 +9.16 个中心性原始单位");
+    expect(exampleXText({ x: 0.0932 })).toBe("9.32");
     // An uncertain direction is flagged; suppressed inference and missing examples show no conversion.
     Object.assign(data.result.coefs[0], { ci_low: -1, ci_high: 0.2 });
     const uncertain = render(<RegressionResultCard outcome="trade" response={data} examples={[{ label: "例子", x: 0.05 }]} />);

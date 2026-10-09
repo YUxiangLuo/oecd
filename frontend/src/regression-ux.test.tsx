@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api";
 import {
   degreeIdentity, exampleEffect, familyBarRows, forwardShareIdentity, groupedFixed, INTERRUPTED_RUN_NOTE, networkDigits, RegressionRequestError,
-  RegressionRunLab, scrollRegressionVerdict, TEACHING_MODEL_VERSION,
+  RegressionRunLab, scrollRegressionVerdict, stepMaterialChanged, TEACHING_MODEL_VERSION,
 } from "./regression";
 import type {
   RegressionOutcome, Step, StepStateApi, TeachingEstimate, TeachingGroupsResponse, TeachingOverviewResponse, TeachingPanelResponse,
@@ -79,6 +80,19 @@ const savedRun = (baseline: string, label: string, coef = 0.5, low = 0.4, high =
 });
 const FVA = () => savedRun("FVA_share", "外国增加值项占比", -0.5493, -0.5711, -0.5274);
 const DVA = () => savedRun("DVAex_share", "国内增加值出口占比", 0.5561, 0.535, 0.577);
+/** A submitted report built from FVA; the page saves into its own state, as the session does. */
+function LockedLab({ initial, outdated = true }: { initial: ReturnType<typeof FVA>; outdated?: boolean }) {
+  const [data, setData] = useState<Record<string, unknown>>({ run: initial });
+  return (
+    <RegressionRunLab
+      step={step}
+      meta={meta}
+      state={{ ...state, materialLocked: true, data: data as never, save: (patch) => setData((current) => ({ ...current, ...patch })) }}
+      reportRuns={[{ step: 11, outcome: "trade", design: FVA().design, result: FVA().result }] as never}
+      reportOutdated={outdated}
+    />
+  );
+}
 const benchmark = { backend: "x", policy_coefs: [], max_abs_coef_diff: 0, max_abs_se_diff: 0, coef_check_passed: true, se_check_mode: "x", notes: [] };
 const mockApis = () => {
   spyOn(api, "teachingGroups").mockResolvedValue(groups);
@@ -214,10 +228,24 @@ describe("simple regression workbench", () => {
     expect(document.querySelector(".reg-results-stale .reg-plain-verdict")).not.toBeNull();
   });
 
+  test("a failed bar click is retried with the clicked Y, named on the button", async () => {
+    mockApis();
+    const run = spyOn(api, "runRegression").mockRejectedValue(new TypeError("Failed to fetch"));
+    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
+    fireEvent.click(await screen.findByRole("button", { name: /^国内增加值出口占比：/ }));
+    const retry = await screen.findByRole("button", { name: "重试：保存国内增加值出口占比" });
+    run.mockResolvedValue({ ...DVA(), benchmark } as never);
+    fireEvent.click(retry);
+    await waitFor(() => expect(run).toHaveBeenCalledTimes(2));
+    expect(run.mock.calls[1][2]).toBe("DVAex_share");
+    await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高"));
+    expect(screen.getByRole("button", { name: "重新计算贸易流回归" })).toBeTruthy();
+  });
+
   test("after a submitted report, clicking another bar says the material has already been replaced", async () => {
     mockApis();
     spyOn(api, "runRegression").mockResolvedValue({ ...DVA(), benchmark } as never);
-    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, materialLocked: true, data: { run: FVA() } as never }} />);
+    render(<LockedLab initial={FVA()} />);
     expect((await screen.findByRole("button", { name: "重新计算贸易流回归" })).className).toBe("run-btn secondary");
     const scrolled: ScrollIntoViewOptions[] = [];
     const scrollIntoView = spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation((options) => { scrolled.push(options as ScrollIntoViewOptions); });
@@ -238,17 +266,46 @@ describe("simple regression workbench", () => {
     } finally { scrollIntoView.mockRestore(); }
   });
 
-  test("after a submitted report, going back to the Y saved when the page opened withdraws the update notice", async () => {
+  test("after a submitted report, going back to the Y the report used withdraws the update notice", async () => {
     mockApis();
     const run = spyOn(api, "runRegression").mockResolvedValue({ ...DVA(), benchmark } as never);
-    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, materialLocked: true, data: { run: FVA() } as never }} />);
+    render(<LockedLab initial={FVA()} />);
     fireEvent.click(await screen.findByRole("button", { name: "国内增加值出口占比：+0.56" }));
     await waitFor(() => expect(document.querySelector(".reg-replaced-notice")).not.toBeNull());
     // Clicking the bar of the Y the report was built from (here FVA) restores that material: no update is needed.
     run.mockResolvedValue({ ...FVA(), benchmark } as never);
     fireEvent.click(await screen.findByRole("button", { name: /^外国增加值项占比：/ }));
     await waitFor(() => expect(document.querySelector(".reg-replaced-notice")).toBeNull(), { timeout: 4000 });
+    expect(document.querySelector(".reg-rerun-warning")?.textContent).toContain("重新计算或点击另一条，会替换报告材料里保存的结果");
   }, 15000);
+
+  test("after a reload the notice follows the report: a stale step says so, the submitted Y does not", async () => {
+    mockApis();
+    const run = spyOn(api, "runRegression").mockResolvedValue({ ...FVA(), benchmark } as never);
+    // (a) The page opens on DVA while the report was built from FVA and the report is out of date.
+    render(<LockedLab initial={DVA()} />);
+    await waitFor(() => expect(document.querySelector(".reg-replaced-notice")?.textContent)
+      .toBe("本步保存的结果与已提交报告里的不同；请到步骤 15 更新报告并重新提交给老师。"));
+    // (b) Back to the Y the report used: withdrawn, although it is not the Y the page opened on.
+    fireEvent.click(await screen.findByRole("button", { name: /^外国增加值项占比：/ }));
+    await waitFor(() => expect(document.querySelector(".reg-replaced-notice")).toBeNull(), { timeout: 4000 });
+    expect(run).toHaveBeenCalledTimes(1);
+    cleanup();
+    // A current report (the sidebar's 15/15) never shows it, whatever this page saved.
+    render(<LockedLab initial={DVA()} outdated={false} />);
+    await screen.findByRole("button", { name: /^国内增加值出口占比：/ });
+    expect(document.querySelector(".reg-replaced-notice")).toBeNull();
+  }, 15000);
+
+  test("which step changed: only the step whose saved runs differ from the report's", () => {
+    const reported = [{ step: 11, outcome: "trade", design: FVA().design, result: FVA().result }] as never;
+    expect(stepMaterialChanged(11, { run: FVA() } as never, reported)).toBe(false);
+    expect(stepMaterialChanged(11, { run: FVA(), qualified_run: FVA() } as never, reported)).toBe(false);
+    expect(stepMaterialChanged(11, { run: DVA() } as never, reported)).toBe(true);
+    // A changed qualified run changes what the report prints for the step, too.
+    expect(stepMaterialChanged(11, { run: FVA(), qualified_run: DVA() } as never, reported)).toBe(true);
+    expect(stepMaterialChanged(12, { run: FVA() } as never, reported)).toBe(true);
+  });
 
   test("the 加税前后 chart says what its dashed gap is, and the gap reads with a space", async () => {
     mockApis();
