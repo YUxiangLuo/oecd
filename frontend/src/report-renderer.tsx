@@ -3,7 +3,7 @@ import type { ComponentPropsWithoutRef, CSSProperties, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ScrollableRegion } from "./a11y";
-import { niceDomain } from "./viz/nice-ticks";
+import { divergingAxis, niceDomain } from "./viz/nice-ticks";
 import { stripNegativeZero } from "./format";
 import { CAT } from "./viz/shared";
 import { NEGATIVE, POSITIVE, UNCERTAIN, ZERO_LINE } from "./viz/regression/palette";
@@ -561,7 +561,8 @@ function EndLabelLine({ line }: { line: string }) {
  * One bar per Y, as on the step 11–15 pages (viz/regression/diverging-bars): a vertical zero line, positive bars to
  * the right in red, negative to the left in blue, a bar whose 95% interval (the whisker) includes 0 in light grey
  * with "方向不确定". The saved Y is outlined and tagged "已保存". The scale is the largest one at which every bar,
- * whisker and end label fits inside the 720-unit canvas, so no label is clipped or overlaps another row.
+ * whisker and end label, and the page's axis range (divergingAxis), fits inside the 720-unit canvas, so no label is
+ * clipped or overlaps another row and the axis reads as on the page.
  */
 function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "diverging-bar" }> }) {
   const W = 720;
@@ -589,6 +590,10 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
   // The value is bold: about 6% wider than the plain estimate.
   const labelWidth = (row: (typeof rows)[number], layout: number) =>
     Math.max(...endLabelLines(row.item, layout).map((line) => textWidth(line, AXIS_FONT))) * 1.08;
+  // The axis range from the data alone, as on the page (divergingAxis): the same at every width and in print. Both
+  // of its ends stay inside the plot.
+  const ends = chart.items.flatMap((item) => [item.value, item.ci_low ?? item.value, item.ci_high ?? item.value]);
+  const range = divergingAxis(ends, 4);
   const need = (scale: number, layout: number) => rows.reduce((acc, row) => {
     const { value, ci_low: low = value, ci_high: high = value } = row.item;
     const left = scale * Math.max(0, -Math.min(value, low));
@@ -596,11 +601,11 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
     return value < 0
       ? { left: Math.max(acc.left, left + GAP + labelWidth(row, layout)), right: Math.max(acc.right, right) }
       : { left: Math.max(acc.left, left), right: Math.max(acc.right, right + GAP + labelWidth(row, layout)) };
-  }, { left: 0, right: 0 });
+  }, { left: scale * -range.lo, right: scale * range.hi });
   const extent = Math.max(...chart.items.flatMap((item) => [Math.abs(item.value), Math.abs(item.ci_low ?? 0), Math.abs(item.ci_high ?? 0)]));
   const fit = (layout: number) => {
     if (!(extent > 0)) return need(0, layout).left + need(0, layout).right <= plotW ? 1 : 0;
-    let lo = 0, hi = plotW / extent;
+    let lo = 0, hi = plotW / Math.max(extent, range.hi - range.lo);
     for (let iteration = 0; iteration < 40; iteration++) {
       const mid = (lo + hi) / 2;
       const room = need(mid, layout);
@@ -622,9 +627,8 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
   const tops = heights.map((_, index) => m.t + heights.slice(0, index).reduce((sum, height) => sum + height, 0));
   const H = m.t + heights.reduce((sum, height) => sum + height, 0) + m.b;
 
-  // Round ticks over the visible range only.
-  // As many ticks as on the page (one per 110 px there, its text 12/15 of the size here).
-  const visible = niceDomain((plotLeft - zero) / scale, (plotRight - zero) / scale, Math.max(2, Math.round(plotW / ((110 * AXIS_FONT) / 12))));
+  // The data's range; as many ticks as on the page (one per 110 px of it there, its text 12/15 of the size here).
+  const visible = divergingAxis(ends, Math.round((scale * (range.hi - range.lo)) / ((110 * AXIS_FONT) / 12)));
   const ticks = visible.ticks.filter((tick) => x(tick) >= plotLeft - 0.5 && x(tick) <= plotRight + 0.5);
   const stepSize = visible.ticks.length > 1 ? visible.ticks[1] - visible.ticks[0] : 1;
   // As many decimals as the step has ("0.025" → 3), so a tick never prints rounded (-0.125, not -0.13).

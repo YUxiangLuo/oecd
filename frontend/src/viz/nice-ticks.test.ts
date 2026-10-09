@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { integerDomain, niceDomain } from "./nice-ticks";
+import { divergingAxis, integerDomain, niceDomain } from "./nice-ticks";
 
 describe("niceDomain", () => {
   test("rounds a share axis to readable steps instead of max ÷ 4", () => {
@@ -45,5 +45,32 @@ describe("integerDomain", () => {
     const wide = integerDomain(0, 230);
     expect(wide.ticks.every((tick) => Number.isInteger(tick))).toBe(true);
     expect(wide.hi).toBeGreaterThanOrEqual(230);
+  });
+});
+
+describe("divergingAxis", () => {
+  // Step 15's summary (个标准差): bars and whiskers from -0.0645 to +0.0033.
+  const summary = [0, -0.0619, -0.0645, -0.0594, 0.001, -0.0014, 0.0033, -0.0034, -0.0054, -0.0014, -0.0489, -0.0498, -0.048];
+
+  test("the range comes from the data alone: the same however many ticks fit (page widths, report, print)", () => {
+    // The page at 1440 px used to read −0.1…0 and at 1024 px and in the report −0.15…0.
+    const ranges = [2, 3, 4, 5, 6, 8, 12].map((intervals) => divergingAxis(summary, intervals));
+    for (const axis of ranges) {
+      expect([axis.lo, axis.hi]).toEqual([-0.075, 0.025]);
+      expect([axis.ticks[0], axis.ticks.at(-1)]).toEqual([-0.075, 0.025]);
+      expect(axis.ticks).toContain(0);
+    }
+    // Only the density changes.
+    expect(ranges[0].ticks).toEqual([-0.075, -0.05, -0.025, 0, 0.025]);
+    expect(divergingAxis(summary, 20).ticks.length).toBeGreaterThan(5);
+  });
+
+  test("ticks never print rounded and the range stays tight", () => {
+    // Step 11: ±0.58 points reads -0.6…0.6, not -1…1.
+    expect(divergingAxis([-0.5711, 0.577], 6).ticks).toEqual([-0.6, -0.4, -0.2, 0, 0.2, 0.4, 0.6]);
+    // Step 13 in standard deviations: -0.04…0 with a coarser step where the room is small.
+    expect(divergingAxis([-0.0329, -0.0031], 2).ticks).toEqual([-0.04, -0.02, 0]);
+    expect(divergingAxis([-0.0329, -0.0031], 4).ticks).toEqual([-0.04, -0.03, -0.02, -0.01, 0]);
+    expect(divergingAxis([0, 0], 4).ticks).toContain(0);
   });
 });

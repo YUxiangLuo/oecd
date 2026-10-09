@@ -88,6 +88,15 @@ describe("diverging bar layout", () => {
     },
   );
 
+  test("step 15's summary has the same axis range at every window width (only the tick density varies)", () => {
+    // 1440 px read −0.1…0 while 1024 px (and the report) read −0.15…0.
+    const ends = [...SUMMARY_WIDTHS.map(([, width]) => width), 420, 980].map((width) => {
+      const ticks = layoutDivergingBars(SUMMARY, width).ticks.map((tick) => tick.value);
+      return [ticks[0], ticks.at(-1)];
+    });
+    for (const range of ends) expect(range).toEqual(ends[0]);
+  });
+
   test.each(SUMMARY_WIDTHS)("step 15's summary at a %ipx window (drawn %ipx wide): finite ticks, bars that use the plot, labels inside", (_window, width) => {
     const layout = layoutDivergingBars(SUMMARY, width);
     // Drawn at the container's width: text keeps its size.

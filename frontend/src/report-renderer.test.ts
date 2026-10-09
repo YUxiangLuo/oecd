@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { cleanup, render as renderDom } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { closeBoldBeforeCjkPunctuation, parseReportChart, REPORT_CHART_MAX_WIDTH, ReportMarkdown } from "./report-renderer";
-import { layoutDivergingBars } from "./viz/regression/diverging-bars";
+import { layoutDivergingBars, MIN_WIDTH } from "./viz/regression/diverging-bars";
 import { NEGATIVE, POSITIVE, UNCERTAIN, ZERO_LINE } from "./viz/regression/palette";
 
 describe("report tables", () => {
@@ -517,9 +517,15 @@ describe("regression bar charts (steps 11–14 and the summary)", () => {
     expect(page.width).toBe(576);
     expect(reportLines).toBe(page.rows.reduce((most, row) => Math.max(most, row.lines.length), 1));
     const pageTicks = page.ticks.map((tick) => tick.value);
-    const step = Math.max(pageTicks[1] - pageTicks[0], reportTicks[1] - reportTicks[0]);
-    expect(Math.abs(Math.min(...reportTicks) - Math.min(...pageTicks))).toBeLessThanOrEqual(step + 1e-9);
-    expect(Math.abs(Math.max(...reportTicks) - Math.max(...pageTicks))).toBeLessThanOrEqual(step + 1e-9);
+    // The same axis range (only the tick density may differ), at every page width: the range comes from the data.
+    expect([Math.min(...reportTicks), Math.max(...reportTicks)]).toEqual([Math.min(...pageTicks), Math.max(...pageTicks)]);
+    for (const width of [MIN_WIDTH, 680, 760, 980]) {
+      const ticks = layoutDivergingBars(items.map((item, index) => ({
+        key: String(index), label: item.label, sublabel: item.sub, value: item.value, low: item.ci_low, high: item.ci_high,
+        uncertain: item.ci_low <= 0 && item.ci_high >= 0, valueLabel: item.text,
+      })), width).ticks.map((tick) => tick.value);
+      expect([ticks[0], ticks.at(-1)]).toEqual([Math.min(...pageTicks), Math.max(...pageTicks)]);
+    }
     // The end label stands clear of its whisker cap.
     for (const row of svg.querySelectorAll("[data-diverging-row]")) {
       const label = row.querySelector("[data-bar-label]")!;
