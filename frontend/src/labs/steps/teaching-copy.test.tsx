@@ -23,6 +23,8 @@ describe("student-facing chart copy", () => {
     const html = renderToStaticMarkup(<NetworkIndicatorStep meta={meta} step={step} state={state} />);
     expect(html).toContain("当前数据网络");
     expect(html).toContain("该国全部行业");
+    // The demo covers all three measures it lets the student switch between (round 21).
+    expect(html).toContain("可选：用小型网络演示度、介数与接近中心性的计算");
     expect(html).toContain("介数把很小和很大的流量一视同仁");
     expect(html).not.toMatch(/真实全球图|真实图|45 个行业|原生排序选择器/);
   });

@@ -415,6 +415,14 @@ describe("Step 5 teaching network accessibility", () => {
     expect(html).not.toMatch(/方向键|按 Tab|Enter|空格|点击/);
   });
 
+  test("says what node size means in each mode (round 21)", () => {
+    const view = render(<NetworkCentralityDemo />);
+    expect(view.container.textContent).toContain("圆的大小表示各节点的度，数值越大，圆越大。");
+    fireEvent.click(view.getByRole("button", { name: "查看接近中心性的算法" }));
+    expect(view.container.textContent).toContain("圆的大小表示各节点的接近中心性，数值越大，圆越大。");
+    cleanup();
+  });
+
   test("documents wrapping arrow navigation and Home/End bounds", () => {
     const nodes = ["USA", "MEX", "DEU"];
     expect(nextNetworkDemoNode(nodes, "USA", "ArrowLeft")).toBe("DEU");

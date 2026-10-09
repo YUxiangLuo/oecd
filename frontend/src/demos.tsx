@@ -1263,6 +1263,8 @@ export function NetworkCentralityDemo() {
         </div>
         <span className="muted" id={instructionId}>
           选择节点后可查看它的指标值与相关边。
+          {/* Node radius follows the current measure in every mode (round 21: 接近中心性 resized nodes unexplained). */}
+          圆的大小表示各节点的{NETWORK_DEMO_MODE_LABELS[mode]}，数值越大，圆越大。
         </span>
       </div>
 
