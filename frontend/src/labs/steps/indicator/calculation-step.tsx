@@ -32,7 +32,8 @@ export function CalculationStep({ topic, meta, state }: CalculationStepProps & {
       {/* The country select is the first control of the panel below. */}
       {controls.carriedNote && <p className="muted indicator-carried-note" role="note">{controls.carriedNote}</p>}
       <DecompositionDemo step={cfg.demo} meta={meta} primaryYear={year}
-        primaryCountry={auto.country} onPrimaryChange={controls.setPrimary} />
+        primaryCountry={auto.country} onPrimaryChange={controls.setPrimary}
+        initialView={state.data?.browse_selection} onViewChange={(view) => state.saveView?.({ browse_selection: view })} />
       <AutoMaterialStatus state={state} schema={schema.data} {...auto} where="上方所选国家" />
     </section>
   </div>;

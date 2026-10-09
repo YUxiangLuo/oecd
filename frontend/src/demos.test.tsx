@@ -606,6 +606,54 @@ describe("one country only", () => {
   });
 });
 
+describe("steps 2–4 decomposition demo: all-zero rows and the remembered level", () => {
+  const tradeRow = (country: string, industry: string, scale: number) => ({
+    country, industry, year: 2020, gross_exports: 12 * scale, DVAex: 5 * scale, DVArt: 1 * scale, DDC: 1 * scale, FVA: 3 * scale, FDC: 1 * scale, taxsub: 1 * scale,
+  });
+  const mockRows = (rows: ReturnType<typeof tradeRow>[]) => [
+    spyOn(api, "countryIndicatorsForCountry").mockResolvedValue([tradeRow("CHN", "", 1)]),
+    spyOn(api, "industryIndicatorsAll").mockResolvedValue({ total: rows.length, page: 1, page_size: 200, rows }),
+  ];
+
+  test("step 2: an industry with every part 0 shows no empty grey bar", async () => {
+    const mocks = mockRows([tradeRow("CHN", "B05", 0)]);
+    try {
+      const view = render(
+        <DecompositionDemo step={4} meta={{ years: [2020], countries: ["CHN"], sectors: ["B05"], dataset: null }}
+          primaryYear={2020} primaryCountry="CHN" initialView={{ level: "sector", industry: "B05" }} />,
+      );
+      await waitFor(() => expect(view.container.textContent).toContain("所有分项都是 0"));
+      expect(view.container.querySelector(".decomp-bar")).toBeNull();
+    } finally {
+      cleanup();
+      mocks.forEach((mock) => mock.mockRestore());
+    }
+  });
+
+  test("单个行业 and the chosen industry are saved and reopen where the student left them", async () => {
+    const mocks = mockRows([tradeRow("CHN", "C26", 1), tradeRow("CHN", "C29", 2)]);
+    const meta = { years: [2020], countries: ["CHN"], sectors: ["C26", "C29"], dataset: null };
+    const views: unknown[] = [];
+    try {
+      const view = render(<DecompositionDemo step={4} meta={meta} primaryYear={2020} primaryCountry="CHN" onViewChange={(saved) => views.push(saved)} />);
+      await waitFor(() => expect(view.container.querySelector(".decomp-bar")).toBeTruthy());
+      fireEvent.click(view.getByRole("button", { name: "单个行业" }));
+      await waitFor(() => expect(view.getAllByLabelText("行业")).toHaveLength(1));
+      fireEvent.change(view.getByLabelText("行业"), { target: { value: "C29" } });
+      expect(views).toEqual([{ level: "sector", industry: "C26" }, { level: "sector", industry: "C29" }]);
+      cleanup();
+      // Coming back: the saved view may arrive after the first render.
+      const back = render(<DecompositionDemo step={4} meta={meta} primaryYear={2020} primaryCountry="CHN" />);
+      back.rerender(<DecompositionDemo step={4} meta={meta} primaryYear={2020} primaryCountry="CHN" initialView={{ level: "sector", industry: "C29" }} />);
+      await waitFor(() => expect((back.getByLabelText("行业") as HTMLSelectElement).value).toBe("C29"));
+      expect(back.getByRole("button", { name: "单个行业" }).getAttribute("aria-pressed")).toBe("true");
+    } finally {
+      cleanup();
+      mocks.forEach((mock) => mock.mockRestore());
+    }
+  });
+});
+
 test("the negative-part note only appears beside shares it explains, in the step's own words", () => {
   const parts = [
     { key: "a", label: "纯国内", color: "#123456", desc: "" },

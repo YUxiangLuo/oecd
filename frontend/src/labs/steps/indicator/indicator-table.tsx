@@ -13,6 +13,7 @@ import type { IndicatorSchema, IndustryPage, Meta, QuizCompletionState, StepStat
 import { userFacingRequestError } from "../../../user-facing-error";
 import { countryLabel, sectorLabel } from "../../../viz";
 import { PATH_UNDEFINED_LABEL, PATH_UNDEFINED_NOTE, pathMetricUndefined } from "../../../viz/views/network-heat";
+import type { DecompositionView } from "../../../demos";
 import { AsyncStateMessage, Pager, fieldLabel, fmtField, useAsync } from "../../shared";
 
 const BASE_DESC: Record<string, string> = {
@@ -144,6 +145,9 @@ export interface IndicatorStepState extends QuizCompletionState, Record<string, 
   observations?: IndicatorObservation[];
   /** The student recorded this material explicitly after submitting the report (automatic saves clear it). */
   material_chosen?: boolean;
+  /** Steps 2–4: 国家整体／单个行业 and the industry of the decomposition demo, saved with `saveView` (browsing state,
+   *  not report material; the server leaves `browse_selection` out of the report fingerprint). */
+  browse_selection?: DecompositionView;
 }
 
 export interface IndicatorObservation {
