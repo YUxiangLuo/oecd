@@ -30,8 +30,8 @@ export function NetworkIndicatorStep({ meta, step: _step, state }: { meta: Meta;
     <div>
       <IndicatorMethodIntro topic="network">
         <details className="method-demo">
-          <summary>可选：在一个小网络上看度与介数怎么数</summary>
-          <p className="muted">切换度 / 介数 / 接近，点选节点看每个值是怎么一步步数出来的。这里每条连接都算一样长，只帮你建立直觉。</p>
+          <summary>可选：用小型网络演示度与介数的计算</summary>
+          <p className="muted">切换度、介数、接近中心性，点选节点可查看各指标的逐步计算过程。此处每条连接按等长处理，仅用于直观理解。</p>
           <NetworkCentralityDemo />
           <section className="network-demo-bridge" aria-labelledby="network-demo-bridge-title">
             <h3 id="network-demo-bridge-title">从小网络示意到当前数据网络</h3>

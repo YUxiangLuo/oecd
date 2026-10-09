@@ -652,7 +652,7 @@ export function ReleaseIntegrityStatus({ meta }: { meta: Meta | null }) {
   return (
     <div className="integrity-status" role="status">
       <b>数据已通过系统完整性检查</b>
-      <span>文件和数据来源都已核对，你不用再检查；数据的局限会写进报告。</span>
+      <span>文件和数据来源均已核对，无需再次检查；数据的局限将写入报告。</span>
     </div>
   );
 }
@@ -932,7 +932,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
           <summary>读表说明</summary>
           <ul>
             <li><b>怎么读：</b>{HOW_TO_READ[table]}</li>
-            <li><b>记录规则：</b>系统先自动记录本页数值最大的单元格。你点击别的单元格，就改为记录它。换表或换筛选不会丢掉已记录的单元格。</li>
+            <li><b>记录规则：</b>系统先自动记录本页数值最大的单元格。你点击别的单元格，就改为记录它。切换数据表或筛选条件不影响已记录的单元格。</li>
             <li><b>账户与符号：</b>{STEP1_ACCOUNT_LEGEND}</li>
             {table !== "accounts" && <li><b>恒等式：</b>{STEP1_OUT_IDENTITY_GUIDE}</li>}
             <li><b>键盘：</b>Tab 进入表格后，方向键逐格移动，Home / End 到行首 / 行尾，Ctrl+Home / Ctrl+End 到表首 / 表尾，PageUp / PageDown 上下跳 10 行；Enter 或空格记录当前单元格。</li>

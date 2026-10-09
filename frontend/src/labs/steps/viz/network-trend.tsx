@@ -199,7 +199,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     const zero = hidden.filter((row) => row["weighted degree"] === 0).map((row) => String(row.industry));
     const missing = hidden.filter((row) => row["weighted degree"] !== 0).map((row) => String(row.industry));
     const clauses = [
-      ...(zero.length ? [`${zero.join("、")} 加权总度为 0（没有买卖，对数刻度上画不出）`] : []),
+      ...(zero.length ? [`${zero.join("、")} 加权总度为 0（没有买卖，无法在对数刻度上显示）`] : []),
       ...(missing.length ? [`${missing.join("、")} 缺少数据`] : []),
     ];
     return `另有 ${hidden.length} 个行业没有画出：${clauses.join("；")}。`;
@@ -294,7 +294,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       active={view}
       onPick={setView}
     />
-    {view === "topology" && <p className="muted lens-hint">流量与路径：每个点是一个行业。横轴是买卖总金额（加权总度，对数刻度），纵轴是有多少最短路线经过它（介数）。两种排法一致吗？选了多个国家时每国一张。只供探索，不记录材料。</p>}
+    {view === "topology" && <p className="muted lens-hint">流量与路径：每个点是一个行业。横轴是买卖总金额（加权总度，对数刻度），纵轴是有多少最短路线经过它（介数）。两种排序是否一致？选了多个国家时每国一张。只供探索，不记录材料。</p>}
     {view === "flows" && <p className="muted lens-hint">买入与卖出：每行一个行业，左边是加权入度（买入），右边是加权出度（卖出），按加权总度排序；左边条长的行业主要是买方，右边条长的主要是卖方。只供探索，不记录材料。</p>}
     {(view === "topology" || view === "flows") && <div className="controls">
       <LabeledControl label="年份">{(id) => <select id={id} value={year} onChange={(event) => setYear(Number(event.target.value))}>{years.map((value) => <option key={value} value={value}>{value}</option>)}</select>}</LabeledControl>

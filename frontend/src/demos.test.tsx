@@ -291,7 +291,7 @@ describe("the unavailable step 4 split names undefined parts as such (round 12)"
 
   test("MLT H51: a negative SVA leaves PLv defined and says so", () => {
     expect(unavailableTotalNote(model("negative-weight-denominator", 2.1310588), cfg)).toBe(
-      "前向总生产长度 PLv = 2.131 仍有定义：总长度由投入产出关系直接算出，不需要份额；无法计算的只是按 SVA 份额加权的各段贡献，所以这里只是拆不开。",
+      "前向总生产长度 PLv = 2.131 仍有定义：总长度由投入产出关系直接算出，不需要份额；无法计算的只是按 SVA 份额加权的各段贡献，因此只是无法按段分解。",
     );
   });
 });

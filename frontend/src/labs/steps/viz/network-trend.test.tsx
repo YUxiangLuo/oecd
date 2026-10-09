@@ -346,7 +346,7 @@ test("流量与路径 says which industries it leaves out and why", async () => 
   mockReference();
   render(<NetworkTrend meta={{ ...meta, sectors: ["C26", "C27", "T"] }} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={() => {}} />);
   fireEvent.click(screen.getByRole("button", { name: "流量与路径" }));
-  await waitFor(() => expect(screen.getAllByText("另有 2 个行业没有画出：C27、T 加权总度为 0（没有买卖，对数刻度上画不出）。")).toHaveLength(2));
+  await waitFor(() => expect(screen.getAllByText("另有 2 个行业没有画出：C27、T 加权总度为 0（没有买卖，无法在对数刻度上显示）。")).toHaveLength(2));
 });
 
 test("a recorded ranking does not change the trend's industry; a carried pair says where it came from", () => {

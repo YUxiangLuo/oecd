@@ -179,7 +179,7 @@ export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLa
     return {
       eyebrow: countryLabel(country),
       big: "不在图上",
-      small: reason ? `${reason}（不是缺少数据）` : zeroOnLog ? `${xLabel}为 0 或负，对数横轴上画不出` : "该国缺少其中一项指标的读数",
+      small: reason ? `${reason}（不是缺少数据）` : zeroOnLog ? `${xLabel}为 0 或负，无法在对数横轴上显示` : "该国缺少其中一项指标的读数",
     };
   };
   // With only a few economies on the chart a median says nothing (one of two points is always "above"), nor

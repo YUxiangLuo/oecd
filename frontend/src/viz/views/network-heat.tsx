@@ -15,7 +15,7 @@ export const HEAT_EVIDENCE_METRIC = "betweenesscentrality" as const;
  */
 export const PATH_METRICS: ReadonlySet<string> = new Set(["Eccentricity", "closnesscentrality", "harmonicclosnesscentrality"]);
 export const PATH_UNDEFINED_LABEL = "无连接，无法定义";
-export const PATH_UNDEFINED_NOTE = "没有向其他行业供货的连接，到其他行业的距离无从谈起";
+export const PATH_UNDEFINED_NOTE = "没有向其他行业供货的连接，到其他行业的距离没有定义";
 export function pathMetricUndefined(metric: string, value: unknown): boolean {
   return PATH_METRICS.has(metric) && value === 0;
 }

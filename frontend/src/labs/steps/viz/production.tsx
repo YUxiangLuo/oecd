@@ -11,7 +11,7 @@ export const PRODUCTION_TOPIC: IndicatorTopic = {
   defaultView: "composition",
   question: "生产活动参与跨境分工的程度怎样变化？在全部经济体中处于什么位置？",
   themeLabel: "四类生产活动",
-  themeHint: "四类份额加起来是 100%（有负值时除外）：先看复杂 GVC 占多少、与对比国家差在哪一类，再切到“历年变化”和“国家对比”看变化与全球位置。",
+  themeHint: "四类份额加起来是 100%（有负值时除外）：先看复杂 GVC 的占比，以及与对比国家差异最大的类别，再切换到“历年变化”和“国家对比”看变化与全球位置。",
   metrics: [
     {
       key: "3b_VA_GVC_C_share",
@@ -85,7 +85,7 @@ export const PRODUCTION_TOPIC: IndicatorTopic = {
       ],
       focus: "3b_FGY_GVC_C",
       focusLabel: "后向复杂 GVC 生产份额",
-      note: "从本国生产的最终品往回看：其中的增加值属于哪一类。分母是最终品总值，和前向不同，所以前向、后向的份额不能直接比。",
+      note: "从本国生产的最终品向上游回溯，判断其中的增加值属于哪一类。分母是最终品总值，与前向不同，因此前向、后向份额不能直接比较。",
     },
   },
   axes: {

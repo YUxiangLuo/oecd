@@ -65,7 +65,7 @@ const DECOMP: Record<number, DecompCfg> = {
     unit: "amount",
     parts: [
       { key: "DVAex", label: "DVAex 国内增加值出口", color: "#4b47e0", desc: "出口中由本国创造、在国外被最终使用的增加值。" },
-      { key: "DVArt", label: "DVArt 返回国内的增加值", color: "#7a6bff", desc: "先随出口离境、绕一圈又回到本国被最终使用的国内增加值。" },
+      { key: "DVArt", label: "DVArt 返回国内的增加值", color: "#7a6bff", desc: "随出口离境，经他国加工后返回本国并被最终使用的国内增加值。" },
       { key: "DDC", label: "DDC 国内重复计算", color: "#b6b1f2", desc: "本国增加值在出口统计中被重复计入的部分（中间品多次跨境造成）。" },
       { key: "FVA", label: "FVA 外国增加值", color: "#159a86", desc: "出口中由其他国家创造的增加值（例如进口零部件的价值），不包括外国重复计算 FDC。" },
       { key: "FDC", label: "FDC 外国重复计算", color: "#e0982a", desc: "外国增加值在出口统计中被重复计入的部分。" },
@@ -524,7 +524,7 @@ export function unavailableDashNote(model: DecompositionModel): string {
  * the headline length comes straight from the input–output relations; only the weighted parts need SVA > 0. */
 export function unavailableTotalNote(model: DecompositionModel, cfg: Pick<DecompCfg, "totalLabel" | "unit" | "weightTotal">): string | null {
   if (model.reason !== "negative-weight-denominator" || model.total == null || !cfg.weightTotal) return null;
-  return `${cfg.totalLabel} = ${fmt(model.total, cfg.unit)} 仍有定义：总长度由投入产出关系直接算出，不需要份额；无法计算的只是按 ${cfg.weightTotal} 份额加权的各段贡献，所以这里只是拆不开。`;
+  return `${cfg.totalLabel} = ${fmt(model.total, cfg.unit)} 仍有定义：总长度由投入产出关系直接算出，不需要份额；无法计算的只是按 ${cfg.weightTotal} 份额加权的各段贡献，因此只是无法按段分解。`;
 }
 
 /** Only missing data can change later ("暂时无法拆分"); a weight of 0 or below (LUX B09: FGY = 0, no final goods) is
@@ -555,7 +555,7 @@ function MiniBackwardBar({ row }: { row: Row }) {
   return (
     <div style={{ marginTop: 14, padding: 12, borderRadius: 10, background: "#f8f9fc" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 11.5, marginBottom: 7 }}>
-        <b>后向总生产长度 PLy（从最终产品往回数）</b>
+        <b>后向总生产长度 PLy（从最终产品端回溯）</b>
         <span>{fmt(model.total, "number")}</span>
       </div>
       <div style={{ position: "relative", height: 12, background: "#eceef4", borderRadius: 5, overflow: "hidden" }}>
@@ -1211,7 +1211,7 @@ export function NetworkCentralityDemo() {
 
   return (
     <div className="demo-card">
-      <div className="demo-title">🕸️ 动手演示 · 中心性是怎么数出来的</div>
+      <div className="demo-title">演示 · 中心性的计算方法</div>
       <div className="demo-controls">
         <div className="pill-group" role="group" aria-label="选择中心性指标">
           {(["degree", "betweenness", "closeness"] as NetworkDemoMode[]).map((metric) => (
@@ -1361,9 +1361,9 @@ export function NetworkCentralityDemo() {
               <div className="ndp-calc">
                 {reachablePaths.length > 0
                   ? <>= {reachablePaths.length} / {distanceSum} = <b>{C.closeness[sel].toFixed(3)}</b></>
-                  : <>沿箭头到不了任何节点，记为 <b>0</b></>}
+                  : <>沿箭头无法到达任何节点，记为 <b>0</b></>}
               </div>
-              <p className="ndp-note">高亮的是从 {sel} 沿箭头出发的最短路线；到不了的节点不计入分子和分母。</p>
+              <p className="ndp-note">高亮的是从 {sel} 沿箭头出发的最短路线；无法到达的节点不计入分子和分母。</p>
               <ScrollableRegion
                 label={`从节点 ${sel} 出发的最短路径明细，可滚动`}
                 style={{ maxHeight: 150, overflow: "auto", marginBottom: 10 }}

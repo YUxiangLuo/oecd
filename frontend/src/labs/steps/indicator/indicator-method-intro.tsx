@@ -39,7 +39,7 @@ const METHOD: Record<MethodTopic, MethodContent> = {
       },
       {
         title: "累计全部生产环节",
-        body: "里昂惕夫逆矩阵 B = (I − A)⁻¹ 像一个“放大器”，把直接投入和层层间接投入全部加起来，可以追溯出口中每一元价值来自哪个国家×行业。",
+        body: "里昂惕夫逆矩阵 B = (I − A)⁻¹（完全需求系数矩阵）把直接投入和各轮间接投入全部累加，可以追溯出口中每一元价值来自哪个国家×行业。",
         source: "trade-paper-cn",
         sourceLabel: "王直等（2015）",
       },
@@ -60,13 +60,13 @@ const METHOD: Record<MethodTopic, MethodContent> = {
     steps: [
       {
         title: "求出增加值的完整去向",
-        body: "用上一步的 v 和 B，可以算出每个国家×行业创造的增加值最后被哪国的消费或投资用掉（公式 v̂BY，v̂ 是把 v 放在对角线上的矩阵）。",
+        body: "用上一步的 v 和 B，可以算出每个国家×行业创造的增加值最终被哪国的消费或投资所使用（公式 v̂BY，v̂ 是把 v 放在对角线上的矩阵）。",
         source: "production-guide",
         sourceLabel: "课程说明",
       },
       {
         title: "区分国内与跨境环节",
-        body: "把投入分成“本国内部的投入”和“跨境投入”两部分分别计算，就能看出增加值有没有出国，是随中间品还是随最终品出国。",
+        body: "把投入分成“本国内部的投入”和“跨境投入”两部分分别计算，即可区分增加值是否跨境，以及随中间品还是随最终品跨境。",
         source: "source-production-note",
         sourceLabel: "原始方法说明",
       },
@@ -87,7 +87,7 @@ const METHOD: Record<MethodTopic, MethodContent> = {
     steps: [
       {
         title: "前向与后向两个方向",
-        body: "前向：从增加值的来源往下游数；后向：从最终产品往上游数。公式：前向 PLv = (Bx)ᵢ / xᵢ，后向 PLy = (v′BB)ⱼ / (v′B)ⱼ，其中 x 是总产出（步骤 1 的 OUT）。",
+        body: "前向：从增加值来源端向下游追踪；后向：从最终产品端向上游回溯。公式：前向 PLv = (Bx)ᵢ / xᵢ，后向 PLy = (v′BB)ⱼ / (v′B)ⱼ，其中 x 是总产出（步骤 1 的 OUT）。",
         source: "length-guide",
         sourceLabel: "课程说明",
       },
@@ -126,7 +126,7 @@ const METHOD: Record<MethodTopic, MethodContent> = {
       },
       {
         title: "路径位置：介数",
-        body: "介数（只看连接、不看金额）：把每条连接都当成一样长，数一数其他节点之间的最短路线有多少要经过这个节点（用 Brandes 算法精确计算）。",
+        body: "介数（只看连接、不看金额）：将每条连接视为等长，统计其他节点之间的最短路线中经过该节点的条数（用 Brandes 算法精确计算）。",
         source: "brandes-paper",
         sourceLabel: "Brandes（2001）",
       },

@@ -780,10 +780,10 @@ export function IndicatorExplorer({
         onPick={(next) => select({ view: next === "composition" && composition ? view : next })}
       />
       {themeActive && <p className="muted lens-hint">{side === "alternate"
-        ? "后向：同样四类生产活动，从最终品往回看；先看复杂 GVC 占多少，再看与对比国家差在哪一类。"
+        ? "后向：同样分为四类生产活动，从最终品端回溯；先看复杂 GVC 的占比，再比较与对比国家差异最大的类别。"
         : topic.themeHint}</p>}
       {view === "positioning" && <p className="muted lens-hint">定位图：每个点是一个经济体{industry ? `（${sectorLabel(industry)}）` : ""}，横轴、纵轴各是一项指标，所选国家高亮；{industry ? "轨迹只在“国家整体”下提供" : `可勾选显示 ${years[0]}→${years.at(-1)} 的轨迹`}。只供探索，不记录材料。</p>}
-      {view === "segments" && <p className="muted lens-hint">段长度对照：每行一段（纯国内、传统贸易、GVC），前向点和后向点用线相连，一眼看出哪一段、哪个方向更长；选了多个国家时每国一张。三段长度不能相加。</p>}
+      {view === "segments" && <p className="muted lens-hint">段长度对照：每行一段（纯国内、传统贸易、GVC），前向点和后向点用线相连，便于比较哪一段、哪个方向更长；选了多个国家时每国一张。三段长度不能相加。</p>}
       {view === "structure" && <p className="muted lens-hint">{topic.key === "production" ? "行业结构：所选国家每个行业的四类生产活动份额，按复杂 GVC 生产份额排序；选了多个国家时每国一张。只供探索，不记录材料。" : "行业结构：所选国家每个行业的前向与后向 GVC 段长度，等长线（前向 = 后向）上方更偏上游；选了多个国家时每国一张。只供探索，不记录材料。"}</p>}
       <div className="controls">
         {view !== "industry" && view !== "structure" && (

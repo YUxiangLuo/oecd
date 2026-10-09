@@ -42,7 +42,7 @@ test("Step 1 shows a compact automatic integrity status without student action",
   };
   const html = renderToStaticMarkup(createElement(ReleaseIntegrityStatus, { meta: releaseMeta }));
   expect(html).toContain("数据已通过系统完整性检查");
-  expect(html).toContain("你不用再检查");
+  expect(html).toContain("无需再次检查");
   expect(html).not.toContain("button");
   expect(renderToStaticMarkup(createElement(ReleaseIntegrityStatus, { meta: null }))).toBe("");
 });
