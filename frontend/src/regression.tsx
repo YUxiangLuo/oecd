@@ -287,7 +287,7 @@ export function RegressionCoefficientTable({ response }: { response: RegressionR
           <th>X 每高 1 个百分点，Y 平均相差（{display.unit}）</th>
           <th>系数（X 按份额计）</th>
           <th>95% 区间（按系数计）</th>
-          <th>标准误（按国家计算）</th>
+          <th>标准误（按国家聚类）</th>
           <th>t 值</th>
           <th>p 值</th>
         </tr></thead>

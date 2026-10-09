@@ -1486,7 +1486,7 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert "## 技术附录：保存的回归结果" in report.markdown
     # The raw coefficient states its scale, next to the per-percentage-point reading used in the body.
     assert (
-        "| 变量 | 系数（X 按份额计） | X 每高 1 个百分点，Y 平均相差 | 标准误 | 95% 区间（按系数计） | p 值 |"
+        "| 变量 | 系数（X 按份额计） | X 每高 1 个百分点，Y 平均相差 | 标准误（按国家聚类） | 95% 区间（按系数计） | p 值 |"
         in report.markdown
     )
     # Four decimals for every number but p, as the page's 详细数字 table prints them.
