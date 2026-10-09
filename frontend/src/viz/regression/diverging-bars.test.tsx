@@ -137,11 +137,32 @@ describe("diverging bar layout", () => {
     const layout = layoutDivergingBars(SUMMARY, 300);
     expect(layout.width).toBeGreaterThan(300);
     expect(layout.ticks.every((tick) => Number.isFinite(tick.value) && Math.abs(tick.value) < 1)).toBe(true);
-    // The widest bar with its whisker gets a third of the plot.
+    // The widest bar with its whisker gets at least a sixth of the plot.
     const span = layout.plotRight - layout.plotLeft;
     const reach = (placed: (typeof layout.rows)[number]) =>
       Math.max(placed.x1, placed.whisker?.[1] ?? placed.x1) - Math.min(placed.x0, placed.whisker?.[0] ?? placed.x0);
-    expect(Math.max(...layout.rows.map(reach))).toBeGreaterThan(span / 3);
+    expect(Math.max(...layout.rows.map(reach))).toBeGreaterThan(span / 6);
+  });
+
+  // The course release's step 15 summary (gvcsim summary_chart), with the weak Y saved in step 12: long end labels on
+  // both sides of the zero line, the case that was drawn 940 wide in a 680 card.
+  const RELEASE_SUMMARY: DivergingBarRow[] = [
+    ["外国增加值项占比", "步骤 11 · 贸易流", -0.0624, -0.06453, -0.06028, "-0.55 个百分点（-0.062 个标准差）"],
+    ["后向复杂 GVC 生产份额", "步骤 12 · 生产", 0.0009651, -0.001361, 0.003292, "+0.006 个百分点（+0.001 个标准差）"],
+    ["前向 GVC 段长度", "步骤 13 · 长度", -0.03156, -0.03292, -0.0302, "-0.0184 个长度单位（-0.032 个标准差）"],
+    ["加权总度", "步骤 14 · 网络", -0.0489, -0.04983, -0.04796, "-40.80 个中心性原始单位（-0.049 个标准差）"],
+  ].map(([label, sublabel, value, low, high, valueLabel], index) => ({
+    key: String(index), label: String(label), sublabel: String(sublabel), value: Number(value), low: Number(low), high: Number(high),
+    uncertain: Number(low) <= 0 && Number(high) >= 0, valueLabel: String(valueLabel),
+  }));
+
+  test.each(SUMMARY_WIDTHS)("step 15's release summary at a %ipx window is drawn at the card's width (%ipx), so its text keeps its size", (_window, width) => {
+    for (const rows of [SUMMARY, RELEASE_SUMMARY]) {
+      const layout = layoutDivergingBars(rows, width);
+      expect(layout.width).toBe(width);
+      const span = layout.plotRight - layout.plotLeft;
+      expect(Math.max(...layout.rows.map((placed) => placed.x1 - placed.x0))).toBeGreaterThan(span / 6);
+    }
   });
 
   test("an all-negative family puts the zero line near the right edge, so the bars use the width", () => {

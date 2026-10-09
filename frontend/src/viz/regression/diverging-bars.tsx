@@ -116,9 +116,10 @@ const finiteEnds = (row: DivergingBarRow) =>
  * neither the zero line nor the left column; one label per row and rows taller than the text keep labels apart.
  *
  * End labels stay on one line while the longest bar still gets a third of the plot; otherwise they are stacked on
- * two, then three lines, as in the report (step 15's summary has long labels on both sides of the zero line and
- * left no room for its bars below a 1280 px window). Only when even that leaves no room (far below the supported
- * window width) is the drawing made wider, so the chart scales down as a whole instead of collapsing its bars.
+ * two, then three lines; when none of these gives a third, the one with the longest bars is used, as in the report
+ * (report-renderer.tsx), and the drawing keeps the container's width. Only when the bars would get less than a sixth
+ * (far below the supported window width) is the drawing made wider, so the chart scales down as a whole instead of
+ * collapsing its bars.
  */
 export function layoutDivergingBars(
   rows: DivergingBarRow[],
@@ -169,11 +170,17 @@ export function layoutDivergingBars(
   };
   type Fit = NonNullable<ReturnType<typeof attempt>>;
   const roomy = (fit: Fit | null): fit is Fit => fit != null && fit.k * extent >= fit.span / 3;
-  let fit: Fit | null = [0, 1, 2].map((labelLayout) => attempt(width, labelLayout)).find(roomy) ?? null;
-  // Even three-line labels leave the bars no room: draw wider (the SVG scales down to its box) until they have it.
+  // The report's rule (report-renderer.tsx): the first layout whose longest bar gets a third of the plot, else the one
+  // with the longest bars. The drawing keeps the container's width, so its text keeps its size (a summary drawn 940
+  // wide in a 680 card read at 7–8px).
+  const usable = (fit: Fit | null): fit is Fit => fit != null && fit.k * extent >= fit.span / 6;
+  const fits = [0, 1, 2].map((labelLayout) => attempt(width, labelLayout)).filter((item): item is Fit => item != null);
+  const longest = fits.reduce<Fit | null>((best, item) => (best == null || item.k > best.k ? item : best), null);
+  let fit: Fit | null = fits.find(roomy) ?? (usable(longest) ? longest : null);
+  // Only far below the supported width (labels leave the bars almost nothing): draw wider, scaled down to the box.
   for (let wider = width + 20; !fit && wider <= width * 4; wider += 20) {
     const candidate = attempt(wider, 2);
-    if (roomy(candidate)) fit = candidate;
+    if (usable(candidate)) fit = candidate;
   }
   // Never reached with real labels (they would need a drawing four times as wide); the axis still stays finite.
   const chosen: Fit = fit ?? attempt(width * 4, 2) ?? (() => {

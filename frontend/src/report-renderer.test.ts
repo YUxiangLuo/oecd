@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { cleanup, render as renderDom } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { closeBoldBeforeCjkPunctuation, parseReportChart, REPORT_CHART_MAX_WIDTH, ReportMarkdown } from "./report-renderer";
+import { layoutDivergingBars } from "./viz/regression/diverging-bars";
 import { NEGATIVE, POSITIVE, UNCERTAIN, ZERO_LINE } from "./viz/regression/palette";
 
 describe("report tables", () => {
@@ -331,6 +332,20 @@ const REGRESSION_CHARTS = {
   summary: {"version":1,"type":"diverging-bar","title":"四步保存的结果（都换算成标准差）","x_label":"X 每高 1 个百分点，Y 平均相差（个标准差）","items":[{"label":"外国增加值项占比","sub":"步骤 11 · 贸易流","value":-0.06192,"text":"-0.55 个百分点（-0.062 个标准差）","ci_low":-0.06438,"ci_high":-0.05945},{"label":"后向复杂 GVC 生产份额","sub":"步骤 12 · 生产","value":0.001296,"text":"+0.008 个百分点（+0.001 个标准差）","ci_low":-0.001929,"ci_high":0.004521},{"label":"GVC 位置指数","sub":"步骤 13 · 长度","value":-0.004425,"text":"-0.0008 个位置指数单位（-0.004 个标准差）","ci_low":-0.006494,"ci_high":-0.002356},{"label":"加权总度","sub":"步骤 14 · 网络","value":-0.04703,"text":"-40.11 个中心性原始单位（-0.047 个标准差）","ci_low":-0.04819,"ci_high":-0.04586}],"note":"标准差即 Y 在国家×行业之间的典型差距；条形旁先写各步原始单位的数值（和上表相同），括号里是个标准差。"},
 } as const;
 
+// The course release's step 15 summary items (gvcsim summary_chart on panel_teaching.csv), with step 12's default Y
+// and with its weak Y saved.
+const RELEASE_ITEM = {
+  trade: { label: "外国增加值项占比", sub: "步骤 11 · 贸易流", value: -0.0624, text: "-0.55 个百分点（-0.062 个标准差）", ci_low: -0.06453, ci_high: -0.06028 },
+  production: { label: "复杂 GVC 生产份额", sub: "步骤 12 · 生产", value: -0.08088, text: "-0.39 个百分点（-0.081 个标准差）", ci_low: -0.08415, ci_high: -0.07761 },
+  weak: { label: "后向复杂 GVC 生产份额", sub: "步骤 12 · 生产", value: 0.0009651, text: "+0.006 个百分点（+0.001 个标准差）", ci_low: -0.001361, ci_high: 0.003292 },
+  length: { label: "前向 GVC 段长度", sub: "步骤 13 · 长度", value: -0.03156, text: "-0.0184 个长度单位（-0.032 个标准差）", ci_low: -0.03292, ci_high: -0.0302 },
+  network: { label: "加权总度", sub: "步骤 14 · 网络", value: -0.0489, text: "-40.80 个中心性原始单位（-0.049 个标准差）", ci_low: -0.04983, ci_high: -0.04796 },
+};
+const RELEASE_SUMMARY_ITEMS = {
+  default: [RELEASE_ITEM.trade, RELEASE_ITEM.production, RELEASE_ITEM.length, RELEASE_ITEM.network],
+  weak: [RELEASE_ITEM.trade, RELEASE_ITEM.weak, RELEASE_ITEM.length, RELEASE_ITEM.network],
+};
+
 /** Same width estimate as the renderer: CJK about one em, Latin about 0.6 em. */
 const estimatedWidth = (text: string, size: number) => [...text].reduce((width, char) => width + (/[⺀-￿]/.test(char) ? size : size * 0.6), 0);
 /** A text's box; a stacked end label (tspans) is as wide as its longest line and as tall as all of them. */
@@ -473,6 +488,35 @@ describe("regression bar charts (steps 11–14 and the summary)", () => {
     ]);
     expect(element.textContent).toContain("X 每高 1 个百分点，Y 平均相差（个标准差）");
     expect(element.textContent).toContain(REGRESSION_CHARTS.summary.note);
+  });
+
+  test.each([
+    ["the default Ys", RELEASE_SUMMARY_ITEMS.default],
+    ["the weak Y saved in step 12", RELEASE_SUMMARY_ITEMS.weak],
+  ])("the summary with %s has the page's axis: same label stacking, extents within one tick step", (_name, items) => {
+    const element = renderChart({ ...REGRESSION_CHARTS.summary, items });
+    const svg = element.querySelector("svg")!;
+    const reportTicks = [...svg.querySelectorAll("text")].filter((node) => /^-?[\d.]+$/.test(node.textContent ?? "")).map((node) => Number(node.textContent));
+    const reportLines = Math.max(...[...svg.querySelectorAll("[data-bar-label]")].map((label) => Math.max(1, label.querySelectorAll("tspan[data-line]").length)));
+    // The report draws 720 units with 15-unit text: the page's 12 px text on a 576 px drawing.
+    const page = layoutDivergingBars(items.map((item, index) => ({
+      key: String(index), label: item.label, sublabel: item.sub, value: item.value, low: item.ci_low, high: item.ci_high,
+      uncertain: item.ci_low <= 0 && item.ci_high >= 0, valueLabel: item.text,
+    })), 576);
+    expect(page.width).toBe(576);
+    expect(reportLines).toBe(page.rows.reduce((most, row) => Math.max(most, row.lines.length), 1));
+    const pageTicks = page.ticks.map((tick) => tick.value);
+    const step = Math.max(pageTicks[1] - pageTicks[0], reportTicks[1] - reportTicks[0]);
+    expect(Math.abs(Math.min(...reportTicks) - Math.min(...pageTicks))).toBeLessThanOrEqual(step + 1e-9);
+    expect(Math.abs(Math.max(...reportTicks) - Math.max(...pageTicks))).toBeLessThanOrEqual(step + 1e-9);
+    // The end label stands clear of its whisker cap.
+    for (const row of svg.querySelectorAll("[data-diverging-row]")) {
+      const label = row.querySelector("[data-bar-label]")!;
+      const caps = [...row.querySelectorAll("[data-whisker] line")].map((line) => Number(line.getAttribute("x1")));
+      const x = Number(label.getAttribute("x"));
+      const gap = label.getAttribute("text-anchor") === "end" ? Math.min(...caps) - x : x - Math.max(...caps);
+      expect(gap).toBeGreaterThanOrEqual(12 - 1e-9);
+    }
   });
 
   test("a long Y name wraps instead of being clipped", () => {
