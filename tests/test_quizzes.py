@@ -155,3 +155,14 @@ def test_quizzes_read_x_as_exposure_an_association_and_step_14_y_as_no_amount_ro
     assert "金额" not in quizzes.HINTS["s14-metric-v9"]
     # The options and correct answers stay as the owner kept them.
     assert [q["correct"] for q in QUIZ_BY_ID.values() if q["id"] in ("s12-compare", "s14-metric-v9")] == ["b", "a"]
+
+
+def test_hints_guide_without_giving_the_answer_away_round_27():
+    x_hint = quizzes.HINTS["s10-x-definition-v8"]
+    # No formula to copy, and the page's word for the yearly readouts.
+    assert "w × τ" not in x_hint and "相乘" not in x_hint
+    assert "逐年表" not in x_hint and "逐年读数" in x_hint
+    compare_hint = quizzes.HINTS["s13-compare"]
+    assert "单位不同的数能直接比较大小吗" not in compare_hint and "标准差" in compare_hint
+    assert [q["correct"] for q in quizzes.STEP_QUIZZES[10]] == ["a", "a"]
+    assert [q["correct"] for q in quizzes.STEP_QUIZZES[13]] == ["a", "a"]
