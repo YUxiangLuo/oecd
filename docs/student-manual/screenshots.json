@@ -4,10 +4,10 @@
     "width": 1280,
     "height": 960
   },
-  "baseline_commit": "d963f47",
-  "code_state": "Business code at commit d963f47 (teaching data v7; round 20 fixes); manual text and manifest committed next.",
+  "baseline_commit": "fe5dee8",
+  "code_state": "Business code at commit fe5dee8 (teaching data v7; round 20 fixes); manual text and manifest committed next.",
   "code_sources_hash_rule": "SHA-256 of sorted sha256sum output for frontend/src and gvcsim .ts/.tsx/.css/.py files (Linux checkout).",
-  "code_sources_sha256": "2581d116f8f160dbce8d2266c053c5305a45ed7eba6843515606437a39c05c9d",
+  "code_sources_sha256": "1f79b910bab19b40bcb7a84cc60181d277507e947d9f1a7b8b5bae2a630ed382",
   "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
   "simulation_contract": "step10-tariff-teaching-v7",
   "source": "Manual 2.15 re-captured all 19 figures with headless Chrome driven by frontend/scripts/capture-student-manual.ts at 1280x960 against the local classroom on release b973ea5cdcfa43afa11df7ba16b4c54c (contract step10-tariff-teaching-v6), after the round 4-7 dogfood fixes and the 2026-10-08 UI/UX and copy review (plain wording, renamed views 行业排名/历年构成/流量与路径, regression buttons named after each step, result headline with the per-percentage-point estimate, step 1 headers, step 5 number formats and sort names, step 6-9 views, colours and the separate remove button for comparison countries, step 10 precision, draft reports off the progress count, the graded feedback card). The submitted and graded images are element captures. Passwords are not visible.",
@@ -24,7 +24,7 @@
       "journey": "public-page",
       "account": null,
       "capture_note": "Public login page; demo prefill only in demo builds.",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
@@ -46,7 +46,7 @@
       "journey": "partial-course-browser",
       "account": "manual-gate18",
       "capture_note": "Incomplete course: checklist and missing-item entry points.",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
@@ -68,7 +68,7 @@
       "journey": "partial-course-browser",
       "account": "manual-gate18",
       "capture_note": "Step 12 before running: taxed vs untaxed group chart and run button.",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
@@ -90,7 +90,7 @@
       "journey": "api-seeded-then-browser",
       "account": "manual-s18",
       "capture_note": "Step 1 recorded cell.",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
@@ -112,7 +112,7 @@
       "journey": "api-seeded-then-browser",
       "account": "manual-s18",
       "capture_note": "Understanding check (completed).",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
@@ -134,7 +134,7 @@
       "journey": "api-seeded-then-browser",
       "account": "manual-s18",
       "capture_note": "Step 2 method intro with task card.",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
@@ -156,7 +156,7 @@
       "journey": "api-seeded-then-browser",
       "account": "manual-s18",
       "capture_note": "Step 3 hands-on decomposition.",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
@@ -178,7 +178,7 @@
       "journey": "api-seeded-then-browser",
       "account": "manual-s18",
       "capture_note": "Step 4 length decomposition.",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
@@ -200,7 +200,7 @@
       "journey": "api-seeded-then-browser",
       "account": "manual-s18",
       "capture_note": "Step 5 centrality table.",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
@@ -222,7 +222,7 @@
       "journey": "api-seeded-then-browser",
       "account": "manual-s18",
       "capture_note": "Step 6 trend with automatic material.",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
@@ -245,7 +245,7 @@
       "journey": "api-seeded-then-browser",
       "account": "manual-s18",
       "capture_note": "Step 7 production chart.",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
@@ -268,7 +268,7 @@
       "journey": "api-seeded-then-browser",
       "account": "manual-s18",
       "capture_note": "Step 8 forward/backward lengths.",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
@@ -291,7 +291,7 @@
       "journey": "api-seeded-then-browser",
       "account": "manual-s18",
       "capture_note": "Step 9 two-country industry comparison.",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
@@ -314,7 +314,7 @@
       "journey": "api-seeded-then-browser",
       "account": "manual-s18",
       "capture_note": "Step 10 followed example (Canada vs Mexico, motor vehicles).",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
@@ -336,7 +336,7 @@
       "journey": "api-seeded-then-browser",
       "account": "manual-s18",
       "capture_note": "Step 11 binned scatter, coefficient plot and reading.",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
@@ -358,7 +358,7 @@
       "journey": "api-seeded-then-browser",
       "account": "manual-s18",
       "capture_note": "Step 15 writing area with sentence starters.",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
@@ -380,7 +380,7 @@
       "journey": "api-seeded-then-browser",
       "account": "manual-s18",
       "capture_note": "Generated report (draft).",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
@@ -402,7 +402,7 @@
       "journey": "api-seeded-then-browser",
       "account": "manual-s18",
       "capture_note": "Submitted status line.",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
@@ -424,7 +424,7 @@
       "journey": "api-seeded-then-browser",
       "account": "manual-s18",
       "capture_note": "Graded status with feedback.",
-      "baseline_commit": "d963f47",
+      "baseline_commit": "fe5dee8",
       "data_release": "a0bcfdee0643407aa9651e3eb6a31fd0",
       "simulation_contract": "step10-tariff-teaching-v7",
       "data_sources": [
