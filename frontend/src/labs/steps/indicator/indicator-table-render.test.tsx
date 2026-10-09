@@ -142,6 +142,38 @@ describe("indicator table semantics", () => {
   });
 });
 
+describe("indicator table column widths", () => {
+  test("a bracketed note in a column name goes on its own line, keeping the name's text in order", () => {
+    const schema: IndicatorSchema = {
+      groups: [],
+      fields: {
+        country: { label: "国家", format: "number", desc: "" },
+        eigencentrality: { label: "特征向量中心性（软件近似）", format: "number", desc: "被重要节点连接的节点得分更高。" },
+        degree: { label: "度", format: "number", desc: "" },
+      },
+    };
+    const view = render(
+      <IndicatorDataTable groupLabel="生产网络" schema={schema} columns={["country", "eigencentrality", "degree"]}
+        rows={[{ country: "DEU", eigencentrality: 0.98, degree: 6377 }]} year={2020} country="DEU" page={1} />,
+    );
+    const header = view.getByRole("columnheader", { name: /特征向量中心性/ });
+    expect(header.querySelector(".th-note")?.textContent?.startsWith("（软件近似）")).toBe(true);
+    // The ⓘ ends the note's line.
+    expect(header.querySelector(".th-note button")).toBeTruthy();
+    expect(header.textContent?.startsWith("特征向量中心性（软件近似）")).toBe(true);
+    expect(view.getByRole("columnheader", { name: "度" }).querySelector(".th-note")).toBeNull();
+    cleanup();
+  });
+
+  test("the step table scrolls in a region that marks more columns on the right", async () => {
+    const source = await Bun.file(new URL("./indicator-table.tsx", import.meta.url)).text();
+    expect(source).toContain('className="table-wrap bounded-data-table indicator-table-scroll"');
+    const css = await Bun.file(new URL("../../../workbench.css", import.meta.url)).text();
+    expect(css).toMatch(/\.indicator-table-scroll \{[^}]*no-repeat local/);
+    expect(css).toMatch(/\.indicator-data-table td\.text-col:nth-child\(2\) \{ min-width: 11em; \}/);
+  });
+});
+
 describe("network table sort scope", () => {
   const release = "a".repeat(32);
   const meta: Meta = { years: [2020], countries: ["CHN", "USA"], sectors: ["A"], dataset: { years: [2020], release_id: release } };

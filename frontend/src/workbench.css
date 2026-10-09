@@ -284,6 +284,24 @@
 .table-priority-tools > .labeled-control { display: inline-flex; align-items: center; gap: 6px; }
 .bounded-data-table { max-height: 540px; overflow: auto; border: 1px solid #e7e9ef; border-radius: 9px; }
 .bounded-data-table table { margin: 0; }
+/* Steps 2–5 indicator table: columns take their natural width (the table may be wider than the box and then
+   scrolls) instead of squeezing 行业 to three lines while numeric columns keep wide gaps. A shadow on the right
+   edge says more columns are there even where scrollbars only show while scrolling; it goes once the last
+   column is in view (the white strip travels with the content and covers it at the end). */
+.indicator-table-scroll {
+  background:
+    linear-gradient(to left, #fff 40%, rgba(255, 255, 255, 0)) right / 36px 100% no-repeat local,
+    radial-gradient(farthest-side at 100% 50%, rgba(20, 20, 60, 0.28), rgba(20, 20, 60, 0)) right / 16px 100% no-repeat scroll,
+    #fff;
+}
+.indicator-data-table { width: max-content; min-width: 100%; }
+.indicator-data-table th, .indicator-data-table td, .indicator-data-table th.indicator-row-header { padding-left: 10px; padding-right: 10px; }
+.indicator-data-table thead th { vertical-align: bottom; }
+.indicator-data-table .th-note { display: block; font-weight: 500; }
+/* 行业 keeps one line ("C31T33 家具及其他制造") and a common width, so short names do not make a narrow column. */
+.indicator-data-table td.text-col:nth-child(2) { min-width: 11em; }
+/* “无连接，无法定义” goes on two short lines instead of widening three columns for one row. */
+.indicator-data-table [data-metric-undefined] { display: inline-block; max-width: 4.5em; white-space: normal; line-height: 1.35; }
 .legacy-session-warning { margin: 12px 18px 0; }
 .observation-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 8px 0 10px; font-size: 11.5px; }
 .observation-strip b { color: #4a5265; }

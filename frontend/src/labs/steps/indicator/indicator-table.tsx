@@ -336,6 +336,18 @@ export function indicatorRowHeaderLabel(row: Record<string, string | number | nu
   return `国家 ${country}；行业 ${industry}`;
 }
 
+/**
+ * A column name with a bracketed note ("特征向量中心性（软件近似）", "GVC 位置指数（前向 GVC 段／后向 GVC 段）") puts the
+ * note on a second line, so the column is as wide as its numbers rather than its longest name. The text stays
+ * in order for screen readers and copying.
+ */
+function IndicatorHeaderLabel({ label, children }: { label: string; children?: ReactNode }) {
+  const split = label.indexOf("（");
+  if (split <= 0) return <>{label}{children}</>;
+  // The ⓘ ends the second line, after the note, as it ends a one-line name.
+  return <>{label.slice(0, split)}<span className="th-note">{label.slice(split)}{children}</span></>;
+}
+
 export function IndicatorDataTable({
   groupLabel,
   schema,
@@ -386,8 +398,9 @@ export function IndicatorDataTable({
                 className={TEXT_COLUMNS.has(column) ? "text-col" : undefined}
                 style={left != null ? { position: "sticky", left, zIndex: index === 0 ? 5 : 4, background: "#fafbfd" } : undefined}
               >
-                {fieldLabel(column, schema)}
-                {desc && <ColumnInfo label={fieldLabel(column, schema)} text={desc} />}
+                <IndicatorHeaderLabel label={fieldLabel(column, schema)}>
+                  {desc && <ColumnInfo label={fieldLabel(column, schema)} text={desc} />}
+                </IndicatorHeaderLabel>
               </th>
             );
           })}
@@ -554,7 +567,7 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
             </div>
           )}
           <ScrollableRegion
-            className="table-wrap bounded-data-table"
+            className="table-wrap bounded-data-table indicator-table-scroll"
             label={`${group?.label ?? "指标"}数据表，可横向滚动`}
           >
             <IndicatorDataTable
