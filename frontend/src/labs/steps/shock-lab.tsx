@@ -343,7 +343,7 @@ export function ShockLab({ meta, step: _step, state }: {
   const marksRecorded = Boolean(panel) && !complete && savedCompared.length > 0;
   const highlight = marksRecorded ? savedCompared : selectedCountries;
   const highlightLabel = marksRecorded
-    ? "已记录的例子（当前选择不在回归样本中）"
+    ? "已记录的例子"
     : state.materialLocked && recordedExample && !savedExample ? "当前选的例子（不是已记录的报告材料）" : "你跟踪的例子";
   const taxedCount = overview?.taxed_countries ?? sample?.taxed_countries;
   // The data rule that picks the taxed countries (teaching data v7 on); an older server sends none.
@@ -406,7 +406,7 @@ export function ShockLab({ meta, step: _step, state }: {
             <span className="teaching-x-formula">X = {shown.w}% × {rate(workedExample.teaching_tariff_rate_tau)} = <b>{shown.x} 个百分点</b></span>
             {workedExample.teaching_tariff_exposure === 0 ? "（被加税了，但 w = 0，所以 X 仍是 0）" : bothTaxed ? "（税率相同时，对美出口份额 w 不同，X 也不同）" : ""}
           </p>
-          {shownExample?.recorded && <p className="muted teaching-x-reason">当前选择不在回归样本中，这里用已记录的例子计算。</p>}
+          {shownExample?.recorded && <p className="muted teaching-x-reason">这里用已记录的例子计算。</p>}
           {switchedToB && <p className="muted teaching-x-reason">{switchedToB}</p>}
           <p className="muted">w = 首年（{years[0]} 年）对美出口份额 {shown.w}%，之后各年不变；τ = 加征税率。</p>
         </div>;

@@ -506,7 +506,7 @@ test("A = USA: the card says why it uses CAN, and the chart marks the recorded e
   expect(document.querySelector(".teaching-example-record")!.textContent).toContain("CAN 加拿大 · C29 汽车及零部件（对比 CRI 哥斯达黎加）");
   expect(document.querySelector('[data-highlight="A"]')!.getAttribute("data-country")).toBe("CAN");
   expect(document.querySelector('[data-highlight="B"]')!.getAttribute("data-country")).toBe("CRI");
-  expect(legend()).toBe("AB已记录的例子（当前选择不在回归样本中）");
+  expect(legend()).toBe("AB已记录的例子");
   expect(save).not.toHaveBeenCalled();
   groups.mockRestore();
   series.mockRestore();

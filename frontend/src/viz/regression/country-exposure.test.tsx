@@ -74,7 +74,7 @@ test("hover and keyboard focus show the country, X and the industry count; arrow
     fireEvent.mouseMove(cri, { clientX: 10, clientY: 10 });
     expect(tip()).toContain("CRI 哥斯达黎加");
     expect(tip()).toContain("7.82 个百分点");
-    expect(tip()).toContain("行业43/43 个被加税");
+    expect(tip()).toContain("被加税行业43 个（样本内共 43 个）");
     expect(tip()).toContain("其中 X > 042 个");
     expect(tip()).toContain("其余 1 个对美无出口：w = 0");
     fireEvent.mouseLeave(cri);
@@ -89,7 +89,7 @@ test("hover and keyboard focus show the country, X and the industry count; arrow
     fireEvent.focus(document.activeElement!);
     expect(tip()).toContain("AUT 奥地利");
     expect(tip()).toContain("0 个百分点");
-    expect(tip()).toContain("行业0/44 个被加税");
+    expect(tip()).toContain("被加税行业0 个（样本内共 44 个）");
     expect(tip()).not.toContain("其中");
     fireEvent.keyDown(document.activeElement!, { key: "Home" });
     expect(document.activeElement?.getAttribute("data-country")).toBe("CAN");
@@ -203,13 +203,13 @@ test("the readout fits its 260 px box: the industry count is split into short li
   // CHN: 41 industries taxed, 40 with X > 0. One line read "41/41 个行业被加税（40 个 X > 0，其余对美无出口：w = 0）", 334 px.
   const chn = { ...row("CHN", 0.0512, true, 40, 41), market_goods_surplus: 248900 };
   const lines = countryTipLines(chn, 2020, RULE);
-  expect(lines.slice(2, 5)).toEqual([["行业", "41/41 个被加税"], ["其中 X > 0", "40 个"], ["其余 1 个", "对美无出口：w = 0"]]);
+  expect(lines.slice(2, 5)).toEqual([["被加税行业", "41 个（样本内共 41 个）"], ["其中 X > 0", "40 个"], ["其余 1 个", "对美无出口：w = 0"]]);
   // A rough width at 11.5 px: CJK and full-width characters ~11.5 px, the rest ~6.6 px, plus the key and the gap.
   const width = (text: string) => [...text].reduce((sum, char) => sum + (/[　-￿]/.test(char) ? 11.5 : 6.6), 0);
   for (const [label, value] of lines.slice(1)) expect(18 + width(label) + 6 + width(value)).toBeLessThanOrEqual(236);
   // Every country fully exposed keeps one line.
-  expect(countryIndustryLines(row("CAN", 0.143))).toEqual([["行业", "44/44 个被加税"]]);
-  expect(countryIndustryLines(row("MEX", 0, false, 0, 43))).toEqual([["行业", "0/43 个被加税"]]);
+  expect(countryIndustryLines(row("CAN", 0.143))).toEqual([["被加税行业", "44 个（样本内共 44 个）"]]);
+  expect(countryIndustryLines(row("MEX", 0, false, 0, 43))).toEqual([["被加税行业", "0 个（样本内共 43 个）"]]);
   // And whatever the text, a value in this readout wraps instead of overflowing the box.
   const css = await Bun.file(new URL("../../workbench.css", import.meta.url)).text();
   expect(css).toContain(".country-exposure .hover-tip > div > b { white-space: normal; }");

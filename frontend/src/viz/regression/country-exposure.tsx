@@ -60,10 +60,11 @@ export function taxedRuleText(rule: TeachingCountriesResponse["taxed_rule"], rel
   return `${ruleYear(rule)}对美货物贸易顺差${relation}${ruleYiUsd(rule.min_million_usd)}`;
 }
 
-/** The industry count as short readout lines that fit the 260 px readout: "行业 41/41 个被加税", and for a taxed
+/** The industry count as short readout lines that fit the 260 px readout: "被加税行业 41 个（样本内共 41 个）" (the
+ * total is the country's industries in the regression sample, which can be fewer than 45), and for a taxed
  * country with industries that export nothing to the US, "其中 X > 0 40 个" and "其余 1 个 对美无出口：w = 0". */
 export function countryIndustryLines(row: CountryRow): TipLine[] {
-  const lines: TipLine[] = [["行业", `${row.taxed ? row.industries : 0}/${row.industries} 个被加税`]];
+  const lines: TipLine[] = [["被加税行业", `${row.taxed ? row.industries : 0} 个（样本内共 ${row.industries} 个）`]];
   if (row.taxed && row.exposed_industries < row.industries) {
     lines.push(["其中 X > 0", `${row.exposed_industries} 个`]);
     lines.push([`其余 ${row.industries - row.exposed_industries} 个`, "对美无出口：w = 0"]);
