@@ -147,7 +147,8 @@ def test_report_appendix_counts_taxed_records_by_x_without_causal_wording():
         (0.00009999, "<0.0001"),
         (0.0001, "0.0001"),
         (0.0256, "0.0256"),
-        (1, "1"),
+        (0.0009587, "0.0010"),
+        (1, "1.0000"),
         (None, "—"),
     ],
 )
@@ -1489,7 +1490,7 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
         in report.markdown
     )
     # Four decimals for every number but p, as the page's 详细数字 table prints them.
-    assert "| 关税暴露 X | 1.2000 | +1.20 个百分点 | 0.3000 | [0.5721, 1.8279] | 0.0007662 |" in report.markdown
+    assert "| 关税暴露 X | 1.2000 | +1.20 个百分点 | 0.3000 | [0.5721, 1.8279] | 0.0008 |" in report.markdown
     assert "4 位有效数字" not in report.markdown and "保留 4 位小数" in report.markdown
     # Versions, the session digest and the unused macro controls are listed only under "报告溯源", at the end.
     body, provenance = report.markdown.split("## 报告溯源", 1)

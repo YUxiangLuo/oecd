@@ -320,7 +320,7 @@ export function ShockLab({ meta, step: _step, state }: {
   const boundaryNote = (() => {
     const parts = [
       ...(imposers.length
-        ? [`美国是加征关税的一方，按设计不在回归样本中，X 记为 0 只是定义（w 是“对美出口份额”，美国不会向自己出口），不是数据缺失${imposerMissing.length ? "，不能作为例子" : ""}`]
+        ? [`美国是加征关税的一方，按设计不在回归样本中，X 记为 0 只是定义（w 是“对美出口份额”，美国不会向自己出口），不是数据缺失${imposerMissing.length ? (second && isImposer(second) ? "，不能作为对照国家" : "，不能作为例子") : ""}`]
         : []),
       ...(panel && otherMissing.length
         ? [`${names(otherMissing)} · ${sectorLabel(industry)} 不在回归样本里：${otherMissing.length > 1
@@ -330,7 +330,9 @@ export function ShockLab({ meta, step: _step, state }: {
     ];
     if (!parts.length) return null;
     if (!panel || complete) return `${parts.join("；")}。`;
-    const action = otherMissing.length ? (otherMissing.length > 1 ? "请换国家或行业" : "请换一个国家或行业") : "请换一个国家";
+    const action = otherMissing.length
+      ? (otherMissing.length > 1 ? "请换国家或行业" : "请换一个国家或行业")
+      : second && isImposer(second) ? "请换一个对照国家，或选“不选对照国家”" : "请换一个国家";
     const recorded = shownExample?.recorded && recordedExample
       // The parts above already say why the selection is out of the sample: no second "不在回归样本中".
       ? `下面仍显示已记录的例子 ${recordedExample}。`
@@ -356,7 +358,7 @@ export function ShockLab({ meta, step: _step, state }: {
           <li><b>{rate(overview.tariff_rate)}</b><span>{overview.policy_year ? `${overview.policy_year} 年起的税率（此前为 0）` : "加征税率"}</span></li>
         </ul>
         <h4 className="teaching-subhead">关税暴露 X：加税对一个国家×行业的冲击有多大</h4>
-        <p className="teaching-one-line">X = 首年对美出口份额 w × 加征税率 τ。对美出口越多，加税的冲击越大；未被加税的国家 τ = 0，所以 X = 0。</p>
+        <p className="teaching-one-line">X = 首年对美出口份额 w × 加征税率 τ。对美出口份额越高，加税的冲击越大；未被加税的国家 τ = 0，所以 X = 0。</p>
         {workedCountry && (() => {
           const shown = workedNumbers(workedCountry.mean_w, overview.tariff_rate, workedCountry.mean_exposure);
           return <div className="teaching-x-card" role="group" aria-label="被加税国家的 X 算例">
@@ -447,7 +449,7 @@ export function ShockLab({ meta, step: _step, state }: {
           const unexposedNames = unexposed.map((row) => countryLabel(row.country)).join("、");
           const hint = lastRows.some((row) => isImposer(row.country))
             ? (lastRows.length === 1
-              ? "若要观察加税带来的 X，请换成被加税的国家（如加拿大），或再选一个被加税的对比国家。"
+              ? "若要观察加税带来的 X，请换成被加税的国家（如加拿大），或再选一个被加税的对照国家。"
               : "若要观察被加税与未被加税国家的差别，请把美国换成别的国家（被加税的如加拿大，未被加税的如哥斯达黎加）。")
             : unexposed.length && exposed.length
             // The other country already shows the exposure: nothing to switch.
@@ -456,8 +458,8 @@ export function ShockLab({ meta, step: _step, state }: {
             ? `${unexposedNames} 被加税，但该行业首年不向美国出口（w = 0），所以 X 一直为 0；换一个行业或国家才能看到加税带来的暴露。`
             : taxed.length === 1
             ? (taxed[0]
-              ? `只看一个被加税国家时，图上只有它自己的 X 从${policyYear ? ` ${policyYear} 年` : "加税那年"}起上升；再选一个未被加税的对比国家（如哥斯达黎加），就能看到两者的差距。`
-              : "这个国家未被加税，X 一直为 0；换成被加税的国家（如加拿大），或再选一个被加税的对比国家，才能看到差距。")
+              ? `只看一个被加税国家时，图上只有它自己的 X 从${policyYear ? ` ${policyYear} 年` : "加税那年"}起上升；再选一个未被加税的对照国家（如哥斯达黎加），就能看到两者的差距。`
+              : "这个国家未被加税，X 一直为 0；换成被加税的国家（如加拿大），或再选一个被加税的对照国家，才能看到差距。")
             : taxed.length === 2 && taxed[0] === taxed[1]
               ? (taxed[0]
                 ? "两个国家都被加税，缺少未被加税的对照；可以把其中一个换成未被加税的国家（如哥斯达黎加）。"

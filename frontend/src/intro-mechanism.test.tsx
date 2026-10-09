@@ -21,7 +21,7 @@ test("mechanism preview follows the example, the group gap and the regression", 
     expect(chart.textContent).toContain("X 示意强弱");
     expect(view.getByText(/回归用的是全部国家×行业，结果会换算到你的例子上/)).toBeTruthy();
     // The example is one of the taxed countries; no default pair is named here (step 10 shows the whole sample).
-    expect(view.getByText(/它是被加税的国家之一，可再加一个未被加税的对比国家/)).toBeTruthy();
+    expect(view.getByText(/它是被加税的国家之一，可再加一个未被加税的对照国家/)).toBeTruthy();
     expect(view.queryByText(/默认是加拿大和墨西哥|加拿大|墨西哥/)).toBeNull();
     // Country A is taxed (zero for two years, then positive); country B is untaxed (always zero).
     for (const [series, expected] of [["a", [0, 0, 1, 1, 1]], ["b", [0, 0, 0, 0, 0]]] as const) {

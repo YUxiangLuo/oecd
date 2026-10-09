@@ -118,6 +118,8 @@ def _number(value: Any, *, p_value: bool = False) -> str:
         # A numerical tail probability may underflow to zero; do not print an exact zero.
         if numeric < 0.0001:
             return "<0.0001"
+        # Four fixed decimals, as on the page ("0.0010", not "0.0009587").
+        return f"{numeric:.4f}"
     # Large amounts (e.g. million-USD flows) read better as grouped integers than as 4.584e+06.
     if abs(numeric) >= 1000:
         return f"{numeric:,.0f}"

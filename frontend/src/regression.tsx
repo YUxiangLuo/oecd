@@ -245,9 +245,9 @@ export function RegressionResultCard({ outcome, response, examples = [], example
                 : <>{example.label} 未被加税{zeroNote}</>;
             return <span key={example.label}>{index ? "；" : ""}{text}</span>;
           })}。
-            {noConversion && `${examples.length === 1 ? "这个例子的 X = 0" : "两个例子的 X 都是 0"}，无法换算与 X 相关的差异。如需换算，请回到步骤 10 ${unexposedTaxed
+            {noConversion && `${examples.length === 1 ? "这个例子的 X = 0" : "两个例子的 X 都是 0"}，按估计没有与 X 相关的差异。如需看到不为 0 的换算，请回到步骤 10 ${unexposedTaxed
               ? "换一个向美国出口的被加税国家或行业（如加拿大的汽车行业）"
-              : examples.length === 1 ? "换成被加税的国家（如加拿大），或再选一个被加税的对比国家" : "选一个被加税的国家（如加拿大）"}。`}</li>;
+              : examples.length === 1 ? "换成被加税的国家（如加拿大），或再选一个被加税的对照国家" : "选一个被加税的国家（如加拿大）"}。`}</li>;
         })()}
         {/* As the report says next to the number: step 14's unit is not the 百万美元 of steps 5 and 9. */}
         {kind === "network" && <li className="muted reg-unit-note">{NETWORK_UNIT_NOTE}</li>}

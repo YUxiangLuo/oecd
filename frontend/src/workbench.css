@@ -109,6 +109,8 @@
 .verdict-card .reg-caveat {
   margin: 12px 0 0; padding: 9px 12px; border: 1px solid #ecd9a9; border-left: 4px solid #d99a2b;
   border-radius: 8px; background: #fff8e8; color: #5c4618; font-size: 12.5px;
+  /* A boxed callout inside the list: no bullet beside the box. */
+  list-style: none;
 }
 .reg-caveat b { margin-right: 8px; color: #8a5b12; }
 .model-eq sub { font-size: .72em; }

@@ -267,7 +267,7 @@ export function ComparisonSummary({
         </div>
       ))}
       <div>
-        <span>{lastYear} 年 A−B</span>
+        <span>{lastYear} 年两国之差</span>
         <b>{changeReading(ends[1], ends[0], unit, digits)}</b>
         <small>{countryLabel(countries[0])} 相对 {countryLabel(countries[1])}</small>
       </div>

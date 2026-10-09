@@ -418,7 +418,7 @@ test("card 1 tells the US tariff: one policy line, three tiles, what X is with C
     "关税暴露 X：加税对一个国家×行业的冲击有多大", "3 个被加税国家的 X（从高到低）",
   ]);
   const lines = [...card.querySelectorAll(".teaching-one-line")].map((line) => line.textContent);
-  expect(lines[0]).toBe("X = 首年对美出口份额 w × 加征税率 τ。对美出口越多，加税的冲击越大；未被加税的国家 τ = 0，所以 X = 0。");
+  expect(lines[0]).toBe("X = 首年对美出口份额 w × 加征税率 τ。对美出口份额越高，加税的冲击越大；未被加税的国家 τ = 0，所以 X = 0。");
   // The sample sentence: countries, country×industry units and records (rows from teaching-groups).
   expect(lines[1]).toBe("每条是一个国家 2020 年各行业的平均 X。回归样本：5 国的 210 个国家×行业 × 5 年 = 10 条记录。");
   expect(lines[2]).toContain("步骤 11–14 用每个国家×行业的 X 对照四类指标 Y");
