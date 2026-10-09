@@ -507,7 +507,7 @@ export function parallelTrendsNote(years: readonly number[], policyYear: number 
 
 /** The line under the 加税前后 chart: what its dashed bracket is (β × the taxed group's mean X), as an association. */
 export function gapCaption(meanExposureTaxed: number): string {
-  return `虚线标出的差距 = 估计值 × 被加税组平均 X（${percentagePoints(meanExposureTaxed)} 个百分点），即按回归估计，加税后被加税组与未被加税组平均相差多少；它与两条线的实际距离接近但不必相同（回归按每个国家×行业自己的 X 计算，并扣掉各自的平均水平）。`;
+  return `虚线标出的差距 = 估计值 × 被加税组平均 X（${percentagePoints(meanExposureTaxed)} 个百分点；被加税国家的服务业不加税，X = 0，也计入这个平均），即按回归估计，加税后被加税组与未被加税组平均相差多少；它与两条线的实际距离接近但不必相同（回归按每个国家×行业自己的 X 计算，并扣掉各自的平均水平）。`;
 }
 
 /** Step 14: weighted degree is in-degree + out-degree in every row (the report says the same under its chart). */

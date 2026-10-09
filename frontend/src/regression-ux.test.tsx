@@ -353,7 +353,7 @@ describe("simple regression workbench", () => {
     // -0.5493 × 0.03 × 100 = -1.65 points.
     expect(document.querySelector("[data-estimate-label]")?.textContent).toBe("回归估计的差距 -1.65 个百分点");
     expect(document.querySelector(".reg-gap-caption")?.textContent)
-      .toBe("虚线标出的差距 = 估计值 × 被加税组平均 X（3.00 个百分点），即按回归估计，加税后被加税组与未被加税组平均相差多少；"
+      .toBe("虚线标出的差距 = 估计值 × 被加税组平均 X（3.00 个百分点；被加税国家的服务业不加税，X = 0，也计入这个平均），即按回归估计，加税后被加税组与未被加税组平均相差多少；"
         + "它与两条线的实际距离接近但不必相同（回归按每个国家×行业自己的 X 计算，并扣掉各自的平均水平）。");
     // Under the chart, in its figure; association words only.
     expect(document.querySelector(".reg-group-figure .reg-gap-caption")).not.toBeNull();
