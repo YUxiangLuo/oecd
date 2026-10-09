@@ -32,6 +32,15 @@ describe("indicator method intro", () => {
     }
   });
 
+  test("the WWZ groups are named 五个聚合项, as the schema says, and betweenness is not a count (round 27)", () => {
+    const trade = render("trade").body.textContent ?? "";
+    expect(trade).toContain("归并为五个聚合项");
+    expect(trade).not.toContain("归并为五类");
+    const network = render("network").body.textContent ?? "";
+    expect(network).toContain("对所有节点对求和（未归一化");
+    expect(network).not.toContain("经过该节点的条数（");
+  });
+
   test("production method points to the 四类生产活动 · 后向 view for the backward split (round 21)", () => {
     const text = render("production").body.textContent ?? "";
     expect(text).toContain("在步骤 7 的“四类生产活动”视角选“后向（按最终品）”，查看各类所占份额。");

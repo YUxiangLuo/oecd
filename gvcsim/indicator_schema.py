@@ -133,7 +133,7 @@ INDICATOR_SCHEMA = {
 # The accounting caveats (WWZ items, TLS, negative value added, the Gephi algorithm) live in 技术手册.md
 # and the report's method notes.
 _INDICATOR_DESCRIPTIONS = {
-    "gross_exports": "出口总额，等于五类价值来源（国内增加值出口、返回国内的增加值、国内重复计算、外国增加值、外国重复计算）加上产品税减补贴。",
+    "gross_exports": "出口总额，等于 WWZ 的五个聚合项（国内增加值出口、返回国内的增加值、国内重复计算、外国增加值、外国重复计算）加上产品税减补贴。",
     "FVA_share": "出口额中由外国创造的价值（外国增加值）所占的比例。不含被重复计算的部分，所以和 OECD TiVA 公布的“出口中外国增加值占比”不完全相同。",
     "DVAex_share": "出口额中由本国创造、最终在国外被使用的价值所占的比例。",
     "3_VA_GVC_share": "本国增加值中，随中间品跨境、进入全球价值链生产的部分所占的比例（前向，分母是本国总增加值）。",
