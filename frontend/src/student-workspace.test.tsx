@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   carriedComparisonFor,
   carriedComparisonSource,
+  latestComparison,
   StudentWorkspaceSkipLink,
   focusStepMainContent,
   stepMainContentId,
@@ -108,6 +109,20 @@ describe("steps 2–5 record one country, which the later steps carry", () => {
     expect(carriedComparisonSource(6, [], from({ 2: ["DEU"], 3: ["DEU"] }), countries)).toEqual({ compared: ["DEU", "USA"], from: 2 });
     // A B other than the default was picked on step 6.
     expect(carriedComparisonSource(7, [], from({ 3: ["DEU"], 6: ["DEU", "JPN"] }), countries)).toEqual({ compared: ["DEU", "JPN"], from: 6 });
+  });
+
+  test("the selection left on screen carries over even when its chart was not recorded", () => {
+    // Step 6 picked BRN; step 7 recorded it on opening; step 8 switched to ISL but could not record the chart.
+    const steps: Record<number, unknown> = {
+      6: { compared: ["BRN", "USA"] },
+      7: { compared: ["BRN", "USA"] },
+      8: { compared: ["BRN", "USA"], browse_selection: { first: "ISL", second: "USA", others: ["USA"], industry: "B09" } },
+    };
+    const read = (prior: number) => latestComparison(steps[prior]);
+    expect(carriedComparisonSource(9, [], read, [...countries, "BRN", "ISL"])).toEqual({ compared: ["ISL", "USA"], from: 8 });
+    // Step 9's own browsing countries are what it leaves for later.
+    expect(latestComparison({ compared: ["BRN", "USA"], network_browse: { countries: ["JPN", "CHN"] } })).toEqual(["JPN", "CHN"]);
+    expect(latestComparison({ compared: ["BRN", "USA"] })).toEqual(["BRN", "USA"]);
   });
 
   test("a later steps 6–9 comparison wins over a steps 2–5 country", () => {
