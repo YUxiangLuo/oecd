@@ -746,6 +746,9 @@ export function DecompositionDemo({
     // checks by hand from the amounts beside it.
     const precision = cfg.unit === "amount" ? panelAmountDecimals(model.values, model.total) : null;
     const amount = (value: number) => (precision ? amountAt(value, precision.decimals) : fmt(value, cfg.unit));
+    // The decimals the rows are shown at (lengths in step 4: three), so the sum line reads "≈" whenever the shown
+    // rows do not add up to the shown sum, as in steps 2–3.
+    const shownDecimals = precision ? precision.decimals : cfg.unit === "number" ? 3 : undefined;
     return (
       <div style={{ minWidth: 0 }}>
         {entityPicker}
@@ -769,8 +772,8 @@ export function DecompositionDemo({
         </div>
         {model.closure != null ? (
           <div className={`decomp-identity ${model.closure ? "ok" : "bad"}`}>
-            {model.closure ? "✓" : "✗"} {cfg.parts.length} 项相加 {cfg.unit === "amount" && !displayedRowsAddUp(model.values, model.sum, precision?.decimals) ? "≈" : "="} {amount(model.sum)}，{model.closure ? "等于" : "不等于"}{cfg.totalLabel}{model.error < 1e-6 ? "" : `（差 ${model.error.toPrecision(2)}）`}
-            {cfg.unit === "amount" && displayedSumNote(model.values, model.sum, precision?.decimals)}
+            {model.closure ? "✓" : "✗"} {cfg.parts.length} 项相加 {displayedRowsAddUp(model.values, model.sum, shownDecimals) ? "=" : "≈"} {amount(model.sum)}，{model.closure ? "等于" : "不等于"}{cfg.totalLabel}{model.error < 1e-6 ? "" : `（差 ${model.error.toPrecision(2)}）`}
+            {displayedSumNote(model.values, model.sum, shownDecimals)}
           </div>
         ) : negligible && zeroTotalHint ? null : (
           // A zero total is explained once, by the specific hint below.

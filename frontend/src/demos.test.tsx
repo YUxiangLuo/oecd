@@ -210,6 +210,46 @@ describe("indicator calculation disclosure", () => {
   });
 });
 
+describe("step 4: the sum line says ≈ when the shown lengths do not add up to the shown sum", () => {
+  const renderLengths = async (row: Record<string, number | string>) => {
+    const countryRequest = spyOn(api, "countryIndicatorsForCountry").mockResolvedValue([{ ...row, industry: null }]);
+    const industryRequest = spyOn(api, "industryIndicatorsAll").mockResolvedValue({ total: 1, page: 1, page_size: 200, rows: [row] });
+    try {
+      const view = render(
+        <DecompositionDemo step={6} meta={{ years: [2017], countries: [String(row.country)], sectors: ["A"], dataset: null }}
+          primaryYear={2017} primaryCountry={String(row.country)} />,
+      );
+      await waitFor(() => expect(view.container.querySelector(".decomp-identity")).toBeTruthy());
+      return {
+        rows: [...view.container.querySelectorAll(".decomp-table tbody tr .dt-val")].map((cell) => cell.textContent),
+        line: view.container.querySelector(".decomp-identity")!.textContent!,
+      };
+    } finally {
+      countryRequest.mockRestore();
+      industryRequest.mockRestore();
+    }
+  };
+
+  test("KOR 2017 (国家整体): 1.222 + 0.205 + 0.782 = 2.209, so the line reads ≈ 2.210", async () => {
+    // Weighted contributions 1.2222 + 0.2054 + 0.7821 = 2.2097: each row rounds down, the sum rounds up.
+    const { rows, line } = await renderLengths({
+      country: "KOR", year: 2017, SVA: 1, PLv: 2.2097,
+      "1_VA_D": 0.6, "2_VA_RT": 0.1, "3_VA_GVC": 0.3,
+      PLv_D: 1.2222 / 0.6, PLv_RT: 2.054, PLv_GVC: 0.7821 / 0.3,
+    });
+    expect(rows).toEqual(["1.222", "0.205", "0.782"]);
+    expect(line).toContain("✓ 3 项相加 ≈ 2.210，等于前向总生产长度 PLv");
+    cleanup();
+    // Rows that add up as shown keep "=".
+    const exact = await renderLengths({
+      country: "KOR", year: 2017, SVA: 1, PLv: 2,
+      "1_VA_D": 0.6, "2_VA_RT": 0.1, "3_VA_GVC": 0.3,
+      PLv_D: 2, PLv_RT: 2, PLv_GVC: 2,
+    });
+    expect(exact.line).toContain("✓ 3 项相加 = 2.000，等于前向总生产长度 PLv");
+  });
+});
+
 describe("the unavailable step 4 split names undefined parts as such (round 12)", () => {
   const cfg = { totalLabel: "前向总生产长度 PLv", unit: "number" as const, weightTotal: "SVA" };
   const model = (reason: DecompositionModel["reason"], total: number | null) => ({ reason, total }) as DecompositionModel;
