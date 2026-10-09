@@ -140,7 +140,7 @@ export function exampleEffect(outcome: RegressionOutcome, coef: number, x: numbe
 /** Step 14's unit, worded as the report's line beside the step 14 numbers (gvcsim/report_render.py). */
 export const NETWORK_UNIT_NOTE = "中心性原始单位：本步的 Y 是课程按真实网络指标的排名校准生成的数值，不是步骤 5、9 的百万美元，不能和那两步的数值直接比较。";
 
-const BADGE_COLORS ={ negative: NEGATIVE, positive: POSITIVE, insufficient: UNCERTAIN, suppressed: UNCERTAIN } as const;
+const BADGE_COLORS = { negative: NEGATIVE, positive: POSITIVE, insufficient: UNCERTAIN, suppressed: UNCERTAIN } as const;
 
 /**
  * The selected Y's reading, under the bar chart: one headline, a 方向明确／方向不确定 badge with the interval in

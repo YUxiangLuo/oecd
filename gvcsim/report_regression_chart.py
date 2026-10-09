@@ -5,7 +5,7 @@ default first), from the course's fixed estimates of every Y (``_estimate_overvi
 from the saved run itself and marked 已保存, so the chart, the page and the step's table print the same numbers.
 Summary (frontend ``regressionSummaryRows``): one bar per step's saved run, all in standard deviations.
 Numbers and labels follow frontend ``barFigures``: shares in 个百分点 when every Y of the family is a share,
-otherwise 个标准差 = (β × 0.01) / depvar_std with the native value first ("-40.11（0.047 个标准差）").
+otherwise 个标准差 = (β × 0.01) / depvar_std with the native value first ("-40.11（-0.047 个标准差）").
 """
 
 from __future__ import annotations
@@ -82,8 +82,9 @@ def _bar(
     sd_point = float(coef) * 0.01 / std
     sd_bounds = (ci[0] * 0.01 / std, ci[1] * 0.01 / std) if ci is not None else None
     sd_digits = standardized_digits(sd_point, sd_bounds)
-    # Unsigned, as in the table ("幅度约 0.047 个标准差"): the native number before it carries the sign.
-    item = {"value": _shown(sd_point), "text": f"{native_text}（{_signed(sd_point, sd_digits)[1:]} 个标准差）"}
+    # Signed, as the bar and its interval sit on a signed axis ("-40.11（-0.047 个标准差）"); only the table's
+    # "幅度约 0.047 个标准差" is an unsigned size.
+    item = {"value": _shown(sd_point), "text": f"{native_text}（{_signed(sd_point, sd_digits)} 个标准差）"}
     if sd_bounds is not None:
         item["ci_low"], item["ci_high"] = _shown(sd_bounds[0]), _shown(sd_bounds[1])
     return item
