@@ -82,6 +82,9 @@ describe("indicator explorer with automatic report material", () => {
     expect(view.saves[0].indicator_selection).toMatchObject({ first: "CHN", second: "USA" });
     // The report must not call the student's own choice an automatic record.
     expect(view.saves[0].material_chosen).toBe(true);
+    // The confirmation says what to do next, as step 13 does.
+    view.accept();
+    await waitFor(() => expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("当前图表就是已记录的材料。请到步骤 15 更新报告并重新提交给老师。"));
     rows.mockRestore();
     schema.mockRestore();
   });

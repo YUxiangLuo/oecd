@@ -79,6 +79,8 @@ export function stepRecordsAutomatically(step: number): boolean {
   return step >= 1 && step <= 10;
 }
 export const MATERIAL_LOCKED_ACTION = "改用当前图表作为报告材料（之后需在步骤 15 更新报告）";
+/** After the student re-uses a choice as material on a submitted report: what to do next (as step 13 says). */
+export const MATERIAL_RECHOSEN_NEXT = "请到步骤 15 更新报告并重新提交给老师。";
 
 type ReportState = "draft" | "pending" | "graded";
 

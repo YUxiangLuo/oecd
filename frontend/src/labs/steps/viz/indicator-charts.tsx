@@ -208,6 +208,7 @@ export function ComparisonSummary({
   unit,
   gapNote = "比较差距绝对值，不代表因果关系",
   digits,
+  countryDigits,
 }: {
   readings: ComparisonReading[];
   countries: string[];
@@ -217,6 +218,8 @@ export function ComparisonSummary({
   gapNote?: string;
   /** Overrides the shared reading precision (step 10: X to two decimals of a percentage point). */
   digits?: number;
+  /** A country's own cards at its own precision (step 10: as its X = w × τ line reads); the gap keeps `digits`. */
+  countryDigits?: Record<string, number>;
 }) {
   if (countries.length !== 2) return null;
   const common = years.filter((year) =>
@@ -254,8 +257,8 @@ export function ComparisonSummary({
       {countries.map((country, index) => (
         <div key={country}>
           <span>{countryLabel(country)} · {firstYear}→{lastYear}</span>
-          <b>{changeReading(starts[index], ends[index], unit, digits)}</b>
-          <small>{fixedIndicatorNumber(starts[index], unit, digits)} → {fixedIndicatorNumber(ends[index], unit, digits)}</small>
+          <b>{changeReading(starts[index], ends[index], unit, countryDigits?.[country] ?? digits)}</b>
+          <small>{fixedIndicatorNumber(starts[index], unit, countryDigits?.[country] ?? digits)} → {fixedIndicatorNumber(ends[index], unit, countryDigits?.[country] ?? digits)}</small>
         </div>
       ))}
       <div>
@@ -288,6 +291,7 @@ export function IndicatorTrendChart({
   sameIndustry = false,
   markYear,
   stepped = false,
+  countryDigits,
   gapNote,
   digits,
   emptyReading,
@@ -315,13 +319,15 @@ export function IndicatorTrendChart({
   sameIndustry?: boolean;
   /** Step 10: a dashed line just before this year, e.g. the year the simulated tariff starts. */
   markYear?: { year: number; label: string };
-  /** Step 10: annual values that jump in one year are drawn as steps (held until the next year), and the
-   *  `markYear` line sits on its year, where the jump is drawn. */
+  /** Step 10: annual values that jump in one year are drawn as steps, changing halfway between two years, where
+   *  the `markYear` line sits (between the years, as on steps 11–14). */
   stepped?: boolean;
   /** Pair mode only: caption under the gap card. */
   gapNote?: string;
   /** Overrides the shared reading precision for readouts and cards (step 10: X to two decimals). */
   digits?: number;
+  /** Per-country precision for that country's readout and card (pair mode); see {@link ComparisonSummary}. */
+  countryDigits?: Record<string, number>;
 }) {
   const context = mode === "context";
   const { wrapRef, Tip, show, showNear, hide } = useHoverTip();
@@ -402,7 +408,7 @@ export function IndicatorTrendChart({
         index && context ? `${countryLabel(country)}（对比）` : countryLabel(country),
         (() => {
           const value = series[index].find((point) => point.year === year)?.value ?? null;
-          return value === null ? emptyReading?.(country, year) ?? indicatorNumber(null, unit) : indicatorNumber(value, unit, digits);
+          return value === null ? emptyReading?.(country, year) ?? indicatorNumber(null, unit) : indicatorNumber(value, unit, countryDigits?.[country] ?? digits);
         })(),
         CAT[index],
         // Keys match the drawn lines: comparison countries and the median are dashed.
@@ -482,10 +488,10 @@ export function IndicatorTrendChart({
         ))}
         {markYear && years.includes(markYear.year) && markYear.year > years[0] && (
           <g data-mark-year={markYear.year}>
-            <line x1={x(markYear.year - (stepped ? 0 : 0.5))} x2={x(markYear.year - (stepped ? 0 : 0.5))} y1={34} y2={250} stroke="#4b5563" strokeDasharray="5 4" />
+            <line x1={x(markYear.year - 0.5)} x2={x(markYear.year - 0.5)} y1={34} y2={250} stroke="#4b5563" strokeDasharray="5 4" />
             {/* Left of the line: before the marked year the step 10 X is 0 for every country, so the top-left
                 corner is empty; to the right the taxed line jumps to the top and covered the label. */}
-            <text x={x(markYear.year - (stepped ? 0 : 0.5)) - 6} y={46} textAnchor="end" fontSize={12} fill="#374151">{markYear.label}</text>
+            <text x={x(markYear.year - 0.5) - 6} y={46} textAnchor="end" fontSize={12} fill="#374151">{markYear.label}</text>
           </g>
         )}
         {bandPath && <path d={bandPath} fill={REFERENCE_FILL} fillOpacity={0.22} stroke="none" />}
@@ -529,7 +535,8 @@ export function IndicatorTrendChart({
                   {i > 0 && series[index][i - 1].value !== null && stepped && (
                     <polyline
                       data-series={countries[index]}
-                      points={`${x(series[index][i - 1].year)},${y(series[index][i - 1].value!)} ${x(point.year)},${y(series[index][i - 1].value!)} ${x(point.year)},${y(point.value)}`}
+                      // Held until halfway between the years, where the policy line sits, then the new value.
+                      points={`${x(series[index][i - 1].year)},${y(series[index][i - 1].value!)} ${x((series[index][i - 1].year + point.year) / 2)},${y(series[index][i - 1].value!)} ${x((series[index][i - 1].year + point.year) / 2)},${y(point.value)} ${x(point.year)},${y(point.value)}`}
                       fill="none"
                       stroke={CAT[index]}
                       strokeWidth={context && index ? 2 : context ? 3 : 2.5}
@@ -591,6 +598,7 @@ export function IndicatorTrendChart({
           unit={unit}
           gapNote={gapNote}
           digits={digits}
+          countryDigits={countryDigits}
         />}
     </section>
   );

@@ -164,13 +164,18 @@ test("after the report is submitted, step 9 records only when the student asks",
   spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([row(country, year, (country === "CHN" ? 10 : 70) + year - 2018)]));
   mockReference();
   const save = mock(() => {});
-  render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={save} locked />);
+  const view = render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={save} locked />);
   fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "betweenesscentrality" } });
   const record = await screen.findByRole("button", { name: /改用当前图表作为报告材料/ });
   expect(screen.getByText(/报告已提交：浏览不再自动改动报告材料/)).toBeTruthy();
   expect(save).not.toHaveBeenCalled();
   fireEvent.click(record);
   expect(save).toHaveBeenCalledTimes(1);
+  // Once the parent holds the recorded readings, the confirmation says what to do next.
+  const [countries, observations] = (save.mock.calls[0] as unknown as [string[], VizObservation[]]);
+  expect(countries).toEqual(["CHN", "USA"]);
+  view.rerender(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} observations={observations} onRecord={save} locked />);
+  expect(screen.getByRole("region", { name: "步骤9报告材料" }).textContent).toContain("当前图表就是已记录的材料。请到步骤 15 更新报告并重新提交给老师。");
 });
 
 test("one economy alone records against the same-industry reference", async () => {

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
-import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE } from "../../../step-task-card";
+import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT } from "../../../step-task-card";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { IndicatorSchema, Meta } from "../../../types";
@@ -80,6 +80,8 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   // and a view the student left (recorded or not) reopens as it was.
   const [view, setView] = useState<string>(browse?.view || (restored[0]?.source === "explicit-network-ranking" ? "ranking" : "trend"));
   const [countriesChosen, setCountriesChosen] = useState(false);
+  // Recorded on request after submission: the confirmation then says to update the report on step 15.
+  const [rechosen, setRechosen] = useState(false);
   const [swapNote, setSwapNote] = useState<string | null>(null);
   const shownCarriedNote = carriedNote && !countriesChosen
     && [defaultFirst, ...defaultOthers].join(",") === initialCountries.join(",") ? carriedNote : null;
@@ -406,12 +408,12 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
           : view === "trend" ? (undefinedThroughout.length ? `${joinCountries(undefinedThroughout)}的该行业在所选年份都${PATH_UNDEFINED_NOTE}，${label}都无法定义；请换一个行业、指标或国家。`
             : undefinedPoints.length ? `有的年份该行业${PATH_UNDEFINED_NOTE}，${label}无法定义；所选国家至少需要两个共同有效年份，请换一个行业、指标或国家。` : "所选国家至少需要两个共同有效年份。") : "显示的行业里，至少要有一个行业所有所选国家都有数据。"}${observations.length ? "已记录的材料保持不变。" : ""}`
         : locked
-          ? `${MATERIAL_LOCKED_NOTE}${matchesSaved ? "当前图表就是已记录的材料。" : ""}`
+          ? `${MATERIAL_LOCKED_NOTE}${matchesSaved ? `当前图表就是已记录的材料。${rechosen ? MATERIAL_RECHOSEN_NEXT : ""}` : ""}`
         : matchesSaved
           ? `当前图表已自动记录：${joinCountries(selected)} · ${view === "trend" ? `${sectorLabel(industry)} · ${years[0]}–${years.at(-1)} 年趋势` : `${year} 年行业排名`} · ${label}。换视角、国家或指标后会自动更新。`
           : "正在记录当前图表…"}</p>
       {locked && canRecord && !matchesSaved && (
-        <button type="button" className="secondary" onClick={() => onRecord(selected, pendingObservations)}>{MATERIAL_LOCKED_ACTION}</button>
+        <button type="button" className="secondary" onClick={() => { setRechosen(true); onRecord(selected, pendingObservations); }}>{MATERIAL_LOCKED_ACTION}</button>
       )}
       {observations.length ? <details>
         <summary>核对已记录的材料 · {observations.length} 条读数</summary>

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE } from "../../../step-task-card";
+import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT } from "../../../step-task-card";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { Meta, Step, StepStateApi } from "../../../types";
@@ -480,6 +480,8 @@ export function IndicatorExplorer({
         JSON.stringify(state.data?.indicator_selection?.[key as keyof IndicatorSelection]) === JSON.stringify(value),
     );
   const pendingKey = canSave ? `${materialKey(pending)}|${JSON.stringify({ ...selection, view })}` : "";
+  // Recorded on request after submission: the confirmation then says to update the report on step 15.
+  const [rechosen, setRechosen] = useState(false);
   // `chosen`: recorded on the student's request after submission, so the report does not call it automatic.
   const recordCurrent = (chosen = false) => state.save({
     compared: selected,
@@ -1298,12 +1300,12 @@ export function IndicatorExplorer({
           {!validYears ? "请先修正年份范围，当前图表才能被记录。" : !canSave
             ? `当前图表暂不能记录：${blockedReason}${saved.length ? "已记录的材料保持不变。" : ""}`
             : state.materialLocked
-              ? `${MATERIAL_LOCKED_NOTE}${matches ? "当前图表就是已记录的材料。" : ""}`
+              ? `${MATERIAL_LOCKED_NOTE}${matches ? `当前图表就是已记录的材料。${rechosen ? MATERIAL_RECHOSEN_NEXT : ""}` : ""}`
               : matches ? "当前图表已自动记录为本步报告材料；换视角、国家或年份后会自动更新为最后查看的完整图表。" : "正在记录当前图表…"}
         </p>
         {validYears && !canSave && view === "industry" && !rankComplete.length && rankGapList}
         {state.materialLocked && canSave && !matches && (
-          <button type="button" className="secondary" onClick={() => recordCurrent(true)}>{MATERIAL_LOCKED_ACTION}</button>
+          <button type="button" className="secondary" onClick={() => { setRechosen(true); recordCurrent(true); }}>{MATERIAL_LOCKED_ACTION}</button>
         )}
         {saved.length > 0 && <details>
           <summary>核对已记录的材料 · {saved.length} 条读数</summary>
