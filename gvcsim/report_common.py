@@ -21,8 +21,8 @@ _STEP_OUTCOMES = {
 # Keyed by the saved Y's kind, not its family: step 13 can use the GVC position index instead of a length.
 _KIND_DIMENSIONS = {
     "share": "份额（×100 = 百分点）",
-    "length": "长度单位（1 个长度单位约等于平均多经过 1 个生产环节）",
-    "position": "位置指数单位",
+    "length": "长度单位（1 个长度单位约等于平均多经过 1 个生产环节）；另附标准差换算（标准差即 Y 的典型差距）",
+    "position": "位置指数单位；另附标准差换算（标准差即 Y 的典型差距）",
     "network": "中心性原始单位（按真实网络指标的排名校准生成，不是步骤 5、9 的百万美元）；另附标准差换算（标准差即 Y 的典型差距）",
 }
 _STUDENT_METRIC_LABELS = {
@@ -338,40 +338,36 @@ def _natural_effect(
             if ci
             else "—"
         )
-    elif kind == "network":
+    else:
+        # Lengths, the position index and centrality: the value in its own unit, with its size in standard
+        # deviations of Y as on the page ("-0.018 个长度单位（幅度约 0.031 个标准差）"); the sd size is unsigned,
+        # the number before it carries the sign.
+        unit = {"position": "位置指数单位", "network": "中心性原始单位"}.get(kind, "长度单位")
         sd = result.get("depvar_std")
-        positive_sd = float(sd) if isinstance(sd, (int, float)) and float(sd) > 0 else None
+        positive_sd = float(sd) if isinstance(sd, (int, float)) and math.isfinite(sd) and float(sd) > 0 else None
         sd_bounds = (ci[0] * increment / positive_sd, ci[1] * increment / positive_sd) if ci and positive_sd else None
         sd_point = effect / positive_sd if positive_sd is not None else None
         sd_digits = standardized_digits(sd_point, sd_bounds)
         # The estimate and both interval ends in the same decimals, as on the page.
-        digits = network_interval_digits(effect, (ci[0] * increment, ci[1] * increment) if ci else None)
-        effect_text = f"{_signed(effect, digits)} 个中心性原始单位"
-        # Unsigned, as on the page ("平均下降 39.70 …（幅度约 0.047 个标准差）"): the number before it carries the sign.
-        if positive_sd is not None:
-            effect_text += f"（幅度约 {_signed(cast(float, sd_point), sd_digits)[1:]} 个标准差）"
+        digits = (
+            network_interval_digits(effect, (ci[0] * increment, ci[1] * increment) if ci else None)
+            if kind == "network"
+            else 4
+            if kind == "position"
+            else 3
+        )
+        effect_text = f"{_signed(effect, digits)} 个{unit}"
+        if sd_point is not None:
+            effect_text += f"（幅度约 {_signed(sd_point, sd_digits)[1:]} 个标准差）"
         interval = (
-            f"[{_signed(ci[0] * increment, digits)}, {_signed(ci[1] * increment, digits)}] 个中心性原始单位"
+            f"[{_signed(ci[0] * increment, digits)}, {_signed(ci[1] * increment, digits)}] 个{unit}"
             + (
-                f"（约 [{_signed(sd_bounds[0], sd_digits)}, {_signed(sd_bounds[1], sd_digits)}]"
-                " 个标准差）"
+                f"（约 [{_signed(sd_bounds[0], sd_digits)}, {_signed(sd_bounds[1], sd_digits)}] 个标准差）"
                 if sd_bounds is not None
                 else ""
             )
             if ci
             else "—"
-        )
-    else:
-        unit = "位置指数单位" if kind == "position" else "长度单位"
-        digits = 4 if kind == "position" else 3
-        effect_text = f"{_signed(effect, digits)} 个{unit}"
-        mean = result.get("depvar_mean")
-        # As on the page: a length effect is also read against the sample mean length, as an unsigned size
-        # ("幅度约为样本均值的 0.46%"); the number before it carries the sign.
-        if kind == "length" and isinstance(mean, (int, float)) and math.isfinite(mean) and abs(float(mean)) > 1e-12:
-            effect_text += f"（幅度约为样本均值的 {_signed(effect / abs(float(mean)) * 100, 2)[1:]}%）"
-        interval = (
-            f"[{_signed(ci[0] * increment, digits)}, {_signed(ci[1] * increment, digits)}] 个{unit}" if ci else "—"
         )
     return effect_label, effect_text, interval
 

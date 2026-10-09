@@ -108,3 +108,14 @@ def test_submission_response_preserves_step_version_for_session_save(step, versi
     assert result["version"] == version
     assert result["quiz"]["version"] == version
     assert quizzes.grade(step, result["quiz"]["version"], result["quiz"]["answers"])[0]
+
+
+def test_step_12_asks_to_read_the_grey_bar_without_clicking_it():
+    """Clicking a bar saves that Y, so the quiz and the task ask the student to hover or focus the grey bar."""
+    from gvcsim.steps import STEPS
+
+    question = next(item for item in quizzes.STEP_QUIZZES[12] if item["id"] == "s12-compare")
+    assert "点灰色" not in question["prompt"] and "不用点击" in question["prompt"]
+    assert question["correct"] == "b" and quizzes.quiz_version(12) == quizzes.QUIZ_VERSION
+    tasks = " ".join(next(step for step in STEPS if step["n"] == 12)["tasks"])
+    assert "点灰色" not in tasks and "不用点击" in tasks

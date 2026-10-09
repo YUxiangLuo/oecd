@@ -138,11 +138,21 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
             )
             shown = "0.00" if abs(total) < 0.005 else _signed(total, 2)
             assert (
-                f"- 纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（{shown}）。"
-                in section
+                f"- 纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（{shown}）；"
+                "前向 GVC 生产总份额 = 简单 + 复杂。" in section
             )
         else:
             assert "四项份额合计 100%" not in section
+        # Step 14: weighted degree is in-degree + out-degree, said once under its chart (as on the page).
+        assert ("- 加权总度 = 加权入度 + 加权出度，所以这两条的原始值相加约等于加权总度那一条。" in section) == (
+            outcome == "network"
+        )
+        if outcome in ("length", "network"):
+            assert (
+                "条长都换算成标准差（标准差即 Y 在国家×行业之间的典型差距），这样单位或大小差很多的 Y 也能放在一起比"
+                in section
+            )
+            assert "才能放在一起比" not in section
         # The binned scatter and the single-dot coefficient plot are gone.
         assert '"type":"binscatter"' not in section and '"type":"coefficient"' not in section
 

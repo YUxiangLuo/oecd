@@ -116,7 +116,20 @@ def _forward_share_identity(rows: list[dict[str, Any]]) -> str | None:
         return None
     total = sum(float(coef) for coef in coefs if _finite(coef))
     shown = "0.00" if abs(total) < 0.005 else _signed(total, 2)
-    return f"纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（{shown}）。"
+    return (
+        f"纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（{shown}）；"
+        "前向 GVC 生产总份额 = 简单 + 复杂。"
+    )
+
+
+# Step 14: weighted degree is in-degree + out-degree in every row (frontend ``NETWORK_DEGREE_IDENTITY``).
+_DEGREE_KEYS = ("weighted_degree", "weighted_indegree", "weighted_outdegree")
+NETWORK_DEGREE_IDENTITY = "加权总度 = 加权入度 + 加权出度，所以这两条的原始值相加约等于加权总度那一条。"
+
+
+def _degree_identity(rows: list[dict[str, Any]]) -> str | None:
+    keys = {row.get("key") for row in rows}
+    return NETWORK_DEGREE_IDENTITY if all(key in keys for key in _DEGREE_KEYS) else None
 
 
 def family_chart(
@@ -182,10 +195,17 @@ def family_chart(
     }
     if standardized:
         chart["note"] = (
-            "条形是个标准差（标准差即 Y 在国家×行业之间的典型差距），单位或大小相差很多的 Y 才能放在一起比；条形旁先写原始单位的数值，括号里是个标准差。"
+            "条长都换算成标准差（标准差即 Y 在国家×行业之间的典型差距），这样单位或大小差很多的 Y 也能放在一起比；"
+            "条旁先写原始单位的数值，括号里是标准差。"
         )
     lines = _chart_block(chart)
-    identity = _forward_share_identity(rows) if outcome == "production" else None
+    identity = (
+        _forward_share_identity(rows)
+        if outcome == "production"
+        else _degree_identity(rows)
+        if outcome == "network"
+        else None
+    )
     if identity:
         lines.extend((f"- {identity}", ""))
     if len(items) > 1:
@@ -234,4 +254,4 @@ def summary_chart(qualified: dict[int, dict[str, Any]]) -> list[str]:
     return _chart_block(chart)
 
 
-__all__ = ["UNIT_TITLES", "family_chart", "summary_chart"]
+__all__ = ["NETWORK_DEGREE_IDENTITY", "UNIT_TITLES", "family_chart", "summary_chart"]

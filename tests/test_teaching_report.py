@@ -58,14 +58,41 @@ def test_report_small_effects_match_card_precision(outcome, coef, low, high, eff
     assert rendered_interval == interval
 
 
-def test_report_length_effect_states_its_size_against_the_mean_unsigned_as_on_the_page():
-    _, effect, _ = teaching_report._natural_effect(
+@pytest.mark.parametrize(
+    ("kind", "coef", "low", "high", "std", "effect", "interval"),
+    [
+        (
+            "length",
+            -1.8414,
+            -1.92,
+            -1.76,
+            0.58,
+            "-0.018 个长度单位（幅度约 0.032 个标准差）",
+            "[-0.019, -0.018] 个长度单位（约 [-0.033, -0.030] 个标准差）",
+        ),
+        (
+            "position",
+            -0.21,
+            -0.30,
+            -0.12,
+            0.17,
+            "-0.0021 个位置指数单位（幅度约 0.012 个标准差）",
+            "[-0.0030, -0.0012] 个位置指数单位（约 [-0.018, -0.007] 个标准差）",
+        ),
+    ],
+)
+def test_report_step13_sizes_are_in_standard_deviations_like_step_14(kind, coef, low, high, std, effect, interval):
+    """Step 13 states its size as step 14 does (and as both bar charts draw it): in standard deviations,
+    unsigned after 幅度约, not against the sample mean."""
+    _, rendered_effect, rendered_interval = teaching_report._natural_effect(
         "length",
-        {"method": "twfe_intensity", "depvar_kind": "length"},
-        {"status": "ok", "depvar_mean": 3.95},
-        {"name": "teaching_tariff_exposure", "coef": -1.8186, "ci_low": -1.9, "ci_high": -1.7},
+        {"method": "twfe_intensity", "depvar_kind": kind},
+        {"status": "ok", "depvar_mean": 3.95, "depvar_std": std},
+        {"name": "teaching_tariff_exposure", "coef": coef, "ci_low": low, "ci_high": high},
     )
-    assert effect == "-0.018 个长度单位（幅度约为样本均值的 0.46%）"
+    assert rendered_effect == effect
+    assert rendered_interval == interval
+    assert "样本均值" not in rendered_effect
 
 
 def test_report_tiny_nonzero_numbers_and_standardized_effect_preserve_sign():
@@ -1427,7 +1454,7 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert report.provenance["runs"][0]["step"] == 11
     assert report.provenance["runs"][0]["result"]["coefs"][0]["coef"] == 1.2
     assert "1.2" in report.markdown and "生成报告时不会重算" in report.markdown
-    assert "[0.5721, 1.828]" in report.markdown
+    assert "[0.5721, 1.8279]" in report.markdown
     assert "## 关键证据摘要" in report.markdown
     assert X_COLUMN in report.markdown
     assert "+1.20 个百分点" in report.markdown
@@ -1437,7 +1464,9 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
         "| 变量 | 系数（X 按份额计） | X 每高 1 个百分点，Y 平均相差 | 标准误 | 95% 区间（按系数计） | p 值 |"
         in report.markdown
     )
-    assert "| 关税暴露 X | 1.2 | +1.20 个百分点 | 0.3 | [0.5721, 1.828] | 0.0007662 |" in report.markdown
+    # Four decimals for every number but p, as the page's 详细数字 table prints them.
+    assert "| 关税暴露 X | 1.2000 | +1.20 个百分点 | 0.3000 | [0.5721, 1.8279] | 0.0007662 |" in report.markdown
+    assert "4 位有效数字" not in report.markdown and "保留 4 位小数" in report.markdown
     # Versions, the session digest and the unused macro controls are listed only under "报告溯源", at the end.
     body, provenance = report.markdown.split("## 报告溯源", 1)
     assert "数据来源：OECD ICIO 2023 版" in body
@@ -1920,7 +1949,7 @@ def test_report_marks_suppressed_inference_and_reasons(tmp_path, monkeypatch):
 
     assert "这一项不显示 95% 区间" in report.markdown
     assert "处理聚类不足" in report.markdown
-    assert "| 关税暴露 X | -0.2 | -0.20 个百分点 | 0.1 | 不显示 | 不显示 |" in report.markdown
+    assert "| 关税暴露 X | -0.2000 | -0.20 个百分点 | 0.1000 | 不显示 | 不显示 |" in report.markdown
 
 
 def test_report_translates_settings_controls_and_rounds_display_values(tmp_path, monkeypatch):
@@ -2363,7 +2392,7 @@ def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(
     saved = length["items"][2]
     assert saved["value"] == pytest.approx(-0.004 / 0.17, rel=1e-3)
     assert saved["text"] == "-0.0040（-0.024 个标准差）"
-    assert "| 关税暴露 X 每高 1 个百分点，Y 平均相差 | **-0.0040 个位置指数单位** |" in markdown
+    assert "| 关税暴露 X 每高 1 个百分点，Y 平均相差 | **-0.0040 个位置指数单位（幅度约 0.024 个标准差）** |" in markdown
     assert [item["sub"] for item in length["items"]] == ["长度单位", "长度单位", "位置指数单位"]
     summary = next(chart for chart in charts if chart["title"] == "四步保存的结果（都换算成标准差）")
     assert summary["items"][2]["text"] == "-0.0040 个位置指数单位（-0.024 个标准差）"
@@ -2387,10 +2416,13 @@ def test_technical_appendix_states_the_chosen_y_unit_not_the_family_unit():
         "result": {"status": "ok", "coefs": []},
     }
     lines = _run_sections([run])
-    assert "- 单位：位置指数单位" in lines
+    assert "- 单位：位置指数单位；另附标准差换算（标准差即 Y 的典型差距）" in lines
     assert "- 结果指标 Y：GVC 位置指数" in lines
     default = {**run, "design": {"depvar_label": "前向生产长度", "equation": "Y = βX + FE"}}
-    assert "- 单位：长度单位（1 个长度单位约等于平均多经过 1 个生产环节）" in _run_sections([default])
+    assert (
+        "- 单位：长度单位（1 个长度单位约等于平均多经过 1 个生产环节）；另附标准差换算（标准差即 Y 的典型差距）"
+        in _run_sections([default])
+    )
 
 
 def test_tiny_signed_values_keep_two_significant_figures_like_the_result_card():
@@ -2672,3 +2704,26 @@ def _sector(code: str) -> str:
     from gvcsim.report_labels import sector_label
 
     return sector_label(code)
+
+
+def test_report_appendix_numbers_match_the_page_detail_table():
+    """The appendix prints the coefficient, SE and both interval ends with four decimals, as the page's 详细数字
+    table does (``toFixed(4)``): "[-0.4109, -0.3790]", never "[-0.4109, -0.379]" or "-1.841" next to "-1.8414"."""
+    from gvcsim.report_render import _technical_estimate_tables
+
+    result = {
+        "status": "ok",
+        "coefs": [
+            {"name": X_COLUMN, "coef": -1.84138, "se": 0.0398641, "p": 0.00002, "ci_low": -0.41094, "ci_high": -0.37902}
+        ],
+    }
+    lines = _technical_estimate_tables({"depvar_kind": "length"}, result, suppressed=False, outcome="length")
+    row = next(line for line in lines if line.startswith("| 关税暴露 X |"))
+    assert row == "| 关税暴露 X | -1.8414 | -0.018 个长度单位 | 0.0399 | [-0.4109, -0.3790] | <0.0001 |"
+
+
+def test_report_example_conversion_groups_thousands_like_the_page():
+    from gvcsim.report_render import _example_size
+
+    assert _example_size("network", -1382.4) == "1,382 个中心性原始单位"
+    assert _example_size("network", 12.345) == "12.3 个中心性原始单位"

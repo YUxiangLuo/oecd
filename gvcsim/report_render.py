@@ -489,7 +489,8 @@ def _example_size(kind: str, change: float) -> str:
         size *= 100
     if 0 < size < 0.5 * 10**-digits:
         return f"不到 {10**-digits:.{digits}f} {unit}"
-    return f"{size:.{digits}f} {unit}"
+    # Thousands separators, as the page writes them ("约为 -1,382 个中心性原始单位").
+    return f"{size:,.{digits}f} {unit}"
 
 
 def _example_conversion(
@@ -679,8 +680,17 @@ def _reported_inference_cells(
 ) -> tuple[str, str]:
     if suppressed:
         return "不显示", "不显示"
-    interval = f"[{_number(ci_low)}, {_number(ci_high)}]" if ci_low is not None and ci_high is not None else "—"
+    low, high = _fixed4(ci_low), _fixed4(ci_high)
+    interval = f"[{low}, {high}]" if "—" not in (low, high) else "—"
     return interval, _number(p_raw, p_value=True)
+
+
+def _fixed4(value: Any) -> str:
+    """A coefficient, SE or interval end as the page's 详细数字 table prints it (``toFixed(4)``): four decimals,
+    both interval ends alike ("[-0.4109, -0.3790]", not "[-0.4109, -0.379]")."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(float(value)):
+        return "—"
+    return f"{float(value):.4f}"
 
 
 def _technical_estimate_tables(
@@ -716,8 +726,8 @@ def _technical_estimate_tables(
             else "—"
         )
         lines.append(
-            f"| {_coefficient_label(coefficient.get('name', '—'), design)} | {_number(coefficient.get('coef'))} | "
-            f"{per_point} | {_number(coefficient.get('se'))} | {interval} | {p_value} |"
+            f"| {_coefficient_label(coefficient.get('name', '—'), design)} | {_fixed4(coefficient.get('coef'))} | "
+            f"{per_point} | {_fixed4(coefficient.get('se'))} | {interval} | {p_value} |"
         )
 
     return lines
@@ -730,7 +740,7 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
         # One source line per paragraph: Markdown joins consecutive lines with a space, which would show
         # after each "。".
         "以下是你在步骤 11–14 保存的计算结果，生成报告时不会重算。每步通常只有最后一次计算；只有最后一次没有算出可用结果时，才会同时列出用于汇总表的那一次。"
-        "表中数字四舍五入到 4 位有效数字，很小的 p 值显示为 <0.0001，不是说概率为零。",
+        "系数、标准误和区间保留 4 位小数，与步骤 11–14 页面上的“详细数字”表相同；很小的 p 值显示为 <0.0001，不是说概率为零。",
         "",
         "表中的“系数”对应 X 相差 1（即 100 个百分点）时 Y 平均相差多少；除以 100，才是正文里“X 每高 1 个百分点”的数，"
         "表中另列一栏。贸易流和生产两步的 Y 是份额，正文又把它换成百分点（乘 100），一除一乘，两栏数字相同；"
