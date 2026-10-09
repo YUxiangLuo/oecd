@@ -992,6 +992,24 @@ def test_indicator_trend_requires_two_common_years_per_metric():
     assert any(item["step"] == 6 for item in check_material_gate(session))
 
 
+def test_composition_reading_says_the_part_medians_need_not_add_up_to_100(monkeypatch):
+    """Round 27: each part's global median is taken on its own (step 7's four sum to 100.87%)."""
+    session = _complete()
+    data = session["steps"]["6"]["data"]
+    components = {"DVAex": 50, "DVArt": 5, "DDC": 3, "FVA": 20, "FDC": 4, "taxsub": -2, "gross_exports": 80}
+    data["observations"] = [
+        dict(item, metric=metric, value=value, unit="百万美元", source="explicit-indicator-composition")
+        for item in data["observations"]
+        for metric, value in components.items()
+    ]
+    monkeypatch.setattr(
+        report_observed, "country_reference", lambda *args, **kwargs: {"n": 76, "median": 0.2, "ranks": {}, "ties": {}}
+    )
+    section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 6", 1)[1]
+    reading = next(line for line in section.splitlines() if line.startswith("- 自动读图"))
+    assert "各项的全球中位数分别计算，相加不一定等于 100%。这是描述性比较。" in reading
+
+
 def test_composition_requires_all_trade_components_and_reports_each_reading():
     session = _complete()
     data = session["steps"]["6"]["data"]

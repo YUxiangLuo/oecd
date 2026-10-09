@@ -658,9 +658,16 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
                     if len(references) == 1
                     else ""
                 )
+                # Each part's median is taken across economies on its own, so the medians need not add up to 100%.
+                medians_note = (
+                    "各项的全球中位数分别计算，相加不一定等于 100%。"
+                    if observations[0]["source"] == "explicit-indicator-composition" and len(references) > 1
+                    else ""
+                )
                 lines.append(
                     f"- 自动读图：{scope}最高为 {largest_labels}（{_reading(largest['value'], unit)}），"
-                    f"最低为 {smallest_labels}（{_reading(smallest['value'], unit)}）{median_reading}。这是描述性比较。"
+                    f"最低为 {smallest_labels}（{_reading(smallest['value'], unit)}）{median_reading}。"
+                    f"{medians_note}这是描述性比较。"
                 )
             lines.append("")
     return lines
