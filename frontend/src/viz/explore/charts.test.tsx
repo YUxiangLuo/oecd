@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { LengthViz } from "../views/length-comparison";
 import { CompositionBar, QuadrantScatter, RankBarChart, RANK_HIGHLIGHT_TEXT, xTickAnchor } from "./charts";
@@ -228,6 +229,23 @@ describe("Steps 6-9 chart semantic data equivalents", () => {
       expect(html).toContain("当前没有可显示的有效数据");
       expect(html).not.toContain("<table");
       expect(html).toContain("<summary>");
+    }
+  });
+});
+
+describe("chart tooltips", () => {
+  test("a value keeps its unit on one line: 百万美元 is not split across lines", () => {
+    const view = render(<CompositionBar
+      rows={[{ country: "MEX", a: 274951, total: 410393 }]}
+      segments={[{ key: "a", name: "国内增加值出口" }]} sortKey="total" valueFormat="amount" sortFormat="amount"
+    />);
+    try {
+      fireEvent.mouseMove(view.container.querySelector(".composition-chart-row")!, { clientX: 10, clientY: 10 });
+      const values = [...view.container.querySelectorAll("b")].filter((node) => node.textContent?.endsWith("百万美元"));
+      expect(values.length).toBeGreaterThan(0);
+      for (const value of values) expect(value.style.whiteSpace).toBe("nowrap");
+    } finally {
+      cleanup();
     }
   });
 });
