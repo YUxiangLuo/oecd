@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { DistributionStrip, IndicatorPairBars, IndicatorTrendChart, LengthPositionTrajectory, TrendSummary } from "./indicator-charts";
+import { ComparisonSummary, DistributionStrip, IndicatorPairBars, IndicatorTrendChart, LengthPositionTrajectory, TrendSummary } from "./indicator-charts";
 import { countryDistribution } from "./indicator-model";
 import type { Row } from "./scaffold";
 
@@ -110,6 +110,15 @@ describe("mark-level hover layers", () => {
     expect(screen.getByRole("status").textContent).toContain("USA 美国");
     fireEvent.blur(group);
     expect(group.getAttribute("data-hovered")).toBeNull();
+  });
+
+  test("step 10 with both X = 0: the gap card says 差距为 0, not 差距基本不变", () => {
+    const readings = [2016, 2020].flatMap((year) => ["MEX", "CRI"].map((country) => ({ country, year, value: 0 })));
+    const view = render(<ComparisonSummary readings={readings} countries={["MEX", "CRI"]} years={[2016, 2020]} unit="个百分点" gapNote="两国都未被加税：X 一直为 0，没有差距" />);
+    const text = view.getByRole("group", { name: "两国趋势结论" }).textContent ?? "";
+    expect(text).toContain("差距为 0");
+    expect(text).not.toContain("差距基本不变");
+    cleanup();
   });
 
   test("pair bar labels read amounts under 10 at the cards' three decimals (8.765, -2.235, not 9, -2)", () => {
