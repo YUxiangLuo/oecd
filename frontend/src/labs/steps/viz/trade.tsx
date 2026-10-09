@@ -58,6 +58,7 @@ export const TRADE_TOPIC: IndicatorTopic = {
     focus: "FVA",
     focusLabel: "外国增加值项占比",
     note: "每条是一国总出口的六项构成，加起来等于总出口。产品税减补贴为负时画成红色，放在 0 的左边；这时各项份额加起来不按普通 100% 条读。",
+    evolutionNote: "每个色带是总出口的一项，六项加起来等于总出口。产品税减补贴为负时画成红色，放在 0 的下方；这时各项份额加起来不按普通 100% 读。",
   },
   axes: {
     key: "source",

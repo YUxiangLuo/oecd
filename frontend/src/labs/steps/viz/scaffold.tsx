@@ -61,6 +61,11 @@ export interface BoundRows {
 
 export interface VizStepState extends QuizCompletionState, Record<string, unknown> {
   indicator_selection?: IndicatorSelection;
+  /** Steps 6–8: the selection last on screen, saved with `saveView` whether or not it was recorded (see
+   *  `StepStateApi.saveView`); it reopens the step where the student left it. */
+  browse_selection?: IndicatorSelection;
+  /** Step 9: the same for its countries, view, industry, indicator and year. */
+  network_browse?: NetworkBrowse;
   chart?: string;
   compared?: string[];
   year?: number;
@@ -71,6 +76,15 @@ export interface VizStepState extends QuizCompletionState, Record<string, unknow
   observations?: VizObservation[];
   /** The student recorded this material explicitly after submitting the report (automatic saves clear it). */
   material_chosen?: boolean;
+}
+
+/** Step 9's browsing state (see `VizStepState.network_browse`). */
+export interface NetworkBrowse {
+  countries: string[];
+  view: string;
+  industry: string;
+  metric: string;
+  year: number;
 }
 
 interface RestoredVizState {

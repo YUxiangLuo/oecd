@@ -3,10 +3,10 @@
  * country-level headline indicator for the selected year. A one-line status shows what was recorded.
  * There is no comparison country here; comparing countries belongs to steps 6–9.
  */
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../../api";
 import { sameJsonValue } from "../../../session-store";
-import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE, STEP_MATERIAL_ACTION_ID } from "../../../step-task-card";
+import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT, STEP_MATERIAL_ACTION_ID } from "../../../step-task-card";
 import type { IndicatorSchema, Meta, StepStateApi } from "../../../types";
 import { cjkSpace } from "../../../format";
 import { countryLabel } from "../../../viz";
@@ -86,6 +86,11 @@ export function useAutoMaterial({ topic, meta, state, country, year, schema, bro
   };
 }
 
+/** "GVC 位置指数（前向 GVC 段／后向 GVC 段，国家整体）": one bracket pair, never two back to back. */
+export function countryScope(label: string): string {
+  return label.endsWith("）") ? `${label.slice(0, -1)}，国家整体）` : `${label}（国家整体）`;
+}
+
 export function AutoMaterialStatus({ state, schema, metric, current, record, loadFailed, loadError = null, onRetryLoad, where, lead, note }: {
   state: StepStateApi<IndicatorStepState>;
   schema: IndicatorSchema | null | undefined;
@@ -109,6 +114,8 @@ export function AutoMaterialStatus({ state, schema, metric, current, record, loa
   // Locked material is shown as saved even when the student browses something else. A record saved by an
   // earlier version may hold two countries; it is shown as recorded.
   const recorded = current || state.materialLocked ? state.data?.observations ?? [] : [];
+  // Recorded on request after submission: say what to do next while the record is the current choice.
+  const [rechosen, setRechosen] = useState(false);
   return (
     <div id={STEP_MATERIAL_ACTION_ID} tabIndex={-1} className={`auto-material${loadFailed && recorded.length === 0 ? " auto-material--failed" : ""}`}>
       <b>报告材料 · {state.materialLocked ? "已记录" : "自动记录"}</b>
@@ -119,8 +126,8 @@ export function AutoMaterialStatus({ state, schema, metric, current, record, loa
           {loadFailed && onRetryLoad && <button type="button" className="secondary" onClick={(event) => { const button = event.currentTarget; onRetryLoad(); keepFocusNear(button); }}>重试</button>}
         </span>}
       {state.materialLocked
-        ? <small>{MATERIAL_LOCKED_NOTE}{record && <button type="button" className="secondary" onClick={record}>{MATERIAL_LOCKED_ACTION.replace("图表", "选择")}</button>}</small>
-        : <small>{lead ?? `记录${where}`}{cjkSpace(lead ? "记录的是同一年的" : "同一年的", metric ? fieldLabel(metric, schema) : "本步指标")}（国家整体），换国家或年份后自动更新，无需另外保存。{note ? ` ${note}` : ""}</small>}
+        ? <small>{MATERIAL_LOCKED_NOTE}{rechosen && current ? `当前选择就是已记录的材料。${MATERIAL_RECHOSEN_NEXT}` : ""}{record && <button type="button" className="secondary" onClick={() => { setRechosen(true); record(); }}>{MATERIAL_LOCKED_ACTION.replace("图表", "选择")}</button>}</small>
+        : <small>{lead ?? `记录${where}`}{cjkSpace(lead ? "记录的是同一年的" : "同一年的", countryScope(metric ? fieldLabel(metric, schema) : "本步指标"))}，换国家或年份后自动更新，无需另外保存。{note ? ` ${note}` : ""}</small>}
     </div>
   );
 }

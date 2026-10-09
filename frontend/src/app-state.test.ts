@@ -51,6 +51,23 @@ describe("application URL state", () => {
     ]);
   });
 
+  test("a step opened by URL keeps its own entry: the first sidebar click pushes after it", () => {
+    // A history stack as the browser keeps it, driven the way App drives it: the deep link is canonicalized with
+    // "replace" (a no-op for ?step=3), every sidebar click pushes.
+    const stack = ["/lab?step=3"];
+    let index = 0;
+    const history = {
+      pushState: (_data: unknown, _unused: string, url?: string | URL | null) => { stack.splice(index + 1, Infinity, String(url)); index += 1; },
+      replaceState: (_data: unknown, _unused: string, url?: string | URL | null) => { stack[index] = String(url); },
+    };
+    const href = () => `https://example.test${stack[index]}`;
+    writeStepHistory(history, href(), 3, "replace");
+    writeStepHistory(history, href(), 7, "push");
+    writeStepHistory(history, href(), 12, "push");
+    expect(stack).toEqual(["/lab?step=3", "/lab?step=7", "/lab?step=12"]);
+    expect(index).toBe(2);
+  });
+
   test("drops only the step from the current entry when the account changes", () => {
     const calls: string[] = [];
     const history = {

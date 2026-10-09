@@ -202,3 +202,13 @@ describe("undefined path metrics in the step 5 table (round 12)", () => {
     expect(html).toMatch(/<td>0<\/td>/);
   });
 });
+
+test("steps 2–5 tables use the compact cells that let step 5's nine columns fit at 1024 px", async () => {
+  const html = renderToStaticMarkup(
+    <IndicatorDataTable groupLabel="网络" schema={null} columns={["country", "industry"]} rows={[]} year={2020} country="CHN" page={1} />,
+  );
+  expect(html).toContain('<table class="data-table indicator-data-table">');
+  const css = await Bun.file(new URL("./indicator-method.css", import.meta.url)).text();
+  expect(css).toContain(".data-table.indicator-data-table th, .data-table.indicator-data-table td { padding-left: 8px; padding-right: 8px; }");
+  expect(css).toContain(".data-table.indicator-data-table td.text-col { white-space: normal;");
+});

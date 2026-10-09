@@ -136,6 +136,8 @@ export interface SessionApi {
   materialGate: ReportGateItem[] | null;
   /** Incremented when a server conflict deliberately replaces all local step state. */
   workspaceGeneration: number;
+  /** Incremented each time edits kept in this tab (an expired login, a logout offline) are put back after login. */
+  restoredEdits?: number;
   getStep: <T>(step: number) => T | undefined;
   getConfirmedStep: <T>(step: number) => T | undefined;
   patchStep: <T extends object>(step: number, patch: Partial<T>) => void;
@@ -275,6 +277,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const [reportGate, setReportGate] = useState<ReportGateItem[] | null>(null);
   const [materialGate, setMaterialGate] = useState<ReportGateItem[] | null>(null);
   const [workspaceGeneration, setWorkspaceGeneration] = useState(0);
+  const [restoredEdits, setRestoredEdits] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncConflict, setSyncConflict] = useState(false);
@@ -386,6 +389,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         setSyncConflict(false);
         setStatus("ready");
         if (!sameSessionContent(restored, response.session)) {
+          setRestoredEdits((value) => value + 1);
           queue.current?.enqueue(restored);
           void queue.current?.drain().catch(() => {});
         }
@@ -584,7 +588,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
 
   return {
     status, session, report, updatedAt, syncing, syncError, syncConflict, unsynced,
-    completion, reportGate, materialGate, workspaceGeneration,
+    completion, reportGate, materialGate, workspaceGeneration, restoredEdits,
     getStep: useCallback(<T,>(step: number) => readStep<T>(session, step), [session]),
     getConfirmedStep: useCallback(<T,>(step: number) => readStep<T>(confirmedSession, step), [confirmedSession]),
     patchStep: useCallback(<T extends object,>(step: number, patch: Partial<T>) => update((value) => patchStoredStep(value, step, patch)), [update]),

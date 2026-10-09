@@ -400,3 +400,13 @@ test("the default comparison country is the USA, or the first other country when
   expect(defaultPartner(["ARG", "CHN", "USA"], "CHN")).toBe("USA");
   expect(defaultPartner(["ARG", "CHN", "USA"], "USA")).toBe("ARG");
 });
+
+test("the （默认） mark stays on the USA; with the USA as A the preset is rearranged and nothing is marked", async () => {
+  const { defaultMarkFor, pickFirst } = await import("./indicator-model");
+  expect(defaultMarkFor(["ARG", "CHN", "USA"], "CHN")).toBe("USA");
+  expect(defaultMarkFor(["ARG", "CHN", "USA"], "DEU")).toBe("USA");
+  expect(defaultMarkFor(["ARG", "CHN", "USA"], "USA")).toBe("");
+  // Picking a comparison country as A swaps the two and says so.
+  expect(pickFirst("CHN", ["USA", "DEU"], "DEU")).toEqual({ others: ["USA", "CHN"], note: "已与对比国家 C 互换。" });
+  expect(pickFirst("CHN", ["USA"], "JPN")).toEqual({ others: ["USA"], note: null });
+});

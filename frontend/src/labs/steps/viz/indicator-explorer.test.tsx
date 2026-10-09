@@ -82,6 +82,9 @@ describe("indicator explorer with automatic report material", () => {
     expect(view.saves[0].indicator_selection).toMatchObject({ first: "CHN", second: "USA" });
     // The report must not call the student's own choice an automatic record.
     expect(view.saves[0].material_chosen).toBe(true);
+    // The confirmation says what to do next, as step 13 does.
+    view.accept();
+    await waitFor(() => expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("当前图表就是已记录的材料。请到步骤 15 更新报告并重新提交给老师。"));
     rows.mockRestore();
     schema.mockRestore();
   });
@@ -572,6 +575,22 @@ describe("readouts and update notes follow the chart on screen (round 10)", () =
       expect(view.getByLabelText("构成读数").textContent).toContain("无法算比重");
     } finally { rows.mockRestore(); schema.mockRestore(); }
   });
+
+  test("a total of 0 with every part 0 does not send the student to 金额, which would be empty too", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) =>
+      countryRows(year).map((row) => (row.country === "USA" ? { ...row, gross_exports: 0, FVA: 0, DVAex: 0, DVArt: 0, DDC: 0, FDC: 0, taxsub: 0 } : row)));
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const view = setup();
+      const note = await view.findByText(/构成份额无法计算，占比图里不画/);
+      expect(note.textContent).toContain("USA 美国 · 2021：总出口（含产品税减补贴）为 0，构成份额无法计算，占比图里不画。");
+      expect(note.textContent).not.toContain("金额");
+      // 历年构成 draws bands, not bars: its note does not say "每条".
+      fireEvent.click(view.getByRole("button", { name: "历年构成" }));
+      await waitFor(() => expect(view.container.textContent).toContain("每个色带是总出口的一项"));
+      expect(view.container.textContent).not.toContain("每条是");
+    } finally { rows.mockRestore(); schema.mockRestore(); }
+  });
 });
 
 test("a complete chart's readings summary has no blank-reading suffix (round 13)", async () => {
@@ -803,5 +822,67 @@ describe("undefined lengths and medians that say nothing (round 11)", () => {
       expect(view.container.textContent).not.toContain("前后向均较高");
       expect(view.container.textContent).not.toContain("灰色虚线是图上各经济体的中位数");
     } finally { rows.mockRestore(); sector.mockRestore(); schema.mockRestore(); }
+  });
+});
+
+describe("steps 6–8 keep an exploration-only selection and say where carried countries came from", () => {
+  const wide: Meta = { ...meta, countries: ["BRN", "CHN", "LUX", "USA"] };
+  const wideRows = (year: number) => ["BRN", "CHN", "LUX", "USA"].map((country, i) => ({ ...countryRows(year)[0], country, gross_exports: 100 + i * 50 }));
+  const stateOf = (data: VizStepState | undefined, views: VizStepState[], extra: Partial<StepStateApi<VizStepState>> = {}): StepStateApi<VizStepState> => ({
+    data, save: () => {}, saveView: (value) => views.push(value), complete: false, syncing: false, syncError: null, syncNow: () => {}, ...extra,
+  });
+
+  test("a country changed in 定位图 (not recorded) comes back with its view after leaving the step", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => wideRows(year));
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const views: VizStepState[] = [];
+      const first = render(<TradeVizStep meta={wide} step={step} state={stateOf({ compared: ["LUX", "USA"] }, views)} />);
+      await first.findByRole("button", { name: "定位图" });
+      fireEvent.click(first.getByRole("button", { name: "定位图" }));
+      fireEvent.change(first.getByLabelText("国家 A"), { target: { value: "BRN" } });
+      fireEvent.click(first.getByRole("button", { name: /移除对比国家 B/ }));
+      await waitFor(() => expect(views.at(-1)?.browse_selection).toMatchObject({ first: "BRN", others: [], view: "positioning" }));
+      first.unmount();
+      // Back on the step: the saved browsing selection wins over the carried / recorded countries.
+      const again = render(<TradeVizStep meta={wide} step={step} state={stateOf({ compared: ["LUX", "USA"], browse_selection: views.at(-1)!.browse_selection }, [])} />);
+      expect((again.getByLabelText("国家 A") as HTMLSelectElement).value).toBe("BRN");
+      expect(again.queryByLabelText("对比国家 B")).toBeNull();
+      expect(again.getByRole("button", { name: "定位图" }).getAttribute("aria-pressed")).toBe("true");
+    } finally { rows.mockRestore(); schema.mockRestore(); }
+  });
+
+  test("a carried set says which step it came from until the countries change here", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => wideRows(year));
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const view = render(<TradeVizStep meta={wide} step={step} state={stateOf({ compared: ["LUX", "USA"] }, [], { carriedFrom: 3 })} />);
+      expect(view.getByText("沿用你在步骤 3 选的国家，可以更换。")).toBeTruthy();
+      // Another view is not another set of countries.
+      fireEvent.click(view.getByRole("button", { name: "定位图" }));
+      expect(view.queryByText("沿用你在步骤 3 选的国家，可以更换。")).toBeTruthy();
+      fireEvent.change(view.getByLabelText("国家 A"), { target: { value: "CHN" } });
+      expect(view.queryByText("沿用你在步骤 3 选的国家，可以更换。")).toBeNull();
+      cleanup();
+      // The step's own selection (not the carried set) has no line.
+      const own = render(<TradeVizStep meta={wide} step={step} state={stateOf({ compared: ["LUX", "USA"], browse_selection: { first: "BRN", second: "", others: [], industry: "", metric: "FVA_share", start: 2019, end: 2021, year: 2021, view: "trend", limit: 10 } }, [], { carriedFrom: 3 })} />);
+      expect(own.queryByText(/沿用你在步骤/)).toBeNull();
+    } finally { rows.mockRestore(); schema.mockRestore(); }
+  });
+
+  test("picking a comparison country as A swaps the two, says so, and drops the （默认） mark", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => wideRows(year));
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const view = render(<TradeVizStep meta={wide} step={step} state={stateOf({ compared: ["CHN", "USA"] }, [])} />);
+      const marked = () => [...(view.getByLabelText("对比国家 B") as HTMLSelectElement).options].filter((option) => option.text.includes("（默认）")).map((option) => option.value);
+      expect(marked()).toEqual(["USA"]);
+      fireEvent.change(view.getByLabelText("国家 A"), { target: { value: "USA" } });
+      expect((view.getByLabelText("对比国家 B") as HTMLSelectElement).value).toBe("CHN");
+      expect(view.getByText("已与对比国家 B 互换。")).toBeTruthy();
+      expect(marked()).toEqual([]);
+      fireEvent.change(view.getByLabelText("对比国家 B"), { target: { value: "LUX" } });
+      expect(view.queryByText("已与对比国家 B 互换。")).toBeNull();
+    } finally { rows.mockRestore(); schema.mockRestore(); }
   });
 });

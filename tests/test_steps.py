@@ -55,6 +55,12 @@ def test_student_copy_never_reverses_the_supply_direction():
     assert "谁买了谁的东西" not in _student_copy()
 
 
+def test_step_ten_task_names_the_keyboard_readout_too():
+    """步骤 10 的国家图可用方向键逐个读数，任务卡不只说悬停。"""
+    tasks = "".join(next(step for step in STEPS if step["n"] == 10)["tasks"])
+    assert "悬停或用方向键查看各国的 X 与对美货物顺差" in tasks
+
+
 def test_student_copy_never_leaks_internal_field_names():
     copy = _student_copy()
     assert "EXGR_FVASH" not in copy

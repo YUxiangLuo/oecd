@@ -164,13 +164,18 @@ test("after the report is submitted, step 9 records only when the student asks",
   spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([row(country, year, (country === "CHN" ? 10 : 70) + year - 2018)]));
   mockReference();
   const save = mock(() => {});
-  render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={save} locked />);
+  const view = render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={save} locked />);
   fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "betweenesscentrality" } });
   const record = await screen.findByRole("button", { name: /改用当前图表作为报告材料/ });
   expect(screen.getByText(/报告已提交：浏览不再自动改动报告材料/)).toBeTruthy();
   expect(save).not.toHaveBeenCalled();
   fireEvent.click(record);
   expect(save).toHaveBeenCalledTimes(1);
+  // Once the parent holds the recorded readings, the confirmation says what to do next.
+  const [countries, observations] = (save.mock.calls[0] as unknown as [string[], VizObservation[]]);
+  expect(countries).toEqual(["CHN", "USA"]);
+  view.rerender(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} observations={observations} onRecord={save} locked />);
+  expect(screen.getByRole("region", { name: "步骤9报告材料" }).textContent).toContain("当前图表就是已记录的材料。请到步骤 15 更新报告并重新提交给老师。");
 });
 
 test("one economy alone records against the same-industry reference", async () => {
@@ -300,4 +305,65 @@ test("加权总度 of an industry with no flows anywhere (T) reads as real zeros
   await waitFor(() => expect(scope.textContent).toContain("指标加权总度"));
   expect(material.textContent).toContain("全部为 0");
   expect(save).not.toHaveBeenCalled();
+});
+
+test("step 9 keeps the countries, view and industry of an exploration view after leaving the step", async () => {
+  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([row(country, year, 10)]));
+  mockReference();
+  const browsed: unknown[] = [];
+  const first = render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={() => {}} onBrowse={(value) => browsed.push(value)} />);
+  fireEvent.click(screen.getByRole("button", { name: "流量与路径" }));
+  fireEvent.change(screen.getByLabelText("国家 A"), { target: { value: "DEU" } });
+  await waitFor(() => expect(browsed.at(-1)).toMatchObject({ countries: ["DEU", "USA"], view: "topology", industry: "C26" }));
+  first.unmount();
+  render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={() => {}} initialBrowse={{ ...(browsed.at(-1) as { countries: string[]; view: string; industry: string; metric: string; year: number }), industry: "C27" }} />);
+  expect((screen.getByLabelText("国家 A") as HTMLSelectElement).value).toBe("DEU");
+  expect(screen.getByRole("button", { name: "流量与路径" }).getAttribute("aria-pressed")).toBe("true");
+  fireEvent.click(screen.getByRole("button", { name: "历年变化" }));
+  expect((screen.getByLabelText("行业") as HTMLSelectElement).value).toBe("C27");
+});
+
+test("undefined path metrics: economies with the same years share one clause", async () => {
+  // CHN and USA have no outgoing links in every year; DEU only in 2018.
+  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([{
+    country, year, industry: "C26", closnesscentrality: country === "DEU" ? (year === 2018 ? 0 : 0.5) : 0,
+  } as never]));
+  mockReference();
+  render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA", "DEU"]} onRecord={() => {}}
+    initialBrowse={{ countries: ["CHN", "USA", "DEU"], view: "trend", industry: "C26", metric: "closnesscentrality", year: 2020 }} />);
+  await waitFor(() => expect(screen.getByText(/无法定义（不是 0，不参与排名和中位数，图上留空）/)).toBeTruthy());
+  const note = screen.getByText(/无法定义（不是 0，不参与排名和中位数，图上留空）/).textContent!;
+  expect(note.startsWith("CHN 中国、USA 美国 历年，DEU 德国 2018 年的 C26")).toBe(true);
+  expect(note).not.toContain("中国历年");
+});
+
+test("流量与路径 says which industries it leaves out and why", async () => {
+  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([
+    { country, year, industry: "C26", "weighted degree": 120, betweenesscentrality: 3 },
+    { country, year, industry: "C27", "weighted degree": 0, betweenesscentrality: 0 },
+    { country, year, industry: "T", "weighted degree": 0, betweenesscentrality: 0 },
+  ] as never));
+  mockReference();
+  render(<NetworkTrend meta={{ ...meta, sectors: ["C26", "C27", "T"] }} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={() => {}} />);
+  fireEvent.click(screen.getByRole("button", { name: "流量与路径" }));
+  await waitFor(() => expect(screen.getAllByText("另有 2 个行业没有画出：C27、T 加权总度为 0（没有买卖，对数刻度上画不出）。")).toHaveLength(2));
+});
+
+test("a recorded ranking does not change the trend's industry; a carried pair says where it came from", () => {
+  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([row(country, year, 10)]));
+  mockReference();
+  const release = "a".repeat(32);
+  const ranking: VizObservation[] = ["C27", "C26"].map((industry) => ({ entity: `CHN·${industry}`, country: "CHN", industry, year: 2020, value: 1, metric: "weighted degree", source: "explicit-network-ranking", release }));
+  render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} observations={ranking} carriedNote="沿用你在步骤 6 选的国家，可以更换。" onRecord={() => {}} />);
+  expect(screen.getByRole("button", { name: "行业排名" }).getAttribute("aria-pressed")).toBe("true");
+  fireEvent.click(screen.getByRole("button", { name: "历年变化" }));
+  // The top-ranked C27 is not the trend's industry: the trend keeps its default.
+  expect((screen.getByLabelText("行业") as HTMLSelectElement).value).toBe("C26");
+  expect(screen.queryByText("沿用你在步骤 6 选的国家，可以更换。")).toBeNull();
+  cleanup();
+  render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} carriedNote="沿用你在步骤 6 选的国家，可以更换。" onRecord={() => {}} />);
+  expect(screen.getByText("沿用你在步骤 6 选的国家，可以更换。")).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("国家 A"), { target: { value: "USA" } });
+  expect(screen.queryByText("沿用你在步骤 6 选的国家，可以更换。")).toBeNull();
+  expect(screen.getByText("已与对比国家 B 互换。")).toBeTruthy();
 });

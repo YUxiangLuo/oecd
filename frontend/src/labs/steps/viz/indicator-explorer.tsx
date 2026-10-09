@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE } from "../../../step-task-card";
+import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT } from "../../../step-task-card";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { Meta, Step, StepStateApi } from "../../../types";
@@ -25,7 +25,7 @@ import {
   countryDistribution,
   DEFAULT_MARK,
   defaultEntities,
-  defaultPartner,
+  defaultMarkFor,
   finiteValue,
   indicatorMaterial,
   indicatorRows,
@@ -33,6 +33,7 @@ import {
   materialKey,
   MAX_ENTITIES,
   normalizeSelection,
+  pickFirst,
   selectionEntities,
   type IndicatorSelection,
   type IndicatorTopic,
@@ -55,6 +56,17 @@ import { CAT } from "../../../viz/shared";
 import { cjkSpace } from "../../../format";
 import { MaxCountriesNote } from "./add-country";
 import { Year2020Note } from "./scaffold";
+import { carriedCountryNote } from "../indicator/indicator-table";
+
+/** A saved browsing selection, if it still names a country of this release as A (unknown comparison countries go). */
+export function browsedSelection(raw: unknown, countries: readonly string[]): IndicatorSelection | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const selection = raw as IndicatorSelection;
+  if (typeof selection.first !== "string" || !countries.includes(selection.first)) return null;
+  const others = (Array.isArray(selection.others) ? selection.others : [selection.second])
+    .filter((country): country is string => typeof country === "string" && countries.includes(country));
+  return normalizeSelection({ ...selection, others, second: others[0] ?? "" });
+}
 
 /** "2020" for a single-year material (composition / same-year), "2016–2020" for a range. */
 function savedYearSpan(years: number[]): string {
@@ -95,23 +107,44 @@ export function IndicatorExplorer({
     view: topic.defaultView ?? "trend",
     limit: 10,
   };
-  const [selection, setSelection] = useState<IndicatorSelection>(
-    saved.length && state.data?.indicator_selection
-      ? normalizeSelection(state.data.indicator_selection)
-      : defaults,
-  );
+  // The selection last on screen (saved even when its chart is not recorded) wins over the recorded one, so an
+  // exploration-only view keeps its countries and view after leaving the step.
+  const restoredSelection = (data: VizStepState | undefined, hasSaved: boolean) => {
+    const browse = browsedSelection(data?.browse_selection, countries);
+    if (browse) return browse;
+    return hasSaved && data?.indicator_selection ? normalizeSelection(data.indicator_selection) : null;
+  };
+  const [selection, setSelection] = useState<IndicatorSelection>(() => restoredSelection(state.data, saved.length > 0) ?? defaults);
   const touched = useRef(false);
   const hydrated = useRef(Boolean(state.data));
   useEffect(() => {
     if (hydrated.current || touched.current || !state.data) return;
-    if (saved.length && state.data.indicator_selection)
-      setSelection(normalizeSelection(state.data.indicator_selection));
+    const restored = restoredSelection(state.data, saved.length > 0);
+    if (restored) setSelection(restored);
     hydrated.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.data, saved.length]);
+  // Picking a comparison country as A swaps the two; a short note says so until the next change.
+  const [swapNote, setSwapNote] = useState<string | null>(null);
+  // Where an opening set of countries came from ("沿用你在步骤 n 选的国家"), until the student changes them here.
+  const [carriedFrom] = useState(() => state.carriedFrom != null
+    && selectionEntities(selection).join(",") === (state.data?.compared ?? []).join(",") ? state.carriedFrom : undefined);
+  const [countriesChosen, setCountriesChosen] = useState(false);
   const select = (patch: Partial<IndicatorSelection>) => {
     touched.current = true;
+    setSwapNote(null);
+    if (patch.first !== undefined || patch.others !== undefined) setCountriesChosen(true);
     setSelection((old) => normalizeSelection({ ...old, ...patch }));
   };
+  // Save what is on screen as browsing state, independently of the report material (see `saveView`).
+  const browseKey = JSON.stringify(selection);
+  const browseSaved = useRef(browseKey);
+  useEffect(() => {
+    if (!touched.current || browseSaved.current === browseKey) return;
+    browseSaved.current = browseKey;
+    state.saveView?.({ browse_selection: selection });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [browseKey]);
   /** Replace the comparison list (0–4 countries); `second` follows for saved selections. */
   const selectOthers = (others: string[]) => select({ others, second: others[0] ?? "" });
   // The sticky scope card jumps to the control that changes each part of the scope.
@@ -138,6 +171,7 @@ export function IndicatorExplorer({
     ref.current?.focus();
   };
   const { first, industry, metric, start, end, year, limit } = selection;
+  const carriedNote = countriesChosen ? null : carriedCountryNote(carriedFrom);
   // Step 7 reads the composition from either side; the 定位图 can switch axes and draw year trails.
   const side = selection.composition_side === "alternate" && topic.composition?.alternate ? "alternate" : "primary";
   const activeComposition = side === "alternate" ? topic.composition!.alternate! : topic.composition;
@@ -446,6 +480,8 @@ export function IndicatorExplorer({
         JSON.stringify(state.data?.indicator_selection?.[key as keyof IndicatorSelection]) === JSON.stringify(value),
     );
   const pendingKey = canSave ? `${materialKey(pending)}|${JSON.stringify({ ...selection, view })}` : "";
+  // Recorded on request after submission: the confirmation then says to update the report on step 15.
+  const [rechosen, setRechosen] = useState(false);
   // `chosen`: recorded on the student's request after submission, so the report does not call it automatic.
   const recordCurrent = (chosen = false) => state.save({
     compared: selected,
@@ -539,6 +575,11 @@ export function IndicatorExplorer({
   // Single-year composition bars leave out a total of 0 or below in the share view (shares are undefined);
   // the amount view still draws it, negative parts left of zero.
   const droppedBars = view === "composition" && !amountMode ? totalIssues : [];
+  // "切换到‘金额’可看各分项" only helps when some part is not 0 (LUX T: every part is 0, the amount view is empty too).
+  const droppedHaveParts = droppedBars.some((item) => activeComposition?.segments.some((segment) => {
+    const value = scoped.find((row) => row.country === item.country && row.year === item.year)?.[segment.key];
+    return finiteValue(value) && value !== 0;
+  }));
   const valuesFor = (key: string, sector = industry) =>
     selected.map((country) => {
       const value = rows.find(
@@ -665,6 +706,7 @@ export function IndicatorExplorer({
       aria-label={`步骤 ${step.n} 图表比较区`}
     >
       <h3>{topic.question}</h3>
+      {carriedNote && <p className="muted indicator-carried-note" role="note">{carriedNote}</p>}
       <div className="controls" role="group" aria-label="所选国家">
         <LabeledControl label="国家 A">
           {(id) => (
@@ -674,9 +716,9 @@ export function IndicatorExplorer({
               value={first}
               onChange={(e) => {
                 // Choosing a comparison country as A swaps it with the old A rather than dropping it.
-                const next = e.target.value;
-                const swapped = others.includes(next) ? others.map((item) => (item === next ? first : item)) : others;
-                select({ first: next, others: swapped, second: swapped[0] ?? "" });
+                const picked = pickFirst(first, others, e.target.value);
+                select({ first: e.target.value, others: picked.others, second: picked.others[0] ?? "" });
+                setSwapNote(picked.note);
               }}
             >
               {countries.map((country) => (
@@ -700,7 +742,7 @@ export function IndicatorExplorer({
                     .filter((candidate) => candidate === country || !selected.includes(candidate))
                     .map((candidate) => (
                       <option key={candidate} value={candidate}>
-                        {countryLabel(candidate)}{index === 0 && candidate === defaultPartner(countries, first) ? DEFAULT_MARK : ""}
+                        {countryLabel(candidate)}{index === 0 && candidate === defaultMarkFor(countries, first) ? DEFAULT_MARK : ""}
                       </option>
                     ))}
                 </select>
@@ -730,6 +772,7 @@ export function IndicatorExplorer({
           />
         )}
         {selected.length >= MAX_ENTITIES && <MaxCountriesNote />}
+        {swapNote && <span className="muted" role="status">{swapNote}</span>}
       </div>
       <LensNav
         lenses={lenses}
@@ -1058,7 +1101,7 @@ export function IndicatorExplorer({
           {composition && activeComposition && (
             <>
               <p>
-                {activeComposition.note}
+                {view === "evolution" ? activeComposition.evolutionNote ?? activeComposition.note : activeComposition.note}
                 {view === "evolution"
                   ? "每个国家一张图，颜色和年份顺序都相同；先看各国自己的变化，再比较国家之间的差别。"
                   : amountMode ? "所选国家使用同一金额刻度，条长与总量成比例；负分项画在零轴左侧。" : "所选国家使用相同分项颜色和共同刻度；金额和份额不能混读。"}
@@ -1097,7 +1140,7 @@ export function IndicatorExplorer({
               )}
               {droppedBars.length > 0 && (
                 <p className="muted">
-                  {droppedBars.map((item) => `${countryLabel(item.country)} · ${item.year}：${label(activeComposition.total)}为${item.value === 0 ? " 0" : `负（${textNumber(item.value, "百万美元")} 百万美元）`}`).join("；")}，构成份额无法计算，占比图里不画；切换到“金额”可看各分项。
+                  {droppedBars.map((item) => `${countryLabel(item.country)} · ${item.year}：${label(activeComposition.total)}为${item.value === 0 ? " 0" : `负（${textNumber(item.value, "百万美元")} 百万美元）`}`).join("；")}，构成份额无法计算，占比图里不画{droppedHaveParts ? "；切换到“金额”可看各分项" : ""}。
                 </p>
               )}
               {view === "composition"
@@ -1262,12 +1305,12 @@ export function IndicatorExplorer({
           {!validYears ? "请先修正年份范围，当前图表才能被记录。" : !canSave
             ? `当前图表暂不能记录：${blockedReason}${saved.length ? "已记录的材料保持不变。" : ""}`
             : state.materialLocked
-              ? `${MATERIAL_LOCKED_NOTE}${matches ? "当前图表就是已记录的材料。" : ""}`
+              ? `${MATERIAL_LOCKED_NOTE}${matches ? `当前图表就是已记录的材料。${rechosen ? MATERIAL_RECHOSEN_NEXT : ""}` : ""}`
               : matches ? "当前图表已自动记录为本步报告材料；换视角、国家或年份后会自动更新为最后查看的完整图表。" : "正在记录当前图表…"}
         </p>
         {validYears && !canSave && view === "industry" && !rankComplete.length && rankGapList}
         {state.materialLocked && canSave && !matches && (
-          <button type="button" className="secondary" onClick={() => recordCurrent(true)}>{MATERIAL_LOCKED_ACTION}</button>
+          <button type="button" className="secondary" onClick={() => { setRechosen(true); recordCurrent(true); }}>{MATERIAL_LOCKED_ACTION}</button>
         )}
         {saved.length > 0 && <details>
           <summary>核对已记录的材料 · {saved.length} 条读数</summary>

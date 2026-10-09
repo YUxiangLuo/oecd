@@ -108,7 +108,7 @@ const DECOMP: Record<number, DecompCfg> = {
         if (length != null) return length.toFixed(3);
         return finiteNumber(r[weightKey]) === 0 ? "—（无此类活动）" : "—";
       };
-      return `各段长度：纯国内 ${segment("PLv_D", "1_VA_D")}、传统贸易 ${segment("PLv_RT", "2_VA_RT")}、GVC ${segment("PLv_GVC", "3_VA_GVC")}` +
+      return `前向各段长度：纯国内 ${segment("PLv_D", "1_VA_D")}、传统贸易 ${segment("PLv_RT", "2_VA_RT")}、GVC ${segment("PLv_GVC", "3_VA_GVC")}` +
         `（上表是这些长度乘以增加值份额后的贡献）。`;
     },
   },
@@ -289,6 +289,14 @@ export function displayedSumNote(values: readonly number[], sum: number, panelDe
   return `（上表各项按显示值相加为 ${amountText(total, decimals)}，差别来自四舍五入）`;
 }
 
+/** The rest of the "N 项相加" line: "= 28.85104，等于总出口", or with rounding "≈ 28.85104，与总出口一致（差别来自四舍五入）"
+ * ("≈" and "等于" never share a line); `sumNote` is {@link displayedSumNote}, which then explains the rounding instead. */
+export function sumLine(closes: boolean, addsUp: boolean, sum: string, totalLabel: string, sumNote: string | null): string {
+  if (!closes) return `${addsUp ? "=" : "≈"} ${sum}，不等于${totalLabel}${sumNote ?? ""}`;
+  if (addsUp) return `= ${sum}，等于${totalLabel}${sumNote ?? ""}`;
+  return `≈ ${sum}，${cjkJoin(`与${totalLabel}`, "一致")}${sumNote ?? "（差别来自四舍五入）"}`;
+}
+
 /** Whether the rows as displayed add up exactly to the displayed sum; when not, the sum line reads "≈", as the
  * two-part lines do ("31.136 + 15.354 ≈ 46.489"). */
 export function displayedRowsAddUp(values: readonly number[], sum: number, panelDecimals?: number): boolean {
@@ -299,9 +307,10 @@ export function displayedRowsAddUp(values: readonly number[], sum: number, panel
   return Number.isNaN(shownSum) || Math.abs(added - shownSum) < 10 ** -panelDecimals / 2;
 }
 
-/** A share already in percent, to three decimals as everywhere else ("11.730%"); an exact zero is "0%". */
+/** A share already in percent, to three decimals as everywhere else ("11.730%"), an exact zero too ("0.000%" next
+ * to "100.000%", not "0%"). */
 function percentText(percent: number): string {
-  return percent === 0 ? "0%" : `${stripNegativeZero(percent.toFixed(3))}%`;
+  return `${stripNegativeZero(percent.toFixed(3))}%`;
 }
 
 /** The same digits as the decomposition table beside it; a tiny operand keeps three significant digits so the
@@ -772,8 +781,7 @@ export function DecompositionDemo({
         </div>
         {model.closure != null ? (
           <div className={`decomp-identity ${model.closure ? "ok" : "bad"}`}>
-            {model.closure ? "✓" : "✗"} {cfg.parts.length} 项相加 {displayedRowsAddUp(model.values, model.sum, shownDecimals) ? "=" : "≈"} {amount(model.sum)}，{model.closure ? "等于" : "不等于"}{cfg.totalLabel}{model.error < 1e-6 ? "" : `（差 ${model.error.toPrecision(2)}）`}
-            {displayedSumNote(model.values, model.sum, shownDecimals)}
+            {model.closure ? "✓" : "✗"} {cfg.parts.length} 项相加 {sumLine(model.closure, displayedRowsAddUp(model.values, model.sum, shownDecimals), amount(model.sum), cfg.totalLabel, displayedSumNote(model.values, model.sum, shownDecimals))}{model.error < 1e-6 ? "" : `（差 ${model.error.toPrecision(2)}）`}
           </div>
         ) : negligible && zeroTotalHint ? null : (
           // A zero total is explained once, by the specific hint below.
@@ -782,7 +790,7 @@ export function DecompositionDemo({
             {model.amountCloses != null && ` ${cfg.parts.length} 项金额相加${model.amountCloses ? "等于" : "不等于"}总量。`}
           </div>
         )}
-        {negligible && <div className="decomp-hint">⚠️ {countryLabel(country)} · {sectorLabel(sector)}：{
+        {negligible && <div className="decomp-identity neutral decomp-hint" role="note">ℹ {countryLabel(country)} · {sectorLabel(sector)}：{
           zeroTotalHint ?? "这个行业的数值太小（不到本国各行业合计的 0.01%），建议换一个行业。"
         }</div>}
         <DecompositionDetailTable
@@ -797,8 +805,8 @@ export function DecompositionDemo({
           decimals={precision?.decimals}
           roundingNote={precision?.checks === false}
         />
-        {step === 6 && <MiniBackwardBar row={row} />}
         {cfg.note && sharesAvailable && <div className="decomp-note">{cfg.note(row, model.values, precision?.decimals)}</div>}
+        {step === 6 && <MiniBackwardBar row={row} />}
       </div>
     );
   };

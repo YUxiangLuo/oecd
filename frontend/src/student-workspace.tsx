@@ -29,6 +29,21 @@ import { ToastHost } from "./toast";
 import type { AuthUser, Meta, StepsResponse, StepStateApi } from "./types";
 import type { SessionApi } from "./use-session";
 import { defaultPartner } from "./labs/steps/viz/indicator-model";
+import { sameJsonValue } from "./session-store";
+import { showToast } from "./toast";
+
+export const RESTORED_EDITS_TOAST = "已恢复上次未保存的修改";
+
+/** Edits kept when the login expired were put back on the saved record: say so once per restore (a remount of
+ *  the workspace with the same count does not repeat it). */
+const shownRestores = { count: 0 };
+export function useRestoredEditsToast(restoredEdits: number): void {
+  useEffect(() => {
+    if (restoredEdits <= shownRestores.count) return;
+    shownRestores.count = restoredEdits;
+    showToast(RESTORED_EDITS_TOAST);
+  }, [restoredEdits]);
+}
 
 export function stepMainContentId(step: number): string {
   return `step-${step}-main-content`;
@@ -116,23 +131,46 @@ export function carriedComparisonSource(
 ): { compared: string[]; from: number } | null {
   const singleCountry = step <= 5;
   if (step < 3 || step > 9 || current.length >= (singleCountry ? 1 : 2)) return null;
+  const listOf = (candidates: unknown): string[] => Array.isArray(candidates)
+    ? candidates.filter((code, index): code is string =>
+      typeof code === "string" && code !== "" && code !== "ROW" && candidates.indexOf(code) === index)
+    : [];
+  const partnerOf = (country: string) => (countries.length ? defaultPartner(countries.filter((code) => code !== "ROW"), country) : "");
+  // Steps 2–5 carry the latest earlier country, and opening a step records it, so the nearest earlier record may
+  // itself be a carry: the earliest of the consecutive steps 2–5 holding the same country is where it was picked.
+  const pickedIn = (prior: number, country: string) => {
+    let from = prior;
+    while (from > 2 && firstCountry(savedComparison(from - 1)) === country) from -= 1;
+    return from;
+  };
   for (let prior = step - 1; prior >= 2; prior -= 1) {
     const candidates = savedComparison(prior);
     if (!Array.isArray(candidates)) continue;
-    const unique = candidates.filter((code, index): code is string =>
-      typeof code === "string" && code !== "" && code !== "ROW" && candidates.indexOf(code) === index);
+    const unique = listOf(candidates);
     if (prior <= 5) {
       if (unique.length === 0) continue;
-      // Opening a step records the carried country, so the nearest earlier record may itself be a carry: name the
-      // earliest of the consecutive steps 2–5 that hold the same country, i.e. where the student picked it.
-      let from = prior;
-      while (from > 2 && firstCountry(savedComparison(from - 1)) === unique[0]) from -= 1;
+      const from = pickedIn(prior, unique[0]);
       if (singleCountry) return { compared: unique.slice(0, 1), from };
       if (unique.length >= 2) return { compared: unique.slice(0, 2), from };
-      const partner = countries.length ? defaultPartner(countries.filter((code) => code !== "ROW"), unique[0]) : "";
+      const partner = partnerOf(unique[0]);
       return { compared: partner ? [unique[0], partner] : [unique[0]], from };
     }
-    if (unique.length >= 2) return { compared: unique.slice(0, 5), from: prior };
+    if (unique.length >= 2) {
+      const compared = unique.slice(0, 5);
+      // Steps 6–9 record the carried list as they open too: walk back through the consecutive steps holding it.
+      let from = prior;
+      while (from > 6 && sameJsonValue(listOf(savedComparison(from - 1)).slice(0, 5), compared)) from -= 1;
+      // Step 6 may hold the steps 2–5 country with its default comparison country: that is where it was picked.
+      if (from === 6 && compared.length === 2 && compared[1] === partnerOf(compared[0])) {
+        for (let earlier = 5; earlier >= 2; earlier -= 1) {
+          const country = firstCountry(savedComparison(earlier));
+          if (country == null) continue;
+          if (country === compared[0]) from = pickedIn(earlier, country);
+          break;
+        }
+      }
+      return { compared, from };
+    }
   }
   return null;
 }
@@ -178,6 +216,7 @@ export function StudentWorkspace({
     }
     hadSyncError.current = failing;
   }, [session.syncError, contentRef]);
+  useRestoredEditsToast(session.restoredEdits ?? 0);
   if (stepIndex < 0) {
     return <div style={{ padding: 40 }} className="error-box">步骤不存在，请从课程大纲重新选择。</div>;
   }

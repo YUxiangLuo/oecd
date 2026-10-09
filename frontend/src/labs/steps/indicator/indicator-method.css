@@ -55,3 +55,8 @@
 
 /* Steps 3–5: where the opening country came from, beside the country select. */
 .indicator-carried-note { margin: 0 0 6px; font-size: 12px; }
+
+/* Steps 2–5 indicator tables: tighter cells and wrapping industry names, so step 5's nine columns fit the content
+   width at 1024 px instead of clipping the last one (接近中心性 and its ⓘ, values cut to "0.7"). */
+.data-table.indicator-data-table th, .data-table.indicator-data-table td { padding-left: 8px; padding-right: 8px; }
+.data-table.indicator-data-table td.text-col { white-space: normal; min-width: 7em; }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { sameJsonValue } from "../../session-store";
-import { MATERIAL_LOCKED_NOTE } from "../../step-task-card";
+import { MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT } from "../../step-task-card";
 import { LabeledControl, ScrollableRegion } from "../../a11y";
 import { api } from "../../api";
 import { icioDatasetName } from "../../dataset-label";
@@ -676,6 +676,8 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
   const [cellExpandSignal, setCellExpandSignal] = useState(0);
   // After the report is submitted, a clicked cell is only selected; it replaces the material on request.
   const [pickedCell, setPickedCell] = useState<Pick<DbStepState, "slice" | "observation"> | null>(null);
+  // Recorded on request after submission: the strip then says to update the report on step 15.
+  const [rechosen, setRechosen] = useState(false);
 
   useEffect(() => {
     if (!meta || !meta.default_year) return;
@@ -909,11 +911,11 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
             {selectedObservation.auto && !state.materialLocked ? "。系统已先记录这个单元格，点击其他数值即可替换。" : ""}
           </span>
         ) : <span className="empty">尚未记录</span>}
-        {state.materialLocked && <span className="muted">{MATERIAL_LOCKED_NOTE.replace("浏览", "点击单元格")}</span>}
+        {state.materialLocked && <span className="muted">{MATERIAL_LOCKED_NOTE.replace("浏览", "点击单元格")}{rechosen && !pickedCell ? `已改为记录这个单元格。${MATERIAL_RECHOSEN_NEXT}` : ""}</span>}
         {state.materialLocked && pickedCell?.observation && !sameJsonValue(pickedCell.observation, selectedObservation) && (
           <span className="db-picked">
             你选中的：{dbObservationSentence((pickedCell.observation.table as DbTableKind | undefined) ?? table, pickedCell.observation.row, pickedCell.observation.column)} = {fmtDb(pickedCell.observation.value)} 百万美元{observationSourceLabel(pickedCell.observation) ? `（${observationSourceLabel(pickedCell.observation)}）` : ""}
-            <button type="button" className="secondary" onClick={() => { state.save(pickedCell); setPickedCell(null); }}>改为记录这个单元格（之后需在步骤 15 更新报告）</button>
+            <button type="button" className="secondary" onClick={() => { state.save(pickedCell); setPickedCell(null); setRechosen(true); }}>改为记录这个单元格（之后需在步骤 15 更新报告）</button>
           </span>
         )}
       </div>

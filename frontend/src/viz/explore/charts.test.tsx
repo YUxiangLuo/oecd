@@ -83,6 +83,34 @@ describe("Steps 6-9 chart semantic data equivalents", () => {
     expect(spread).not.toContain("不画中位数");
   });
 
+  test("step 8 定位图: the equal-length line does not run through a corner label", () => {
+    const quadrants: [string, string, string, string] = ["前后向均较高", "前向较高·后向较低", "前后向均较低", "前向较低·后向较高"];
+    // Both axes on the same range: the line runs corner to corner.
+    const points = ["AAA", "BBB", "CCC", "DDD", "EEE", "FFF"].map((country, i) => ({ country, x: 1 + i, y: 6 - i }));
+    const html = renderToStaticMarkup(
+      <QuadrantScatter rows={points} xKey="x" yKey="y" xLabel="后向" yLabel="前向" xFormat="number" yFormat="number" equalityLine quadrantLabels={quadrants} />,
+    );
+    const label = (corner: number) => {
+      const match = html.match(new RegExp(`<text data-corner="${corner}" x="([\\d.]+)" y="([\\d.]+)"`))!;
+      return { x: Number(match[1]), y: Number(match[2]) };
+    };
+    // The line meets the top-right and bottom-left corners: those labels move out of its way; the others stay put.
+    expect(label(0)).not.toEqual({ x: 636, y: 26 });
+    expect(label(2)).not.toEqual({ x: 68, y: 346 });
+    expect(label(1)).toEqual({ x: 68, y: 26 });
+    expect(label(3)).toEqual({ x: 636, y: 346 });
+    const line = html.match(/<line x1="([\d.]+)" y1="([\d.]+)" x2="([\d.]+)" y2="([\d.]+)" stroke="#e0982a"/)!.slice(1).map(Number);
+    for (const corner of [0, 2]) {
+      const at = label(corner);
+      const box = corner === 0 ? { x0: at.x - 6 * 10.5, x1: at.x, y0: at.y - 10, y1: at.y + 3 } : { x0: at.x, x1: at.x + 6 * 10.5, y0: at.y - 10, y1: at.y + 3 };
+      for (let i = 0; i <= 100; i += 1) {
+        const x = line[0] + ((line[2] - line[0]) * i) / 100;
+        const y = line[1] + ((line[3] - line[1]) * i) / 100;
+        expect(x >= box.x0 && x <= box.x1 && y >= box.y0 && y <= box.y1).toBe(false);
+      }
+    }
+  });
+
   test("composition table exposes signed segments and a distinct sort metric", () => {
     const html = renderToStaticMarkup(
       <CompositionBar

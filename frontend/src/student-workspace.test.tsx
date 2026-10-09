@@ -6,7 +6,10 @@ import {
   StudentWorkspaceSkipLink,
   focusStepMainContent,
   stepMainContentId,
+  useRestoredEditsToast,
 } from "./student-workspace";
+import { cleanup, render, renderHook, screen } from "@testing-library/react";
+import { ToastHost } from "./toast";
 
 describe("student workspace skip link", () => {
   test("is the first native Tab stop and has one unique current-main target", () => {
@@ -95,9 +98,36 @@ describe("steps 2–5 record one country, which the later steps carry", () => {
     expect(carriedComparisonFor(6, [], from({ 3: ["DEU"] }))).toEqual(["DEU"]);
   });
 
+  test("steps 6–9 name the step where the carried set was chosen", () => {
+    // Step 6 picked JPN · CHN; step 7 recorded that set on opening: step 8 names step 6.
+    expect(carriedComparisonSource(8, [], from({ 6: ["JPN", "CHN"], 7: ["JPN", "CHN"] }), countries)).toEqual({ compared: ["JPN", "CHN"], from: 6 });
+    // Step 7 changed the set: step 8 names step 7.
+    expect(carriedComparisonSource(8, [], from({ 6: ["JPN", "CHN"], 7: ["JPN", "DEU"] }), countries)).toEqual({ compared: ["JPN", "DEU"], from: 7 });
+    // Step 6 opened on the steps 2–5 country with its default B: the set was chosen where DEU was picked.
+    expect(carriedComparisonSource(8, [], from({ 2: ["DEU"], 3: ["DEU"], 6: ["DEU", "USA"], 7: ["DEU", "USA"] }), countries)).toEqual({ compared: ["DEU", "USA"], from: 2 });
+    expect(carriedComparisonSource(6, [], from({ 2: ["DEU"], 3: ["DEU"] }), countries)).toEqual({ compared: ["DEU", "USA"], from: 2 });
+    // A B other than the default was picked on step 6.
+    expect(carriedComparisonSource(7, [], from({ 3: ["DEU"], 6: ["DEU", "JPN"] }), countries)).toEqual({ compared: ["DEU", "JPN"], from: 6 });
+  });
+
   test("a later steps 6–9 comparison wins over a steps 2–5 country", () => {
     expect(carriedComparisonFor(7, [], from({ 5: ["DEU"], 6: ["JPN", "CHN"] }), countries)).toEqual(["JPN", "CHN"]);
     // A one-country save on steps 6–9 is not a comparison: the steps 2–5 country is used.
     expect(carriedComparisonFor(7, [], from({ 5: ["DEU"], 6: ["JPN"] }), countries)).toEqual(["DEU", "USA"]);
   });
+});
+
+test("edits put back after a re-login are confirmed once with a toast", async () => {
+  render(<ToastHost />);
+  const hook = renderHook(({ count }) => useRestoredEditsToast(count), { initialProps: { count: 0 } });
+  expect(screen.queryByText("已恢复上次未保存的修改")).toBeNull();
+  hook.rerender({ count: 1 });
+  expect(await screen.findByText("已恢复上次未保存的修改", { exact: false })).toBeTruthy();
+  // A remounted workspace with the same count does not say it again.
+  hook.unmount();
+  const toasts = () => screen.queryAllByText("已恢复上次未保存的修改", { exact: false }).length;
+  const before = toasts();
+  renderHook(() => useRestoredEditsToast(1));
+  expect(toasts()).toBe(before);
+  cleanup();
 });

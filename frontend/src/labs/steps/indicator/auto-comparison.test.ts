@@ -94,6 +94,25 @@ describe("automatic material status line", () => {
   });
 });
 
+test("after 改用当前选择 on a submitted report, the line says to update the report on step 15", async () => {
+  const { AutoMaterialStatus } = await import("./auto-comparison");
+  const { fireEvent, screen } = await import("@testing-library/react");
+  const state = { data: { observations: [{ country: "CHN", year: 2020, metric: "FVA_share", value: 0.1173, unit: "%" }] }, save: () => {}, complete: false, syncing: false, syncError: null, syncNow: () => {}, materialLocked: true } as never;
+  const props = (current: boolean, record?: () => void) => ({ state, schema: null, metric: "FVA_share", current, record, loadFailed: false, where: "上方所选国家" });
+  const view = render(createElement(AutoMaterialStatus, props(false, () => {})));
+  expect(view.container.textContent).not.toContain("请到步骤 15");
+  fireEvent.click(screen.getByRole("button", { name: /改用当前选择/ }));
+  view.rerender(createElement(AutoMaterialStatus, props(true)));
+  expect(view.container.textContent).toContain("当前选择就是已记录的材料。请到步骤 15 更新报告并重新提交给老师。");
+  cleanup();
+});
+
+test("a label that ends in a bracket takes 国家整体 inside it: one pair, not two back to back", async () => {
+  const { countryScope } = await import("./auto-comparison");
+  expect(countryScope("GVC 位置指数（前向 GVC 段／后向 GVC 段）")).toBe("GVC 位置指数（前向 GVC 段／后向 GVC 段，国家整体）");
+  expect(countryScope("外国增加值项占比")).toBe("外国增加值项占比（国家整体）");
+});
+
 describe("recording under the report lock", () => {
   test("automatic saves clear the choice marker; a save on request after submission sets it", async () => {
     const rows = spyOn(api, "countryIndicators").mockResolvedValue([

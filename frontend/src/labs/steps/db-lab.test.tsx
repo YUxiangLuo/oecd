@@ -194,6 +194,8 @@ describe("step 1 after the report is submitted", () => {
     const replaced = saved.find((patch) => (patch as { observation?: unknown }).observation) as { observation: { column: string; value: number } };
     expect(replaced.observation.column).toBe("CHN_D01T02");
     expect(replaced.observation.value).toBe(10);
+    // The strip confirms the switch and says what to do next, as step 13 does.
+    expect(document.querySelector(".db-observation")!.textContent).toContain("已改为记录这个单元格。请到步骤 15 更新报告并重新提交给老师。");
   });
 });
 

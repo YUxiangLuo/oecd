@@ -38,6 +38,8 @@ export interface CompositionSpec {
     /** The focus part's share as an indicator name ("外国增加值项占比"), for the reading cards; defaults to the part's name. */
     focusLabel?: string;
     note: string;
+    /** The note under 历年构成 when `note` describes the single-year bars ("每条是…"). */
+    evolutionNote?: string;
 }
 
 export interface AxesOption {
@@ -130,6 +132,28 @@ export function defaultPartner(countries: string[], first: string): string {
   return defaultComparison(countries, [first])[1];
 }
 export const DEFAULT_MARK = "（默认）";
+
+/**
+ * The comparison country the （默认） mark goes on: the preset partner (USA) for country A. When A is that preset
+ * partner itself (USA picked as A, e.g. swapped in from B), the preset is rearranged and no option is marked.
+ */
+export function defaultMarkFor(countries: string[], first: string): string {
+  const [, presetPartner] = defaultComparison(countries, []);
+  return first === presetPartner ? "" : defaultPartner(countries, first);
+}
+
+/**
+ * Country A picked from the comparison list swaps with the old A rather than dropping it; `note` says so
+ * ("已与对比国家 B 互换。"), null when nothing was swapped.
+ */
+export function pickFirst(first: string, others: string[], next: string): { others: string[]; note: string | null } {
+  const slot = others.indexOf(next);
+  if (slot < 0 || next === first) return { others, note: null };
+  return {
+    others: others.map((item) => (item === next ? first : item)),
+    note: `已与对比国家 ${COMPARISON_LETTERS[slot]} 互换。`,
+  };
+}
 
 export const finiteValue = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);

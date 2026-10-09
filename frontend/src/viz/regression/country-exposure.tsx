@@ -20,11 +20,21 @@ export function countryIndustryNote(row: CountryRow): string {
     : base;
 }
 
-/** An amount in million USD (the ICIO unit) in 亿美元: 1,000 → "10 亿美元", 248,900 → "2,489 亿美元". */
+/** An amount in million USD (the ICIO unit) in 亿美元, with one rule so readings side by side line up: one decimal
+ * from 1 up (300 → "3.0", 248,900 → "2,489.0"), two significant digits below 1 (13 → "0.13"), and "0" for zero. */
 export function yiUsd(millionUsd: number): string {
   const yi = millionUsd / 100;
-  const digits = Math.abs(yi) >= 100 ? 0 : Math.abs(yi) >= 1 || yi === 0 ? 1 : 2;
-  return `${yi.toLocaleString("zh-CN", { maximumFractionDigits: digits })} 亿美元`;
+  if (yi === 0) return "0 亿美元";
+  const text = Math.abs(yi) >= 1
+    ? yi.toLocaleString("zh-CN", { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+    : String(Number(yi.toPrecision(2)));
+  return `${text} 亿美元`;
+}
+
+/** A round threshold as set by the rule ("10 亿美元"), not as a reading. */
+export function ruleYiUsd(millionUsd: number): string {
+  const yi = millionUsd / 100;
+  return Number.isInteger(yi) ? `${yi.toLocaleString("zh-CN")} 亿美元` : yiUsd(millionUsd);
 }
 
 /** The year the taxed rule reads the goods balance in, as a phrase ("2016 年"; "首年" from an older server). */
@@ -46,7 +56,7 @@ export function goodsBalanceText(row: Pick<CountryRow, "market_goods_surplus">, 
 /** The data rule behind who is taxed, "2016 年对美货物贸易顺差 ≥ 10 亿美元"; undefined from an older server. */
 export function taxedRuleText(rule: TeachingCountriesResponse["taxed_rule"], relation = " ≥ "): string | undefined {
   if (!rule || typeof rule.min_million_usd !== "number" || !Number.isFinite(rule.min_million_usd)) return undefined;
-  return `${ruleYear(rule)}对美货物贸易顺差${relation}${yiUsd(rule.min_million_usd)}`;
+  return `${ruleYear(rule)}对美货物贸易顺差${relation}${ruleYiUsd(rule.min_million_usd)}`;
 }
 
 /** The industry count as short readout lines that fit the 260 px readout: "行业 41/41 个被加税", and for a taxed
