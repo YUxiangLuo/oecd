@@ -14,10 +14,20 @@ import { LEAVE_MESSAGE, useTeacherReviewGuard } from "./review-guard";
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
 type Filter = "pending" | "graded" | "all";
 
-/** Empty list copy: "no match" only when a search or class filter is active, not when all pending work is done. */
-export function reportsEmptyState(total: number, filter: Filter, narrowed: boolean): { title: string; hint: string } {
+/**
+ * Empty list copy: "no match" only when a search or class filter is active, not when all pending work is done.
+ * `pendingElsewhere`: reports still to grade that the filter or search leaves out (the sidebar badge counts them).
+ */
+export function reportsEmptyState(total: number, filter: Filter, narrowed: boolean, pendingElsewhere = 0): { title: string; hint: string } {
   if (!total) return { title: "还没有学生提交报告", hint: "学生提交报告后会出现在这里" };
-  if (narrowed) return { title: "没有匹配的报告", hint: "请调整筛选条件或关键词" };
+  if (narrowed) {
+    return {
+      title: "没有匹配的报告",
+      hint: filter !== "graded" && pendingElsewhere > 0
+        ? `筛选范围外还有 ${pendingElsewhere} 份待评阅报告；请调整筛选条件或关键词`
+        : "请调整筛选条件或关键词",
+    };
+  }
   if (filter === "pending") return { title: "暂无待评阅报告", hint: "已提交的报告都评阅完了；新的提交会出现在这里" };
   return { title: "暂无已评阅报告", hint: "评阅后的报告会出现在这里" };
 }
@@ -151,10 +161,12 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh }: {
   const semesters = academic?.semesters ?? [];
   // Normalized like stored names (full-width letters/digits, zero-width characters), then case-folded.
   const needle = normalizeLabel(query).toLowerCase();
-  const shown = reports
-    .filter((report) => filter === "all" || report.state === filter)
+  // The term/class filter and the search narrow every tab alike, so the 待评阅 count is taken after them
+  // (as 学生与进度 counts its summary over the rows its filters leave); only the sidebar badge counts them all.
+  const narrowed = reports
     .filter((report) => matchesAcademicFilter(report.enrollments, semesterId, classId))
     .filter((report) => !needle || [report.display_name, report.username, report.student_no].some((value) => normalizeLabel(value ?? "").toLowerCase().includes(needle)));
+  const shown = narrowed.filter((report) => filter === "all" || report.state === filter);
   // The open review comes first: a list refresh failing in the background must not unmount an unsaved review.
   if (openAccountId != null) {
     return <div ref={rootRef}><ReportView key={openAccountId} accountId={openAccountId} queue={queue}
@@ -176,7 +188,8 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh }: {
       if (academicError) retryAcademic();
     }} />;
   }
-  const pending = reports.filter((report) => report.state === "pending").length;
+  const pending = narrowed.filter((report) => report.state === "pending").length;
+  const pendingElsewhere = reports.filter((report) => report.state === "pending").length - pending;
   const open = (accountId: number) => {
     setQueue(shown.map((report) => report.account_id));
     setOpenAccountId(accountId);
@@ -221,7 +234,7 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh }: {
             <td><ReportRowAction report={report} onOpen={() => open(report.account_id)} /></td>
           </tr>)}
         </tbody></table>
-        {data && shown.length === 0 && <EmptyState icon="📝" {...reportsEmptyState(reports.length, filter, Boolean(needle) || semesterId != null)} />}
+        {data && shown.length === 0 && <EmptyState icon="📝" {...reportsEmptyState(reports.length, filter, Boolean(needle) || semesterId != null, pendingElsewhere)} />}
       </ScrollableRegion>
     </div>
   );

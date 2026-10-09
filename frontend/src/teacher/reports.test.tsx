@@ -338,6 +338,42 @@ describe("teacher review flow", () => {
     }
   });
 
+  test("the 待评阅 count follows the term filter; the sidebar badge stays the global count and says so", async () => {
+    const semesters = [
+      { id: 1, name: "2026 秋", is_active: true, student_count: 1, created_at: "2026-09-01",
+        classes: [{ id: 11, term_id: 1, name: "一班", is_active: true, student_count: 1, created_at: "2026-09-01" }] },
+      { id: 2, name: "2027 春", is_active: true, student_count: 0, created_at: "2027-02-01", classes: [] },
+    ];
+    const autumn = { ...pendingReport, account_id: 8, display_name: "秋季学生", enrollments: [{ term_id: 1, term_name: "2026 秋", class_id: 11, class_name: "一班" }] };
+    const spies = [
+      spyOn(api.classroom, "reports").mockResolvedValue({ reports: [pendingReport, autumn] }),
+      spyOn(api.classroom, "students").mockResolvedValue({ students: [] }),
+      spyOn(api.classroom, "semesters").mockResolvedValue({ semesters }),
+    ];
+    try {
+      renderReports();
+      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+      await screen.findByRole("button", { name: "评阅报告：秋季学生" });
+      const pill = () => screen.getByRole("button", { name: /^待评阅/ }).querySelector(".seg-badge")?.textContent ?? null;
+      expect(pill()).toBe("2");
+      await waitFor(() => expect(document.querySelector(".nav-badge")?.textContent).toBe("2"));
+
+      fireEvent.change(await screen.findByLabelText("筛选学期"), { target: { value: "1" } });
+      expect(pill()).toBe("1");
+      fireEvent.change(screen.getByLabelText("筛选学期"), { target: { value: "2" } });
+      expect(pill()).toBeNull();
+      expect(screen.getByText("没有匹配的报告")).toBeTruthy();
+      expect(screen.getByText("筛选范围外还有 2 份待评阅报告；请调整筛选条件或关键词")).toBeTruthy();
+      // The sidebar keeps counting every pending report, and its name says it is not filtered.
+      expect(document.querySelector(".nav-badge")?.textContent).toBe("2");
+      const nav = screen.getByRole("button", { name: /报告评阅/, current: "page" });
+      expect(nav.getAttribute("title")).toBe("报告评阅（全部学期、班级共 2 份待评阅）");
+      expect(nav.textContent).toContain("全部学期、班级共 2 份待评阅");
+    } finally {
+      spies.forEach((spy) => spy.mockRestore());
+    }
+  });
+
   test("a failed list load reads as Chinese and can be retried", async () => {
     const reports = spyOn(api.classroom, "reports").mockRejectedValue(new TypeError("Failed to fetch"));
     const spies = [

@@ -79,7 +79,8 @@ export function TeacherDashboard({ user }: { user: AuthUser }) {
             key={item.key}
             className={`teacher-nav-item${tab === item.key ? " active" : ""}`}
             aria-current={tab === item.key ? "page" : undefined}
-            title={item.label}
+            // The badge counts every report still to grade, whatever 报告评阅's term/class filter shows.
+            title={item.key === "reports" && pending > 0 ? `${item.label}（全部学期、班级共 ${pending} 份待评阅）` : item.label}
             onClick={() => item.key === tab || reviewGuard.attempt(() => { setReportRequest(null); setTab(item.key); })}
           >
             <span className="teacher-nav-ic" aria-hidden="true">
@@ -89,7 +90,8 @@ export function TeacherDashboard({ user }: { user: AuthUser }) {
               <span className="teacher-nav-label">{item.label}</span>
               <span className="teacher-nav-sub">{item.sub}</span>
             </span>
-            {item.key === "reports" && pending > 0 && <span className="nav-badge">{pending}</span>}
+            {item.key === "reports" && pending > 0 && <span className="nav-badge" aria-hidden="true">{pending}</span>}
+            {item.key === "reports" && pending > 0 && <span className="sr-only">，全部学期、班级共 {pending} 份待评阅</span>}
           </button>
         ))}
       </nav>
