@@ -487,7 +487,7 @@ export function zeroTotalDecompositionHint(model: DecompositionModel, totalLabel
     return `${cjkJoin(totalLabel, "为 0：")}正负分项相互抵消，无法算比重。`;
   }
   if (kind === "nonclosing") {
-    return `${cjkJoin(totalLabel, "为 0，")}但各分项加起来不等于 0，无法算比重。`;
+    return `${cjkJoin(totalLabel, "为 0，")}但各分项之和不等于 0，无法算比重。`;
   }
   return null;
 }
@@ -513,7 +513,7 @@ export function decompositionModelReason(model: DecompositionModel, weightLabel?
       return "总量为 0：正负分项相互抵消，无法算比重。";
     }
     if (kind === "nonclosing") {
-      return "总量为 0，但各分项加起来不等于 0，无法算比重。";
+      return "总量为 0，但各分项之和不等于 0，无法算比重。";
     }
     return "总量为 0，无法算比重。";
   }

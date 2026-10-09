@@ -69,6 +69,13 @@ def test_task_cards_count_what_the_page_shows():
     assert "美国加征关税" in tasks and "举例" in tasks and "跟踪" not in tasks and "四个摘要" not in tasks
 
 
+def test_exploration_only_views_use_one_term_on_steps_six_to_nine():
+    """步骤 6–9 页面和手册都说“只供探索”；步骤 9 任务卡不能另写“只供查阅”（round 21）。"""
+    tasks = "".join("".join(step["tasks"]) for step in STEPS if 6 <= step["n"] <= 9)
+    assert "只供查阅" not in tasks
+    assert "只供探索" in "".join(next(step for step in STEPS if step["n"] == 9)["tasks"])
+
+
 def test_student_copy_never_leaks_internal_field_names():
     copy = _student_copy()
     assert "EXGR_FVASH" not in copy

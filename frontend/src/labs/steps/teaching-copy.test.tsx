@@ -4,6 +4,8 @@ import type { Meta, Step, StepStateApi } from "../../types";
 import { NetworkIndicatorStep } from "./indicator/network";
 import type { IndicatorStepState } from "./indicator/indicator-table";
 import { ChartStory } from "./viz/scaffold";
+import { PRODUCTION_TOPIC } from "./viz/production";
+import { TRADE_TOPIC } from "./viz/trade";
 
 const meta: Meta = {
   years: [2020], countries: ["CHN", "USA"], sectors: ["A01_02", "C26"],
@@ -25,8 +27,17 @@ describe("student-facing chart copy", () => {
     expect(html).toContain("该国全部行业");
     // The demo covers all three measures it lets the student switch between (round 21).
     expect(html).toContain("可选：用小型网络演示度、介数与接近中心性的计算");
-    expect(html).toContain("介数把很小和很大的流量一视同仁");
+    expect(html).toContain("介数不区分流量大小：很小和很大的正流量按同样长度计");
+    expect(html).not.toContain("一视同仁");
     expect(html).not.toMatch(/真实全球图|真实图|45 个行业|原生排序选择器/);
+  });
+
+  test("steps 6–7 state their identities in plain academic wording (round 21)", () => {
+    expect(TRADE_TOPIC.composition!.note).toContain("六项之和等于总出口");
+    expect(TRADE_TOPIC.composition!.evolutionNote).toContain("六项之和等于总出口");
+    expect(PRODUCTION_TOPIC.themeHint).toContain("四类份额之和为 100%");
+    const copy = [TRADE_TOPIC.composition!.note, TRADE_TOPIC.composition!.evolutionNote, PRODUCTION_TOPIC.themeHint].join("");
+    expect(copy).not.toContain("加起来");
   });
 
   test("chart prompts invite observation rather than prescribe a discovery", () => {
