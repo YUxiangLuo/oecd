@@ -10,6 +10,14 @@ import { useRef } from "react";
 
 // 固定顺序的类别槽位(经校验的默认调色板,前 6 位)
 export const CAT = ["#216cc0", "#1baf7a", "#eda100", "#008300", "#4a3aa7", "#e34948"];
+/** 分解分项的固定颜色:定义分项的步骤(2–4)与作图的步骤(6–8)共用同一套,同一分项处处同色。
+ * 取自 CAT 槽位(即步骤 6–7 原有配色),没有一项接近负分项的红色。 */
+export const COMPONENT_COLORS = {
+  // 总贸易流分解(步骤 2、6)
+  DVAex: CAT[0], DVArt: CAT[1], DDC: CAT[2], FVA: CAT[3], FDC: CAT[4], taxsub: "#98a0b3",
+  // 四类生产活动(步骤 3、7)与长度分解的三段(步骤 4);GVC 段沿用复杂 GVC 的颜色
+  domestic: CAT[0], traditional: CAT[1], simpleGvc: CAT[2], complexGvc: CAT[4], gvc: CAT[4],
+} as const;
 // 顺序色(蓝,浅→深),用于热力表
 export const SEQ = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"];
 

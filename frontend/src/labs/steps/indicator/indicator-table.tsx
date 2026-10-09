@@ -358,11 +358,16 @@ export function IndicatorDataTable({
 }) {
   // A group label may already end in “指标” (e.g. “生产网络指标”); do not say it twice.
   const captionLabel = groupLabel.endsWith("指标") ? `${groupLabel}数据` : `${groupLabel}指标数据`;
-  // 国家 and 行业 both stay in view while the extended indicators scroll by; 行业 sits right after the measured
-  // 国家 column (country names differ in length).
+  // 国家, 行业 and 年份 all stay in view while the extended indicators scroll by; each sits right after the measured
+  // columns before it (country and industry names differ in length). A 年份 left to scroll slid under 行业 and
+  // showed the last digit of its year beside it (round 21).
   const [measureFirst, firstWidth] = useMeasuredWidth<HTMLTableCellElement>();
+  const [measureSecond, secondWidth] = useMeasuredWidth<HTMLTableCellElement>();
   const stickyIndustry = columns[0] === "country" && columns[1] === "industry";
-  const stickyLeft = (index: number) => index === 0 ? 0 : stickyIndustry && index === 1 ? firstWidth : null;
+  const stickyYear = stickyIndustry && columns[2] === "year";
+  const lastSticky = stickyYear ? 2 : stickyIndustry ? 1 : 0;
+  const stickyLeft = (index: number) =>
+    index === 0 ? 0 : index <= lastSticky ? (index === 1 ? firstWidth : firstWidth + secondWidth) : null;
   return (
     <table className="data-table indicator-data-table">
       <caption className="sr-only">{captionLabel} · {year} 年 · {country ? countryLabel(country) : "全部国家"}{totalPages > 1 ? ` · 第 ${page} 页` : ""}</caption>
@@ -374,7 +379,7 @@ export function IndicatorDataTable({
             return (
               <th
                 key={column}
-                ref={index === 0 ? measureFirst : undefined}
+                ref={index === 0 ? measureFirst : index === 1 ? measureSecond : undefined}
                 scope="col"
                 // An indicator's definition is a focusable ⓘ; the identifier columns keep a hover hint.
                 title={desc ? undefined : BASE_DESC[column]}
@@ -406,7 +411,7 @@ export function IndicatorDataTable({
                 ? {
                   position: "sticky" as const, left, zIndex: 2, background: "#fff",
                   // The last sticky column casts an edge so scrolled values visibly pass under it.
-                  ...(index === (stickyIndustry ? 1 : 0) ? { boxShadow: "inset -1px 0 #e8eaf0" } : {}),
+                  ...(index === lastSticky ? { boxShadow: "inset -1px 0 #e8eaf0" } : {}),
                 }
                 : undefined;
               return index === 0 ? (

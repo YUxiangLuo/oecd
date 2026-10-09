@@ -46,6 +46,7 @@ import {
   LengthPositionTrajectory,
   TrendSummary,
   indicatorNumber,
+  scopeLabel,
   textNumber,
 } from "./indicator-charts";
 import { ScopeCard } from "./scope-card";
@@ -995,6 +996,7 @@ export function IndicatorExplorer({
               emptyStatus={emptyStatus(metric)}
               emptyReading={trendEmpty(metric)}
               reasonFor={trendReason(metric)}
+              industry={industry}
             />
           )}
           {view === "directions" &&
@@ -1020,6 +1022,7 @@ export function IndicatorExplorer({
                   emptyStatus={emptyStatus(key)}
                   emptyReading={trendEmpty(key)}
                   reasonFor={trendReason(key)}
+                  industry={industry}
                 />
               ))}
             </>}
@@ -1073,7 +1076,7 @@ export function IndicatorExplorer({
                 highlightColors={Object.fromEntries(selected.map((country, index) => [country, CAT[index]]))}
                 trails={trails}
               />
-              <ReadingCards label="定位读数" cards={positioningCards({ reference, countries: selected, xKey: axes.x, yKey: axes.y, xLabel: label(axes.x), yLabel: label(axes.y), xFormat: formatOf(axes.x), yFormat: formatOf(axes.y), xScale: axes.xScale, reasonFor: (country) => {
+              <ReadingCards label="定位读数" cards={positioningCards({ reference, countries: selected, xKey: axes.x, yKey: axes.y, xLabel: label(axes.x), yLabel: label(axes.y), xFormat: formatOf(axes.x), yFormat: formatOf(axes.y), xScale: axes.xScale, industry, reasonFor: (country) => {
                 const reasons = [axes.x, axes.y].flatMap((key) => {
                   const reason = undefinedReason(country, key, exploreYear);
                   return reason ? [`${reason}，${label(key)}无法计算`] : [];
@@ -1163,19 +1166,22 @@ export function IndicatorExplorer({
                         ? `${industry ? "该行业" : "该国"}${label(activeComposition!.total)}${total === 0 ? "为 0" : "为负"}，${focusLabel ?? "构成份额"}无法计算（不是缺少数据）`
                         : null;
                     };
-                    return <TrendSummary readings={readings} countries={selected} years={chartYears} unit="%" metricLabel={focusLabel} reasonFor={totalReason} />;
+                    return <TrendSummary readings={readings} countries={selected} years={chartYears} unit="%" metricLabel={focusLabel} industry={industry} reasonFor={totalReason} />;
                   })()}
             </>
           )}
           {view === "segments" && (
             <>
               {selected.length > 1 && <p className="muted">各国使用同一坐标范围，点的位置可以跨国比较。</p>}
+              {/* Summed over a country's industries, the domestic Leontief terms are the same whether read along rows
+                  (forward) or columns (backward), so these two pairs coincide by construction (round 21). */}
+              {!industry && <p className="muted">国家整体上，纯国内段与传统贸易段的前向长度和后向长度总是相等，这是恒等关系，不是数据错误：这两段的生产全部在本国内部完成（传统贸易只把最终品出口一次），按增加值来源（前向）和按最终品（后向）汇总的是同一批生产活动。只有 GVC 段涉及外国的生产环节，前后向长度一般不同。</p>}
               {/* Each dumbbell needs about 440px for a readable track: two side by side only when they fit (at 1024
                   two columns squeezed each plot to ~40px), three or more always stacked. */}
               <div className={`comparison-facets ${selected.length > 2 ? "comparison-facets--stacked" : "comparison-facets--roomy"}`}>
                 {selected.map((country) => (
                   <section key={country} className="comparison-facet">
-                    <h4>{countryLabel(country)} · {year}{industry ? ` · ${sectorLabel(industry)}` : ""}</h4>
+                    <h4>{scopeLabel(country, industry)} · {year}</h4>
                     <Dumbbell
                       title={`${countryLabel(country)} 段长度对照`}
                       unit="长度单位"

@@ -250,3 +250,30 @@ describe("trend cards name the empty year and say why (round 12)", () => {
     expect(text).toContain("2016、2020 年该行业无连接，离心率无法定义（不是 0），暂不比较差距");
   });
 });
+
+describe("trend cards name the industry when the scope is one industry (round 21)", () => {
+  const readings = [2016, 2020].map((year) => ({ country: "JPN", year, value: year === 2016 ? 0.13084 : 0.14945 }));
+
+  test("step 6 JPN C29: the observed country's card reads country · industry · years", () => {
+    const view = render(<TrendSummary readings={readings} countries={["JPN"]} years={[2016, 2020]} unit="%" industry="C29" />);
+    expect(view.getByLabelText("趋势读数").textContent).toContain("JPN 日本 · C29 汽车及零部件 · 2016→2020");
+    cleanup();
+  });
+
+  test("country level keeps the plain country label", () => {
+    const view = render(<TrendSummary readings={readings} countries={["JPN"]} years={[2016, 2020]} unit="%" />);
+    const text = view.getByLabelText("趋势读数").textContent ?? "";
+    expect(text).toContain("JPN 日本 · 2016→2020");
+    expect(text).not.toContain("C29");
+    cleanup();
+  });
+
+  test("the context trend chart passes its industry to the cards (step 9 C26)", () => {
+    const rows = [2016, 2020].map((year) => ({ country: "JPN", year, industry: "C26", m: year === 2016 ? 158133 : 151048 }));
+    const view = render(
+      <IndicatorTrendChart rows={rows} countries={["JPN"]} years={[2016, 2020]} metric="m" label="加权总度" unit="百万美元" mode="context" sameIndustry industry="C26" />,
+    );
+    expect(view.getByLabelText("趋势读数").textContent).toContain("JPN 日本 · C26 计算机电子光学 · 2016→2020");
+    cleanup();
+  });
+});

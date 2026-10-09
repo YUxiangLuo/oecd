@@ -1,5 +1,5 @@
 import type { Meta, Step, StepStateApi } from "../../../types";
-import { CAT } from "../../../viz/shared";
+import { COMPONENT_COLORS } from "../../../viz/shared";
 import { IndicatorExplorer } from "./indicator-explorer";
 import type { IndicatorTopic } from "./indicator-model";
 import type { VizStepState } from "./scaffold";
@@ -47,18 +47,18 @@ export const TRADE_TOPIC: IndicatorTopic = {
   composition: {
     total: "gross_exports",
     segments: [
-      { key: "DVAex", name: "国内增加值出口", color: CAT[0] },
-      { key: "DVArt", name: "返回国内的增加值", color: CAT[1] },
-      { key: "DDC", name: "国内重复计算", color: CAT[2] },
-      { key: "FVA", name: "外国增加值", color: CAT[3] },
-      { key: "FDC", name: "外国重复计算", color: CAT[4] },
-      // Grey as in step 2; red is reserved for negative parts (left of zero).
-      { key: "taxsub", name: "产品税减补贴", color: "#98a0b3" },
+      // The colours step 2 gives the same parts; red is reserved for negative parts (left of zero).
+      { key: "DVAex", name: "国内增加值出口", color: COMPONENT_COLORS.DVAex },
+      { key: "DVArt", name: "返回国内的增加值", color: COMPONENT_COLORS.DVArt },
+      { key: "DDC", name: "国内重复计算", color: COMPONENT_COLORS.DDC },
+      { key: "FVA", name: "外国增加值", color: COMPONENT_COLORS.FVA },
+      { key: "FDC", name: "外国重复计算", color: COMPONENT_COLORS.FDC },
+      { key: "taxsub", name: "产品税减补贴", color: COMPONENT_COLORS.taxsub },
     ],
     focus: "FVA",
     focusLabel: "外国增加值项占比",
-    note: "每条是一国总出口的六项构成，加起来等于总出口。产品税减补贴为负时画成红色，放在 0 的左边；此时各项份额之和不能按常规 100% 堆积条解读。",
-    evolutionNote: "每个色带是总出口的一项，六项加起来等于总出口。产品税减补贴为负时画成红色，放在 0 的下方；此时各项份额之和不能按常规 100% 解读。",
+    note: "每条是一国总出口的六项构成，六项之和等于总出口。产品税减补贴为负时画成红色，放在 0 的左边；此时各项份额之和不能按常规 100% 堆积条解读。",
+    evolutionNote: "每个色带是总出口的一项，六项之和等于总出口。产品税减补贴为负时画成红色，放在 0 的下方；此时各项份额之和不能按常规 100% 解读。",
   },
   axes: {
     key: "source",

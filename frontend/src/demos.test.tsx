@@ -5,6 +5,7 @@ import { api } from "./api";
 import { buildDecompositionModel, type DecompositionModel, type DecompositionSpec } from "./decomposition-model";
 import {
   ClosenessPathTable,
+  DECOMP,
   DecompositionDemo,
   DecompositionDetailTable,
   DecompositionRequestMessage,
@@ -250,6 +251,36 @@ describe("step 4: the sum line says ≈ when the shown lengths do not add up to 
     });
     expect(exact.line).toContain("✓ 3 项相加 = 2.000，等于前向总生产长度 PLv");
   });
+
+  test("the backward PLy line names what its sum is checked against (round 21)", async () => {
+    const row = {
+      country: "JPN", year: 2017, SVA: 1, PLv: 2, "1_VA_D": 0.6, "2_VA_RT": 0.1, "3_VA_GVC": 0.3, PLv_D: 2, PLv_RT: 2, PLv_GVC: 2,
+      FGY: 1, PLy: 1.555, "1_FGY_D": 0.5, "2_FGY_RT": 0.25, "3_FGY_GVC": 0.25, PLy_D: 1.31, PLy_RT: 1.5, PLy_GVC: 2.1, GVCPs: 0.952,
+    };
+    const countryRequest = spyOn(api, "countryIndicatorsForCountry").mockResolvedValue([{ ...row, industry: null }]);
+    const industryRequest = spyOn(api, "industryIndicatorsAll").mockResolvedValue({ total: 1, page: 1, page_size: 200, rows: [row] });
+    try {
+      const view = render(
+        <DecompositionDemo step={6} meta={{ years: [2017], countries: ["JPN"], sectors: ["A"], dataset: null }} primaryYear={2017} primaryCountry="JPN" />,
+      );
+      await waitFor(() => expect(view.container.textContent).toContain("后向总生产长度 PLy（从最终产品端回溯）"));
+      const text = view.container.textContent ?? "";
+      expect(text).toContain("各段（最终产品中的份额 × 段长度）之和 = 1.555；等于直接算出的后向总生产长度 PLy（1.555），即 PLy 是三段长度按最终产品份额的加权平均。");
+      expect(text).not.toContain("与总量一致");
+    } finally {
+      countryRequest.mockRestore();
+      industryRequest.mockRestore();
+      cleanup();
+    }
+  });
+});
+
+describe("step 3 points to where the backward split is charted in step 7 (round 21)", () => {
+  test("the 四类生产活动 view with 后向（按最终品）, not the amount options marked （后向）", () => {
+    const note = DECOMP[5].note!({}, [4, 3, 2, 1], 0);
+    expect(note).toContain("在步骤 7 的“四类生产活动”视角选“后向（按最终品）”，查看各类所占份额。");
+    expect(note).not.toContain("选带“（后向）”的指标");
+  });
 });
 
 describe("the unavailable step 4 split names undefined parts as such (round 12)", () => {
@@ -413,6 +444,14 @@ describe("Step 5 teaching network accessibility", () => {
     expect(html).toContain('aria-pressed="false" aria-label="查看介数的算法"');
     expect(html).toContain("选择节点后可查看它的指标值与相关边");
     expect(html).not.toMatch(/方向键|按 Tab|Enter|空格|点击/);
+  });
+
+  test("says what node size means in each mode (round 21)", () => {
+    const view = render(<NetworkCentralityDemo />);
+    expect(view.container.textContent).toContain("圆的大小表示各节点的度，数值越大，圆越大。");
+    fireEvent.click(view.getByRole("button", { name: "查看接近中心性的算法" }));
+    expect(view.container.textContent).toContain("圆的大小表示各节点的接近中心性，数值越大，圆越大。");
+    cleanup();
   });
 
   test("documents wrapping arrow navigation and Home/End bounds", () => {
