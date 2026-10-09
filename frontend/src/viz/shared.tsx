@@ -141,7 +141,11 @@ export const rowLabel = (r: Row) => (r.industry != null ? sectorLabel(String(r.i
 export function useTip() {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  const show = (e: React.MouseEvent, lines: [string, string][]) => {
+  /**
+   * `anchor` (keyboard focus): the element's box; the tip goes just above it, or below it when there is no room
+   * above, so it does not cover the text under the chart (a footnote, the axis title).
+   */
+  const show = (e: React.MouseEvent, lines: [string, string][], anchor?: Pick<DOMRect, "top" | "bottom">) => {
     const box = boxRef.current, wrap = wrapRef.current;
     if (!box || !wrap) return;
     box.replaceChildren(
@@ -163,6 +167,10 @@ export function useTip() {
     const r = wrap.getBoundingClientRect();
     let x = e.clientX - r.left + 14, y = e.clientY - r.top + 12;
     if (x > r.width - 190) x = e.clientX - r.left - 195;
+    if (anchor) {
+      const above = anchor.top - r.top - box.offsetHeight - 6;
+      y = above >= 0 ? above : anchor.bottom - r.top + 6;
+    }
     box.style.left = `${x}px`; box.style.top = `${y}px`; box.style.opacity = "1";
   };
   const hide = () => { if (boxRef.current) boxRef.current.style.opacity = "0"; };

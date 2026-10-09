@@ -233,7 +233,12 @@
   display: grid; gap: 12px; min-height: 60vh; padding: 18px 0;
 }
 .report-restore-skeleton .skeleton-report { min-height: calc(60vh - 70px); }
-.submit-card { min-height: 50px; }
+.submit-card { min-height: 50px; border-radius: 10px; }
+/* Draft and pending: one status line, in a padded light card (a graded report shows its score card). */
+.submit-card-plain {
+  box-sizing: border-box; display: flex; align-items: center; padding: 12px 14px;
+  border: 1px solid #e0e3ed; background: #f7f8fb;
+}
 .gate-link {
   border: 0; background: transparent; padding: 0; font: inherit; font-weight: 600;
   color: #4b47e0; cursor: pointer; text-decoration: underline;

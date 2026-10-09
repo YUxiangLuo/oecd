@@ -23,6 +23,8 @@
 .outro-receipt b { color: #90e0bd; font-size: 18px; }
 .outro-receipt span, .outro-receipt small { color: #c5cee5; }
 .outro-receipt p { margin: 0; white-space: pre-wrap; }
+.outro-receipt-caveat { display: grid; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid #625a96; }
+.outro-receipt-caveat b { color: #ffd38a; }
 .outro-journey { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; text-align: left; }
 .outro-journey article { padding: 18px; border: 1px solid #ffffff24; border-radius: 12px; }
 .outro-journey span { display: block; color: #b5a3ed; font-size: 12px; margin-bottom: 10px; }

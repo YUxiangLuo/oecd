@@ -24,13 +24,16 @@ export function ReportOutro({ report, onClose, onExport, exportDisabled = false,
       <h1 id={titleId} ref={headingRef} tabIndex={-1} className="intro-title">{report.state === "graded" ? "报告已评阅" : "报告已提交"}</h1>
       <p className="intro-lede">报告包含已保存的数据、图表、回归结果和你的分析。</p>
       <section className="outro-receipt" aria-label="报告提交回执">
-        <b>{report.state === "graded" ? `已评阅 · ${report.score ?? "—"} 分` : "提交成功 · 等待教师评阅"}</b>
+        {/* Opened while the report needs updating: the caveat comes first, not "提交成功". */}
+        {reportOutdated && <div role="status" className="outro-receipt-caveat">
+          <b>报告需更新</b>
+          <p>后续修改尚未纳入这份报告。请返回步骤 15 确认修改已保存，再更新报告；已提交的版本仍保存在服务器上。</p>
+          {report.state === "graded" && <p>重新生成会清除当前评分与评语，并重新提交给老师；操作前会要求确认。取消确认将保留原报告。需要留档时，可先导出 PDF：导出的已评阅版本含评分与评语。</p>}
+        </div>}
+        <b>{report.state === "graded" ? `已评阅 · ${report.score ?? "—"} 分` : reportOutdated ? "已提交的版本 · 等待教师评阅" : "提交成功 · 等待教师评阅"}</b>
         <span>提交时间：{report.submitted_at ? report.submitted_at.slice(0, 16).replace("T", " ") : "—"}</span>
         {report.state === "graded" && report.feedback?.trim() && <div className="report-feedback" tabIndex={0} role="region" aria-label="教师评语"><b>教师评语：</b>{report.feedback}</div>}
-        {reportOutdated ? <div role="status">
-          <p>已提交版本已保存；后续修改尚未纳入这份报告。请返回步骤 15 确认修改已保存，再更新报告。</p>
-          {report.state === "graded" && <p>重新生成会清除当前评分与评语，并重新提交给老师；操作前会要求确认。取消确认将保留原报告。需要留档时，可先导出 PDF：导出的已评阅版本含评分与评语。</p>}
-        </div> : <small>报告已保存到服务器。你可以离开页面，之后回到步骤 15 查看报告与老师的评阅。</small>}
+        {!reportOutdated && <small>报告已保存到服务器。你可以离开页面，之后回到步骤 15 查看报告与老师的评阅。</small>}
       </section>
       <div className="outro-journey">
         <article><span>01</span><b>计算并理解指标</b><p>从 ICIO 账户理解生产联系与价值来源。</p></article>

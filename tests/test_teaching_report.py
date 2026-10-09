@@ -67,8 +67,9 @@ def test_report_small_effects_match_card_precision(outcome, coef, low, high, eff
             -1.92,
             -1.76,
             0.58,
-            "-0.018 个长度单位（幅度约 0.032 个标准差）",
-            "[-0.019, -0.018] 个长度单位（约 [-0.033, -0.030] 个标准差）",
+            # At 3 decimals the upper end would read as the estimate ("[-0.019, -0.018]"): one more decimal.
+            "-0.0184 个长度单位（幅度约 0.032 个标准差）",
+            "[-0.0192, -0.0176] 个长度单位（约 [-0.033, -0.030] 个标准差）",
         ),
         (
             "position",
@@ -1403,6 +1404,17 @@ def test_report_prints_automatically_saved_teaching_row(tmp_path, monkeypatch):
 
     assert "换算用的例子：CHN 中国 · s1 · 2019" in markdown
     assert "w = 20.00%；τ = 10%；X = w × τ = 2.00 个百分点" in markdown
+    # Each reference links its title, so it is announced by name rather than by its URL.
+    references = markdown.split("## 方法参考文献", 1)[1].split("\n\n", 2)[1].splitlines()
+    assert len(references) == 10
+    assert references[0] == (
+        "1. Yamano et al. (2023), [*Development of the OECD Inter-Country Input-Output Database 2023*]"
+        "(https://doi.org/10.1787/5a5d0665-en)"
+    )
+    assert references[7] == (
+        "8. [*Gephi 软件特征向量中心性实现说明*](https://github.com/gephi/gephi/issues/2145)（Gephi 项目讨论 #2145）"
+    )
+    assert all(re.search(r"\]\(https://[^)\s]+\)", line) and ", https://" not in line for line in references)
     # The section is named after the step; the data version is provenance, not body text.
     step_ten = markdown.split("### 步骤 10 · 认识关税暴露 X", 1)[1].split("###", 1)[0]
     assert TEACHING_VERSION not in step_ten
@@ -2513,6 +2525,30 @@ def test_report_example_conversion_reads_like_the_page():
     )
     assert untaxed is not None and untaxed.endswith("未被加税，X = 0，按估计没有与 X 相关的差异。")
     assert _example_conversion("trade", {}, coefficient, True, None) is None
+
+
+def test_report_example_x_uses_step_ten_digits():
+    """X reads as on step 10 (frontend ``workedNumbers``), so the conversion checks by hand: 0.22444 × 40.80 ≈ 9.16."""
+    from gvcsim.report_render import _example_conversion, worked_numbers
+
+    assert worked_numbers(0.0089776, 0.25, 0.0089776 * 0.25) == ("0.89776", "0.22444")
+    assert worked_numbers(0.000985, 0.25, 0.000985 * 0.25) == ("0.10", "0.025")
+    assert worked_numbers(0.93, 0.25, 0.93 * 0.25) == ("93.00", "23.25")
+    assert worked_numbers(0.000033, 0.25, 0.000033 * 0.25) == ("0.0033", "0.00083")
+    assert worked_numbers(0, 0.25, 0) == ("0.00", "0")
+    example = {
+        "country": "SVK",
+        "industry": "C26",
+        "teaching_tariff_exposure": 0.0089776 * 0.25,
+        "teaching_tariff_rate_tau": 0.25,
+        "teaching_export_share_w": 0.0089776,
+    }
+    line = _example_conversion("network", {"depvar_kind": "network"}, {"coef": 4080}, True, example)
+    assert line is not None and "的 X 为 0.22444 个百分点，按估计与 X 相关的差异约为 +9.16 个中心性原始单位" in line
+    # Without w (an older record), two decimals as before.
+    del example["teaching_export_share_w"]
+    line = _example_conversion("network", {"depvar_kind": "network"}, {"coef": 4080}, True, example)
+    assert line is not None and "的 X 为 0.22 个百分点" in line
 
 
 def test_report_network_standardized_size_uses_three_decimals_below_point_one():

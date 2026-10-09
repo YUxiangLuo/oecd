@@ -19,15 +19,13 @@ from gvcsim.report_common import (
     _depvar_kind,
     _global_inference_suppressed,
     _primary_coefficient,
-    _share_digits,
     _signed,
     _y_label,
+    estimate_digits,
     standardized_digits,
     y_display,
 )
 
-# Native digits of a value per 1 percentage point of X, as in the result table (``_natural_effect``).
-_NATIVE_DIGITS = {"length": 3, "position": 4, "network": 2}
 _COUNT_UNITS = {
     "share": "个百分点",
     "length": "个长度单位",
@@ -67,8 +65,11 @@ def _bar(
         return {"value": 0.0, "text": "没算出估计值"}
     # The value in the Y's own unit per 1 percentage point of X: β × 0.01 × 100 points for shares (the result
     # table's expression), β × 0.01 otherwise.
-    native = float(coef) * 0.01 * (100 if kind == "share" else 1)
-    native_text = _signed(native, _share_digits(native) if kind == "share" else _NATIVE_DIGITS.get(kind, 3))
+    to_native = 0.01 * (100 if kind == "share" else 1)
+    native = float(coef) * to_native
+    # In the result table's digits (``_natural_effect``), with its interval.
+    native_bounds = (ci[0] * to_native, ci[1] * to_native) if ci is not None else None
+    native_text = _signed(native, estimate_digits(kind, native, native_bounds))
     if with_unit:
         native_text += f" {_COUNT_UNITS.get(kind, '个原始单位')}"
     if not standardized:

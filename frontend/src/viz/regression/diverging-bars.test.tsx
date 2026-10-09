@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { barFigures, barUnitFor, type BarEstimate } from "../../regression-verdict";
 import type { DepvarKind } from "../../types";
 import { svgTextWidth } from "./charts";
-import { DivergingBarChart, endLabel, endLabelLines, layoutDivergingBars, unitTitleX, type DivergingBarRow } from "./diverging-bars";
+import { DivergingBarChart, endLabel, endLabelLines, layoutDivergingBars, spokenBar, unitTitleX, type DivergingBarRow } from "./diverging-bars";
 import { NEGATIVE, POSITIVE, UNCERTAIN, ZERO_LINE } from "./palette";
 
 afterEach(cleanup);
@@ -137,11 +137,32 @@ describe("diverging bar layout", () => {
     const layout = layoutDivergingBars(SUMMARY, 300);
     expect(layout.width).toBeGreaterThan(300);
     expect(layout.ticks.every((tick) => Number.isFinite(tick.value) && Math.abs(tick.value) < 1)).toBe(true);
-    // The widest bar with its whisker gets a third of the plot.
+    // The widest bar with its whisker gets at least a sixth of the plot.
     const span = layout.plotRight - layout.plotLeft;
     const reach = (placed: (typeof layout.rows)[number]) =>
       Math.max(placed.x1, placed.whisker?.[1] ?? placed.x1) - Math.min(placed.x0, placed.whisker?.[0] ?? placed.x0);
-    expect(Math.max(...layout.rows.map(reach))).toBeGreaterThan(span / 3);
+    expect(Math.max(...layout.rows.map(reach))).toBeGreaterThan(span / 6);
+  });
+
+  // The course release's step 15 summary (gvcsim summary_chart), with the weak Y saved in step 12: long end labels on
+  // both sides of the zero line, the case that was drawn 940 wide in a 680 card.
+  const RELEASE_SUMMARY: DivergingBarRow[] = [
+    ["外国增加值项占比", "步骤 11 · 贸易流", -0.0624, -0.06453, -0.06028, "-0.55 个百分点（-0.062 个标准差）"],
+    ["后向复杂 GVC 生产份额", "步骤 12 · 生产", 0.0009651, -0.001361, 0.003292, "+0.006 个百分点（+0.001 个标准差）"],
+    ["前向 GVC 段长度", "步骤 13 · 长度", -0.03156, -0.03292, -0.0302, "-0.0184 个长度单位（-0.032 个标准差）"],
+    ["加权总度", "步骤 14 · 网络", -0.0489, -0.04983, -0.04796, "-40.80 个中心性原始单位（-0.049 个标准差）"],
+  ].map(([label, sublabel, value, low, high, valueLabel], index) => ({
+    key: String(index), label: String(label), sublabel: String(sublabel), value: Number(value), low: Number(low), high: Number(high),
+    uncertain: Number(low) <= 0 && Number(high) >= 0, valueLabel: String(valueLabel),
+  }));
+
+  test.each(SUMMARY_WIDTHS)("step 15's release summary at a %ipx window is drawn at the card's width (%ipx), so its text keeps its size", (_window, width) => {
+    for (const rows of [SUMMARY, RELEASE_SUMMARY]) {
+      const layout = layoutDivergingBars(rows, width);
+      expect(layout.width).toBe(width);
+      const span = layout.plotRight - layout.plotLeft;
+      expect(Math.max(...layout.rows.map((placed) => placed.x1 - placed.x0))).toBeGreaterThan(span / 6);
+    }
   });
 
   test("an all-negative family puts the zero line near the right edge, so the bars use the width", () => {
@@ -182,9 +203,17 @@ describe("DivergingBarChart", () => {
     expect(selected.querySelector("[data-selected-tag]")?.textContent).toBe("已保存");
     const svg = dom.querySelector("svg")!;
     expect(svg.getAttribute("role")).toBe("img");
-    expect(svg.getAttribute("aria-label")).toBe("X 每高 1 个百分点，Y 平均相差（个百分点）。外国增加值项占比：-0.55，已保存；国内增加值出口占比：+0.56");
+    expect(svg.getAttribute("aria-label")).toBe("X 每高 1 个百分点，Y 平均相差（个百分点）。外国增加值项占比：-0.55 个百分点，95% 区间 [-0.57, -0.53]，已保存；国内增加值出口占比：+0.56 个百分点，95% 区间 [+0.54, +0.58]");
     expect(svg.getAttribute("viewBox")).toBe(`0 0 860 ${10 + 2 * 42 + 44}`);
     expect(dom.querySelector('[role="button"]')).toBeNull();
+  });
+
+  test("a bar is read aloud with its unit, its 95% interval, an open direction and whether it is saved", () => {
+    const [saved, other] = STEP11;
+    expect(spokenBar(saved)).toBe("外国增加值项占比：-0.55 个百分点，95% 区间 [-0.57, -0.53]，已保存");
+    expect(spokenBar(other)).toBe("国内增加值出口占比：+0.56 个百分点，95% 区间 [+0.54, +0.58]");
+    const weak = STEP12.find((row) => row.uncertain)!;
+    expect(spokenBar(weak)).toBe("后向复杂 GVC 生产份额：+0.008 个百分点，95% 区间 [-0.011, +0.026]，方向不确定，已保存");
   });
 
   test("a suppressed interval draws no whisker and says so in the tooltip text", () => {
@@ -203,7 +232,7 @@ describe("DivergingBarChart", () => {
     const bars = [...container.querySelectorAll<SVGGElement>('[role="button"]')];
     expect(bars.map((bar) => bar.getAttribute("tabindex"))).toEqual(["0", "-1"]);
     expect(bars[0].getAttribute("aria-pressed")).toBe("true");
-    expect(bars[1].getAttribute("aria-label")).toBe("国内增加值出口占比：+0.56");
+    expect(bars[1].getAttribute("aria-label")).toBe("国内增加值出口占比：+0.56 个百分点，95% 区间 [+0.54, +0.58]");
     bars[0].focus();
     fireEvent.keyDown(bars[0], { key: "ArrowDown" });
     expect(document.activeElement).toBe(bars[1]);
@@ -221,5 +250,23 @@ describe("DivergingBarChart", () => {
     fireEvent.click(busy);
     fireEvent.keyDown(busy, { key: "Enter" });
     expect(onSelect).toHaveBeenCalledTimes(3);
+  });
+
+  test("keyboard focus puts the tooltip above the row, not over the lines under the chart", () => {
+    const { container } = render(<DivergingBarChart rows={STEP11} unitTitle="个百分点" onSelect={() => {}} width={650}><p>合计 100%</p></DivergingBarChart>);
+    const wrap = container.querySelector<HTMLElement>(".diverging-bars")!;
+    const tip = container.querySelector<HTMLElement>(".diverging-bars > div[style*='pointer-events']")!;
+    const rect = (top: number, bottom: number) => ({ top, bottom, left: 0, right: 600, width: 600, height: bottom - top, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+    wrap.getBoundingClientRect = () => rect(100, 400);
+    Object.defineProperty(tip, "offsetHeight", { configurable: true, value: 80 });
+    const [first, last] = [...container.querySelectorAll<SVGGElement>('[role="button"]')];
+    last.getBoundingClientRect = () => rect(300, 340);
+    fireEvent.focus(last);
+    // The row starts 200px into the card: the 80px tip ends 6px above it.
+    expect(tip.style.top).toBe(`${200 - 80 - 6}px`);
+    // No room above the first row: below it instead (over the next row, never under the chart).
+    first.getBoundingClientRect = () => rect(150, 190);
+    fireEvent.focus(first);
+    expect(tip.style.top).toBe(`${190 - 100 + 6}px`);
   });
 });

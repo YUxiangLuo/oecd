@@ -20,6 +20,16 @@ export interface DivergingBarRow {
   /** Tooltip only: the interval in words, and a note such as "这次不显示 95% 区间". */
   intervalLabel?: string;
   note?: string;
+  /** Read aloud: the value with its unit and the 95% interval (barFigures); the end label when absent. */
+  spokenLabel?: string;
+}
+
+/** A bar as read aloud: "外国增加值项占比：-0.55 个百分点，95% 区间 [-0.57, -0.53]，已保存". */
+export function spokenBar(row: DivergingBarRow, highlight = "已保存"): string {
+  const value = row.spokenLabel != null
+    ? `${row.spokenLabel}${row.uncertain ? `，${UNCERTAIN_TEXT}` : ""}`
+    : endLabel(row).replace(" · ", "，");
+  return `${row.label}：${value}${row.selected ? `，${highlight}` : ""}`;
 }
 
 export const UNCERTAIN_TEXT = "方向不确定";
@@ -106,9 +116,10 @@ const finiteEnds = (row: DivergingBarRow) =>
  * neither the zero line nor the left column; one label per row and rows taller than the text keep labels apart.
  *
  * End labels stay on one line while the longest bar still gets a third of the plot; otherwise they are stacked on
- * two, then three lines, as in the report (step 15's summary has long labels on both sides of the zero line and
- * left no room for its bars below a 1280 px window). Only when even that leaves no room (far below the supported
- * window width) is the drawing made wider, so the chart scales down as a whole instead of collapsing its bars.
+ * two, then three lines; when none of these gives a third, the one with the longest bars is used, as in the report
+ * (report-renderer.tsx), and the drawing keeps the container's width. Only when the bars would get less than a sixth
+ * (far below the supported window width) is the drawing made wider, so the chart scales down as a whole instead of
+ * collapsing its bars.
  */
 export function layoutDivergingBars(
   rows: DivergingBarRow[],
@@ -159,11 +170,17 @@ export function layoutDivergingBars(
   };
   type Fit = NonNullable<ReturnType<typeof attempt>>;
   const roomy = (fit: Fit | null): fit is Fit => fit != null && fit.k * extent >= fit.span / 3;
-  let fit: Fit | null = [0, 1, 2].map((labelLayout) => attempt(width, labelLayout)).find(roomy) ?? null;
-  // Even three-line labels leave the bars no room: draw wider (the SVG scales down to its box) until they have it.
+  // The report's rule (report-renderer.tsx): the first layout whose longest bar gets a third of the plot, else the one
+  // with the longest bars. The drawing keeps the container's width, so its text keeps its size (a summary drawn 940
+  // wide in a 680 card read at 7–8px).
+  const usable = (fit: Fit | null): fit is Fit => fit != null && fit.k * extent >= fit.span / 6;
+  const fits = [0, 1, 2].map((labelLayout) => attempt(width, labelLayout)).filter((item): item is Fit => item != null);
+  const longest = fits.reduce<Fit | null>((best, item) => (best == null || item.k > best.k ? item : best), null);
+  let fit: Fit | null = fits.find(roomy) ?? (usable(longest) ? longest : null);
+  // Only far below the supported width (labels leave the bars almost nothing): draw wider, scaled down to the box.
   for (let wider = width + 20; !fit && wider <= width * 4; wider += 20) {
     const candidate = attempt(wider, 2);
-    if (roomy(candidate)) fit = candidate;
+    if (usable(candidate)) fit = candidate;
   }
   // Never reached with real labels (they would need a drawing four times as wide); the axis still stays finite.
   const chosen: Fit = fit ?? attempt(width * 4, 2) ?? (() => {
@@ -298,7 +315,7 @@ export function DivergingBarChart({
   const rowRefs = useRef<(SVGGElement | null)[]>([]);
   const [focused, setFocused] = useState<string | null>(null);
   const tabRow = Math.max(0, rows.findIndex((row) => row.selected));
-  const spoken = (row: DivergingBarRow) => `${row.label}：${endLabel(row).replace(" · ", "，")}${row.selected ? `，${highlight}` : ""}`;
+  const spoken = (row: DivergingBarRow) => spokenBar(row, highlight);
   const summary = `${title ? `${title}；` : ""}${unitTitle}。${rows.map(spoken).join("；")}`;
   const move = (index: number) => rowRefs.current[(index + rows.length) % rows.length]?.focus();
   const select = (row: DivergingBarRow) => {
@@ -371,12 +388,12 @@ export function DivergingBarChart({
                 "aria-label": spoken(row),
                 onClick: () => select(row),
                 onKeyDown: (event: KeyboardEvent<SVGGElement>) => onKey(event, index, row),
-                // Keyboard focus shows the hover tooltip (its value and 95% interval), under the focused row.
+                // Keyboard focus shows the hover tooltip (its value and 95% interval) above the focused row, so it
+                // never covers the lines under the chart (step 12's 合计 100% note, the axis title).
                 onFocus: (event: FocusEvent<SVGGElement>) => {
                   setFocused(row.key);
                   const box = event.currentTarget.getBoundingClientRect();
-                  // useTip positions by the pointer only (clientX/clientY); the row stands in for it.
-                  show({ clientX: box.left + box.width * 0.55, clientY: box.bottom - 6 } as Parameters<typeof show>[0], barTip(row, interactive));
+                  show({ clientX: box.left + box.width * 0.55, clientY: box.top } as Parameters<typeof show>[0], barTip(row, interactive), box);
                 },
                 onBlur: () => {
                   setFocused((current) => (current === row.key ? null : current));

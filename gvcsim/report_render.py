@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from gvcsim.regression.estimation import two_way_note
@@ -72,6 +73,49 @@ def _points(share: float) -> str:
     if 0 < points < 0.005:
         return f"{points:.{min(10, math.ceil(-math.log10(points)) + 1)}f}"
     return f"{points:.2f}"
+
+
+def _fixed(value: float, digits: int) -> str:
+    """JavaScript ``toFixed``: the exact value rounded half up at ``digits`` decimals, never "-0"."""
+    text = str(Decimal(value).quantize(Decimal(1).scaleb(-digits), rounding=ROUND_HALF_UP))
+    return text[1:] if text.startswith("-") and not any(char in "123456789" for char in text) else text
+
+
+def _shown_decimals(share: float) -> int:
+    """Decimals ``_points`` gives a share: two, or two significant digits for a tiny positive one."""
+    points = share * 100
+    return min(10, math.ceil(-math.log10(points)) + 1) if 0 < points < 0.005 else 2
+
+
+def worked_numbers(w: float, tau: float, x: float) -> tuple[str, str]:
+    """w (in %) and X (in percentage points) as step 10 shows them (frontend ``workedNumbers``): two decimals, more
+    only until the shown w times the shown τ rounds to the shown X, so "X = w × τ" and the conversions in steps
+    11–14 check by hand (0.22444, not 0.22). An exact zero X reads "0"."""
+
+    def w_at(decimals: int) -> str:
+        return _fixed(w * 100, decimals)
+
+    w_base, x_base = _shown_decimals(w), _shown_decimals(x)
+    if x == 0:
+        return w_at(w_base), "0"
+    tau_shown = Decimal(_rate(tau * 100))
+    for extra in range(7):
+        for w_decimals, x_decimals in ((w_base + extra, x_base + extra), (w_base + extra, x_base + extra + 1)):
+            w_text, x_text = w_at(w_decimals), _fixed(x * 100, x_decimals)
+            product = (Decimal(w_text) * tau_shown / 100).quantize(
+                Decimal(1).scaleb(-x_decimals), rounding=ROUND_HALF_UP
+            )
+            if product == Decimal(x_text):
+                return w_text, x_text
+    return w_at(w_base), _fixed(x * 100, x_base)
+
+
+def _example_x(item: dict[str, Any], x: float, tau: float) -> str:
+    """An example's X at step 10's digits when its w is known, else two decimals."""
+    w = item.get("teaching_export_share_w")
+    if isinstance(w, (int, float)) and not isinstance(w, bool) and math.isfinite(w) and math.isfinite(tau):
+        return worked_numbers(float(w), tau, x)[1]
+    return _points(x)
 
 
 # How each recorded unit is read, in the order the notes list them (steps 6–9).
@@ -354,15 +398,21 @@ def _experiment_sections(session: dict[str, Any], scenario: dict[str, Any] | Non
         )
         teaching_observation = shock.get("teaching_observation")
         if isinstance(teaching_observation, dict):
+            worked = worked_numbers(
+                float(teaching_observation["teaching_export_share_w"]),
+                float(teaching_observation["teaching_tariff_rate_tau"]),
+                float(teaching_observation["teaching_tariff_exposure"]),
+            )
             lines.extend(
                 (
                     f"- 换算用的例子：{_safe(country_label(str(teaching_observation.get('country'))))} · "
                     f"{_safe(sector_label(str(teaching_observation.get('industry'))))} · {_safe(teaching_observation.get('year'))}",
                     # X is read in percentage points throughout steps 10–14, so print it the same way here.
-                    # Same precision as step 10's table: w and X to two decimals, the tariff rate as set.
-                    f"- w = {_points(float(teaching_observation['teaching_export_share_w']))}%；"
+                    # Same digits as step 10: w and X to two decimals, more where the product would not check by
+                    # hand; the tariff rate as set.
+                    f"- w = {worked[0]}%；"
                     f"τ = {_rate(float(teaching_observation['teaching_tariff_rate_tau']) * 100)}%；"
-                    f"X = w × τ = {_points(float(teaching_observation['teaching_tariff_exposure']))} 个百分点",
+                    f"X = w × τ = {worked[1]} 个百分点",
                 )
             )
         lines.append("")
@@ -535,7 +585,7 @@ def _example_conversion(
                 if item is converted[-1]
                 else ""
             )
-            text = f"{label} 的 X 为 {_points(x)} 个百分点，按估计与 X 相关的差异{amount}{reading}"
+            text = f"{label} 的 X 为 {_example_x(item, x, tau)} 个百分点，按估计与 X 相关的差异{amount}{reading}"
         elif tau > 0:
             text = f"{label} 被加税但首年不向美国出口（w = 0），X = 0，按估计没有与 X 相关的差异"
         else:

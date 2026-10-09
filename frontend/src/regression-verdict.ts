@@ -118,9 +118,30 @@ export function networkIntervalDigits(point: number, bounds: [number, number] | 
   return digits;
 }
 
-/** A value per 1 percentage point of X, signed, in the headline's digits for its kind (shares 2–3, lengths 3, position 4, network 2). */
-export function signedEffect(value: number, kind: DepvarKind): string {
-  return signed(value, kind === "position" ? 4 : kind === "length" ? 3 : kind === "share" ? shareDigits(value) : 2);
+/**
+ * One more decimal (up to three more) while an interval end prints the same as the estimate: "-0.018" with
+ * "[-0.019, -0.018]" reads "-0.0184" with "[-0.0192, -0.0176]" (report `distinct_digits`).
+ */
+export function distinctDigits(digits: number, point: number, bounds: [number, number] | null): number {
+  if (!bounds) return digits;
+  let shown = digits;
+  while (shown < digits + 3 && (signed(point, shown) === signed(bounds[0], shown) || signed(point, shown) === signed(bounds[1], shown))) shown += 1;
+  return shown;
+}
+
+/**
+ * Decimals of an estimate per 1 percentage point of X and its 95% interval, in the Y's own unit (shares in points):
+ * shares 2–3, lengths 3, position 4, network 2 or more (networkIntervalDigits); more where an interval end would
+ * read the same as the estimate (report `estimate_digits`).
+ */
+export function estimateDigits(kind: DepvarKind, value: number, bounds: [number, number] | null): number {
+  const base = kind === "network" ? networkIntervalDigits(value, bounds) : kind === "position" ? 4 : kind === "length" ? 3 : shareDigits(value);
+  return distinctDigits(base, value, bounds);
+}
+
+/** A value per 1 percentage point of X, signed, in the headline's digits for its kind (see estimateDigits). */
+export function signedEffect(value: number, kind: DepvarKind, bounds: [number, number] | null = null): string {
+  return signed(value, estimateDigits(kind, value, bounds));
 }
 
 /**
@@ -156,6 +177,8 @@ export interface BarFigures {
   uncertain: boolean;
   valueLabel: string;
   intervalLabel: string;
+  /** Read aloud for the bar: the value with its unit and the 95% interval ("-0.55 个百分点，95% 区间 [-0.57, -0.53]"). */
+  spokenLabel: string;
 }
 
 /** Bars of one chart are in 个百分点 only when every Y is a share; otherwise in 个标准差 (step 13, 14, 15). */
@@ -183,25 +206,38 @@ export function standardizedEffect(coef: number, depvarStd: number | null | unde
 export function barFigures(estimate: BarEstimate, kind: DepvarKind, unit: BarUnit, withUnit = false): BarFigures {
   const { coef } = estimate;
   if (coef == null || !Number.isFinite(coef)) {
-    return { value: 0, low: null, high: null, uncertain: true, valueLabel: "没算出估计值", intervalLabel: "—" };
+    return { value: 0, low: null, high: null, uncertain: true, valueLabel: "没算出估计值", intervalLabel: "—", spokenLabel: "没算出估计值" };
   }
   const low = estimate.suppressed ? null : estimate.ci_low;
   const high = estimate.suppressed ? null : estimate.ci_high;
   const hasCi = low != null && high != null && Number.isFinite(low) && Number.isFinite(high);
   const uncertain = estimate.suppressed || !hasCi || (low! <= 0 && high! >= 0);
-  // The value per 1 percentage point of X in the Y's own display unit (shares ×1 in points, others ×0.01).
-  const native = coef * (kind === "share" ? 1 : 0.01);
-  const nativeText = `${signedEffect(native, kind)}${withUnit ? ` ${countUnit(kind)}` : ""}`;
+  // The value per 1 percentage point of X in the Y's own display unit (shares ×1 in points, others ×0.01), in the
+  // headline's digits (with its interval, so it reads as the headline does).
+  const toNative = kind === "share" ? 1 : 0.01;
+  const native = coef * toNative;
+  const nativeBounds: [number, number] | null = hasCi ? [low! * toNative, high! * toNative] : null;
+  const nativeValue = signedEffect(native, kind, nativeBounds);
+  const nativeText = `${nativeValue}${withUnit ? ` ${countUnit(kind)}` : ""}`;
+  // Spoken with its unit even where the drawing leaves it to the axis title or the name's second line.
+  const spokenNative = `${nativeValue} ${countUnit(kind)}`;
   if (unit === "points") {
-    const digits = shareDigits(coef);
+    const digits = estimateDigits(kind, coef, hasCi ? [low!, high!] : null);
+    const interval = hasCi ? `[${signed(low!, digits)}, ${signed(high!, digits)}]` : null;
     return {
       value: coef, low: hasCi ? low : null, high: hasCi ? high : null, uncertain,
       valueLabel: nativeText,
-      intervalLabel: hasCi ? `[${signed(low!, digits)}, ${signed(high!, digits)}] 个百分点` : "—",
+      intervalLabel: interval ? `${interval} 个百分点` : "—",
+      spokenLabel: interval ? `${spokenNative}，95% 区间 ${interval}` : spokenNative,
     };
   }
   const sd = standardizedEffect(coef, estimate.depvar_std);
-  if (sd == null) return { value: 0, low: null, high: null, uncertain: true, valueLabel: `${nativeText}（没有标准差）`, intervalLabel: "—" };
+  if (sd == null) {
+    return {
+      value: 0, low: null, high: null, uncertain: true, valueLabel: `${nativeText}（没有标准差）`, intervalLabel: "—",
+      spokenLabel: `${spokenNative}（没有标准差）`,
+    };
+  }
   const bounds: [number, number] | null = hasCi ? [standardizedEffect(low!, estimate.depvar_std)!, standardizedEffect(high!, estimate.depvar_std)!] : null;
   const digits = standardizedDigits(sd, bounds);
   return {
@@ -210,6 +246,7 @@ export function barFigures(estimate: BarEstimate, kind: DepvarKind, unit: BarUni
     // "幅度约 0.047 个标准差" is an unsigned size.
     valueLabel: `${nativeText}（${signed(sd, digits)} 个标准差）`,
     intervalLabel: bounds ? `[${signed(bounds[0], digits)}, ${signed(bounds[1], digits)}] 个标准差` : "—",
+    spokenLabel: `${spokenNative}（${signed(sd, digits)} 个标准差）${bounds ? `，95% 区间 [${signed(bounds[0], digits)}, ${signed(bounds[1], digits)}] 个标准差` : ""}`,
   };
 }
 
@@ -224,7 +261,7 @@ function naturalScale(
   const ciHigh = (coefficient.ci_high ?? 0) * 0.01;
   const kind = depvarKind(outcome, response.design);
   if (kind === "share") {
-    const digits = shareDigits(effect * 100);
+    const digits = estimateDigits(kind, effect * 100, hasCi ? [ciLow * 100, ciHigh * 100] : null);
     const interval = hasCi ? `[${signed(ciLow * 100, digits)}, ${signed(ciHigh * 100, digits)}] 个百分点` : "—";
     const text = `${signed(effect * 100, digits)} 个百分点`;
     return { effect: text, effectBrief: text, interval, intervalShort: interval };
@@ -238,8 +275,8 @@ function naturalScale(
   // Point and interval share their digits: 3 below 0.1, more when the interval's ends would print alike.
   const sdDigits = standardizedDigits(standardized, sdBounds);
   const standardizedInterval = sdBounds ? `；约 [${signed(sdBounds[0], sdDigits)}, ${signed(sdBounds[1], sdDigits)}] 个标准差` : "";
-  // The estimate and both interval ends in the same decimals.
-  const digits = kind === "network" ? networkIntervalDigits(effect, hasCi ? [ciLow, ciHigh] : null) : kind === "position" ? 4 : 3;
+  // The estimate and both interval ends in the same decimals, more where an end would read as the estimate.
+  const digits = estimateDigits(kind, effect, hasCi ? [ciLow, ciHigh] : null);
   const intervalShort = hasCi ? `[${signed(ciLow, digits)}, ${signed(ciHigh, digits)}] ${countUnit(kind)}` : "—";
   // Unsigned, as in the report ("幅度约 0.047 个标准差"): the number before it carries the sign.
   const size = standardized == null ? "" : `幅度约 ${signed(standardized, sdDigits).replace(/^[+−-]/, "")} 个标准差`;

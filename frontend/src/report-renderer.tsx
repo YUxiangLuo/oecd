@@ -567,7 +567,9 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
   const W = 720;
   const SUB_FONT = 14;
   const LINE = 19;
-  const GAP = 8;
+  // Room between a bar's whisker cap and its end label: about the page's 7px once the drawing is shown at report width
+  // (8 units read as touching the cap).
+  const GAP = 12;
   const rows = chart.items.map((item) => {
     const lines = wrapLabel(item.label, LABEL_FONT, 200);
     return { item, lines, sub: item.sub ?? "", label: endLabel(item) };
@@ -621,7 +623,8 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
   const H = m.t + heights.reduce((sum, height) => sum + height, 0) + m.b;
 
   // Round ticks over the visible range only.
-  const visible = niceDomain((plotLeft - zero) / scale, (plotRight - zero) / scale, 4);
+  // As many ticks as on the page (one per 110 px there, its text 12/15 of the size here).
+  const visible = niceDomain((plotLeft - zero) / scale, (plotRight - zero) / scale, Math.max(2, Math.round(plotW / ((110 * AXIS_FONT) / 12))));
   const ticks = visible.ticks.filter((tick) => x(tick) >= plotLeft - 0.5 && x(tick) <= plotRight + 0.5);
   const stepSize = visible.ticks.length > 1 ? visible.ticks[1] - visible.ticks[0] : 1;
   // As many decimals as the step has ("0.025" → 3), so a tick never prints rounded (-0.125, not -0.13).

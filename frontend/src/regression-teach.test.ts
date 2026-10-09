@@ -137,7 +137,10 @@ describe("student-first regression reading", () => {
     const dom = new DOMParser().parseFromString(html, "text/html");
     const effect = (step: string) => [...dom.querySelectorAll("tbody tr")].find((item) => item.querySelector("th")?.textContent === step)!
       .querySelectorAll("td")[2].textContent;
-    expect(effect("13")).toBe("-0.018 个长度单位（幅度约 0.032 个标准差）");
+    // At 3 decimals the interval's upper end would read as the estimate ("-0.018" in "[-0.019, -0.018]"): one more.
+    expect(effect("13")).toBe("-0.0184 个长度单位（幅度约 0.032 个标准差）");
+    expect([...dom.querySelectorAll("tbody tr")].find((item) => item.querySelector("th")?.textContent === "13")!
+      .querySelectorAll("td")[3].textContent).toMatch(/^\[-0\.0192, -0\.0176\] 个长度单位/);
     expect(effect("14")).toBe("-40.11 个中心性原始单位（幅度约 0.047 个标准差）");
     expect(html).not.toContain("样本均值");
     expect(html.match(/标准差即 Y 的典型差距/g)).toHaveLength(1);

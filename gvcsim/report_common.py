@@ -221,6 +221,34 @@ def network_interval_digits(point: float, bounds: tuple[float, float] | None) ->
     return digits
 
 
+def distinct_digits(digits: int, point: float, bounds: tuple[float, float] | None) -> int:
+    """One more decimal (up to three more) while an interval end prints the same as the estimate (frontend
+    ``distinctDigits``): "-0.018" with "[-0.019, -0.018]" reads "-0.0184" with "[-0.0192, -0.0176]"."""
+    shown = digits
+    while (
+        bounds is not None
+        and shown < digits + 3
+        and _signed(point, shown) in (_signed(bounds[0], shown), _signed(bounds[1], shown))
+    ):
+        shown += 1
+    return shown
+
+
+def estimate_digits(kind: str, value: float, bounds: tuple[float, float] | None) -> int:
+    """Decimals of an estimate per 1 percentage point of X and its interval in the Y's own unit (shares in points),
+    as on the page (frontend ``estimateDigits``)."""
+    base = (
+        network_interval_digits(value, bounds)
+        if kind == "network"
+        else 4
+        if kind == "position"
+        else 3
+        if kind == "length"
+        else _share_digits(value)
+    )
+    return distinct_digits(base, value, bounds)
+
+
 def _signed(value: float, digits: int) -> str:
     rounded = f"{value:+,.{digits}f}"
     # Match the result card (toPrecision(2)): a small nonzero estimate/CI endpoint is not zero, and keeps
@@ -331,7 +359,7 @@ def _natural_effect(
     effect_label = "关税暴露 X 每高 1 个百分点，Y 平均相差"
     kind = _depvar_kind(outcome, design)
     if kind == "share":
-        share_digits = _share_digits(effect * 100)
+        share_digits = estimate_digits(kind, effect * 100, (ci[0], ci[1]) if ci else None)
         effect_text = f"{_signed(effect * 100, share_digits)} 个百分点"
         interval = (
             f"[{_signed(ci[0] * increment * 100, share_digits)}, {_signed(ci[1] * increment * 100, share_digits)}] 个百分点"
@@ -348,14 +376,9 @@ def _natural_effect(
         sd_bounds = (ci[0] * increment / positive_sd, ci[1] * increment / positive_sd) if ci and positive_sd else None
         sd_point = effect / positive_sd if positive_sd is not None else None
         sd_digits = standardized_digits(sd_point, sd_bounds)
-        # The estimate and both interval ends in the same decimals, as on the page.
-        digits = (
-            network_interval_digits(effect, (ci[0] * increment, ci[1] * increment) if ci else None)
-            if kind == "network"
-            else 4
-            if kind == "position"
-            else 3
-        )
+        # The estimate and both interval ends in the same decimals, more where an end would read as the estimate,
+        # as on the page.
+        digits = estimate_digits(kind, effect, (ci[0] * increment, ci[1] * increment) if ci else None)
         effect_text = f"{_signed(effect, digits)} 个{unit}"
         if sd_point is not None:
             effect_text += f"（幅度约 {_signed(sd_point, sd_digits)[1:]} 个标准差）"
@@ -391,16 +414,20 @@ def _y_label(outcome: str, design: dict[str, Any] | None) -> str:
 
 
 def _effect_size(outcome: str, design: dict[str, Any] | None, coefficient: dict[str, Any]) -> str:
-    """The size of the change per 1 percentage point of X, unsigned, in the step's unit ("0.55 个百分点")."""
-    effect = abs(float(coefficient["coef"]) * 0.01)
+    """The size of the change per 1 percentage point of X, unsigned, in the step's unit ("0.55 个百分点"), in the
+    digits of the result table (``_natural_effect``)."""
     kind = _depvar_kind(outcome, design or {})
-    if kind == "share":
-        return f"{_signed(effect * 100, _share_digits(effect * 100))[1:]} 个百分点"
-    if kind == "network":
-        return f"{_signed(effect, network_interval_digits(effect, None))[1:]} 个中心性原始单位"
-    if kind == "position":
-        return f"{_signed(effect, 4)[1:]} 个位置指数单位"
-    return f"{_signed(effect, 3)[1:]} 个长度单位"
+    scale = 1.0 if kind == "share" else 0.01
+    effect = float(coefficient["coef"]) * scale
+    low, high = coefficient.get("ci_low"), coefficient.get("ci_high")
+    bounds = (
+        (float(low) * scale, float(high) * scale)
+        if isinstance(low, (int, float)) and isinstance(high, (int, float))
+        else None
+    )
+    size = _signed(effect, estimate_digits(kind, effect, bounds)).lstrip("+-")
+    unit = {"share": "个百分点", "network": "个中心性原始单位", "position": "个位置指数单位"}.get(kind, "个长度单位")
+    return f"{size} {unit}"
 
 
 def _association(outcome: str, design: dict[str, Any] | None, coefficient: dict[str, Any], negative: bool) -> str:
