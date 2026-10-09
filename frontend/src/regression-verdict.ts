@@ -36,7 +36,7 @@ export function globalInferenceIsSuppressed(
     || (support != null && support.status !== resultStatus);
 }
 
-function hasValidInterval(coefficient: CoefStat): boolean {
+function hasValidInterval(coefficient: Pick<CoefStat, "coef" | "ci_low" | "ci_high">): boolean {
   const { coef, ci_low: low, ci_high: high } = coefficient;
   return Number.isFinite(coef) && low != null && high != null
     && Number.isFinite(low) && Number.isFinite(high) && low <= coef && coef <= high;
@@ -170,6 +170,19 @@ export function estimateDigits(kind: DepvarKind, value: number, bounds: [number,
 /** A value per 1 percentage point of X, signed, in the headline's digits for its kind (see estimateDigits). */
 export function signedEffect(value: number, kind: DepvarKind, bounds: [number, number] | null = null): string {
   return signed(value, estimateDigits(kind, value, bounds));
+}
+
+/**
+ * The estimate per 1 percentage point of X as the headline prints it ("-0.55" 个百分点, "-0.0184"), as a number:
+ * the example conversions multiply this rounded value by the shown X, so the printed numbers check by hand.
+ */
+export function shownPerPoint(outcome: RegressionOutcome, coefficient: Pick<CoefStat, "coef" | "ci_low" | "ci_high">, design?: { depvar_kind?: string } | null): number {
+  const kind = depvarKind(outcome, design);
+  // Shares are printed in points (coef × 0.01 × 100); the other kinds in their own unit (coef × 0.01).
+  const scale = kind === "share" ? 1 : 0.01;
+  const bounds: [number, number] | null = hasValidInterval(coefficient)
+    ? [(coefficient.ci_low ?? 0) * scale, (coefficient.ci_high ?? 0) * scale] : null;
+  return Number(signedEffect(coefficient.coef * scale, kind, bounds).replace(/[+,]/g, ""));
 }
 
 /**

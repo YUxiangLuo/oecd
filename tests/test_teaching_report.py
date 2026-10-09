@@ -2540,6 +2540,16 @@ def test_report_example_conversion_reads_like_the_page():
     assert _example_conversion("trade", {}, coefficient, True, None) is None
 
 
+def test_report_example_conversion_multiplies_the_printed_numbers():
+    """The printed -0.55 × the printed 20.44 = -11.24, not the unrounded -0.5517 × 20.44 = -11.28 (as on the page)."""
+    from gvcsim.report_render import _example_conversion
+
+    example = {"country": "CAN", "industry": "C29", "teaching_tariff_exposure": 0.2044, "teaching_tariff_rate_tau": 0.25}
+    coefficient = {"coef": -0.5517, "ci_low": -0.61, "ci_high": -0.49}
+    line = _example_conversion("trade", {}, coefficient, True, example)
+    assert line is not None and line.endswith("的 X 为 20.44 个百分点，按估计与 X 相关的差异约为 -11.24 个百分点（Y 偏低）。")
+
+
 def test_report_example_x_uses_step_ten_digits():
     """X reads as on step 10 (frontend ``workedNumbers``), so the conversion checks by hand: 0.22444 × 40.80 ≈ 9.16."""
     from gvcsim.report_render import _example_conversion, worked_numbers

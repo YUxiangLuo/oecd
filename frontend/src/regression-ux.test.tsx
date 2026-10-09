@@ -11,6 +11,7 @@ import type {
   RegressionOutcome, Step, StepStateApi, TeachingEstimate, TeachingGroupsResponse, TeachingOverviewResponse, TeachingPanelResponse,
 } from "./types";
 import { GENERATED_DATA_NOTE } from "./regression-lessons";
+import { shownPerPoint } from "./regression-verdict";
 
 afterEach(() => { cleanup(); mock.restore(); });
 
@@ -491,25 +492,36 @@ describe("simple regression workbench", () => {
   });
 
   test("converts the estimate to the example's X in each step's own units", () => {
-    expect(exampleEffect("trade", -0.55, 0.0932)).toBe("5.13 个百分点");
-    expect(exampleEffect("length", -1.8, 0.0932)).toBe("0.168 个长度单位");
-    expect(exampleEffect("network", -4000, 0.0932)).toBe("373 个中心性原始单位");
-    expect(exampleEffect("network", -2000, 0.0932)).toBe("186 个中心性原始单位");
+    expect(exampleEffect("trade", -0.55, 9.32)).toBe("5.13 个百分点");
+    expect(exampleEffect("length", -0.018, 9.32)).toBe("0.168 个长度单位");
+    expect(exampleEffect("network", -40, 9.32)).toBe("373 个中心性原始单位");
+    expect(exampleEffect("network", -20, 9.32)).toBe("186 个中心性原始单位");
     // A closeness change below the shown precision says so instead of printing "-0.00000".
-    expect(exampleEffect("network", -0.49, 0.0000039)).toBe("不到 0.00001 个中心性原始单位");
-    expect(exampleEffect("network", -0.5, 0.1693)).toBe("0.0847 个中心性原始单位");
-    expect(exampleEffect("network", -60, 0.1)).toBe("6.00 个中心性原始单位");
+    expect(exampleEffect("network", -0.0049, 0.00039)).toBe("不到 0.00001 个中心性原始单位");
+    expect(exampleEffect("network", -0.005, 16.93)).toBe("0.0847 个中心性原始单位");
+    expect(exampleEffect("network", -0.6, 10)).toBe("6.00 个中心性原始单位");
     // Closeness gaps (~0.005) need decimals; a fixed 0 printed "低 0" and "估计的差距 −0".
     expect(networkDigits(0.0049)).toBe(5);
     expect(networkDigits(0.012)).toBe(4);
     expect(networkDigits(59)).toBe(1);
     // With a chosen baseline the design says how Y is read.
-    expect(exampleEffect("length", -0.4, 0.0932, { depvar_kind: "position" })).toBe("0.0373");
-    expect(exampleEffect("trade", 0.55, 0.0932, { depvar_kind: "share" })).toBe("5.13 个百分点");
+    expect(exampleEffect("length", -0.004, 9.32, { depvar_kind: "position" })).toBe("0.0373");
+    expect(exampleEffect("trade", 0.55, 9.32, { depvar_kind: "share" })).toBe("5.13 个百分点");
+  });
+
+  test("a conversion multiplies the printed estimate by the printed X, so it checks by hand", () => {
+    // Headline "-0.55 个百分点" × X "20.44" = "11.24", not the unrounded -0.5517 × 20.44 = 11.28.
+    const perPoint = shownPerPoint("trade", { coef: -0.5517, ci_low: -0.61, ci_high: -0.49 });
+    expect(perPoint).toBe(-0.55);
+    expect(exampleEffect("trade", perPoint, 20.44)).toBe("11.24 个百分点");
+    // Half up on the decimal product, as by hand: 0.018 × 23.25 = 0.4185 → 0.419.
+    expect(exampleEffect("length", -0.018, 23.25)).toBe("0.419 个长度单位");
+    // Lengths print the estimate per point (coef × 0.01) in 3 decimals: -1.5378 → -0.015.
+    expect(shownPerPoint("length", { coef: -1.5378, ci_low: -1.9, ci_high: -1.2 })).toBe(-0.015);
   });
 
   test("network conversions group thousands, as the report does", () => {
-    expect(exampleEffect("network", -4000, 0.3455)).toBe("1,382 个中心性原始单位");
+    expect(exampleEffect("network", -40, 34.55)).toBe("1,382 个中心性原始单位");
     expect(groupedFixed(-1382.4, 0)).toBe("-1,382");
     expect(groupedFixed(12.345, 2)).toBe("12.35");
     // Rounds to zero: no negative zero.

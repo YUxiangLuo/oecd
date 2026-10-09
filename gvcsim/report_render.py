@@ -34,6 +34,7 @@ from gvcsim.report_common import (
     _y_label,
     network_digits,
     reading_number,
+    shown_per_point,
     with_count_unit,
     y_display,
 )
@@ -531,19 +532,20 @@ def _teaching_sample_lines(source_filter: dict[str, Any] | None) -> list[str]:
 
 
 def _example_size(kind: str, change: float) -> str:
-    """The unsigned Y change implied for the step 10 example, in the step's unit (frontend ``exampleEffect``)."""
+    """The unsigned Y change implied for the step 10 example, in the step's display unit (shares in points;
+    frontend ``exampleEffect``)."""
     size = abs(change)
     if kind == "network":
         digits = network_digits(size)
     else:
         digits = {"share": 2, "position": 4}.get(kind, 3)
-    if kind == "share":
-        size *= 100
     # The position index has no unit: a bare number, as on the page.
     if 0 < size < 0.5 * 10**-digits:
         return with_count_unit(f"不到 {10**-digits:.{digits}f}", kind)
-    # Thousands separators, as the page writes them ("约为 -1,382 个中心性原始单位").
-    return with_count_unit(f"{size:,.{digits}f}", kind)
+    # Thousands separators, as the page writes them ("约为 -1,382 个中心性原始单位"). Half up on the decimal
+    # product, as by hand: 0.018 × 23.25 = 0.4185 reads 0.419 (float formatting alone gives 0.418).
+    rounded = Decimal(repr(size)).quantize(Decimal(1).scaleb(-digits), rounding=ROUND_HALF_UP)
+    return with_count_unit(f"{rounded:,.{digits}f}", kind)
 
 
 def _example_conversion(
@@ -574,7 +576,8 @@ def _example_conversion(
         if str(item.get("country")) == MARKET:
             text = f"{label} 属于加征关税的一方，按设计不在回归样本中，X 记为 0 只是定义，不做换算"
         elif x > 0:
-            change = float(coefficient["coef"]) * x
+            # The printed estimate per point × the printed X, so the line checks by hand (as on the page).
+            change = shown_per_point(outcome, design, coefficient) * float(_example_x(item, x, tau))
             size = _example_size(_depvar_kind(outcome, design), change)
             words = _difference_words(_depvar_kind(outcome, design))
             if size.startswith("不到"):

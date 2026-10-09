@@ -22,6 +22,7 @@ import {
   networkDigits,
   signed,
   signedEffect,
+  shownPerPoint,
   type BarEstimate,
 } from "./regression-verdict";
 import { workedNumbers } from "./labs/steps/shock-lab";
@@ -147,17 +148,22 @@ export function exampleXText(example: Pick<RegressionExample, "x" | "w" | "tau">
     : percentagePoints(example.x);
 }
 
-/** Y change implied by the estimate for an example's X, in the step's display units. */
-export function exampleEffect(outcome: RegressionOutcome, coef: number, x: number, design?: { depvar_kind?: string } | null): string {
-  const change = coef * x;
+/**
+ * Y change implied by the estimate for an example's X, in the step's display units: the headline's rounded estimate
+ * per point (shownPerPoint) times X as shown in points, so "-0.55 × 20.44 = -11.24" checks by hand.
+ */
+export function exampleEffect(outcome: RegressionOutcome, perPoint: number, xPoints: number, design?: { depvar_kind?: string } | null): string {
+  const change = perPoint * xPoints;
   const kind = depvarKind(outcome, design);
   // A change that rounds to zero at the shown precision says so instead of printing "0.0000"; thousands are
   // grouped ("约为 -1,382 个中心性原始单位"), as in the report.
   // The position index has no unit: a bare number.
+  // Half up on the decimal product, as by hand: 0.018 × 23.25 = 0.4185 reads 0.419 (toFixed alone gives 0.418).
+  const halfUp = (size: number, digits: number) => Math.round(Number((size * 10 ** digits).toPrecision(12))) / 10 ** digits;
   const sized = (size: number, digits: number) => withCountUnit(
-    size > 0 && size < 0.5 * 10 ** -digits ? `不到 ${(10 ** -digits).toFixed(digits)}` : groupedFixed(size, digits), kind,
+    size > 0 && size < 0.5 * 10 ** -digits ? `不到 ${(10 ** -digits).toFixed(digits)}` : groupedFixed(halfUp(size, digits), digits), kind,
   );
-  if (kind === "share") return sized(Math.abs(change * 100), 2);
+  if (kind === "share") return sized(Math.abs(change), 2);
   if (kind === "length") return sized(Math.abs(change), 3);
   if (kind === "position") return sized(Math.abs(change), 4);
   const size = Math.abs(change);
@@ -232,7 +238,7 @@ export function RegressionResultCard({ outcome, response, examples = [], example
               ? <>{example.label} 属于加征关税的一方，按设计不在回归样本中，X 记为 0 只是定义，不做换算</>
               : example.x > 0
               ? (() => {
-                const effect = exampleEffect(outcome, coef, example.x, response.design);
+                const effect = exampleEffect(outcome, shownPerPoint(outcome, verdict.coefficient!, response.design), Number(exampleXText(example)), response.design);
                 const lower = coef * example.x < 0;
                 const tiny = effect.startsWith("不到");
                 // "与 X 相关的差异约为 -12.83 个百分点（Y 偏低）"; below the shown precision it reads "不到 0.01 个百分点".
@@ -807,7 +813,10 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
           const coefficient = result ? runEstimate(result) : null;
           const gap = coefficient?.coef != null && groups.mean_exposure_taxed != null && !coefficient.suppressed
             ? coefficient.coef * groups.mean_exposure_taxed : null;
-          const shown = (gap ?? 0) * levelScale;
+          // The label is the headline's rounded estimate × the caption's rounded mean X, so it checks by hand.
+          const shown = gap == null || groups.mean_exposure_taxed == null ? 0
+            : shownPerPoint(outcome, { coef: coefficient!.coef!, ci_low: coefficient!.ci_low, ci_high: coefficient!.ci_high }, { depvar_kind: kind })
+              * Number(percentagePoints(groups.mean_exposure_taxed));
           // The weak Y's interval includes 0: the gap's sign is not settled, as the verdict says.
           const uncertain = coefficient?.ci_low != null && coefficient.ci_high != null && coefficient.ci_low <= 0 && coefficient.ci_high >= 0;
           return (

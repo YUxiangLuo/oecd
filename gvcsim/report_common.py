@@ -435,9 +435,8 @@ def _y_label(outcome: str, design: dict[str, Any] | None) -> str:
     return _DEFAULT_Y_LABELS.get(outcome, outcome)
 
 
-def _effect_size(outcome: str, design: dict[str, Any] | None, coefficient: dict[str, Any]) -> str:
-    """The size of the change per 1 percentage point of X, unsigned, in the step's unit ("0.55 个百分点"), in the
-    digits of the result table (``_natural_effect``)."""
+def _signed_per_point(outcome: str, design: dict[str, Any] | None, coefficient: dict[str, Any]) -> str:
+    """The change per 1 percentage point of X, signed, as the result table prints it (shares in points)."""
     kind = _depvar_kind(outcome, design or {})
     scale = 1.0 if kind == "share" else 0.01
     effect = float(coefficient["coef"]) * scale
@@ -447,8 +446,20 @@ def _effect_size(outcome: str, design: dict[str, Any] | None, coefficient: dict[
         if isinstance(low, (int, float)) and isinstance(high, (int, float))
         else None
     )
-    size = _signed(effect, estimate_digits(kind, effect, bounds)).lstrip("+-")
-    return with_count_unit(size, kind)
+    return _signed(effect, estimate_digits(kind, effect, bounds))
+
+
+def shown_per_point(outcome: str, design: dict[str, Any] | None, coefficient: dict[str, Any]) -> float:
+    """The printed (rounded) change per 1 percentage point of X as a number (frontend ``shownPerPoint``): the
+    example conversions multiply it by the printed X, so "-0.55 × 20.44 = -11.24" checks by hand."""
+    return float(_signed_per_point(outcome, design, coefficient).replace(",", ""))
+
+
+def _effect_size(outcome: str, design: dict[str, Any] | None, coefficient: dict[str, Any]) -> str:
+    """The size of the change per 1 percentage point of X, unsigned, in the step's unit ("0.55 个百分点"), in the
+    digits of the result table (``_natural_effect``)."""
+    size = _signed_per_point(outcome, design, coefficient).lstrip("+-")
+    return with_count_unit(size, _depvar_kind(outcome, design or {}))
 
 
 def _association(outcome: str, design: dict[str, Any] | None, coefficient: dict[str, Any], negative: bool) -> str:
