@@ -4,7 +4,7 @@ import { useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api";
 import {
-  degreeIdentity, exampleEffect, familyBarRows, forwardShareIdentity, groupedFixed, INTERRUPTED_RUN_NOTE, networkDigits, RegressionRequestError,
+  degreeIdentity, exampleEffect, familyBarRows, forwardShareIdentity, gapLabel, groupedFixed, INTERRUPTED_RUN_NOTE, networkDigits, RegressionRequestError,
   RegressionRunLab, scrollRegressionVerdict, stepMaterialChanged, TEACHING_MODEL_VERSION,
 } from "./regression";
 import type {
@@ -246,6 +246,36 @@ describe("simple regression workbench", () => {
     expect(screen.getByRole("button", { name: "重新计算贸易流回归" })).toBeTruthy();
   });
 
+  test("a failed bar click shows its error and retry under the bars, brought into view, worded as saving", async () => {
+    // Offline at 1440×900 with the bars at the top: the error and the retry (up in the run card) were out of view.
+    mockApis();
+    spyOn(api, "runRegression").mockRejectedValue(new TypeError("Failed to fetch"));
+    const scrolled: Element[] = [];
+    const scrollIntoView = spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (this: HTMLElement) { scrolled.push(this); });
+    try {
+      render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
+      fireEvent.click(await screen.findByRole("button", { name: /^国内增加值出口占比：/ }));
+      const alert = await screen.findByRole("alert");
+      expect(alert.closest(".reg-family-bars")).not.toBeNull();
+      expect(alert.textContent).toContain("保存国内增加值出口占比没有成功：网络连接中断，请检查连接后重试。");
+      expect(alert.textContent).toContain("图和下面仍是上次保存的结果（外国增加值项占比）。");
+      expect(alert.textContent).not.toContain("计算");
+      // One retry, next to the error; the run button above recalculates the saved Y as usual.
+      expect(alert.querySelector("button")?.textContent).toBe("重试：保存国内增加值出口占比");
+      expect(screen.getByRole("button", { name: "重新计算贸易流回归" }).className).toBe("run-btn secondary");
+      expect(screen.getAllByRole("alert")).toHaveLength(1);
+      expect(document.querySelector(".reg-stale-note")).toBeNull();
+      await waitFor(() => expect(scrolled).toContain(alert));
+      expect(scrollIntoView.mock.calls.at(-1)?.[0]).toMatchObject({ block: "nearest" });
+    } finally {
+      scrollIntoView.mockRestore();
+    }
+    // At full strength while the bars fade, with room above it when scrolled into view.
+    const css = await Bun.file(new URL("./workbench.css", import.meta.url)).text();
+    expect(css).toContain(".reg-results-stale .reg-family-bars > :not(.reg-bar-error) { opacity: .62; }");
+    expect(css).toMatch(/\.reg-bar-error \{[^}]*scroll-margin: 16px 0 16px;/);
+  });
+
   test("after a submitted report, clicking another bar says the material has already been replaced", async () => {
     mockApis();
     spyOn(api, "runRegression").mockResolvedValue({ ...DVA(), benchmark } as never);
@@ -406,8 +436,9 @@ describe("simple regression workbench", () => {
     ], "PLv_GVC");
     expect(length.unitTitle).toBe("X 每高 1 个百分点，Y 平均相差（个标准差）");
     expect(length.rows.map((row) => [row.sublabel, row.valueLabel])).toEqual([
-      ["长度单位", "-0.018（-0.045 个标准差）"],
-      ["位置指数单位", "-0.0008（-0.015 个标准差）"],
+      // One decimal count per chart: the position index's four.
+      ["长度单位", "-0.0181（-0.045 个标准差）"],
+      ["无量纲", "-0.0008（-0.015 个标准差）"],
     ]);
     const network = familyBarRows("network", [
       estimate("weighted_degree", "加权总度（入+出）", -4010.70, -4109.84, -3911.56, { kind: "network", default: true, depvar_std: 856 }),
@@ -419,6 +450,35 @@ describe("simple regression workbench", () => {
     ]);
     expect([network.rows[1].low, network.rows[1].high]).toEqual([null, null]);
     expect(network.rows[1].note).toBe("这次的数据不够判断方向，不显示 95% 区间");
+  });
+
+  test("one decimal count per family chart (end labels, tooltips and what is read aloud)", () => {
+    // Step 13 as the testers saw it: "-0.0184（-0.032 个标准差）", "-0.015（-0.026 个标准差）", "-0.0006".
+    const length = familyBarRows("length", [
+      estimate("PLv_GVC", "前向 GVC 段长度", -1.8414, -1.92, -1.76, { kind: "length", default: true, depvar_std: 0.58 }),
+      estimate("PLy_GVC", "后向 GVC 段长度", -1.5231, -1.62, -1.43, { kind: "length", depvar_std: 0.58 }),
+      estimate("GVCPs", "GVC 位置指数", -0.0612, -0.08, -0.04, { kind: "position", depvar_std: 0.17 }),
+    ], "PLv_GVC");
+    expect(length.rows.map((row) => row.valueLabel)).toEqual([
+      "-0.0184（-0.032 个标准差）", "-0.0152（-0.026 个标准差）", "-0.0006（-0.004 个标准差）",
+    ]);
+    expect(length.rows[1].spokenLabel).toBe("-0.0152 个长度单位（-0.026 个标准差），95% 区间 [-0.028, -0.025] 个标准差");
+    expect(length.rows[1].intervalLabel).toBe("[-0.028, -0.025] 个标准差");
+    // Step 12: a small estimate gives the shares three decimals ("+0.008", never "+0.01").
+    const production = familyBarRows("production", [
+      estimate("3b_VA_GVC_C_share", "复杂 GVC 生产份额", -0.4012, -0.42, -0.38, { default: true }),
+      estimate("1_VA_D_share", "纯国内生产份额", 1.0031, 0.98, 1.03),
+      estimate("3b_FGY_GVC_C_share", "后向复杂 GVC 生产份额", 0.0081, -0.002, 0.018),
+    ], "3b_VA_GVC_C_share");
+    expect(production.rows.map((row) => row.valueLabel)).toEqual(["-0.401", "+1.003", "+0.008"]);
+    expect(production.rows[0].intervalLabel).toBe("[-0.420, -0.380] 个百分点");
+    // Step 14: the degrees keep two decimals; closeness, too small for them, keeps two significant digits.
+    const network = familyBarRows("network", [
+      estimate("weighted_degree", "加权总度（入+出）", -4080.37, -4158.54, -4002.2, { kind: "network", default: true, depvar_std: 856 }),
+      estimate("betweenesscentrality", "网络介数（全正边二值）", -6011.39, -6400, -5600, { kind: "network", depvar_std: 1300 }),
+      estimate("closnesscentrality", "接近中心性", -0.4884, -0.5045, -0.4722, { kind: "network", depvar_std: 0.11 }),
+    ], "weighted_degree");
+    expect(network.rows.map((row) => row.valueLabel.split("（")[0])).toEqual(["-40.80", "-60.11", "-0.0049"]);
   });
 
   test("converts the estimate to the example's X in each step's own units", () => {
@@ -435,7 +495,7 @@ describe("simple regression workbench", () => {
     expect(networkDigits(0.012)).toBe(4);
     expect(networkDigits(59)).toBe(1);
     // With a chosen baseline the design says how Y is read.
-    expect(exampleEffect("length", -0.4, 0.0932, { depvar_kind: "position" })).toBe("0.0373 个位置指数单位");
+    expect(exampleEffect("length", -0.4, 0.0932, { depvar_kind: "position" })).toBe("0.0373");
     expect(exampleEffect("trade", 0.55, 0.0932, { depvar_kind: "share" })).toBe("5.13 个百分点");
   });
 
@@ -443,6 +503,18 @@ describe("simple regression workbench", () => {
     expect(exampleEffect("network", -4000, 0.3455)).toBe("1,382 个中心性原始单位");
     expect(groupedFixed(-1382.4, 0)).toBe("-1,382");
     expect(groupedFixed(12.345, 2)).toBe("12.35");
+    // Rounds to zero: no negative zero.
+    expect(groupedFixed(-0.0004, 2)).toBe("0.00");
+  });
+
+  test("the 加税前后 bracket uses the headline's digits for every network Y", () => {
+    // Weighted degree read "-147" and weighted out-degree "-73.8": decimals by size.
+    expect(gapLabel("network", -147.1234)).toBe("回归估计的差距 -147.12 个中心性原始单位");
+    expect(gapLabel("network", -73.8)).toBe("回归估计的差距 -73.80 个中心性原始单位");
+    expect(gapLabel("network", -1147.1234)).toBe("回归估计的差距 -1,147.12 个中心性原始单位");
+    expect(gapLabel("network", -0.00491)).toBe("回归估计的差距 -0.0049 个中心性原始单位");
+    expect(gapLabel("share", -1.6512)).toBe("回归估计的差距 -1.65 个百分点");
+    expect(gapLabel("length", 0.0164)).toBe("回归估计的差距 +0.016 个长度单位");
   });
 
   test("step 14 says weighted degree is in + out once all three are in the family", () => {

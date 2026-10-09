@@ -16,6 +16,7 @@ from typing import Any, TypeGuard
 
 from gvcsim.regression.teaching import BASELINES
 from gvcsim.report_common import (
+    UNIT_NAMES,
     _depvar_kind,
     _global_inference_suppressed,
     _primary_coefficient,
@@ -23,15 +24,10 @@ from gvcsim.report_common import (
     _y_label,
     estimate_digits,
     standardized_digits,
+    with_count_unit,
     y_display,
 )
 
-_COUNT_UNITS = {
-    "share": "个百分点",
-    "length": "个长度单位",
-    "position": "个位置指数单位",
-    "network": "个中心性原始单位",
-}
 _FAMILIES = {11: "贸易流", 12: "生产", 13: "长度", 14: "网络"}
 UNIT_TITLES = {
     "points": "X 每高 1 个百分点，Y 平均相差（个百分点）",
@@ -50,6 +46,48 @@ def _finite(value: Any) -> TypeGuard[int | float]:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
+def _native(kind: str, coef: float, ci: tuple[float, float] | None) -> tuple[float, tuple[float, float] | None]:
+    """The value in the Y's own unit per 1 percentage point of X, with its interval: β × 0.01 × 100 points for shares
+    (the result table's expression), β × 0.01 otherwise."""
+    to_native = 0.01 * (100 if kind == "share" else 1)
+    return float(coef) * to_native, ((ci[0] * to_native, ci[1] * to_native) if ci is not None else None)
+
+
+def _standardized(coef: float, ci: tuple[float, float] | None, depvar_std: Any) -> tuple[float, Any] | None:
+    """(β × 0.01) / sd(Y) with its interval, or None without a positive standard deviation."""
+    if not _finite(depvar_std) or float(depvar_std) <= 0:
+        return None
+    std = float(depvar_std)
+    return float(coef) * 0.01 / std, ((ci[0] * 0.01 / std, ci[1] * 0.01 / std) if ci is not None else None)
+
+
+def chart_digits(items: list[tuple[float, int]]) -> int | None:
+    """One decimal count for a chart's (value, digits) pairs (frontend ``chartDigits``): as many as the bar needing
+    the most has on its own, but no more than gives the largest value four significant figures (or its own digits);
+    a value too small for that keeps two significant digits, as ``_signed`` does everywhere."""
+    finite = [(value, digits) for value, digits in items if math.isfinite(value)]
+    if not finite:
+        return None
+    largest_value, largest_digits = max(finite, key=lambda item: abs(item[0]))
+    cap = max(0, 3 - math.floor(math.log10(abs(largest_value)))) if largest_value != 0 else math.inf
+    return int(max(largest_digits, min(cap, max(digits for _, digits in finite))))
+
+
+def _chart_digits(entries: list[dict[str, Any]]) -> tuple[int | None, int | None]:
+    """The native and standard-deviation decimals of a family chart (frontend ``familyChartDigits``)."""
+    native: list[tuple[float, int]] = []
+    sd: list[tuple[float, int]] = []
+    for entry in entries:
+        if not _finite(entry["coef"]):
+            continue
+        value, bounds = _native(entry["kind"], entry["coef"], entry["ci"])
+        native.append((value, estimate_digits(entry["kind"], value, bounds)))
+        standardized = _standardized(entry["coef"], entry["ci"], entry["depvar_std"])
+        if standardized is not None:
+            sd.append((standardized[0], standardized_digits(*standardized)))
+    return chart_digits(native), chart_digits(sd)
+
+
 def _bar(
     kind: str,
     coef: Any,
@@ -58,31 +96,29 @@ def _bar(
     *,
     standardized: bool,
     with_unit: bool = False,
+    digits: tuple[int | None, int | None] = (None, None),
 ) -> dict[str, Any]:
     """One bar per 1 percentage point of X (frontend ``barFigures``). Without an estimate or a standard deviation
-    the bar is 0 and its label says so; the renderer draws it grey with "方向不确定"."""
+    the bar is 0 and its label says so; the renderer draws it grey with "方向不确定". Alone, a bar has the result
+    table's digits; a family chart passes one (native, standard deviation) count for all its bars."""
     if not _finite(coef):
         return {"value": 0.0, "text": "没算出估计值"}
-    # The value in the Y's own unit per 1 percentage point of X: β × 0.01 × 100 points for shares (the result
-    # table's expression), β × 0.01 otherwise.
-    to_native = 0.01 * (100 if kind == "share" else 1)
-    native = float(coef) * to_native
-    # In the result table's digits (``_natural_effect``), with its interval.
-    native_bounds = (ci[0] * to_native, ci[1] * to_native) if ci is not None else None
-    native_text = _signed(native, estimate_digits(kind, native, native_bounds))
+    native, native_bounds = _native(kind, coef, ci)
+    # In the result table's digits (``_natural_effect``), with its interval, or the chart's.
+    native_digits = digits[0] if digits[0] is not None else estimate_digits(kind, native, native_bounds)
+    native_text = _signed(native, native_digits)
     if with_unit:
-        native_text += f" {_COUNT_UNITS.get(kind, '个原始单位')}"
+        native_text = with_count_unit(native_text, kind)
     if not standardized:
         item: dict[str, Any] = {"value": _shown(native), "text": native_text}
         if ci is not None:
             item["ci_low"], item["ci_high"] = _shown(ci[0] * 0.01 * 100), _shown(ci[1] * 0.01 * 100)
         return item
-    if not _finite(depvar_std) or float(depvar_std) <= 0:
+    standardized_value = _standardized(coef, ci, depvar_std)
+    if standardized_value is None:
         return {"value": 0.0, "text": f"{native_text}（没有标准差）"}
-    std = float(depvar_std)
-    sd_point = float(coef) * 0.01 / std
-    sd_bounds = (ci[0] * 0.01 / std, ci[1] * 0.01 / std) if ci is not None else None
-    sd_digits = standardized_digits(sd_point, sd_bounds)
+    sd_point, sd_bounds = standardized_value
+    sd_digits = digits[1] if digits[1] is not None else standardized_digits(sd_point, sd_bounds)
     # Signed, as the bar and its interval sit on a signed axis ("-40.11（-0.047 个标准差）"); only the table's
     # "幅度约 0.047 个标准差" is an unsigned size.
     item = {"value": _shown(sd_point), "text": f"{native_text}（{_signed(sd_point, sd_digits)} 个标准差）"}
@@ -175,12 +211,21 @@ def family_chart(
     # of the family is a share; otherwise 个标准差 (lengths with the position index; centralities of any size).
     kinds = [item.kind for item in BASELINES.get(outcome, ())] or [entry["kind"] for entry in entries]
     standardized = not all(kind == "share" for kind in kinds)
+    # One decimal count for the whole chart ("-0.0184", "-0.0152", "-0.0006"), as on the page.
+    digits = _chart_digits(entries)
     items = [
         {
             "label": str(entry["label"]),
             # In 个标准差 the native unit goes under the name, as on the page.
-            **({"sub": _COUNT_UNITS.get(entry["kind"], "个原始单位").removeprefix("个")} if standardized else {}),
-            **_bar(entry["kind"], entry["coef"], entry["ci"], entry["depvar_std"], standardized=standardized),
+            **({"sub": UNIT_NAMES.get(entry["kind"], "原始单位")} if standardized else {}),
+            **_bar(
+                entry["kind"],
+                entry["coef"],
+                entry["ci"],
+                entry["depvar_std"],
+                standardized=standardized,
+                digits=digits,
+            ),
             **({"saved": True} if entry["saved"] else {}),
         }
         for entry in entries

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ScrollableRegion } from "./a11y";
 import { scrollIntoCourseContent } from "./content-scroll";
 import { api, ApiError } from "./api";
-import { percentagePoints } from "./format";
+import { percentagePoints, stripNegativeZero } from "./format";
 import { useAsync } from "./labs";
 import { DEFAULT_BASELINES, displayBaselineLabel, GENERATED_DATA_NOTE, lessonFor, lessonQuestion } from "./regression-lessons";
 import { nextRegressionSave } from "./regression-save";
@@ -13,13 +13,16 @@ import {
   barUnitFor,
   buildRegressionVerdict,
   differenceWords,
+  familyChartDigits,
   teachingEffect,
   chartDisplayScale,
-  countUnit,
+  unitName,
+  withCountUnit,
   depvarKind,
   globalInferenceIsSuppressed,
   networkDigits,
   signed,
+  signedEffect,
   type BarEstimate,
 } from "./regression-verdict";
 import { workedNumbers } from "./labs/steps/shock-lab";
@@ -127,9 +130,12 @@ export interface RegressionExample {
 /** Defined with the other number formats (regression-verdict.ts); re-exported where it was first used. */
 export { networkDigits };
 
-/** A number with fixed decimals and thousands separators: 1382.4 → "1,382" (0 digits), -12.5 → "-12.50" (2). */
+/**
+ * A number with fixed decimals and thousands separators: 1382.4 → "1,382" (0 digits), -12.5 → "-12.50" (2); a value
+ * that rounds to zero reads "0.00", never "-0.00".
+ */
 export function groupedFixed(value: number, digits: number): string {
-  return value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return stripNegativeZero(value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits }));
 }
 
 /**
@@ -148,13 +154,15 @@ export function exampleEffect(outcome: RegressionOutcome, coef: number, x: numbe
   const kind = depvarKind(outcome, design);
   // A change that rounds to zero at the shown precision says so instead of printing "0.0000"; thousands are
   // grouped ("约为 -1,382 个中心性原始单位"), as in the report.
-  const sized = (size: number, digits: number, unit: string) =>
-    size > 0 && size < 0.5 * 10 ** -digits ? `不到 ${(10 ** -digits).toFixed(digits)} ${unit}` : `${groupedFixed(size, digits)} ${unit}`;
-  if (kind === "share") return sized(Math.abs(change * 100), 2, "个百分点");
-  if (kind === "length") return sized(Math.abs(change), 3, "个长度单位");
-  if (kind === "position") return sized(Math.abs(change), 4, "个位置指数单位");
+  // The position index has no unit: a bare number.
+  const sized = (size: number, digits: number) => withCountUnit(
+    size > 0 && size < 0.5 * 10 ** -digits ? `不到 ${(10 ** -digits).toFixed(digits)}` : groupedFixed(size, digits), kind,
+  );
+  if (kind === "share") return sized(Math.abs(change * 100), 2);
+  if (kind === "length") return sized(Math.abs(change), 3);
+  if (kind === "position") return sized(Math.abs(change), 4);
   const size = Math.abs(change);
-  return sized(size, networkDigits(size), "个中心性原始单位");
+  return sized(size, networkDigits(size));
 }
 
 /** Step 14's unit, worded as the report's line beside the step 14 numbers (gvcsim/report_render.py). */
@@ -254,6 +262,12 @@ export function RegressionResultCard({ outcome, response, examples = [], example
   );
 }
 
+/**
+ * A raw coefficient, SE or interval end at four decimals with thousands grouped (report ``_fixed4``): step 14's
+ * "-4,080.3723"; never "-0.0000".
+ */
+const fixed4 = (value: number) => groupedFixed(value, 4);
+
 /** Column names in the coefficient table, as the page names them (the code stays in the report appendix). */
 const COEFFICIENT_NAMES: Record<string, string> = { teaching_tariff_exposure: "关税暴露 X" };
 
@@ -289,11 +303,14 @@ export function RegressionCoefficientTable({ response }: { response: RegressionR
           return (
             <tr key={coef.name}>
               <td>{COEFFICIENT_NAMES[coef.name] ?? coef.name}</td>
-              <td>{coef.name === response.design.shock_col ? teachingEffect(outcome, coef.coef, response.design) : "—"}</td>
-              <td>{coef.coef.toFixed(4)}</td>
-              <td>{ciLow != null && ciHigh != null ? `[${ciLow.toFixed(4)}, ${ciHigh.toFixed(4)}]` : "—"}</td>
+              {/* The headline's digits: with the interval it shows (none when suppressed), as the report's appendix. */}
+              <td>{coef.name === response.design.shock_col
+                ? teachingEffect(outcome, coef.coef, response.design, ciLow != null && ciHigh != null ? [ciLow, ciHigh] : null)
+                : "—"}</td>
+              <td>{fixed4(coef.coef)}</td>
+              <td>{ciLow != null && ciHigh != null ? `[${fixed4(ciLow)}, ${fixed4(ciHigh)}]` : "—"}</td>
               {/* With inference suppressed, SE and t are not read either (the backend keeps them for integrity checks). */}
-              <td>{inferenceAllowed && coef.se != null ? coef.se.toFixed(4) : "—"}</td><td>{inferenceAllowed && coef.t != null ? coef.t.toFixed(2) : "—"}</td><td>{formatPValue(p)}</td>
+              <td>{inferenceAllowed && coef.se != null ? fixed4(coef.se) : "—"}</td><td>{inferenceAllowed && coef.t != null ? groupedFixed(coef.t, 2) : "—"}</td><td>{formatPValue(p)}</td>
             </tr>
           );
         })}</tbody>
@@ -409,15 +426,21 @@ export function familyBarRows(
   selected?: Pick<RegressionResponse, "design" | "result" | "model_snapshot"> | null,
 ): { rows: DivergingBarRow[]; unitTitle: string } {
   const unit = barUnitFor(items.map((item) => kindOf(item.kind, outcome)));
-  const rows = items.map((item): DivergingBarRow => {
-    const kind = kindOf(item.kind, outcome);
+  const estimates = items.map((item) => ({
+    kind: kindOf(item.kind, outcome),
+    estimate: item.key === selectedKey && selected ? runEstimate(selected) : overviewEstimate(item),
+  }));
+  // One decimal count for the whole chart ("-0.0184", "-0.0152", "-0.0006"), as the report's chart.
+  const digits = familyChartDigits(estimates);
+  const rows = items.map((item, index): DivergingBarRow => {
+    const { kind, estimate } = estimates[index];
     const isSelected = item.key === selectedKey;
-    const figures = barFigures(isSelected && selected ? runEstimate(selected) : overviewEstimate(item), kind, unit);
-    const suppressed = isSelected && selected ? runEstimate(selected).suppressed : overviewEstimate(item).suppressed;
+    const figures = barFigures(estimate, kind, unit, false, digits);
+    const suppressed = estimate.suppressed;
     return {
       key: item.key,
       label: displayBaselineLabel(item.label),
-      sublabel: unit === "sd" ? countUnit(kind).replace(/^个/, "") : undefined,
+      sublabel: unit === "sd" ? unitName(kind) : undefined,
       ...figures,
       selected: isSelected,
       note: suppressed ? "这次的数据不够判断方向，不显示 95% 区间" : undefined,
@@ -453,6 +476,14 @@ export function stepMaterialChanged(
   const saved = new Set([data?.run, data?.qualified_run].filter((run) => run != null).map(identity));
   const reported = new Set((reportRuns ?? []).filter((run) => run.step === stepNumber).map(identity));
   return saved.size !== reported.size || [...saved].some((item) => !reported.has(item));
+}
+
+/**
+ * The bracket's label on the 加税前后 chart, in the headline's digits for the Y's kind (estimateDigits): every network
+ * Y reads "-147.12" and "-73.80" alike (by size they read "-147" and "-73.8"), grouped from 1,000.
+ */
+export function gapLabel(kind: DepvarKind, shown: number): string {
+  return `回归估计的差距 ${withCountUnit(signedEffect(shown, kind), kind)}`;
 }
 
 /** The line under the 加税前后 chart: what its dashed bracket is (β × the taxed group's mean X), as an association. */
@@ -520,6 +551,8 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
   const [failedRequest, setFailedRequest] = useState<{ key: string | null; fromBar: boolean } | null>(null);
   const replacedNoticeRef = useRef<HTMLParagraphElement>(null);
   const revealReplacedNotice = useRef(false);
+  const barErrorRef = useRef<HTMLDivElement>(null);
+  const revealBarError = useRef(false);
   // The bars are fetched with the first run (or with a restored one), never before.
   const [overviewWanted, setOverviewWanted] = useState(false);
   // A 429 carries Retry-After: the retry button waits it out with a visible countdown.
@@ -651,8 +684,11 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
     } catch (cause) {
       focusSavedBarAfterRun.current = false;
       if (mountedRef.current) {
-        setError(userFacingRequestError(cause, `${runName}未完成`));
+        // A bar (or 恢复默认) was saving another Y: said so ("保存国内增加值出口占比没有成功"), not as a calculation.
+        const failedLabel = lessonFor(outcome, key ?? defaultKey, baselineOptions.find((option) => option.key === (key ?? defaultKey))?.label).shortMetric;
+        setError(userFacingRequestError(cause, fromButton ? `${runName}未完成` : `保存${failedLabel}没有成功`));
         setFailedRequest({ key, fromBar: !fromButton });
+        revealBarError.current = !fromButton;
         if (cause instanceof ApiError && cause.status === 429 && cause.retryAfter) {
           setNow(Date.now());
           setRetryAt(Date.now() + cause.retryAfter * 1000);
@@ -704,6 +740,18 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
   }, [showReplaced, result]);
 
   const bars = result && overviewItems.length > 0 ? familyBarRows(outcome, overviewItems, selectedKey, result) : null;
+  // A failed bar click: the error and its retry sit under the bars, where the click happened (the run card and
+  // its button can be far above, out of view), and are brought into view; keyboard focus stays on the bars.
+  const errorAtBars = Boolean(error && failedRequest?.fromBar && bars);
+  useEffect(() => {
+    if (!errorAtBars || !revealBarError.current) return;
+    revealBarError.current = false;
+    const frame = window.requestAnimationFrame(() => {
+      const reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      barErrorRef.current?.scrollIntoView?.({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [errorAtBars, error]);
   const identity = !bars ? null : outcome === "production" ? forwardShareIdentity(overviewItems) : outcome === "network" ? degreeIdentity(overviewItems) : null;
   const defaultLabel = lessonFor(outcome, defaultKey, baselineOptions.find((option) => option.default)?.label).shortMetric;
   const latinGap = /^[A-Za-z]/.test(lesson.shortMetric) ? " " : "";
@@ -724,18 +772,19 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
         {/* Said before the run (the result card repeats it), so the Y is never read as OECD data first. */}
         {!result && <p className="muted reg-data-note reg-data-note-before" role="note">{GENERATED_DATA_NOTE}</p>}
         {/* Once a result exists, recalculating is a secondary action; it replaces saved material. */}
+        {/* After a failed bar click the retry sits under the bars; this button recalculates the saved Y as usual. */}
         <button
-          className={result && !error ? "run-btn secondary" : "run-btn"}
+          className={result && (!error || errorAtBars) ? "run-btn secondary" : "run-btn"}
           onClick={() => {
             if (running || retryWait > 0) return;
-            void run(failedRequest ? failedRequest.key : result ? selectedKey : null, true);
+            void run(failedRequest && !errorAtBars ? failedRequest.key : result ? selectedKey : null, true);
           }}
           // aria-disabled while running keeps keyboard focus on the button instead of dropping it to the page.
           aria-disabled={running || retryWait > 0}
         >
           {running ? "正在计算…"
             : retryWait > 0 ? `重试（${retryWait} 秒后）`
-              : error ? (failedBarLabel ? `重试：保存${failedBarLabel}` : `重试：计算${runName}`)
+              : error && !errorAtBars ? (failedBarLabel ? `重试：保存${failedBarLabel}` : `重试：计算${runName}`)
                 : result ? `重新计算${runName}`
                   : groups ? `计算${runName}（用全部 ${groups.sample.rows.toLocaleString("zh-CN")} 条记录）` : `计算${runName}`}
         </button>
@@ -759,8 +808,6 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
           const coefficient = result ? runEstimate(result) : null;
           const gap = coefficient?.coef != null && groups.mean_exposure_taxed != null && !coefficient.suppressed
             ? coefficient.coef * groups.mean_exposure_taxed : null;
-          // Network Y ranges from closeness (~0.01) to weighted degree (thousands), so its decimals follow the gap.
-          const digits = kind === "network" ? networkDigits(Math.abs((gap ?? 0) * levelScale)) : kind === "position" ? 4 : kind === "length" ? 3 : 2;
           const shown = (gap ?? 0) * levelScale;
           // The weak Y's interval includes 0: the gap's sign is not settled, as the verdict says.
           const uncertain = coefficient?.ci_low != null && coefficient.ci_high != null && coefficient.ci_low <= 0 && coefficient.ci_high >= 0;
@@ -774,7 +821,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
                 scale={levelScale}
                 unit={display.unit ?? lesson.unit}
                 title={`加税前后：两组${latinGap}${lesson.shortMetric}的平均变化`}
-                estimate={gap == null ? null : { gap, label: `回归估计的差距 ${shown > 0 ? "+" : ""}${groupedFixed(shown, digits)} ${countUnit(kind)}`, uncertain }}
+                estimate={gap == null ? null : { gap, label: gapLabel(kind, shown), uncertain }}
               />
               {gap != null && groups.mean_exposure_taxed != null && <p className="muted reg-gap-caption">{gapCaption(groups.mean_exposure_taxed)}</p>}
             </div>
@@ -786,11 +833,11 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
       </section>
 
       {/* One action: the run button above doubles as the retry (it shows the wait after "too many requests"). */}
-      {error && <div className="error-box async-error" role="alert"><span>{error}</span></div>}
+      {error && !errorAtBars && <div className="error-box async-error" role="alert"><span>{error}</span></div>}
 
       {result && (
         <div className={error ? "reg-results reg-results-stale" : "reg-results"}>
-          {error && <p className="reg-stale-note" role="note">这次计算没有成功；下面仍是上次保存的结果。</p>}
+          {error && !errorAtBars && <p className="reg-stale-note" role="note">这次计算没有成功；下面仍是上次保存的结果。</p>}
           <div ref={verdictAnchorRef} className="verdict-anchor">
             {bars ? (
               <div className="reg-family-bars">
@@ -818,6 +865,23 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
                     <p ref={replacedNoticeRef} className="reg-rerun-warning reg-replaced-notice" role="status">{replacedNotice}</p>
                   )}
                 </DivergingBarChart>
+                {/* Under the bars, not faded with them: what failed, that the bars still show the saved Y, and the retry. */}
+                {errorAtBars && (
+                  <div ref={barErrorRef} className="error-box async-error reg-bar-error" role="alert">
+                    <span>{error}<span className="reg-bar-error-note">图和下面仍是上次保存的结果（{lesson.shortMetric}）。</span></span>
+                    <button type="button" className="secondary" aria-disabled={running || retryWait > 0 || undefined}
+                      onClick={() => {
+                        if (running || retryWait > 0 || !failedRequest) return;
+                        // The button goes with the error: keyboard focus moves to the bar being saved, then (on success)
+                        // to the saved bar.
+                        verdictAnchorRef.current?.querySelector<SVGGElement>(`[data-bar="${failedKey}"]`)?.focus();
+                        focusSavedBarAfterRun.current = true;
+                        void run(failedRequest.key, false);
+                      }}>
+                      {retryWait > 0 ? `重试（${retryWait} 秒后）` : `重试：保存${failedBarLabel}`}
+                    </button>
+                  </div>
+                )}
               </div>
             ) : overviewQuery.status === "error" && overviewQuery.error
               ? <RegressionRequestError label="条形图" error={overviewQuery.error} onRetry={overviewQuery.retry} />

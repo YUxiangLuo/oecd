@@ -204,7 +204,14 @@ describe("fixed teaching regression reading", () => {
     data.result.depvar_std = 0.17;
     const { container } = render(<RegressionResultCard outcome="length" response={data} />);
     expect(container.querySelector(".reg-headline-main")?.textContent)
-      .toContain("平均低 0.0021 个位置指数单位（幅度约 0.012 个标准差，标准差即 Y 的典型差距）");
+      .toContain("平均低 0.0021（幅度约 0.012 个标准差，标准差即 Y 的典型差距）");
+    // A ratio: no unit after its amounts, "无量纲" where a unit is named (as step 7 and the report say).
+    expect(container.querySelector(".reg-interval-words")?.textContent).toContain("[-0.0030, -0.0012]；约 [");
+    expect(container.textContent).not.toContain("位置指数单位");
+    cleanup();
+    const table = render(<RegressionCoefficientTable response={data} />);
+    expect(table.container.querySelectorAll("th")[1].textContent).toBe("X 每高 1 个百分点，Y 平均相差（无量纲）");
+    expect(table.container.querySelectorAll("tbody td")[1].textContent).toBe("-0.0021");
   });
 
   test("allowed estimates still disclose design warnings", () => {
@@ -230,6 +237,44 @@ describe("fixed teaching regression reading", () => {
     expect(cells[1]).toBe("-0.018 个长度单位");
     expect(cells[2]).toBe("-1.8186");
   });
+
+  test("the table's per-percentage-point reading has the headline's digits (an interval end would read alike)", () => {
+    // Step 13's default Y: -0.0184 with [-0.0192, -0.0176] read "-0.018" in the table but "-0.0184" in the headline.
+    const data = response();
+    data.design.outcome = "length";
+    data.design.depvar_kind = "length";
+    Object.assign(data.result.coefs[0], { coef: -1.8414, ci_low: -1.92, ci_high: -1.76 });
+    data.result.depvar_std = 0.58;
+    const card = render(<RegressionResultCard outcome="length" response={data} />);
+    expect(card.container.querySelector(".reg-headline-main")?.textContent).toContain("0.0184 个长度单位");
+    cleanup();
+    const table = render(<RegressionCoefficientTable response={data} />);
+    expect(table.container.querySelectorAll("tbody td")[1].textContent).toBe("-0.0184 个长度单位");
+    // Without an interval (suppressed inference) the base digits stay, as in the report.
+    cleanup();
+    data.result.support!.suppress_inference = true;
+    const suppressed = render(<RegressionCoefficientTable response={data} />);
+    expect(suppressed.container.querySelectorAll("tbody td")[1].textContent).toBe("-0.018 个长度单位");
+  });
+});
+
+test("step 14's raw coefficients group thousands, as the report's appendix", () => {
+  const data = response();
+  data.design.outcome = "network";
+  data.design.depvar_kind = "network";
+  Object.assign(data.result.coefs[0], { coef: -4080.37226, ci_low: -4158.542, ci_high: -4002.2026, se: 39.88, t: -102.3 });
+  data.result.depvar_std = 850;
+  const table = render(<RegressionCoefficientTable response={data} />);
+  const cells = [...table.container.querySelectorAll("tbody td")].map((cell) => cell.textContent);
+  expect(cells.slice(1, 6)).toEqual(["-40.80 个中心性原始单位", "-4,080.3723", "[-4,158.5420, -4,002.2026]", "39.8800", "-102.30"]);
+});
+
+test("the coefficient table never prints a negative zero", () => {
+  const data = response();
+  Object.assign(data.result.coefs[0], { coef: -0.00001, ci_low: -0.00004, ci_high: 0.00002, se: 0.00001, t: -0.001 });
+  const table = render(<RegressionCoefficientTable response={data} />);
+  const cells = [...table.container.querySelectorAll("tbody td")].map((cell) => cell.textContent);
+  expect(cells.slice(2, 6)).toEqual(["0.0000", "[0.0000, 0.0000]", "0.0000", "0.00"]);
 });
 
 test.each(["unknown", "conflicting"])("%s status suppresses table inference", (status) => {

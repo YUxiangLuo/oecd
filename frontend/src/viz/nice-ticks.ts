@@ -51,3 +51,51 @@ export function integerDomain(lo: number, hi: number, intervals = 4): { lo: numb
   const ticks = Array.from({ length: Math.round((niceHi - niceLo) / step) + 1 }, (_, index) => niceLo + index * step);
   return { lo: niceLo, hi: niceHi, ticks };
 }
+
+/** A step of 1, 2, 2.5 or 5 × 10ⁿ. */
+function isNiceStep(step: number): boolean {
+  const mantissa = step / 10 ** Math.floor(Math.log10(step) + 1e-9);
+  return [1, 2, 2.5, 5, 10].some((nice) => Math.abs(mantissa - nice) < 1e-6);
+}
+
+/**
+ * The axis of a diverging bar chart (steps 11–15 pages and the report): its range from the data alone (0 and every
+ * bar and whisker end, in two to five nice steps), so the page at any width, the report and its print show the same
+ * range. Only the tick density follows the room: the range's step split (or joined) into another nice step that
+ * lands on both ends, as many as fit `intervals` (at least the coarsest such step).
+ */
+export function divergingAxis(values: number[], intervals: number): { lo: number; hi: number; ticks: number[] } {
+  const finite = values.filter((value) => Number.isFinite(value));
+  const lo = Math.min(0, ...finite);
+  const hi = Math.max(0, ...finite) > lo ? Math.max(0, ...finite) : lo + (Math.abs(lo) || 1);
+  // The narrowest range on a nice step with two to six steps (ties: fewer steps); 0 is always on a step.
+  const magnitude = 10 ** Math.floor(Math.log10(hi - lo));
+  let range = { lo, hi, step: hi - lo, count: 1 };
+  let bestWidth = Infinity;
+  for (const factor of [0.1, 0.2, 0.25, 0.5, 1, 2, 2.5, 5, 10]) {
+    const step = factor * magnitude;
+    const niceLo = Math.floor(lo / step + 1e-9) * step;
+    const niceHi = Math.ceil(hi / step - 1e-9) * step;
+    const count = Math.round((niceHi - niceLo) / step);
+    if (count < 2 || count > 6) continue;
+    const width = niceHi - niceLo;
+    if (width < bestWidth - 1e-9 * step || (Math.abs(width - bestWidth) <= 1e-9 * step && count < range.count)) {
+      range = { lo: niceLo, hi: niceHi, step, count };
+      bestWidth = width;
+    }
+  }
+  // Ticks: the range's step split (or joined) into another nice step that still lands on both ends and on 0, as
+  // many as fit `intervals`, else the fewest.
+  const onStep = (value: number, step: number) => Math.abs(value / step - Math.round(value / step)) < 1e-6;
+  const options = [
+    ...[1, 2, 4, 5, 10].map((parts) => ({ step: range.step / parts, count: range.count * parts })),
+    ...[2, 3, 4, 5, 6].filter((join) => range.count % join === 0).map((join) => ({ step: range.step * join, count: range.count / join })),
+  ].filter((option) => isNiceStep(option.step) && onStep(range.lo, option.step));
+  const fitting = options.filter((option) => option.count <= Math.max(2, intervals));
+  const chosen = fitting.length
+    ? fitting.reduce((best, option) => (option.count > best.count ? option : best))
+    : options.reduce((best, option) => (option.count < best.count ? option : best), { step: range.step, count: range.count });
+  const first = Math.round(range.lo / chosen.step);
+  const ticks = Array.from({ length: chosen.count + 1 }, (_, index) => Number(((first + index) * chosen.step).toPrecision(12)));
+  return { lo: ticks[0], hi: ticks[ticks.length - 1], ticks };
+}

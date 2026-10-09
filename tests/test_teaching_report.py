@@ -25,6 +25,7 @@ from gvcsim.regression import teaching
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 from gvcsim.regression.teaching import X_COLUMN, model_snapshot, variable_catalog
 from gvcsim.report_common import _number
+from gvcsim.report_render import _fixed4
 
 from gvcsim.session import empty_session, make_record
 from gvcsim.teaching_report import (
@@ -77,8 +78,8 @@ def test_report_small_effects_match_card_precision(outcome, coef, low, high, eff
             -0.30,
             -0.12,
             0.17,
-            "-0.0021 个位置指数单位（幅度约 0.012 个标准差）",
-            "[-0.0030, -0.0012] 个位置指数单位（约 [-0.018, -0.007] 个标准差）",
+            "-0.0021（幅度约 0.012 个标准差）",
+            "[-0.0030, -0.0012]（约 [-0.018, -0.007] 个标准差）",
         ),
     ],
 )
@@ -94,6 +95,14 @@ def test_report_step13_sizes_are_in_standard_deviations_like_step_14(kind, coef,
     assert rendered_effect == effect
     assert rendered_interval == interval
     assert "样本均值" not in rendered_effect
+
+
+def test_report_numbers_never_print_a_negative_zero():
+    # As on the page (stripNegativeZero / signed): a value that rounds to zero carries no minus sign.
+    assert teaching_report._signed(-0.0, 3) == "+0.000"
+    assert _number(-0.0) == "0"
+    assert _fixed4(-0.00001) == "0.0000"
+    assert _fixed4(-0.4109) == "-0.4109"
 
 
 def test_report_tiny_nonzero_numbers_and_standardized_effect_preserve_sign():
@@ -2393,8 +2402,8 @@ def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(
 
     markdown = build(session, "同学").markdown
     assert "| 结果指标 Y | GVC 位置指数 |" in markdown
-    assert "个位置指数单位" in markdown
-    assert "GVC 位置指数平均越低（X 每高 1 个百分点，约低 0.0040 个位置指数单位）" in markdown
+    assert "位置指数单位" not in markdown
+    assert "GVC 位置指数平均越低（X 每高 1 个百分点，约低 0.0040）" in markdown
     charts = [
         json.loads(block)
         for block in re.findall("```gvcsim-chart" + chr(10) + "(.*?)" + chr(10) + "```", markdown, re.S)
@@ -2408,10 +2417,10 @@ def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(
     saved = length["items"][2]
     assert saved["value"] == pytest.approx(-0.004 / 0.17, rel=1e-3)
     assert saved["text"] == "-0.0040（-0.024 个标准差）"
-    assert "| 关税暴露 X 每高 1 个百分点，Y 平均相差 | **-0.0040 个位置指数单位（幅度约 0.024 个标准差）** |" in markdown
-    assert [item["sub"] for item in length["items"]] == ["长度单位", "长度单位", "位置指数单位"]
+    assert "| 关税暴露 X 每高 1 个百分点，Y 平均相差 | **-0.0040（幅度约 0.024 个标准差）** |" in markdown
+    assert [item["sub"] for item in length["items"]] == ["长度单位", "长度单位", "无量纲"]
     summary = next(chart for chart in charts if chart["title"] == "四步保存的结果（都换算成标准差）")
-    assert summary["items"][2]["text"] == "-0.0040 个位置指数单位（-0.024 个标准差）"
+    assert summary["items"][2]["text"] == "-0.0040（-0.024 个标准差）"
 
     # A baseline from another family, or one the snapshot does not match, is not a reportable run.
     forged = copy.deepcopy(run)
@@ -2432,7 +2441,7 @@ def test_technical_appendix_states_the_chosen_y_unit_not_the_family_unit():
         "result": {"status": "ok", "coefs": []},
     }
     lines = _run_sections([run])
-    assert "- 单位：位置指数单位；另附标准差换算（标准差即 Y 的典型差距）" in lines
+    assert "- 单位：无量纲（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（标准差即 Y 的典型差距）" in lines
     assert "- 结果指标 Y：GVC 位置指数" in lines
     default = {**run, "design": {"depvar_label": "前向生产长度", "equation": "Y = βX + FE"}}
     assert (
@@ -2760,6 +2769,25 @@ def test_report_appendix_numbers_match_the_page_detail_table():
     lines = _technical_estimate_tables({"depvar_kind": "length"}, result, suppressed=False, outcome="length")
     row = next(line for line in lines if line.startswith("| 关税暴露 X |"))
     assert row == "| 关税暴露 X | -1.8414 | -0.018 个长度单位 | 0.0399 | [-0.4109, -0.3790] | <0.0001 |"
+
+
+def test_report_appendix_groups_thousands_like_the_page_detail_table():
+    """Step 14's raw coefficients are in the thousands: "-4,080.3723 [-4,158.5420, -4,002.2026]", as the page prints
+    them (``fixed4``), with the per-point reading in the headline's digits."""
+    from gvcsim.report_render import _technical_estimate_tables
+
+    result = {
+        "status": "ok",
+        "depvar_std": 850,
+        "coefs": [
+            {"name": X_COLUMN, "coef": -4080.37226, "se": 39.88, "p": 0.00001, "ci_low": -4158.542, "ci_high": -4002.2026}
+        ],
+    }
+    lines = _technical_estimate_tables({"depvar_kind": "network"}, result, suppressed=False, outcome="network")
+    row = next(line for line in lines if line.startswith("| 关税暴露 X |"))
+    assert row == (
+        "| 关税暴露 X | -4,080.3723 | -40.80 个中心性原始单位 | 39.8800 | [-4,158.5420, -4,002.2026] | <0.0001 |"
+    )
 
 
 def test_report_example_conversion_groups_thousands_like_the_page():

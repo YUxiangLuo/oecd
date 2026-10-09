@@ -1,3 +1,4 @@
+import { stripNegativeZero } from "../../format";
 import { cardStyle } from "../shared";
 import { TAXED, UNTAXED } from "./palette";
 
@@ -74,6 +75,10 @@ export function GroupChangeChart({
   const ticks = niceSymmetricTicks(maxAbs);
   const extent = ticks.at(-1)!;
   const decimals = Math.max(0, Math.min(4, 1 - Math.floor(Math.log10(extent / 2))));
+  // A per-year reading; a small change that rounds to zero reads "0.00", never "-0.00".
+  const reading = (change: number) => stripNegativeZero((change * scale).toFixed(decimals + 1));
+  // A dimensionless Y (the position index) has its unit named once, in the axis title; its readings are bare numbers.
+  const withUnit = (text: string) => (unit === "无量纲" ? text : `${text} ${unit}`);
   const x = (year: number) => padL + ((year - years[0]) / Math.max(1, years.at(-1)! - years[0])) * (width - padL - padR);
   const y = (value: number) => padT + ((extent - value) / (2 * extent)) * (height - padT - padB);
   const path = (series: { year: number; change: number }[]) => series
@@ -109,7 +114,7 @@ export function GroupChangeChart({
         {ticks.map((value) => (
           <g key={value}>
             <line x1={padL} x2={width - padR} y1={y(value)} y2={y(value)} stroke={value === 0 ? "#9aa0ad" : "#eef0f4"} strokeWidth={1} />
-            <text x={padL - 8} y={y(value)} dominantBaseline="middle" textAnchor="end" fontSize={11} fill="#5f6677">{value === 0 ? "0" : value.toFixed(decimals)}</text>
+            <text x={padL - 8} y={y(value)} dominantBaseline="middle" textAnchor="end" fontSize={11} fill="#5f6677">{value === 0 ? "0" : stripNegativeZero(value.toFixed(decimals))}</text>
           </g>
         ))}
         {years.map((year) => <text key={year} x={x(year)} y={height - 12} textAnchor="middle" fontSize={11} fill="#5f6677">{year}</text>)}
@@ -139,7 +144,7 @@ export function GroupChangeChart({
             <path d={path(series)} fill="none" stroke={color} strokeWidth={2.4} />
             {series.map((point) => (
               <circle key={point.year} cx={x(point.year)} cy={y(point.change * scale)} r={3.5} fill={color}>
-                <title>{`${point.year} 年：${(point.change * scale).toFixed(decimals + 1)} ${unit}`}</title>
+                <title>{`${point.year} 年：${withUnit(reading(point.change))}`}</title>
               </circle>
             ))}
           </g>
@@ -156,7 +161,7 @@ export function GroupChangeChart({
           <tbody>{years.map((year) => {
             const cell = (series: { year: number; change: number }[]) => {
               const point = series.find((item) => item.year === year);
-              return point ? (point.change * scale).toFixed(decimals + 1) : "—";
+              return point ? reading(point.change) : "—";
             };
             return <tr key={year}><th scope="row">{year}{year === policyYear ? "（起加税）" : ""}</th><td>{cell(taxed)}</td><td>{cell(untaxed)}</td></tr>;
           })}</tbody>

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   barFigures, barUnitFor, buildRegressionVerdict, chartDisplayScale, distinctDigits, estimateDigits, networkIntervalDigits,
   REGRESSION_STATUS_LABELS,
-  regressionStatusLabel, standardizedEffect,
+  regressionStatusLabel, signed, standardizedEffect,
 } from "./regression-verdict";
 import type { CoefStat, RegressionOutcome, RegressionResponse, TreatmentSupport } from "./types";
 
@@ -131,6 +131,13 @@ describe("network size in standard deviations (same digits as the report)", () =
     expect(network(-4080, -4180, -3980, 850).effect).toMatch(/^-40\.80 个中心性原始单位/);
     expect(network(-5933, -6400, -5466, 1300).intervalShort).toBe("[-64.00, -54.66] 个中心性原始单位");
     expect(network(-5933, -6400, -5466, 1300).effect).toMatch(/^-59\.33 个中心性原始单位/);
+  });
+
+  test("signed numbers group thousands, as the report's _signed does", () => {
+    expect(signed(-1140.254, 2)).toBe("-1,140.25");
+    expect(signed(1234567.5, 1)).toBe("+1,234,567.5");
+    expect(signed(-140.25, 2)).toBe("-140.25");
+    expect(signed(-0.00049, 2)).toBe("-0.00049");
   });
 
   test("network digits: two decimals, two significant digits for a value that would round to 0, more until the ends differ", () => {

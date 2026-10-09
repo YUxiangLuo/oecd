@@ -9,8 +9,8 @@ describe("two-group chart bracket longer than the gap between the lines", () => 
     const years = [2016, 2017, 2018, 2019, 2020];
     const series = (end: number) => years.map((year, index) => ({ year, change: index < 2 ? 0 : end }));
     const markup = renderToStaticMarkup(createElement(GroupChangeChart, {
-      years, policyYear: 2018, taxed: series(-0.0007), untaxed: series(0), scale: 1, unit: "位置指数单位", title: "t",
-      estimate: { gap: -0.0016, label: "回归估计的差距 -0.0016 个位置指数单位" },
+      years, policyYear: 2018, taxed: series(-0.0007), untaxed: series(0), scale: 1, unit: "无量纲", title: "t",
+      estimate: { gap: -0.0016, label: "回归估计的差距 -0.0016" },
     }));
     const taxedEnds = [...markup.matchAll(/<circle cx="[\d.]+" cy="([\d.]+)" r="3.5" fill="#d6731f"/g)].map((match) => Number(match[1]));
     const taxedEnd = taxedEnds.at(-1)!;
@@ -29,6 +29,22 @@ describe("two-group chart bracket longer than the gap between the lines", () => 
     expect(freeSlot(100, 28, [40, 160], 14, 20, 216)).toBe(100);
     expect(Math.abs(freeSlot(100, 28, [100], 14, 20, 216) - 100)).toBeGreaterThanOrEqual(23);
     expect(freeSlot(30, 28, [40], 14, 20, 216)).toBeGreaterThanOrEqual(40 + 23);
+  });
+});
+
+describe("two-group chart readings", () => {
+  test("a small negative change that rounds to zero reads 0.0, never -0.0 (table and tooltips)", () => {
+    // Step 12: a group's change of -0.0004 points printed "-0.00" in 两组逐年读数.
+    const years = [2016, 2017, 2018];
+    const markup = renderToStaticMarkup(createElement(GroupChangeChart, {
+      years, policyYear: 2018, scale: 100, unit: "个百分点", title: "t",
+      taxed: years.map((year, index) => ({ year, change: [-0.000004, 0.000003, -0.2][index] })),
+      untaxed: years.map((year) => ({ year, change: 0 })),
+    }));
+    expect(markup).not.toMatch(/>-0\.0+</);
+    expect(markup).not.toMatch(/：-0\.0+ /);
+    expect(markup).toContain("<th scope=\"row\">2016</th><td>0.0</td>");
+    expect(markup).toContain("<td>-20.0</td>");
   });
 });
 

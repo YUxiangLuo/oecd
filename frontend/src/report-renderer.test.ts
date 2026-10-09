@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { cleanup, render as renderDom } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { closeBoldBeforeCjkPunctuation, parseReportChart, REPORT_CHART_MAX_WIDTH, ReportMarkdown } from "./report-renderer";
-import { layoutDivergingBars } from "./viz/regression/diverging-bars";
+import { layoutDivergingBars, MIN_WIDTH } from "./viz/regression/diverging-bars";
 import { NEGATIVE, POSITIVE, UNCERTAIN, ZERO_LINE } from "./viz/regression/palette";
 
 describe("report tables", () => {
@@ -348,11 +348,11 @@ describe("parseReportChart", () => {
 // The report's step 11–14 and summary charts as gvcsim/report_regression_chart.py writes them for the course release
 // (FVA saved in step 11, the weak Y saved in step 12, GVC 位置指数 in step 13, 加权总度 in step 14).
 const REGRESSION_CHARTS = {
-  trade: {"version":1,"type":"diverging-bar","title":"步骤 11 · 贸易流的 2 个 Y：X 每高 1 个百分点，Y 平均相差多少","x_label":"X 每高 1 个百分点，Y 平均相差（个百分点）","items":[{"label":"外国增加值项占比","value":-0.5493,"text":"-0.55","ci_low":-0.5711,"ci_high":-0.5274,"saved":true},{"label":"国内增加值出口占比","value":0.5561,"text":"+0.56","ci_low":0.5419,"ci_high":0.5702}]},
-  production: {"version":1,"type":"diverging-bar","title":"步骤 12 · 生产的 7 个 Y：X 每高 1 个百分点，Y 平均相差多少","x_label":"X 每高 1 个百分点，Y 平均相差（个百分点）","items":[{"label":"复杂 GVC 生产份额","value":-0.3756,"text":"-0.38","ci_low":-0.3885,"ci_high":-0.3627},{"label":"前向 GVC 生产总份额","value":-0.6801,"text":"-0.68","ci_low":-0.6963,"ci_high":-0.6639},{"label":"后向 GVC 生产总份额","value":-0.4475,"text":"-0.45","ci_low":-0.4688,"ci_high":-0.4262},{"label":"简单 GVC 生产份额","value":-0.3045,"text":"-0.30","ci_low":-0.3181,"ci_high":-0.291},{"label":"传统贸易生产份额","value":-0.295,"text":"-0.30","ci_low":-0.306,"ci_high":-0.2841},{"label":"纯国内生产份额","value":0.9752,"text":"+0.98","ci_low":0.9553,"ci_high":0.995},{"label":"后向复杂 GVC 生产份额","value":0.007501,"text":"+0.008","ci_low":-0.01117,"ci_high":0.02617,"saved":true}]},
-  length: {"version":1,"type":"diverging-bar","title":"步骤 13 · 长度的 3 个 Y：X 每高 1 个百分点，Y 平均相差多少","x_label":"X 每高 1 个百分点，Y 平均相差（个标准差）","items":[{"label":"前向 GVC 段长度","sub":"长度单位","value":-0.03118,"text":"-0.018（-0.031 个标准差）","ci_low":-0.03292,"ci_high":-0.02944},{"label":"后向 GVC 段长度","sub":"长度单位","value":-0.02559,"text":"-0.015（-0.026 个标准差）","ci_low":-0.02695,"ci_high":-0.02423},{"label":"GVC 位置指数","sub":"位置指数单位","value":-0.004425,"text":"-0.0008（-0.004 个标准差）","ci_low":-0.006494,"ci_high":-0.002356,"saved":true}],"note":"条长都换算成标准差（标准差即 Y 在国家×行业之间的典型差距），这样单位或量级差异较大的 Y 也能并列比较；条旁先写原始单位的数值，括号里是标准差。"},
-  network: {"version":1,"type":"diverging-bar","title":"步骤 14 · 网络的 5 个 Y：X 每高 1 个百分点，Y 平均相差多少","x_label":"X 每高 1 个百分点，Y 平均相差（个标准差）","items":[{"label":"加权总度","sub":"中心性原始单位","value":-0.04703,"text":"-40.11（-0.047 个标准差）","ci_low":-0.04819,"ci_high":-0.04586,"saved":true},{"label":"加权入度","sub":"中心性原始单位","value":-0.04594,"text":"-19.91（-0.046 个标准差）","ci_low":-0.04745,"ci_high":-0.04443},{"label":"加权出度","sub":"中心性原始单位","value":-0.04654,"text":"-20.20（-0.047 个标准差）","ci_low":-0.04831,"ci_high":-0.04476},{"label":"介数","sub":"中心性原始单位","value":-0.1003,"text":"-60.11（-0.100 个标准差）","ci_low":-0.1029,"ci_high":-0.09772},{"label":"接近中心性","sub":"中心性原始单位","value":-0.0419,"text":"-0.0049（-0.042 个标准差）","ci_low":-0.04298,"ci_high":-0.04082}],"note":"条长都换算成标准差（标准差即 Y 在国家×行业之间的典型差距），这样单位或量级差异较大的 Y 也能并列比较；条旁先写原始单位的数值，括号里是标准差。"},
-  summary: {"version":1,"type":"diverging-bar","title":"四步保存的结果（都换算成标准差）","x_label":"X 每高 1 个百分点，Y 平均相差（个标准差）","items":[{"label":"外国增加值项占比","sub":"步骤 11 · 贸易流","value":-0.06192,"text":"-0.55 个百分点（-0.062 个标准差）","ci_low":-0.06438,"ci_high":-0.05945},{"label":"后向复杂 GVC 生产份额","sub":"步骤 12 · 生产","value":0.001296,"text":"+0.008 个百分点（+0.001 个标准差）","ci_low":-0.001929,"ci_high":0.004521},{"label":"GVC 位置指数","sub":"步骤 13 · 长度","value":-0.004425,"text":"-0.0008 个位置指数单位（-0.004 个标准差）","ci_low":-0.006494,"ci_high":-0.002356},{"label":"加权总度","sub":"步骤 14 · 网络","value":-0.04703,"text":"-40.11 个中心性原始单位（-0.047 个标准差）","ci_low":-0.04819,"ci_high":-0.04586}],"note":"标准差即 Y 在国家×行业之间的典型差距；条形旁先写各步原始单位的数值（和上表相同），括号里是个标准差。"},
+  trade: {"version":1,"type":"diverging-bar","title":"步骤 11 · 贸易流的 2 个 Y：X 每高 1 个百分点，Y 平均相差多少","x_label":"X 每高 1 个百分点，Y 平均相差（个百分点）","items":[{"label":"外国增加值项占比","value":-0.5519,"text":"-0.55","ci_low":-0.5707,"ci_high":-0.5331,"saved":true},{"label":"国内增加值出口占比","value":0.5592,"text":"+0.56","ci_low":0.5455,"ci_high":0.573}]},
+  production: {"version":1,"type":"diverging-bar","title":"步骤 12 · 生产的 7 个 Y：X 每高 1 个百分点，Y 平均相差多少","x_label":"X 每高 1 个百分点，Y 平均相差（个百分点）","items":[{"label":"复杂 GVC 生产份额","value":-0.3949,"text":"-0.395","ci_low":-0.4109,"ci_high":-0.379},{"label":"前向 GVC 生产总份额","value":-0.6913,"text":"-0.691","ci_low":-0.7066,"ci_high":-0.6759},{"label":"后向 GVC 生产总份额","value":-0.4512,"text":"-0.451","ci_low":-0.4679,"ci_high":-0.4345},{"label":"简单 GVC 生产份额","value":-0.2963,"text":"-0.296","ci_low":-0.3056,"ci_high":-0.2871},{"label":"传统贸易生产份额","value":-0.2973,"text":"-0.297","ci_low":-0.3078,"ci_high":-0.2868},{"label":"纯国内生产份额","value":0.9886,"text":"+0.989","ci_low":0.9665,"ci_high":1.011},{"label":"后向复杂 GVC 生产份额","value":0.005584,"text":"+0.006","ci_low":-0.007878,"ci_high":0.01905,"saved":true}]},
+  length: {"version":1,"type":"diverging-bar","title":"步骤 13 · 长度的 3 个 Y：X 每高 1 个百分点，Y 平均相差多少","x_label":"X 每高 1 个百分点，Y 平均相差（个标准差）","items":[{"label":"前向 GVC 段长度","sub":"长度单位","value":-0.03156,"text":"-0.0184（-0.032 个标准差）","ci_low":-0.03292,"ci_high":-0.0302},{"label":"后向 GVC 段长度","sub":"长度单位","value":-0.02631,"text":"-0.0152（-0.026 个标准差）","ci_low":-0.02853,"ci_high":-0.02408},{"label":"GVC 位置指数","sub":"无量纲","value":-0.003416,"text":"-0.0006（-0.003 个标准差）","ci_low":-0.005394,"ci_high":-0.001437,"saved":true}],"note":"条长都换算成标准差（标准差即 Y 在国家×行业之间的典型差距），这样单位或量级差异较大的 Y 也能并列比较；条旁先写原始单位的数值，括号里是标准差。"},
+  network: {"version":1,"type":"diverging-bar","title":"步骤 14 · 网络的 5 个 Y：X 每高 1 个百分点，Y 平均相差多少","x_label":"X 每高 1 个百分点，Y 平均相差（个标准差）","items":[{"label":"加权总度","sub":"中心性原始单位","value":-0.0489,"text":"-40.80（-0.049 个标准差）","ci_low":-0.04983,"ci_high":-0.04796,"saved":true},{"label":"加权入度","sub":"中心性原始单位","value":-0.04781,"text":"-20.28（-0.048 个标准差）","ci_low":-0.04932,"ci_high":-0.04631},{"label":"加权出度","sub":"中心性原始单位","value":-0.04827,"text":"-20.52（-0.048 个标准差）","ci_low":-0.04968,"ci_high":-0.04687},{"label":"介数","sub":"中心性原始单位","value":-0.1014,"text":"-59.33（-0.101 个标准差）","ci_low":-0.1038,"ci_high":-0.09891},{"label":"接近中心性","sub":"中心性原始单位","value":-0.04244,"text":"-0.0049（-0.042 个标准差）","ci_low":-0.04384,"ci_high":-0.04104}],"note":"条长都换算成标准差（标准差即 Y 在国家×行业之间的典型差距），这样单位或量级差异较大的 Y 也能并列比较；条旁先写原始单位的数值，括号里是标准差。"},
+  summary: {"version":1,"type":"diverging-bar","title":"四步保存的结果（都换算成标准差）","x_label":"X 每高 1 个百分点，Y 平均相差（个标准差）","items":[{"label":"外国增加值项占比","sub":"步骤 11 · 贸易流","value":-0.0624,"text":"-0.55 个百分点（-0.062 个标准差）","ci_low":-0.06453,"ci_high":-0.06028},{"label":"后向复杂 GVC 生产份额","sub":"步骤 12 · 生产","value":0.0009651,"text":"+0.006 个百分点（+0.001 个标准差）","ci_low":-0.001361,"ci_high":0.003292},{"label":"GVC 位置指数","sub":"步骤 13 · 长度","value":-0.003416,"text":"-0.0006（-0.003 个标准差）","ci_low":-0.005394,"ci_high":-0.001437},{"label":"加权总度","sub":"步骤 14 · 网络","value":-0.0489,"text":"-40.80 个中心性原始单位（-0.049 个标准差）","ci_low":-0.04983,"ci_high":-0.04796}],"note":"标准差即 Y 在国家×行业之间的典型差距；条形旁先写各步原始单位的数值（和上表相同），括号里是个标准差。"},
 } as const;
 
 // The course release's step 15 summary items (gvcsim summary_chart on panel_teaching.csv), with step 12's default Y
@@ -425,15 +425,15 @@ describe("regression bar charts (steps 11–14 and the summary)", () => {
     expect(saved.textContent).toContain("后向复杂 GVC 生产份额");
     expect(saved.querySelector("[data-saved-tag]")?.textContent).toBe("已保存");
     expect(saved.querySelector("path[data-bar]")?.getAttribute("stroke")).toBe(ZERO_LINE);
-    expect(saved.querySelector("[data-bar-label]")?.textContent).toBe("+0.008 · 方向不确定");
+    expect(saved.querySelector("[data-bar-label]")?.textContent).toBe("+0.006 · 方向不确定");
     // The value is bold, "方向不确定" muted after it, as on the page.
-    expect(saved.querySelector('[data-bar-label] tspan[font-weight="700"]')?.textContent).toBe("+0.008");
+    expect(saved.querySelector('[data-bar-label] tspan[font-weight="700"]')?.textContent).toBe("+0.006");
     expect(saved.querySelector('[data-bar-label] tspan[fill="#5f6677"]')?.textContent).toBe(" · 方向不确定");
     expect(element.querySelectorAll('[data-diverging-row="saved"]')).toHaveLength(1);
     // The legend names only the colours in use; all three are here.
     expect(element.querySelector("figure")?.textContent).toContain("X 越高，Y 越高X 越高，Y 越低方向不确定细线 = 95% 区间");
     const svg = element.querySelector('svg[role="img"]')!;
-    expect(svg.getAttribute("aria-label")).toContain("后向复杂 GVC 生产份额：+0.008，方向不确定，已保存");
+    expect(svg.getAttribute("aria-label")).toContain("后向复杂 GVC 生产份额：+0.006，方向不确定，已保存");
     expect(svg.getAttribute("aria-label")).toContain("纯国内生产份额：+0.98");
     expect(element.querySelector("figcaption")?.textContent).toBe(REGRESSION_CHARTS.production.title);
   });
@@ -502,9 +502,9 @@ describe("regression bar charts (steps 11–14 and the summary)", () => {
     const rows = [...element.querySelectorAll("[data-diverging-row]")];
     expect(rows.map((row) => row.querySelector("[data-bar-label]")?.getAttribute("data-bar-label"))).toEqual([
       "-0.55 个百分点（-0.062 个标准差）",
-      "+0.008 个百分点（+0.001 个标准差） · 方向不确定",
-      "-0.0008 个位置指数单位（-0.004 个标准差）",
-      "-40.11 个中心性原始单位（-0.047 个标准差）",
+      "+0.006 个百分点（+0.001 个标准差） · 方向不确定",
+      "-0.0006（-0.003 个标准差）",
+      "-40.80 个中心性原始单位（-0.049 个标准差）",
     ]);
     expect(rows.map((row) => [...row.querySelectorAll('text[text-anchor="end"]:not([data-bar-label])')].at(-1)?.textContent)).toEqual([
       "步骤 11 · 贸易流", "步骤 12 · 生产", "步骤 13 · 长度", "步骤 14 · 网络",
@@ -529,9 +529,15 @@ describe("regression bar charts (steps 11–14 and the summary)", () => {
     expect(page.width).toBe(576);
     expect(reportLines).toBe(page.rows.reduce((most, row) => Math.max(most, row.lines.length), 1));
     const pageTicks = page.ticks.map((tick) => tick.value);
-    const step = Math.max(pageTicks[1] - pageTicks[0], reportTicks[1] - reportTicks[0]);
-    expect(Math.abs(Math.min(...reportTicks) - Math.min(...pageTicks))).toBeLessThanOrEqual(step + 1e-9);
-    expect(Math.abs(Math.max(...reportTicks) - Math.max(...pageTicks))).toBeLessThanOrEqual(step + 1e-9);
+    // The same axis range (only the tick density may differ), at every page width: the range comes from the data.
+    expect([Math.min(...reportTicks), Math.max(...reportTicks)]).toEqual([Math.min(...pageTicks), Math.max(...pageTicks)]);
+    for (const width of [MIN_WIDTH, 680, 760, 980]) {
+      const ticks = layoutDivergingBars(items.map((item, index) => ({
+        key: String(index), label: item.label, sublabel: item.sub, value: item.value, low: item.ci_low, high: item.ci_high,
+        uncertain: item.ci_low <= 0 && item.ci_high >= 0, valueLabel: item.text,
+      })), width).ticks.map((tick) => tick.value);
+      expect([ticks[0], ticks.at(-1)]).toEqual([Math.min(...pageTicks), Math.max(...pageTicks)]);
+    }
     // The end label stands clear of its whisker cap.
     for (const row of svg.querySelectorAll("[data-diverging-row]")) {
       const label = row.querySelector("[data-bar-label]")!;

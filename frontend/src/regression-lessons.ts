@@ -171,7 +171,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
   },
   GVCPs: {
     shortMetric: "GVC 位置指数",
-    unit: "位置指数单位",
+    unit: "无量纲",
     definition: "前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界：大于 1 表示相对更上游。",
     downMeaning: "位置指数下降：相对更靠下游。",
     upMeaning: "位置指数上升：相对更上游。",

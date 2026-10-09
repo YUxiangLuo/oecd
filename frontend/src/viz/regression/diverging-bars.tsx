@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from "react";
 import { cardStyle, useTip } from "../shared";
-import { niceDomain } from "../nice-ticks";
+import { divergingAxis } from "../nice-ticks";
 import { svgTextWidth } from "./charts";
 import { NEGATIVE, POSITIVE, UNCERTAIN, ZERO_LINE } from "./palette";
 
@@ -112,7 +112,7 @@ const finiteEnds = (row: DivergingBarRow) =>
 /**
  * Where everything goes at a drawing width. The row names take a left column as wide as the longest one (so no
  * name is clipped); the plot is what remains. The scale is the largest one at which every bar, whisker and end
- * label fits: a label sits beyond the far end of its bar or whisker, on the side away from 0, so it can meet
+ * label fits, and the axis range (divergingAxis: from the data alone, as in the report) too: a label sits beyond the far end of its bar or whisker, on the side away from 0, so it can meet
  * neither the zero line nor the left column; one label per row and rows taller than the text keep labels apart.
  *
  * End labels stay on one line while the longest bar still gets a third of the plot; otherwise they are stacked on
@@ -134,6 +134,9 @@ export function layoutDivergingBars(
   const columnRight = EDGE + nameWidth;
   const plotLeft = columnRight + COLUMN_GAP;
   const extent = Math.max(1e-12, ...rows.flatMap(finiteEnds).map(Math.abs));
+  // The axis range comes from the data alone (as in the report), so it is the same at every width; the scale is
+  // chosen so both of its ends are inside the plot.
+  const range = divergingAxis(rows.flatMap(finiteEnds), 4);
   const itemsAt = (labelLayout: number) => rows.map((row) => {
     const ends = finiteEnds(row);
     const lines = endLabelLines(row, labelLayout);
@@ -147,7 +150,7 @@ export function layoutDivergingBars(
     // x(v) = zero + k·v. Every row asks zero ≥ plotLeft + need − k·lo and zero ≤ plotRight − need − k·hi, where
     // need is its label (plus a gap) on the side the label goes and 0 on the other.
     const bounds = (k: number) => {
-      let low = plotLeft, high = plotRight;
+      let low = plotLeft - k * range.lo, high = plotRight - k * range.hi;
       for (const item of items) {
         low = Math.max(low, plotLeft + (item.right ? 0 : item.labelWidth + GAP) - k * item.lo);
         high = Math.min(high, plotRight - (item.right ? item.labelWidth + GAP : 0) - k * item.hi);
@@ -157,7 +160,7 @@ export function layoutDivergingBars(
     // The labels alone are wider than the plot: no scale fits (this used to fall to k ≈ 0 and print ±2e14 ticks).
     const empty = bounds(0);
     if (empty.low > empty.high) return null;
-    let lo = 0, hi = span / Math.max(1e-12, ...items.map((item) => item.hi - item.lo));
+    let lo = 0, hi = span / Math.max(1e-12, range.hi - range.lo, ...items.map((item) => item.hi - item.lo));
     for (let step = 0; step < 60; step++) {
       const mid = (lo + hi) / 2;
       const { low, high } = bounds(mid);
@@ -189,12 +192,12 @@ export function layoutDivergingBars(
     const centre = (plotLeft + plotRight) / 2;
     return { drawWidth: width, labelLayout: 2, plotRight, span, items: itemsAt(2), k: span / (2 * extent), room: { low: centre, high: centre } };
   })();
-  const { drawWidth, labelLayout, plotRight, span, items, k, room } = chosen;
+  const { drawWidth, labelLayout, plotRight, items, k, room } = chosen;
   // The zero line goes in the middle of the room the labels leave.
   const zeroX = room.low <= room.high ? (room.low + room.high) / 2 : Math.min(Math.max(room.low, plotLeft), plotRight);
   const x = (value: number) => zeroX + k * value;
-  const visible = niceDomain((plotLeft - zeroX) / k, (plotRight - zeroX) / k, Math.max(2, Math.round(span / 110)));
-  const ticks = visible.ticks
+  // The data's range, with a tick per 110 px of it or so.
+  const ticks = divergingAxis(rows.flatMap(finiteEnds), Math.round((k * (range.hi - range.lo)) / 110)).ticks
     .filter((value) => x(value) >= plotLeft - 0.5 && x(value) <= plotRight + 0.5)
     .map((value) => ({ value, x: x(value), text: tickText(value) }));
   const heights = items.map((item) => Math.max(ROW_H, item.lines.length * LINE_H + 14));

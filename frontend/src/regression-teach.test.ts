@@ -166,7 +166,7 @@ describe("RegressionSummaryBars", () => {
     // (β × 0.01) / sd(Y): 0.5 × 0.01 / 0.1 = 0.05 and -0.4 × 0.01 / 0.2 = -0.02.
     expect(rows.map((row) => [row.label, row.sublabel, row.value.toFixed(6), row.valueLabel, row.uncertain])).toEqual([
       ["国内增加值出口占比", "步骤 11 · 贸易流", "0.050000", "+0.50 个百分点（+0.050 个标准差）", false],
-      ["GVC 位置指数", "步骤 13 · 长度", "-0.020000", "-0.0040 个位置指数单位（-0.020 个标准差）", false],
+      ["GVC 位置指数", "步骤 13 · 长度", "-0.020000", "-0.0040（-0.020 个标准差）", false],
     ]);
     expect(missing).toEqual(["步骤 12 · 生产", "步骤 14 · 网络"]);
     const html = renderToStaticMarkup(createElement(RegressionSummaryBars, { getStep }));
