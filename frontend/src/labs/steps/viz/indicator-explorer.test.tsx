@@ -915,16 +915,16 @@ describe("steps 6–8 keep an exploration-only selection and say where carried c
     const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
     try {
       const view = render(<TradeVizStep meta={wide} step={step} state={stateOf({ compared: ["LUX", "USA"] }, [], { carriedFrom: 3 })} />);
-      expect(view.getByText("沿用你在步骤 3 选的国家，可以更换。")).toBeTruthy();
+      expect(view.getByText("沿用步骤 3 的国家，可以更换。")).toBeTruthy();
       // Another view is not another set of countries.
       fireEvent.click(view.getByRole("button", { name: "定位图" }));
-      expect(view.queryByText("沿用你在步骤 3 选的国家，可以更换。")).toBeTruthy();
+      expect(view.queryByText("沿用步骤 3 的国家，可以更换。")).toBeTruthy();
       fireEvent.change(view.getByLabelText("国家 A"), { target: { value: "CHN" } });
-      expect(view.queryByText("沿用你在步骤 3 选的国家，可以更换。")).toBeNull();
+      expect(view.queryByText("沿用步骤 3 的国家，可以更换。")).toBeNull();
       cleanup();
       // The step's own selection (not the carried set) has no line.
       const own = render(<TradeVizStep meta={wide} step={step} state={stateOf({ compared: ["LUX", "USA"], browse_selection: { first: "BRN", second: "", others: [], industry: "", metric: "FVA_share", start: 2019, end: 2021, year: 2021, view: "trend", limit: 10 } }, [], { carriedFrom: 3 })} />);
-      expect(own.queryByText(/沿用你在步骤/)).toBeNull();
+      expect(own.queryByText(/沿用步骤/)).toBeNull();
     } finally { rows.mockRestore(); schema.mockRestore(); }
   });
 

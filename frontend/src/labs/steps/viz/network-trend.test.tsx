@@ -373,16 +373,16 @@ test("a recorded ranking does not change the trend's industry; a carried pair sa
   mockReference();
   const release = "a".repeat(32);
   const ranking: VizObservation[] = ["C27", "C26"].map((industry) => ({ entity: `CHN·${industry}`, country: "CHN", industry, year: 2020, value: 1, metric: "weighted degree", source: "explicit-network-ranking", release }));
-  render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} observations={ranking} carriedNote="沿用你在步骤 6 选的国家，可以更换。" onRecord={() => {}} />);
+  render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} observations={ranking} carriedNote="沿用步骤 6 的国家，可以更换。" onRecord={() => {}} />);
   expect(screen.getByRole("button", { name: "行业排名" }).getAttribute("aria-pressed")).toBe("true");
   fireEvent.click(screen.getByRole("button", { name: "历年变化" }));
   // The top-ranked C27 is not the trend's industry: the trend keeps its default.
   expect((screen.getByLabelText("行业") as HTMLSelectElement).value).toBe("C26");
-  expect(screen.queryByText("沿用你在步骤 6 选的国家，可以更换。")).toBeNull();
+  expect(screen.queryByText("沿用步骤 6 的国家，可以更换。")).toBeNull();
   cleanup();
-  render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} carriedNote="沿用你在步骤 6 选的国家，可以更换。" onRecord={() => {}} />);
-  expect(screen.getByText("沿用你在步骤 6 选的国家，可以更换。")).toBeTruthy();
+  render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} carriedNote="沿用步骤 6 的国家，可以更换。" onRecord={() => {}} />);
+  expect(screen.getByText("沿用步骤 6 的国家，可以更换。")).toBeTruthy();
   fireEvent.change(screen.getByLabelText("国家 A"), { target: { value: "USA" } });
-  expect(screen.queryByText("沿用你在步骤 6 选的国家，可以更换。")).toBeNull();
+  expect(screen.queryByText("沿用步骤 6 的国家，可以更换。")).toBeNull();
   expect(screen.getByText("已与对比国家 B 互换。")).toBeTruthy();
 });

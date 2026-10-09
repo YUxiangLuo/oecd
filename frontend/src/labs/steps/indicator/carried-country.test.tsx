@@ -12,7 +12,7 @@ const stateOf = (data: IndicatorStepState | undefined, extra: Partial<StepStateA
   ({ data, save: () => {}, complete: false, syncing: false, syncError: null, syncNow: () => {}, ...extra });
 /** As the workspace hands a step that opened on step 2's DEU (see carriedComparisonSource). */
 const carried = stateOf({ compared: ["DEU"], country: "DEU" }, { carriedFrom: 2 });
-const NOTE = "沿用你在步骤 2 选的国家，可以更换。";
+const NOTE = "沿用步骤 2 的国家，可以更换。";
 
 afterEach(cleanup);
 

@@ -133,7 +133,7 @@ export function IndicatorExplorer({
   }, [state.data, saved.length]);
   // Picking a comparison country as A swaps the two; a short note says so until the next change.
   const [swapNote, setSwapNote] = useState<string | null>(null);
-  // Where an opening set of countries came from ("沿用你在步骤 n 选的国家"), until the student changes them here.
+  // Where an opening set of countries came from ("沿用步骤 n 的国家"), until the student changes them here.
   const [carriedFrom] = useState(() => state.carriedFrom != null
     && selectionEntities(selection).join(",") === (state.data?.compared ?? []).join(",") ? state.carriedFrom : undefined);
   const [countriesChosen, setCountriesChosen] = useState(false);

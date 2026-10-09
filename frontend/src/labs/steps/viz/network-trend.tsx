@@ -38,7 +38,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   initialBrowse?: NetworkBrowse;
   /** Called with the browsing state whenever the student changes it, so leaving the step keeps it. */
   onBrowse?: (browse: NetworkBrowse) => void;
-  /** "沿用你在步骤 n 选的国家，可以更换。" while the opening countries are the carried ones. */
+  /** "沿用步骤 n 的国家，可以更换。" while the opening countries are the carried ones. */
   carriedNote?: string | null;
   observations?: VizObservation[];
   syncing?: boolean;

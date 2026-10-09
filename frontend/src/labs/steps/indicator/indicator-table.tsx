@@ -251,9 +251,9 @@ function carriedSource(meta: Meta, state: StepStateApi<IndicatorStepState>): num
   return shown !== "" && shown === state.data?.compared?.[0] ? state.carriedFrom : undefined;
 }
 
-/** "沿用你在步骤 2 选的国家，可以更换。", shown beside the country select of a step that opened on a carried country. */
+/** "沿用步骤 2 的国家，可以更换。", shown beside the country select of a step that opened on a carried country. */
 export function carriedCountryNote(from: number | undefined): string | null {
-  return from == null ? null : `沿用你在步骤 ${from} 选的国家，可以更换。`;
+  return from == null ? null : `沿用步骤 ${from} 的国家，可以更换。`;
 }
 
 /** 指标表与分解演示共享一套选择，并只把学生真实交互后的变化写回会话。 */
