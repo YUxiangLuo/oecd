@@ -147,6 +147,21 @@ export function GroupChangeChart({
         {label(taxed, "被加税国家组", TAXED, "taxed")}
         {label(untaxed, "未被加税国家组", UNTAXED, "untaxed")}
       </svg>
+      {/* The per-year values for keyboard and screen-reader users (the dots' tooltips need a mouse). */}
+      <details className="chart-data-disclosure group-change-table">
+        <summary>两组逐年读数</summary>
+        <table className="data-table">
+          <caption className="sr-only">{title}：相对 {years[0]}–{policyYear - 1} 年平均水平的变化（{unit}）</caption>
+          <thead><tr><th scope="col">年份</th><th scope="col">被加税组（{unit}）</th><th scope="col">未被加税组（{unit}）</th></tr></thead>
+          <tbody>{years.map((year) => {
+            const cell = (series: { year: number; change: number }[]) => {
+              const point = series.find((item) => item.year === year);
+              return point ? (point.change * scale).toFixed(decimals + 1) : "—";
+            };
+            return <tr key={year}><th scope="row">{year}{year === policyYear ? "（起加税）" : ""}</th><td>{cell(taxed)}</td><td>{cell(untaxed)}</td></tr>;
+          })}</tbody>
+        </table>
+      </details>
     </div>
   );
 }

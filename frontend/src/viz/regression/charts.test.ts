@@ -59,6 +59,26 @@ describe("two-group chart labels", () => {
   });
 });
 
+describe("two-group chart readings without a mouse", () => {
+  test("a folded table gives each year's value for both groups, in the chart's unit", () => {
+    const years = [2016, 2017, 2018];
+    const markup = renderToStaticMarkup(createElement(GroupChangeChart, {
+      years, policyYear: 2018, scale: 100, unit: "个百分点", title: "加税前后",
+      taxed: [{ year: 2016, change: 0 }, { year: 2017, change: 0.001 }, { year: 2018, change: -0.004 }],
+      untaxed: [{ year: 2016, change: 0 }, { year: 2017, change: -0.001 }, { year: 2018, change: 0.003 }],
+    }));
+    const dom = new DOMParser().parseFromString(markup, "text/html");
+    const details = dom.querySelector("details")!;
+    expect(details.hasAttribute("open")).toBe(false);
+    expect(details.querySelector("summary")?.textContent).toBe("两组逐年读数");
+    expect([...details.querySelectorAll("thead th")].map((cell) => cell.textContent)).toEqual(["年份", "被加税组（个百分点）", "未被加税组（个百分点）"]);
+    const rows = [...details.querySelectorAll("tbody tr")].map((row) => [...row.children].map((cell) => cell.textContent));
+    // The same values as the dots' tooltips.
+    expect(markup).toContain("<title>2018 年：-0.400 个百分点</title>");
+    expect(rows).toEqual([["2016", "0.000", "0.000"], ["2017", "0.100", "-0.100"], ["2018（起加税）", "-0.400", "0.300"]]);
+  });
+});
+
 describe("two-group chart estimate", () => {
   test("the in-chart estimate of a weak Y says its direction is open", () => {
     const years = [2016, 2017, 2018, 2019, 2020];

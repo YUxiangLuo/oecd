@@ -148,7 +148,8 @@ describe("simple regression workbench", () => {
     expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("外国增加值项占比平均低 0.55 个百分点");
     expect(screen.getByRole("group", { name: /X 每高 1 个百分点，Y 平均相差（个百分点）/ })).toBeTruthy();
     // Model and numbers are folded away.
-    expect([...document.querySelectorAll("details > summary")].map((node) => node.textContent)).toEqual(["模型设定", "详细数字（可选）"]);
+    // (The 加税前后 chart's per-year table is folded under the chart.)
+    expect([...document.querySelectorAll("details > summary")].map((node) => node.textContent)).toEqual(["两组逐年读数", "模型设定", "详细数字（可选）"]);
     fireEvent.click(screen.getByRole("button", { name: "国内增加值出口占比：+0.56" }));
     await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高 0.56 个百分点"));
     expect(run.mock.calls[1][2]).toBe("DVAex_share");
