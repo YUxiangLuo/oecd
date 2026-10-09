@@ -542,11 +542,13 @@ export function IndicatorExplorer({
   // comparison and 前后向位置 charts.
   // Economies sharing the same years and reason share one sentence ("BRN 文莱、KHM 柬埔寨…在所选年份该行业…"), so
   // step 8 with T and five economies does not repeat the same sentence five times.
-  const notesFor = (key: string) => {
+  // `summarised`: the trend chart's own reading already says country A cannot be read in any year, so the note
+  // below leaves A out instead of repeating that sentence right after it.
+  const notesFor = (key: string, summarised = false) => {
     const groups = new Map<string, string[]>();
     for (const country of selected) {
       const at = (timeView ? chartYears : [year]).filter((value) => undefinedReason(country, key, value));
-      if (!at.length) continue;
+      if (!at.length || (summarised && country === selected[0] && at.length === chartYears.length)) continue;
       const when = timeView ? (at.length === chartYears.length ? "在所选年份" : ` ${at.join("、")} 年`) : "";
       const clause = `${when}${undefinedReason(country, key, at[0])}，${label(key)}无法计算`;
       groups.set(clause, [...(groups.get(clause) ?? []), country]);
@@ -561,7 +563,7 @@ export function IndicatorExplorer({
     : undefined;
   const undefinedNotes = (view === "trend" || view === "comparison" ? [metric] : view === "directions" ? metrics : [])
     .filter((key) => !allUndefined(key))
-    .flatMap(notesFor);
+    .flatMap((key) => notesFor(key, view === "trend" || view === "directions"));
   // Trend readouts and cards: an undefined reading says "无法计算" and why, with its year, not "缺失".
   const trendEmpty = (key: string) => (country: string, at: number) => (undefinedReason(country, key, at) ? "无法计算" : null);
   const trendReason = (key: string) => (country: string, at: number) => {

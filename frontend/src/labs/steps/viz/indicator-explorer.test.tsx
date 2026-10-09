@@ -408,6 +408,25 @@ describe("indicator explorer with automatic report material", () => {
     schema.mockRestore();
   });
 
+  test("length 前后向位置: a country with no backward GVC length says why it has no trajectory, once", async () => {
+    // CHN plays ISL B09: no backward GVC production in any year, so every PLy_GVC is undefined.
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) =>
+      countryRows(year).map((row) => (row.country === "CHN" ? { ...row, PLy_GVC: null, "3_FGY_GVC": 0 } : row)) as never,
+    );
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    const view = setup(LengthVizStep);
+    const legend = await waitFor(() => { const found = view.container.querySelector('[data-legend="CHN"]'); expect(found).toBeTruthy(); return found!; });
+    expect(legend.textContent).toBe("CHN 中国 · 无轨迹");
+    expect(view.getByRole("note", { name: "" }).textContent ?? "").toContain("CHN 中国没有轨迹");
+    await waitFor(() => expect(view.container.textContent).toContain("暂不能读出期间变化"));
+    // The trend chart's reading says it; the note below the charts does not repeat it.
+    const material = view.getByRole("region", { name: "报告材料" }).textContent ?? "";
+    const outside = (view.container.textContent ?? "").replace(material, "");
+    expect(outside.split("后向 GVC 段长度无法计算").length - 1).toBe(1);
+    rows.mockRestore();
+    schema.mockRestore();
+  });
+
   test("length trajectory does not bridge a missing middle year", () => {
     const rows = [
       { country: "CHN", year: 2019, PLv_GVC: 2, PLy_GVC: 3 },

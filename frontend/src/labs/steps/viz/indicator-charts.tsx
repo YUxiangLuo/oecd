@@ -939,7 +939,7 @@ export function LengthPositionTrajectory({
             onMouseLeave={() => setFocusSeries(null)}
           >
             <svg width={30} height={10} aria-hidden="true"><line x1={0} x2={24} y1={5} y2={5} stroke={CAT[index]} strokeWidth={2.5} /><circle cx={25} cy={5} r={4} fill={CAT[index]} /></svg>
-            {countryLabel(countries[index])}{points.length ? ` · ${points[0].year}→${points.at(-1)!.year}` : ""}
+            {countryLabel(countries[index])}{points.length ? ` · ${points[0].year}→${points.at(-1)!.year}` : " · 无轨迹"}
           </span>
         ))}
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#596173" }}>
@@ -952,6 +952,12 @@ export function LengthPositionTrajectory({
           </span>
         )}
       </div>
+      {/* A legend entry with no line needs a reason (ISL B09: every backward length is undefined). */}
+      {series.some((points) => !points.length) && (
+        <p className="muted" role="note">
+          {joinCountries(countries.filter((_, index) => !series[index].length))}没有轨迹：轨迹需要同一年的前向和后向 GVC 段长度都有读数，原因见下方趋势图。
+        </p>
+      )}
       <div ref={wrapRef} className="hover-wrap" onMouseLeave={() => { setActive(null); hide(); }}>
       <svg
         viewBox="0 0 720 650"
