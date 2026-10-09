@@ -24,6 +24,7 @@ from gvcsim.report_common import (
     _list_values,
     _model_summary,
     _natural_effect,
+    _no_negative_zero,
     _number,
     _observation_reading,
     _primary_coefficient,
@@ -740,7 +741,7 @@ def _fixed4(value: Any) -> str:
     both interval ends alike ("[-0.4109, -0.3790]", not "[-0.4109, -0.379]")."""
     if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(float(value)):
         return "—"
-    return f"{float(value):.4f}"
+    return _no_negative_zero(f"{float(value):.4f}")
 
 
 def _technical_estimate_tables(

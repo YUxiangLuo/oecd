@@ -32,6 +32,22 @@ describe("two-group chart bracket longer than the gap between the lines", () => 
   });
 });
 
+describe("two-group chart readings", () => {
+  test("a small negative change that rounds to zero reads 0.0, never -0.0 (table and tooltips)", () => {
+    // Step 12: a group's change of -0.0004 points printed "-0.00" in 两组逐年读数.
+    const years = [2016, 2017, 2018];
+    const markup = renderToStaticMarkup(createElement(GroupChangeChart, {
+      years, policyYear: 2018, scale: 100, unit: "个百分点", title: "t",
+      taxed: years.map((year, index) => ({ year, change: [-0.000004, 0.000003, -0.2][index] })),
+      untaxed: years.map((year) => ({ year, change: 0 })),
+    }));
+    expect(markup).not.toMatch(/>-0\.0+</);
+    expect(markup).not.toMatch(/：-0\.0+ /);
+    expect(markup).toContain("<th scope=\"row\">2016</th><td>0.0</td>");
+    expect(markup).toContain("<td>-20.0</td>");
+  });
+});
+
 describe("two-group chart labels", () => {
   test("spreadLabels keeps order and pushes close labels apart inside the bounds", () => {
     const slots = spreadLabels([

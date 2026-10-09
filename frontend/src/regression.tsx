@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ScrollableRegion } from "./a11y";
 import { scrollIntoCourseContent } from "./content-scroll";
 import { api, ApiError } from "./api";
-import { percentagePoints } from "./format";
+import { percentagePoints, stripNegativeZero } from "./format";
 import { useAsync } from "./labs";
 import { DEFAULT_BASELINES, displayBaselineLabel, GENERATED_DATA_NOTE, lessonFor, lessonQuestion } from "./regression-lessons";
 import { nextRegressionSave } from "./regression-save";
@@ -127,9 +127,12 @@ export interface RegressionExample {
 /** Defined with the other number formats (regression-verdict.ts); re-exported where it was first used. */
 export { networkDigits };
 
-/** A number with fixed decimals and thousands separators: 1382.4 → "1,382" (0 digits), -12.5 → "-12.50" (2). */
+/**
+ * A number with fixed decimals and thousands separators: 1382.4 → "1,382" (0 digits), -12.5 → "-12.50" (2); a value
+ * that rounds to zero reads "0.00", never "-0.00".
+ */
 export function groupedFixed(value: number, digits: number): string {
-  return value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return stripNegativeZero(value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits }));
 }
 
 /**
@@ -254,6 +257,9 @@ export function RegressionResultCard({ outcome, response, examples = [], example
   );
 }
 
+/** A raw coefficient, SE or interval end at four decimals (report ``_fixed4``), never "-0.0000". */
+const fixed4 = (value: number) => stripNegativeZero(value.toFixed(4));
+
 /** Column names in the coefficient table, as the page names them (the code stays in the report appendix). */
 const COEFFICIENT_NAMES: Record<string, string> = { teaching_tariff_exposure: "关税暴露 X" };
 
@@ -293,10 +299,10 @@ export function RegressionCoefficientTable({ response }: { response: RegressionR
               <td>{coef.name === response.design.shock_col
                 ? teachingEffect(outcome, coef.coef, response.design, ciLow != null && ciHigh != null ? [ciLow, ciHigh] : null)
                 : "—"}</td>
-              <td>{coef.coef.toFixed(4)}</td>
-              <td>{ciLow != null && ciHigh != null ? `[${ciLow.toFixed(4)}, ${ciHigh.toFixed(4)}]` : "—"}</td>
+              <td>{fixed4(coef.coef)}</td>
+              <td>{ciLow != null && ciHigh != null ? `[${fixed4(ciLow)}, ${fixed4(ciHigh)}]` : "—"}</td>
               {/* With inference suppressed, SE and t are not read either (the backend keeps them for integrity checks). */}
-              <td>{inferenceAllowed && coef.se != null ? coef.se.toFixed(4) : "—"}</td><td>{inferenceAllowed && coef.t != null ? coef.t.toFixed(2) : "—"}</td><td>{formatPValue(p)}</td>
+              <td>{inferenceAllowed && coef.se != null ? fixed4(coef.se) : "—"}</td><td>{inferenceAllowed && coef.t != null ? stripNegativeZero(coef.t.toFixed(2)) : "—"}</td><td>{formatPValue(p)}</td>
             </tr>
           );
         })}</tbody>

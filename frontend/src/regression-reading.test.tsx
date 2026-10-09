@@ -251,6 +251,14 @@ describe("fixed teaching regression reading", () => {
   });
 });
 
+test("the coefficient table never prints a negative zero", () => {
+  const data = response();
+  Object.assign(data.result.coefs[0], { coef: -0.00001, ci_low: -0.00004, ci_high: 0.00002, se: 0.00001, t: -0.001 });
+  const table = render(<RegressionCoefficientTable response={data} />);
+  const cells = [...table.container.querySelectorAll("tbody td")].map((cell) => cell.textContent);
+  expect(cells.slice(2, 6)).toEqual(["0.0000", "[0.0000, 0.0000]", "0.0000", "0.00"]);
+});
+
 test.each(["unknown", "conflicting"])("%s status suppresses table inference", (status) => {
   const data = response();
   if (status === "unknown") data.result.status = null;

@@ -443,6 +443,8 @@ describe("simple regression workbench", () => {
     expect(exampleEffect("network", -4000, 0.3455)).toBe("1,382 个中心性原始单位");
     expect(groupedFixed(-1382.4, 0)).toBe("-1,382");
     expect(groupedFixed(12.345, 2)).toBe("12.35");
+    // Rounds to zero: no negative zero.
+    expect(groupedFixed(-0.0004, 2)).toBe("0.00");
   });
 
   test("step 14 says weighted degree is in + out once all three are in the family", () => {

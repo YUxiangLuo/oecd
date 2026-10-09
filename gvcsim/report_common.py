@@ -121,7 +121,12 @@ def _number(value: Any, *, p_value: bool = False) -> str:
     # Large amounts (e.g. million-USD flows) read better as grouped integers than as 4.584e+06.
     if abs(numeric) >= 1000:
         return f"{numeric:,.0f}"
-    return f"{numeric:.4g}"
+    return _no_negative_zero(f"{numeric:.4g}")
+
+
+def _no_negative_zero(text: str) -> str:
+    """A number that rounds to zero reads "0.00", never "-0.00" (frontend ``stripNegativeZero``)."""
+    return text[1:] if text.startswith("-") and not any(char in "123456789" for char in text) else text
 
 
 def reading_digits(value: float, unit: str) -> int:
@@ -250,6 +255,8 @@ def estimate_digits(kind: str, value: float, bounds: tuple[float, float] | None)
 
 
 def _signed(value: float, digits: int) -> str:
+    # -0.0 reads "+0.000", as on the page (``signed``), never "-0.000".
+    value = 0.0 if value == 0 else value
     rounded = f"{value:+,.{digits}f}"
     # Match the result card (toPrecision(2)): a small nonzero estimate/CI endpoint is not zero, and keeps
     # its trailing zero ("-0.0050", not "-0.005" next to the page's "-0.0050").

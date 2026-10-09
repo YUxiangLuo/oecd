@@ -25,6 +25,7 @@ from gvcsim.regression import teaching
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 from gvcsim.regression.teaching import X_COLUMN, model_snapshot, variable_catalog
 from gvcsim.report_common import _number
+from gvcsim.report_render import _fixed4
 
 from gvcsim.session import empty_session, make_record
 from gvcsim.teaching_report import (
@@ -94,6 +95,14 @@ def test_report_step13_sizes_are_in_standard_deviations_like_step_14(kind, coef,
     assert rendered_effect == effect
     assert rendered_interval == interval
     assert "样本均值" not in rendered_effect
+
+
+def test_report_numbers_never_print_a_negative_zero():
+    # As on the page (stripNegativeZero / signed): a value that rounds to zero carries no minus sign.
+    assert teaching_report._signed(-0.0, 3) == "+0.000"
+    assert _number(-0.0) == "0"
+    assert _fixed4(-0.00001) == "0.0000"
+    assert _fixed4(-0.4109) == "-0.4109"
 
 
 def test_report_tiny_nonzero_numbers_and_standardized_effect_preserve_sign():
