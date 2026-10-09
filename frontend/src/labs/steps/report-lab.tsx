@@ -562,6 +562,7 @@ export function ReportLab({
     setGenerating(true);
     setError(null);
     setBlocked([]);
+    const previousState = report?.state;
     let generated = false;
     try {
       await waitUntilReady();
@@ -577,6 +578,14 @@ export function ReportLab({
         const submitted = await api.classroom.submitReport();
         onReportChanged(submitted);
         finalReport = submitted.report;
+      }
+      // The server built the report from its own record. Another tab may have saved newer answers there while this
+      // one sat on step 15 (nothing here was unsaved, so the flush did not notice): the report then holds that
+      // tab's text while these fields keep the old one. Regenerating a submitted or graded report also resubmits
+      // it, so check, as the 409 path does, and offer 载入服务器版本.
+      if (previousState === "pending" || previousState === "graded") {
+        const latest = await api.classroom.session().catch(() => null);
+        if (latest) setServerAnswers(newerServerAnswers(reflection, readStep<ReportReflectionState>(latest.session, 15)));
       }
       if (finalReport.state !== "draft") {
         clearToasts();

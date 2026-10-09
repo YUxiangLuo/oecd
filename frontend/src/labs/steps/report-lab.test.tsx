@@ -489,6 +489,53 @@ test("a stale tab whose answers were changed elsewhere says so and loads the ser
   } finally { generate.mockRestore(); session.mockRestore(); }
 });
 
+test("regenerating a graded report from a stale tab says the report holds the other tab's answers and offers them", async () => {
+  // Tab 1 added text and autosaved; this tab still shows the old text. Regenerating succeeds (the report itself did
+  // not change), and the server builds it from its own record, with tab 1's text.
+  const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("pending"));
+  const newer = { research_question: "新的研究问题", evidence_interpretation: "新的结果解释", limitations: "新的局限" };
+  const session = spyOn(api.classroom, "session").mockResolvedValue({
+    release_id: "a".repeat(32), updated_at: null, ...mutation("pending"),
+    session: { version: "experiment-session-simple-v3", steps: { "15": { data: newer } }, shared: {} } as never,
+  });
+  const saved: Record<string, unknown>[] = [];
+  function Harness() {
+    const [data, setData] = useState<Record<string, unknown>>({ research_question: "旧的研究问题", evidence_interpretation: "旧的结果解释", limitations: "旧的局限" });
+    return <ReportLab {...finishProps} report={report("graded")} sessionUpdatedAt="2026-08-12T00:00:00Z"
+      state={{ ...finishProps.state, data, save: (patch) => { saved.push(patch); setData((value) => ({ ...value, ...patch })); } }} />;
+  }
+  try {
+    render(<Harness />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" })); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "确定重新生成" })); });
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(session).toHaveBeenCalledTimes(1);
+    const dialog = screen.getByRole("dialog", { name: "报告已提交" });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.getByText("这三段是本页的旧文字")).toBeTruthy();
+    expect(screen.getByText("不是最新版本")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "载入服务器版本" }));
+    expect(saved.at(-1)).toEqual(newer);
+    expect((screen.getByRole("textbox", { name: "局限与反思" }) as HTMLTextAreaElement).value).toBe("新的局限");
+    expect(screen.queryByText("这三段是本页的旧文字")).toBeNull();
+  } finally { generate.mockRestore(); session.mockRestore(); }
+});
+
+test("regenerating with the same answers as the server shows no stale-text notice", async () => {
+  const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("pending"));
+  const answers = { research_question: "研究问题", evidence_interpretation: "结果解释", limitations: "局限" };
+  const session = spyOn(api.classroom, "session").mockResolvedValue({
+    release_id: "a".repeat(32), updated_at: null, ...mutation("pending"),
+    session: { version: "experiment-session-simple-v3", steps: { "15": { data: answers } }, shared: {} } as never,
+  });
+  try {
+    render(<ReportLab {...finishProps} report={report("pending")} state={{ ...finishProps.state, data: answers }} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" })); });
+    expect(session).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("这三段是本页的旧文字")).toBeNull();
+  } finally { generate.mockRestore(); session.mockRestore(); }
+});
+
 test("the 409 message follows what changed on the server", () => {
   const graded = report("graded");
   expect(reportConflictMessage(report("pending"), graded)).toContain("老师刚刚评阅");

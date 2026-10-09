@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { cardStyle, useTip } from "../shared";
 import { niceDomain } from "../nice-ticks";
 import { svgTextWidth } from "./charts";
@@ -23,8 +23,11 @@ export interface DivergingBarRow {
 }
 
 export const UNCERTAIN_TEXT = "方向不确定";
+/** The saved bar's tooltip line: it is the Y the report uses, so clicking it does nothing. */
+export const SAVED_TIP = "已保存（报告用这个 Y）";
+export const SELECT_TIP = "点一下，换成这个 Y 并保存";
 const LABEL_SIZE = 12.5, SUB_SIZE = 11, VALUE_SIZE = 12, TAG_SIZE = 10.5;
-const ROW_H = 42, BAR_H = 20, PAD_T = 10, AXIS_H = 44, GAP = 7, COLUMN_GAP = 16, EDGE = 10;
+const ROW_H = 42, LINE_H = 15, BAR_H = 20, PAD_T = 10, AXIS_H = 44, GAP = 7, COLUMN_GAP = 16, EDGE = 10;
 /** Narrowest and widest drawing widths: the chart is drawn at its container's width, so text keeps its size. */
 export const MIN_WIDTH = 420, MAX_WIDTH = 980, DEFAULT_WIDTH = 680;
 const CARD_PADDING_X = 16;
@@ -34,11 +37,32 @@ export function endLabel(row: Pick<DivergingBarRow, "valueLabel" | "uncertain">)
   return row.uncertain ? `${row.valueLabel} · ${UNCERTAIN_TEXT}` : row.valueLabel;
 }
 
+/**
+ * The end label on one, two or three lines (layout 0–2), as the report draws it: "-40.11 个中心性原始单位" /
+ * "（-0.047 个标准差）" / "方向不确定". Where one line leaves the bars too short (long labels on both sides of the
+ * zero line in a narrow window), the labels are stacked instead.
+ */
+export function endLabelLines(row: Pick<DivergingBarRow, "valueLabel" | "uncertain">, layout: number): string[] {
+  if (layout <= 0) return [endLabel(row)];
+  const bracket = row.valueLabel.indexOf("（");
+  const [native, standardized] = bracket > 0
+    ? [row.valueLabel.slice(0, bracket).trimEnd(), row.valueLabel.slice(bracket)]
+    : [row.valueLabel, ""];
+  const uncertain = row.uncertain ? UNCERTAIN_TEXT : "";
+  if (layout === 1) {
+    const second = [standardized, uncertain].filter(Boolean).join(" · ");
+    return second ? [native, second] : [native];
+  }
+  return [native, standardized, uncertain].filter(Boolean);
+}
+
 const tagWidth = (tag: string) => svgTextWidth(tag, TAG_SIZE) + 12;
 
 interface PlacedRow {
   row: DivergingBarRow;
   y: number;
+  /** The row's height: taller when its end label is stacked on two or three lines. */
+  height: number;
   /** Bar from the zero line to the value. */
   x0: number;
   x1: number;
@@ -46,10 +70,13 @@ interface PlacedRow {
   /** End label: anchored at `labelX`, running away from 0 ("start" to the right, "end" to the left). */
   labelX: number;
   anchor: "start" | "end";
+  /** The width of its widest line. */
   labelWidth: number;
+  lines: string[];
 }
 
 export interface DivergingLayout {
+  /** The drawing's width (viewBox): the width asked for, unless even stacked labels leave the bars no room. */
   width: number;
   height: number;
   /** Right edge of the fixed left column holding the row names. */
@@ -57,6 +84,8 @@ export interface DivergingLayout {
   plotLeft: number;
   plotRight: number;
   zeroX: number;
+  /** End labels on one line (0), as value / standard deviations (1), or on three lines (2). */
+  labelLayout: number;
   ticks: { value: number; x: number; text: string }[];
   rows: PlacedRow[];
 }
@@ -67,11 +96,19 @@ function tickText(value: number): string {
   return text === "-0" ? "0" : text;
 }
 
+const finiteEnds = (row: DivergingBarRow) =>
+  [row.value, row.low, row.high, 0].filter((value): value is number => value != null && Number.isFinite(value));
+
 /**
  * Where everything goes at a drawing width. The row names take a left column as wide as the longest one (so no
  * name is clipped); the plot is what remains. The scale is the largest one at which every bar, whisker and end
  * label fits: a label sits beyond the far end of its bar or whisker, on the side away from 0, so it can meet
  * neither the zero line nor the left column; one label per row and rows taller than the text keep labels apart.
+ *
+ * End labels stay on one line while the longest bar still gets a third of the plot; otherwise they are stacked on
+ * two, then three lines, as in the report (step 15's summary has long labels on both sides of the zero line and
+ * left no room for its bars below a 1280 px window). Only when even that leaves no room (far below the supported
+ * window width) is the drawing made wider, so the chart scales down as a whole instead of collapsing its bars.
  */
 export function layoutDivergingBars(
   rows: DivergingBarRow[],
@@ -84,57 +121,89 @@ export function layoutDivergingBars(
     (row.sublabel ? svgTextWidth(row.sublabel, SUB_SIZE) + 6 : 0) + (reserveTag ? tagWidth(highlight) : 0),
   )));
   const columnRight = EDGE + nameWidth;
-  const plotLeft = columnRight + COLUMN_GAP, plotRight = width - EDGE;
-  const span = Math.max(1, plotRight - plotLeft);
-  const items = rows.map((row) => {
-    const ends = [row.value, row.low, row.high, 0].filter((value): value is number => value != null && Number.isFinite(value));
-    const labelWidth = svgTextWidth(endLabel(row), VALUE_SIZE);
-    return { row, lo: Math.min(...ends), hi: Math.max(...ends), right: row.value >= 0, labelWidth };
+  const plotLeft = columnRight + COLUMN_GAP;
+  const extent = Math.max(1e-12, ...rows.flatMap(finiteEnds).map(Math.abs));
+  const itemsAt = (labelLayout: number) => rows.map((row) => {
+    const ends = finiteEnds(row);
+    const lines = endLabelLines(row, labelLayout);
+    const labelWidth = Math.max(...lines.map((line) => svgTextWidth(line, VALUE_SIZE)));
+    return { row, lo: Math.min(...ends), hi: Math.max(...ends), right: row.value >= 0, labelWidth, lines };
   });
-  // x(v) = zero + k·v. Every row asks zero ≥ plotLeft + need − k·lo and zero ≤ plotRight − need − k·hi, where
-  // need is its label (plus a gap) on the side the label goes and 0 on the other.
-  const bounds = (k: number) => {
-    let low = plotLeft, high = plotRight;
-    for (const item of items) {
-      low = Math.max(low, plotLeft + (item.right ? 0 : item.labelWidth + GAP) - k * item.lo);
-      high = Math.min(high, plotRight - (item.right ? item.labelWidth + GAP : 0) - k * item.hi);
+  const attempt = (drawWidth: number, labelLayout: number) => {
+    const plotRight = drawWidth - EDGE;
+    const span = Math.max(1, plotRight - plotLeft);
+    const items = itemsAt(labelLayout);
+    // x(v) = zero + k·v. Every row asks zero ≥ plotLeft + need − k·lo and zero ≤ plotRight − need − k·hi, where
+    // need is its label (plus a gap) on the side the label goes and 0 on the other.
+    const bounds = (k: number) => {
+      let low = plotLeft, high = plotRight;
+      for (const item of items) {
+        low = Math.max(low, plotLeft + (item.right ? 0 : item.labelWidth + GAP) - k * item.lo);
+        high = Math.min(high, plotRight - (item.right ? item.labelWidth + GAP : 0) - k * item.hi);
+      }
+      return { low, high };
+    };
+    // The labels alone are wider than the plot: no scale fits (this used to fall to k ≈ 0 and print ±2e14 ticks).
+    const empty = bounds(0);
+    if (empty.low > empty.high) return null;
+    let lo = 0, hi = span / Math.max(1e-12, ...items.map((item) => item.hi - item.lo));
+    for (let step = 0; step < 60; step++) {
+      const mid = (lo + hi) / 2;
+      const { low, high } = bounds(mid);
+      if (low <= high) lo = mid; else hi = mid;
     }
-    return { low, high };
+    // A little air beyond the longest label.
+    const k = lo * 0.96;
+    if (!(k > 0)) return null;
+    return { drawWidth, labelLayout, plotRight, span, items, k, room: bounds(k) };
   };
-  let lo = 0, hi = span / Math.max(1e-12, ...items.map((item) => item.hi - item.lo));
-  for (let step = 0; step < 60; step++) {
-    const mid = (lo + hi) / 2;
-    const { low, high } = bounds(mid);
-    if (low <= high) lo = mid; else hi = mid;
+  type Fit = NonNullable<ReturnType<typeof attempt>>;
+  const roomy = (fit: Fit | null): fit is Fit => fit != null && fit.k * extent >= fit.span / 3;
+  let fit: Fit | null = [0, 1, 2].map((labelLayout) => attempt(width, labelLayout)).find(roomy) ?? null;
+  // Even three-line labels leave the bars no room: draw wider (the SVG scales down to its box) until they have it.
+  for (let wider = width + 20; !fit && wider <= width * 4; wider += 20) {
+    const candidate = attempt(wider, 2);
+    if (roomy(candidate)) fit = candidate;
   }
-  // A little air beyond the longest label; the zero line goes in the middle of the room that leaves.
-  const k = Math.max(lo * 0.96, 1e-12);
-  const room = bounds(k);
+  // Never reached with real labels (they would need a drawing four times as wide); the axis still stays finite.
+  const chosen: Fit = fit ?? attempt(width * 4, 2) ?? (() => {
+    const plotRight = width - EDGE;
+    const span = Math.max(1, plotRight - plotLeft);
+    const centre = (plotLeft + plotRight) / 2;
+    return { drawWidth: width, labelLayout: 2, plotRight, span, items: itemsAt(2), k: span / (2 * extent), room: { low: centre, high: centre } };
+  })();
+  const { drawWidth, labelLayout, plotRight, span, items, k, room } = chosen;
+  // The zero line goes in the middle of the room the labels leave.
   const zeroX = room.low <= room.high ? (room.low + room.high) / 2 : Math.min(Math.max(room.low, plotLeft), plotRight);
   const x = (value: number) => zeroX + k * value;
   const visible = niceDomain((plotLeft - zeroX) / k, (plotRight - zeroX) / k, Math.max(2, Math.round(span / 110)));
   const ticks = visible.ticks
     .filter((value) => x(value) >= plotLeft - 0.5 && x(value) <= plotRight + 0.5)
     .map((value) => ({ value, x: x(value), text: tickText(value) }));
+  const heights = items.map((item) => Math.max(ROW_H, item.lines.length * LINE_H + 14));
+  const tops = heights.map((_, index) => PAD_T + heights.slice(0, index).reduce((sum, height) => sum + height, 0));
   return {
-    width,
-    height: PAD_T + rows.length * ROW_H + AXIS_H,
+    width: drawWidth,
+    height: PAD_T + heights.reduce((sum, height) => sum + height, 0) + AXIS_H,
     columnRight,
     plotLeft,
     plotRight,
     zeroX,
+    labelLayout,
     ticks,
     rows: items.map((item, index) => {
       const whisker: [number, number] | null = item.row.low != null && item.row.high != null ? [x(item.row.low), x(item.row.high)] : null;
       return {
         row: item.row,
-        y: PAD_T + (index + 0.5) * ROW_H,
+        y: tops[index] + heights[index] / 2,
+        height: heights[index],
         x0: Math.min(zeroX, x(item.row.value)),
         x1: Math.max(zeroX, x(item.row.value)),
         whisker,
         labelX: item.right ? x(item.hi) + GAP : x(item.lo) - GAP,
         anchor: item.right ? "start" : "end",
         labelWidth: item.labelWidth,
+        lines: item.lines,
       };
     }),
   };
@@ -159,6 +228,25 @@ function barPath(x0: number, x1: number, y: number, towardRight: boolean): strin
 
 export function barColor(row: Pick<DivergingBarRow, "uncertain" | "value">): string {
   return row.uncertain ? UNCERTAIN : row.value < 0 ? NEGATIVE : POSITIVE;
+}
+
+/** The tooltip of one bar: its value and interval, and on a selectable chart what a click does (or that it is saved). */
+export function barTip(row: DivergingBarRow, interactive: boolean): [string, string][] {
+  return [
+    ["", row.label],
+    ["估计值", row.valueLabel],
+    ["95% 区间", row.intervalLabel ?? "—"],
+    ...(row.note ? [["说明", row.note] as [string, string]] : []),
+    ...(interactive ? [row.selected ? ["状态", SAVED_TIP] as [string, string] : ["操作", SELECT_TIP] as [string, string]] : []),
+  ];
+}
+
+/** One end-label line: the value in bold, "方向不确定" in muted grey after it. */
+function EndLine({ line }: { line: string }) {
+  const suffix = ` · ${UNCERTAIN_TEXT}`;
+  if (line === UNCERTAIN_TEXT) return <tspan fill="#5f6677">{line}</tspan>;
+  if (line.endsWith(suffix)) return <><tspan fontWeight={700}>{line.slice(0, -suffix.length)}</tspan><tspan fill="#5f6677">{suffix}</tspan></>;
+  return <tspan fontWeight={700}>{line}</tspan>;
 }
 
 /** The container's width, so the chart is drawn at 1:1 and its text keeps its size at 1024 and 1280 px windows. */
@@ -187,7 +275,7 @@ function useDrawingWidth(ref: React.RefObject<HTMLDivElement | null>): number {
  * the chart is one image with its values in the label.
  */
 export function DivergingBarChart({
-  rows, unitTitle, title, onSelect, disabled = false, highlight = "已保存", width: fixedWidth,
+  rows, unitTitle, title, onSelect, disabled = false, highlight = "已保存", width: fixedWidth, children,
 }: {
   rows: DivergingBarRow[];
   /** The axis title, naming the unit ("X 每高 1 个百分点，Y 平均相差（个标准差）"). */
@@ -200,6 +288,8 @@ export function DivergingBarChart({
   highlight?: string;
   /** A fixed drawing width (the report and tests); otherwise the container's width. */
   width?: number;
+  /** Lines under the drawing, inside the card (step 12's identity, the notice after a bar replaced the saved Y). */
+  children?: ReactNode;
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
   const measured = useDrawingWidth(wrapRef);
@@ -210,14 +300,13 @@ export function DivergingBarChart({
   const tabRow = Math.max(0, rows.findIndex((row) => row.selected));
   const spoken = (row: DivergingBarRow) => `${row.label}：${endLabel(row).replace(" · ", "，")}${row.selected ? `，${highlight}` : ""}`;
   const summary = `${title ? `${title}；` : ""}${unitTitle}。${rows.map(spoken).join("；")}`;
-  const tip = (row: DivergingBarRow): [string, string][] => [
-    ["", row.label],
-    ["估计值", row.valueLabel],
-    ["95% 区间", row.intervalLabel ?? "—"],
-    ...(row.note ? [["说明", row.note] as [string, string]] : []),
-    ...(interactive && !row.selected ? [["操作", "点一下，换成这个 Y 并保存"] as [string, string]] : []),
-  ];
   const move = (index: number) => rowRefs.current[(index + rows.length) % rows.length]?.focus();
+  const select = (row: DivergingBarRow) => {
+    if (disabled) return;
+    // The tooltip was written for the row as it was; once the click saves it, it would still offer to save it.
+    hide();
+    onSelect?.(row.key);
+  };
   const onKey = (event: KeyboardEvent<SVGGElement>, index: number, row: DivergingBarRow) => {
     if (event.key === "ArrowDown" || event.key === "ArrowRight") { event.preventDefault(); move(index + 1); }
     else if (event.key === "ArrowUp" || event.key === "ArrowLeft") { event.preventDefault(); move(index - 1); }
@@ -225,7 +314,7 @@ export function DivergingBarChart({
     else if (event.key === "End") { event.preventDefault(); move(rows.length - 1); }
     else if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      if (!disabled) onSelect?.(row.key);
+      select(row);
     }
   };
   const present = new Set(rows.map((row) => barColor(row)));
@@ -234,7 +323,7 @@ export function DivergingBarChart({
     { color: NEGATIVE, text: "X 越高，Y 越低" },
     { color: UNCERTAIN, text: UNCERTAIN_TEXT },
   ].filter((item) => present.has(item.color));
-  const plotBottom = PAD_T + rows.length * ROW_H;
+  const plotBottom = layout.height - AXIS_H;
   return (
     <div ref={wrapRef} className="diverging-bars" style={{ ...cardStyle, padding: `14px ${CARD_PADDING_X}px`, printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}>
       {title && <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3a4050" }}>{title}</div>}
@@ -263,7 +352,7 @@ export function DivergingBarChart({
         ))}
         <text aria-hidden="true" x={unitTitleX(layout, unitTitle)} y={layout.height - 6} textAnchor="middle" fontSize={11.5} fill="#3a4050">{unitTitle}</text>
         {layout.rows.map((placed, index) => {
-          const { row, y } = placed;
+          const { row, y, height } = placed;
           const towardRight = row.value >= 0;
           const twoLines = Boolean(row.sublabel) || Boolean(row.selected);
           const nameY = twoLines ? y - 7 : y;
@@ -280,19 +369,19 @@ export function DivergingBarChart({
                 "aria-pressed": Boolean(row.selected),
                 "aria-disabled": disabled || undefined,
                 "aria-label": spoken(row),
-                onClick: () => { if (!disabled) onSelect?.(row.key); },
+                onClick: () => select(row),
                 onKeyDown: (event: KeyboardEvent<SVGGElement>) => onKey(event, index, row),
                 onFocus: () => setFocused(row.key),
                 onBlur: () => setFocused((current) => (current === row.key ? null : current)),
               } : {})}
-              style={{ cursor: interactive ? (disabled ? "progress" : "pointer") : undefined, outline: "none" }}
-              onMouseEnter={(event) => show(event, tip(row))}
-              onMouseMove={(event) => show(event, tip(row))}
+              style={{ cursor: interactive ? (disabled ? "progress" : row.selected ? "default" : "pointer") : undefined, outline: "none" }}
+              onMouseEnter={(event) => show(event, barTip(row, interactive))}
+              onMouseMove={(event) => show(event, barTip(row, interactive))}
               onMouseLeave={hide}
             >
               {/* The whole row is the hit area; the selected one is tinted. */}
-              <rect x={0} y={y - ROW_H / 2 + 1} width={layout.width} height={ROW_H - 2} rx={8} fill={row.selected ? "#f3f4fa" : "transparent"} />
-              {focused === row.key && <rect x={1} y={y - ROW_H / 2 + 1} width={layout.width - 2} height={ROW_H - 2} rx={8} fill="none" stroke="#4b47e0" strokeWidth={2} strokeDasharray="4 3" />}
+              <rect x={0} y={y - height / 2 + 1} width={layout.width} height={height - 2} rx={8} fill={row.selected ? "#f3f4fa" : "transparent"} />
+              {focused === row.key && <rect x={1} y={y - height / 2 + 1} width={layout.width - 2} height={height - 2} rx={8} fill="none" stroke="#4b47e0" strokeWidth={2} strokeDasharray="4 3" />}
               <text x={layout.columnRight} y={nameY} dominantBaseline="middle" textAnchor="end" fontSize={LABEL_SIZE} fontWeight={row.selected ? 700 : 500} fill="#2a2f3a">{row.label}</text>
               {twoLines && (
                 <g aria-hidden="true">
@@ -321,14 +410,21 @@ export function DivergingBarChart({
                 </g>
               )}
               <text data-end-label x={placed.labelX} y={y} dominantBaseline="middle" textAnchor={placed.anchor} fontSize={VALUE_SIZE} fill="#2a2f3a">
-                <tspan fontWeight={700}>{row.valueLabel}</tspan>
-                {row.uncertain && <tspan fill="#5f6677">{` · ${UNCERTAIN_TEXT}`}</tspan>}
+                {placed.lines.length === 1
+                  ? <EndLine line={placed.lines[0]} />
+                  : placed.lines.map((line, lineIndex) => (
+                    // Stacked lines centred on the bar: the first one (n − 1) / 2 lines above it.
+                    <tspan key={lineIndex} data-line x={placed.labelX} dy={lineIndex === 0 ? -((placed.lines.length - 1) * LINE_H) / 2 : LINE_H}>
+                      <EndLine line={line} />
+                    </tspan>
+                  ))}
               </text>
             </g>
           );
         })}
         <line x1={layout.zeroX} x2={layout.zeroX} y1={PAD_T - 4} y2={plotBottom} stroke={ZERO_LINE} strokeWidth={1.6} />
       </svg>
+      {children}
       {Tip}
     </div>
   );

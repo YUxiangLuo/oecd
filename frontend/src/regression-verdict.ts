@@ -92,6 +92,27 @@ export function teachingEffect(outcome: RegressionOutcome, beta: number, design?
  */
 export const shareDigits = (pointsEstimate: number) => (Math.abs(pointsEstimate) >= 0.005 && Math.abs(pointsEstimate) < 0.1 ? 3 : 2);
 
+/** Network units span closeness (~0.01) to weighted degree (thousands): keep about three significant figures. */
+export function networkDigits(size: number): number {
+  return size >= 100 ? 0 : size >= 10 ? 1 : size >= 1 ? 2 : size >= 0.1 ? 3 : size >= 0.01 ? 4 : 5;
+}
+
+/** Decimals that give a nonzero value two significant digits (0.0047 → 4), as signed() falls back to. */
+const twoSignificantDigits = (value: number) => Math.max(0, 1 - Math.floor(Math.log10(Math.abs(value))));
+
+/**
+ * Decimals of a network estimate and its 95% interval, one count for all three (report `network_interval_digits`):
+ * 2 ("-40.80"); more when a nonzero value would round to 0 at 2, so it keeps two significant digits; more again
+ * until the interval's ends print differently. Closeness used to read "[-0.01, -0.0047]": one end at 2 decimals,
+ * the other at two significant digits, and the estimate -0.0049 outside it.
+ */
+export function networkIntervalDigits(point: number, bounds: [number, number] | null): number {
+  const tiny = [point, ...(bounds ?? [])].filter((value) => Number.isFinite(value) && value !== 0 && Number(value.toFixed(2)) === 0);
+  let digits = Math.max(2, ...tiny.map(twoSignificantDigits));
+  if (bounds) while (digits < 8 && signed(bounds[0], digits) === signed(bounds[1], digits)) digits += 1;
+  return digits;
+}
+
 /** A value per 1 percentage point of X, signed, in the headline's digits for its kind (shares 2–3, lengths 3, position 4, network 2). */
 export function signedEffect(value: number, kind: DepvarKind): string {
   return signed(value, kind === "position" ? 4 : kind === "length" ? 3 : kind === "share" ? shareDigits(value) : 2);
@@ -151,8 +172,8 @@ export function standardizedEffect(coef: number, depvarStd: number | null | unde
 
 /**
  * The bar of one estimate. In 个百分点 (shares) the label is the headline's signed number ("-0.55"); in 个标准差
- * the bar is the standardized size and the label the native value with the size, as the step 14 headline gives
- * it ("-40.11（0.047 个标准差）"; with `withUnit`, "-0.55 个百分点（0.12 个标准差）" for charts that mix units).
+ * the bar is the standardized size and the label the native value with the signed size ("-40.11（-0.047 个标准差）";
+ * with `withUnit`, "-0.55 个百分点（-0.062 个标准差）" for charts that mix units).
  */
 export function barFigures(estimate: BarEstimate, kind: DepvarKind, unit: BarUnit, withUnit = false): BarFigures {
   const { coef } = estimate;
@@ -180,8 +201,9 @@ export function barFigures(estimate: BarEstimate, kind: DepvarKind, unit: BarUni
   const digits = standardizedDigits(sd, bounds);
   return {
     value: sd, low: bounds?.[0] ?? null, high: bounds?.[1] ?? null, uncertain,
-    // Unsigned, as in the headline ("幅度约 0.047 个标准差"): the native number before it carries the sign.
-    valueLabel: `${nativeText}（${signed(sd, digits).replace(/^[+−-]/, "")} 个标准差）`,
+    // Signed, as the bar and its interval are on a signed axis ("-40.11（-0.047 个标准差）"); only the headline's
+    // "幅度约 0.047 个标准差" is an unsigned size.
+    valueLabel: `${nativeText}（${signed(sd, digits)} 个标准差）`,
     intervalLabel: bounds ? `[${signed(bounds[0], digits)}, ${signed(bounds[1], digits)}] 个标准差` : "—",
   };
 }
@@ -209,11 +231,13 @@ function naturalScale(
     // Point and interval share their digits: 3 below 0.1, more when the interval's ends would print alike.
     const sdDigits = standardizedDigits(standardized, sdBounds);
     const standardizedInterval = sdBounds ? `；约 [${signed(sdBounds[0], sdDigits)}, ${signed(sdBounds[1], sdDigits)}] 个标准差` : "";
-    const intervalShort = hasCi ? `[${signed(ciLow, 2)}, ${signed(ciHigh, 2)}] ${countUnit("network")}` : "—";
+    // The estimate and both interval ends in the same decimals.
+    const digits = networkIntervalDigits(effect, hasCi ? [ciLow, ciHigh] : null);
+    const intervalShort = hasCi ? `[${signed(ciLow, digits)}, ${signed(ciHigh, digits)}] ${countUnit("network")}` : "—";
     return {
       // A standard deviation is the typical gap in Y between country×industry records.
       // Unsigned, as in the report ("幅度约 0.047 个标准差"): the number before it carries the sign.
-      effect: `${signed(effect, 2)} 个中心性原始单位${standardized == null ? "" : `（幅度约 ${signed(standardized, sdDigits).replace(/^[+−-]/, "")} 个标准差，标准差即 Y 的典型差距）`}`,
+      effect: `${signed(effect, digits)} 个中心性原始单位${standardized == null ? "" : `（幅度约 ${signed(standardized, sdDigits).replace(/^[+−-]/, "")} 个标准差，标准差即 Y 的典型差距）`}`,
       interval: hasCi ? `${intervalShort}${standardizedInterval}` : "—",
       intervalShort,
     };
