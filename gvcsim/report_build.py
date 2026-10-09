@@ -94,21 +94,21 @@ _REFERENCES = (
         "https://doi.org/10.1257/aer.104.2.459",
     ),
     (
-        "Wang, Wei & Zhu (2018), ",
+        "Wang, Wei & Zhu (2018), NBER w19677, ",
         "Quantifying International Production Sharing at the Bilateral and Sector Levels",
-        ", NBER w19677",
+        "",
         "https://www.nber.org/papers/w19677",
     ),
     (
-        "Wang, Wei, Yu & Zhu (2017), ",
+        "Wang, Wei, Yu & Zhu (2017), NBER w23222, ",
         "Measures of Participation in Global Value Chains and Global Business Cycles",
-        ", NBER w23222",
+        "",
         "https://www.nber.org/papers/w23222",
     ),
     (
-        "Wang, Wei, Yu & Zhu (2017), ",
+        "Wang, Wei, Yu & Zhu (2017), NBER w23261, ",
         "Characterizing Global Value Chains: Production Length and Upstreamness",
-        ", NBER w23261",
+        "",
         "https://www.nber.org/papers/w23261",
     ),
     (

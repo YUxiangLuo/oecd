@@ -108,9 +108,9 @@ export function CountryExposureChart({ data }: { data: TeachingCountriesResponse
   const order = [...taxed, ...untaxed];
   const rows = Math.max(taxed.length, 1);
 
-  // Drawn at the card's width (600–860 units at 1:1), so the bars use a wide card at the same text size.
+  // Drawn at the card's width (600–1,100 units at 1:1), so the bars fill a wide card at the same text size.
   const [measure, measured] = useMeasuredWidth<HTMLDivElement>();
-  const width = measured > 0 ? Math.round(Math.min(860, Math.max(600, measured))) : 600;
+  const width = measured > 0 ? Math.round(Math.min(1100, Math.max(600, measured))) : 600;
   const labelW = 110, valueRoom = 44, rowH = 15, barH = 10, padT = 6, axisH = 34;
   const barW = width - labelW - valueRoom;
   const height = padT + rows * rowH + axisH;

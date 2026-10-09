@@ -147,7 +147,7 @@ export function TrendSummary({
       const gap = gapText(second, [firstYear, lastYear].filter((year) => value(second, year) === null));
       return (
         <div key={second}>
-          <span>与对比国家 {countryLabel(second)}</span>
+          <span>与对比国家 {scopeLabel(second, industry)}</span>
           <b>{gap.undefinedOnly ? `期间读数${gap.word}` : "期间读数不完整"}</b>
           <small>{gap.text}，暂不比较差距</small>
         </div>
@@ -168,7 +168,7 @@ export function TrendSummary({
           : `差距缩小 ${gapMagnitude}`;
     return (
       <div key={second}>
-        <span>与对比国家 {countryLabel(second)}</span>
+        <span>与对比国家 {scopeLabel(second, industry)}</span>
         <b>{lastYear} 年 {countryLabel(first)} {endGap === 0 ? "与它持平" : endMagnitude === null ? "与它基本持平" : `比它${endGap > 0 ? "高" : "低"} ${endMagnitude}`}</b>
         <small>{firstYear}→{lastYear} {gapStory}；比较的是差距绝对值，不代表因果关系</small>
       </div>
