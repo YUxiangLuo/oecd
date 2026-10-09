@@ -412,13 +412,6 @@ export function GradeView({ data, grader, semesters = [], backLabel = BACK_TO_LI
           </div>
           <div className="grade-panel-body">
             {reloaded && <p ref={reloadedRef} className="muted grade-note" role="status" tabIndex={-1}>{RELOADED_REVIEW_NOTE}</p>}
-            <details ref={rubricRef} className="grade-rubric" open={rubricOpen}>
-              {/* Only the teacher's own clicks are remembered (a toggle event also fires when the page sets `open`). */}
-              <summary onClick={() => rememberRubric(!rubricRef.current?.open)}>评分参考（四项各 25 分）</summary>
-              <ol>
-                {GRADE_RUBRIC.map(([title, detail]) => <li key={title}><b>{title}</b><span>{detail}</span></li>)}
-              </ol>
-            </details>
             <label className="grade-field">评语（选填）<textarea disabled={saving} value={feedback} onChange={(event) => {
               // 4000 characters as the server counts them (an emoji is one); only text beyond that is cut, and said so.
               const characters = [...event.target.value];
@@ -428,10 +421,18 @@ export function GradeView({ data, grader, semesters = [], backLabel = BACK_TO_LI
               setFeedback(next);
               reviewGuard.publish({ dirty: score !== initialScore || next !== data.feedback, saving: false });
               setSaveError(null);
-            }} rows={8} /></label>
+            }} rows={6} /></label>
             {/* Not a live region: announcing the count on every keystroke drowned out typing; only the limit is announced. */}
             <span className="muted grade-count">评语 {[...feedback.trim()].length} / 4000 字</span>
             {feedbackCut && <span className="muted grade-cut" role="status">超过 4000 字上限，多出的内容没有保留。</span>}
+            {/* After the 评语 box, so an open rubric never pushes the box out of the panel (1024×768 included). */}
+            <details ref={rubricRef} className="grade-rubric" open={rubricOpen}>
+              {/* Only the teacher's own clicks are remembered (a toggle event also fires when the page sets `open`). */}
+              <summary onClick={() => rememberRubric(!rubricRef.current?.open)}>评分参考（四项各 25 分）</summary>
+              <ol>
+                {GRADE_RUBRIC.map(([title, detail]) => <li key={title}><b>{title}</b><span>{detail}</span></li>)}
+              </ol>
+            </details>
           </div>
           {/* Always in view at the bottom of the panel: the score and the save buttons. */}
           <div className="grade-panel-foot">

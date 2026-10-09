@@ -414,6 +414,14 @@ test("the review header marks an archived class and the feedback counter ignores
   expect(container.querySelector(".grade-count")?.textContent).toBe("评语 2 / 4000 字");
 });
 
+test("the 评语 box comes before the rubric, so an open rubric never pushes it out of the panel", () => {
+  const { container } = render(<GradeView data={report} grader="teacher" onBack={() => {}} onReload={() => {}} />);
+  const textarea = container.querySelector(".grade-panel-body textarea")!;
+  const rubric = container.querySelector(".grade-panel-body .grade-rubric")!;
+  expect(textarea.compareDocumentPosition(rubric) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(textarea.getAttribute("rows")).toBe("6");
+});
+
 test("a report's place in its list gives 第 k / n 份 and its neighbours", () => {
   expect(reviewPosition([7, 8, 9], 7)).toEqual({ index: 0, total: 3, previous: null, next: 8 });
   expect(reviewPosition([7, 8, 9], 8)).toEqual({ index: 1, total: 3, previous: 7, next: 9 });
