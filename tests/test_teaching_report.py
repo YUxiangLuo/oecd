@@ -2515,6 +2515,30 @@ def test_report_example_conversion_reads_like_the_page():
     assert _example_conversion("trade", {}, coefficient, True, None) is None
 
 
+def test_report_example_x_uses_step_ten_digits():
+    """X reads as on step 10 (frontend ``workedNumbers``), so the conversion checks by hand: 0.22444 × 40.80 ≈ 9.16."""
+    from gvcsim.report_render import _example_conversion, worked_numbers
+
+    assert worked_numbers(0.0089776, 0.25, 0.0089776 * 0.25) == ("0.89776", "0.22444")
+    assert worked_numbers(0.000985, 0.25, 0.000985 * 0.25) == ("0.10", "0.025")
+    assert worked_numbers(0.93, 0.25, 0.93 * 0.25) == ("93.00", "23.25")
+    assert worked_numbers(0.000033, 0.25, 0.000033 * 0.25) == ("0.0033", "0.00083")
+    assert worked_numbers(0, 0.25, 0) == ("0.00", "0")
+    example = {
+        "country": "SVK",
+        "industry": "C26",
+        "teaching_tariff_exposure": 0.0089776 * 0.25,
+        "teaching_tariff_rate_tau": 0.25,
+        "teaching_export_share_w": 0.0089776,
+    }
+    line = _example_conversion("network", {"depvar_kind": "network"}, {"coef": 4080}, True, example)
+    assert line is not None and "的 X 为 0.22444 个百分点，按估计与 X 相关的差异约为 +9.16 个中心性原始单位" in line
+    # Without w (an older record), two decimals as before.
+    del example["teaching_export_share_w"]
+    line = _example_conversion("network", {"depvar_kind": "network"}, {"coef": 4080}, True, example)
+    assert line is not None and "的 X 为 0.22 个百分点" in line
+
+
 def test_report_network_standardized_size_uses_three_decimals_below_point_one():
     _, effect, interval = teaching_report._natural_effect(
         "network",

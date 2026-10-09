@@ -108,6 +108,12 @@ def _teaching_scenario(session: dict[str, Any]) -> tuple[dict[str, Any] | None, 
                         "industry": industry,
                         X_COLUMN: float(row[X_COLUMN]),
                         "teaching_tariff_rate_tau": float(row["teaching_tariff_rate_tau"]),
+                        # With w, X reads at step 10's digits in the conversion line.
+                        **(
+                            {"teaching_export_share_w": float(row["teaching_export_share_w"])}
+                            if "teaching_export_share_w" in row.index
+                            else {}
+                        ),
                     }
                 )
     return scenario, examples if observation in examples else recorded
