@@ -156,7 +156,7 @@ def main():
                 wait_saved(step, lambda row: bool(row.get("teaching_observation")))
             else:
                 student.run("find", "role", "button", "click", "--name", "算出这个差距")
-                student.run("wait", "--text", "重新算一次")
+                student.run("wait", "--text", "重新计算")
                 wait_saved(step, lambda row: bool(row.get("run")), timeout=30)
             names = json.loads(
                 student.run(

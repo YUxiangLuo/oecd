@@ -30,7 +30,7 @@ const whyCheck = (name: string) => WHY_CHECK.find(([prefix]) => name.startsWith(
   ?? "确认该中间产物满足后续计算与回归所依赖的口径，避免错误在流水线中继续传播。";
 
 export function qcResultLabel(check: QcCheck): { className: string; text: string } {
-  if (check.severity === "fatal") return { className: "qc-fail", text: "✗ Fatal" };
+  if (check.severity === "fatal") return { className: "qc-fail", text: "✗ 需要留意" };
   if (check.severity === "warning") return { className: "qc-warning", text: "⚠ 提醒" };
   if (check.severity === "disclosure") return { className: "qc-warning", text: "✓ 通过·需披露" };
   return check.passed

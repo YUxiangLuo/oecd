@@ -16,7 +16,7 @@ const check = (passed: boolean, severity: QcCheck["severity"]): QcCheck => ({
 describe("QC result labels", () => {
   test("does not render a warning as fatal", () => {
     expect(qcResultLabel(check(false, "warning")).text).toBe("⚠ 提醒");
-    expect(qcResultLabel(check(false, "fatal")).text).toBe("✗ Fatal");
+    expect(qcResultLabel(check(false, "fatal")).text).toBe("✗ 需要留意");
   });
 
   test("keeps passed disclosures visible", () => {

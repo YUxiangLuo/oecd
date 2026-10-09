@@ -76,7 +76,7 @@ def main():
         try:
             browser.login(base, name, password)
             browser.run("open", base + "/?step=11")
-            browser.run("wait", "--text", "重新算一次")
+            browser.run("wait", "--text", "重新计算")
             # Loading the display-only two-country chart must not rewrite the
             # estimate that the report already snapshots.
             current, report = snapshot()
@@ -109,7 +109,7 @@ def main():
             browser.run("screenshot", str(output / f"display-only-{attempt}.png"))
 
             browser.run("open", base + "/?step=11")
-            browser.run("wait", "--text", "重新算一次")
+            browser.run("wait", "--text", "重新计算")
             browser.run(
                 "eval",
                 """(() => {
@@ -122,7 +122,7 @@ def main():
                   };
                 })()""",
             )
-            browser.button("重新算一次")
+            browser.button("重新计算")
             browser.run("wait", "--fn", "window.__reportRerunComplete === true")
             current, report = wait_for(
                 lambda s, r: s["steps"]["11"]["data"]["run"]["design"]["method"] == "twfe_intensity"
