@@ -11,7 +11,7 @@ import { TARIFF_IMPOSER, teachingExample } from "../../teaching-example";
 import { GENERATED_DATA_NOTE } from "../../regression-lessons";
 import { percentagePoints } from "../../format";
 import { countryLabel, sectorLabel } from "../../viz";
-import { CountryExposureChart } from "../../viz/regression/country-exposure";
+import { CountryExposureChart, taxedRuleText, yiUsd } from "../../viz/regression/country-exposure";
 import { useAsync } from "../shared";
 import { IndicatorTrendChart } from "./viz/indicator-charts";
 
@@ -55,19 +55,19 @@ export function fallbackWorkedCountry(data: TeachingCountriesResponse | undefine
 export function stepTenGapNote(taxed: boolean[], exposed: boolean[] = taxed, imposer: boolean[] = []): string | undefined {
   if (taxed.length !== 2) return undefined;
   // The imposing country's X is 0 only by definition and it is not in the regression sample: no tariff gap to read.
-  if (imposer.some(Boolean)) return "美国的 X 记为 0 只是定义（它是加征关税的一方，不在回归样本中），这不是回归要比较的加税与未加税之差";
+  if (imposer.some(Boolean)) return "美国的 X 记为 0 只是定义（它是加征关税的一方，不在回归样本中），这不是回归要比较的被加税与未被加税国家之差";
   // A taxed country with no exports to the US (w = 0) has X = 0 like an untaxed one.
   if (exposed[0] !== exposed[1]) {
     return taxed[exposed.indexOf(false)]
       ? "两国的差距就是加税那年起的 X：另一国虽被加税，但不向美国出口（w = 0），X 始终为 0"
-      : "两国的差距就是加税那年起的 X：未加税国家始终为 0";
+      : "两国的差距就是加税那年起的 X：未被加税国家始终为 0";
   }
   if (!exposed[0]) {
     return taxed.some(Boolean)
-      ? "两国的 X 都为 0：加税的国家该行业不向美国出口（w = 0），没有差距"
-      : "两国都未加税：X 一直为 0，没有差距";
+      ? "两国的 X 都为 0：被加税的国家该行业不向美国出口（w = 0），没有差距"
+      : "两国都未被加税：X 一直为 0，没有差距";
   }
-  return "两国都被加税（税率相同）：差距来自对美出口份额 w 的不同；缺少未加税的对照";
+  return "两国都被加税（税率相同）：差距来自对美出口份额 w 的不同；缺少未被加税的对照";
 }
 
 /**
@@ -246,6 +246,9 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
     : undefined;
   const workedCountry = workedExample ? undefined : fallbackWorkedCountry(overview);
   const taxedCount = overview?.taxed_countries ?? sample?.taxed_countries;
+  // The data rule that picks the taxed countries (teaching data v7 on); an older server sends none.
+  const ruleClause = taxedRuleText(overview?.taxed_rule, "超过 ");
+  const ruleMin = overview?.taxed_rule?.min_million_usd;
   const sampleRows = sample?.rows ?? (overview ? overview.entities * years.length : undefined);
 
   return <div className="shock-workbench">
@@ -258,10 +261,10 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
       {overview && <>
         {/* The whole scenario is centred on one market: say so before any number or example. */}
         <p className="teaching-scenario">
-          <b>情景以美国为中心：</b>{countryLabel(overview.market)}{overview.policy_year ? `从 ${overview.policy_year} 年起` : ""}对 {overview.taxed_countries} 个国家的商品加征 {rate(overview.tariff_rate)} 关税，其余 {overview.untaxed_countries} 个国家未被加税。关税暴露 X 衡量一个国家×行业的出口有多依赖美国市场：X = 首年对美出口份额 w × 加征税率 τ。
+          <b>情景以美国为中心：</b>{countryLabel(overview.market)}{overview.policy_year ? `从 ${overview.policy_year} 年起` : ""}对 {ruleClause ? `${ruleClause}的 ${overview.taxed_countries} 个国家` : `${overview.taxed_countries} 个国家的商品`}加征 {rate(overview.tariff_rate)} 关税，其余 {overview.untaxed_countries} 个国家未被加税。关税暴露 X 衡量一个国家×行业的出口有多依赖美国市场：X = 首年对美出口份额 w × 加征税率 τ。
         </p>
         <ul className="teaching-tiles" aria-label="全部样本的加税设定">
-          <li className="taxed"><b>{overview.taxed_countries} 国</b><span>被美国加税</span></li>
+          <li className="taxed"><b>{overview.taxed_countries} 国</b><span>被美国加税{ruleClause && ruleMin != null ? `（对美货物顺差 ≥ ${yiUsd(ruleMin)}）` : ""}</span></li>
           <li className="untaxed"><b>{overview.untaxed_countries} 国</b><span>未被加税（X 始终为 0）</span></li>
           <li className="imposer"><b>{countryLabel(overview.market)}</b><span>加征关税的一方（不在样本中）</span></li>
           <li><b>{rate(overview.tariff_rate)}</b><span>{overview.policy_year ? `${overview.policy_year} 年起的税率（此前为 0）` : "加征税率"}</span></li>
@@ -277,13 +280,13 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
           <p>
             {countryLabel(workedExample.country)} · {sectorLabel(industry)} · {workedExample.year} 年：{" "}
             <span className="teaching-x-formula">X = {pct(workedExample.teaching_export_share_w)} × {rate(workedExample.teaching_tariff_rate_tau)} = <b>{xPoints(workedExample.teaching_tariff_exposure)} 个百分点</b></span>
-            {workedExample.teaching_tariff_exposure === 0 ? "（加税了，但 w = 0，所以 X 仍是 0）" : bothTaxed ? "（税率相同时，对美出口份额 w 不同，X 也不同）" : ""}
+            {workedExample.teaching_tariff_exposure === 0 ? "（被加税了，但 w = 0，所以 X 仍是 0）" : bothTaxed ? "（税率相同时，对美出口份额 w 不同，X 也不同）" : ""}
           </p>
           <p className="muted">w = 首年（{years[0]} 年）对美出口份额 {pct(workedExample.teaching_export_share_w)}，之后各年不变；τ = 加征税率。</p>
         </div>
       )}
       {workedCountry && overview && (
-        <div className="teaching-x-card" role="group" aria-label="用加税国家算一次 X">
+        <div className="teaching-x-card" role="group" aria-label="用被加税国家算一次 X">
           <b>算一次：X = w × τ</b>
           <p>
             {countryLabel(workedCountry.country)} · {overview.year} 年 · {workedCountry.industries} 个行业平均：{" "}
@@ -304,7 +307,7 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
     <section className="reg-run-card">
       <span className="reg-section-step">跟踪一个例子（可选）</span>
       <p className="teaching-example-lead">
-        看 X 在加税那年怎样跳起来。默认的加拿大是{taxedCount ? ` ${taxedCount} 个` : ""}加税国家之一，对比的墨西哥未加税；行业沿用步骤 9 最后看的行业。步骤 11–14 会把回归结果换算到你选的例子上。
+        看 X 在加税那年怎样跳起来。默认的加拿大是{taxedCount ? ` ${taxedCount} 个` : ""}被加税国家之一，对比的墨西哥未被加税；行业沿用步骤 9 最后看的行业。步骤 11–14 会把回归结果换算到你选的例子上。
       </p>
       <div className="controls" role="group" aria-label="跟随的例子">
         <label className="model-control"><span className="model-control-label">国家 A</span>
@@ -369,7 +372,7 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
             const taxed = row.teaching_tariff_rate_tau > 0;
             return <li key={row.country}>
               <b>{countryLabel(row.country)} · {sectorLabel(industry)}</b>
-              {isImposer(row.country) ? "加征关税的一方（不在回归样本中）" : taxed ? "加税" : "未加税"}：w = {pct(row.teaching_export_share_w)}，{years.at(-1)} 年 X = {xPoints(row.teaching_tariff_exposure)} 个百分点{taxed && row.teaching_tariff_exposure === 0 ? "（不向美国出口：w = 0，所以 X = 0）" : ""}
+              {isImposer(row.country) ? "加征关税的一方（不在回归样本中）" : taxed ? "被加税" : "未被加税"}：w = {pct(row.teaching_export_share_w)}，{years.at(-1)} 年 X = {xPoints(row.teaching_tariff_exposure)} 个百分点{taxed && row.teaching_tariff_exposure === 0 ? "（不向美国出口：w = 0，所以 X = 0）" : ""}
             </li>;
           })}
         </ul>
@@ -382,8 +385,8 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
           const unexposedNames = unexposed.map((row) => countryLabel(row.country)).join("、");
           const hint = lastRows.some((row) => isImposer(row.country))
             ? (lastRows.length === 1
-              ? "想看加税带来的 X，换成加税的国家（如加拿大），或再选一个加税的对比国家。"
-              : "想看加税与未加税的差别，把美国换成别的国家（加税的如加拿大，未加税的如墨西哥）。")
+              ? "想看加税带来的 X，换成被加税的国家（如加拿大），或再选一个被加税的对比国家。"
+              : "想看被加税与未被加税国家的差别，把美国换成别的国家（被加税的如加拿大，未被加税的如墨西哥）。")
             : unexposed.length && exposed.length
             // The other country already shows the exposure: nothing to switch.
             ? `${unexposedNames} 被加税，但该行业首年不向美国出口（w = 0），所以 X 一直为 0；图上 ${exposed.map((row) => countryLabel(row.country)).join("、")} 的 X 就是加税带来的暴露。`
@@ -391,12 +394,12 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
             ? `${unexposedNames} 被加税，但该行业首年不向美国出口（w = 0），所以 X 一直为 0；换一个行业或国家才能看到加税带来的暴露。`
             : taxed.length === 1
             ? (taxed[0]
-              ? "只看一个加税国家时，图上是它自己的 X 跳起来；再选一个未加税的对比国家（如墨西哥），就能看到两者的差距。"
-              : "这个国家未被加税，X 一直为 0；换成加税的国家（如加拿大），或再选一个加税的对比国家，才能看到差距。")
+              ? "只看一个被加税国家时，图上是它自己的 X 跳起来；再选一个未被加税的对比国家（如墨西哥），就能看到两者的差距。"
+              : "这个国家未被加税，X 一直为 0；换成被加税的国家（如加拿大），或再选一个被加税的对比国家，才能看到差距。")
             : taxed.length === 2 && taxed[0] === taxed[1]
               ? (taxed[0]
-                ? "两个国家都被加税，缺少未加税的对照；可以把其中一个换成未加税的国家（如墨西哥）。"
-                : "两个国家都未被加税，X 一直为 0，看不到加税前后的差距；可以把其中一个换成加税的国家（如加拿大）。")
+                ? "两个国家都被加税，缺少未被加税的对照；可以把其中一个换成未被加税的国家（如墨西哥）。"
+                : "两个国家都未被加税，X 一直为 0，看不到加税前后的差距；可以把其中一个换成被加税的国家（如加拿大）。")
               : null;
           return hint && <p className="teaching-example-hint" role="note">{hint}</p>;
         })()}

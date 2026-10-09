@@ -271,6 +271,9 @@ export interface TeachingCountriesResponse {
   policy_year: number | null;
   taxed_countries: number;
   untaxed_countries: number;
+  /** The data rule that picks the taxed countries: a goods trade surplus with the market of at least
+   * `min_million_usd` (million USD) in `year`. Servers before teaching data v7 omit it. */
+  taxed_rule?: { basis?: string; min_million_usd: number; year?: number } | null;
   entities: number;
   /** Sorted from the highest mean exposure down; X is a fraction (0.23 = 23 percentage points). */
   countries: {
@@ -280,6 +283,8 @@ export interface TeachingCountriesResponse {
     max_exposure: number;
     industries: number;
     exposed_industries: number;
+    /** Goods trade balance with the market in the rule's year, million USD (negative = deficit); absent before v7. */
+    market_goods_surplus?: number | null;
   }[];
 }
 

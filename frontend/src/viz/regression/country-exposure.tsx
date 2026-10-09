@@ -20,12 +20,43 @@ export function countryIndustryNote(row: CountryRow): string {
     : base;
 }
 
+/** An amount in million USD (the ICIO unit) in 亿美元: 1,000 → "10 亿美元", 248,900 → "2,489 亿美元". */
+export function yiUsd(millionUsd: number): string {
+  const yi = millionUsd / 100;
+  const digits = Math.abs(yi) >= 100 ? 0 : Math.abs(yi) >= 1 || yi === 0 ? 1 : 2;
+  return `${yi.toLocaleString("zh-CN", { maximumFractionDigits: digits })} 亿美元`;
+}
+
+/** The year the taxed rule reads the goods balance in, as a phrase ("2016 年"; "首年" from an older server). */
+const ruleYear = (rule: TeachingCountriesResponse["taxed_rule"]) => (rule?.year ? `${rule.year} 年` : "首年");
+
+/** A country's goods balance with the US in the rule's year, as ["2016 年对美货物顺差", "2,489 亿美元"] (or "逆差");
+ * undefined when the server sent no balance. */
+export function goodsBalance(row: Pick<CountryRow, "market_goods_surplus">, rule: TeachingCountriesResponse["taxed_rule"]): [string, string] | undefined {
+  const surplus = row.market_goods_surplus;
+  if (typeof surplus !== "number" || !Number.isFinite(surplus)) return undefined;
+  return [`${ruleYear(rule)}对美货物${surplus < 0 ? "逆差" : "顺差"}`, yiUsd(Math.abs(surplus))];
+}
+
+/** "2016 年对美货物顺差 2,489 亿美元" (or "逆差 …"); undefined when the server sent no balance. */
+export function goodsBalanceText(row: Pick<CountryRow, "market_goods_surplus">, rule: TeachingCountriesResponse["taxed_rule"]): string | undefined {
+  return goodsBalance(row, rule)?.join(" ");
+}
+
+/** The data rule behind who is taxed, "2016 年对美货物贸易顺差 ≥ 10 亿美元"; undefined from an older server. */
+export function taxedRuleText(rule: TeachingCountriesResponse["taxed_rule"], relation = " ≥ "): string | undefined {
+  if (!rule || typeof rule.min_million_usd !== "number" || !Number.isFinite(rule.min_million_usd)) return undefined;
+  return `${ruleYear(rule)}对美货物贸易顺差${relation}${yiUsd(rule.min_million_usd)}`;
+}
+
 /** The readout for one country, shared by hover, keyboard focus and the aria label. */
-export function countryTipLines(row: CountryRow, year: number): TipLine[] {
+export function countryTipLines(row: CountryRow, year: number, rule?: TeachingCountriesResponse["taxed_rule"]): TipLine[] {
+  const balance = goodsBalance(row, rule);
   return [
     ["", countryLabel(row.country)],
     [`${year} 年各行业平均 X`, `${points(row.mean_exposure)} 个百分点`, row.taxed ? TAXED : UNTAXED],
     ["行业", countryIndustryNote(row)],
+    ...(balance ? [balance as TipLine] : []),
   ];
 }
 
@@ -81,16 +112,22 @@ export function CountryExposureChart({ data, highlight = [] }: {
     event.preventDefault();
     focusAt(next);
   };
+  const rule = data.taxed_rule;
+  const ruleText = taxedRuleText(rule);
+  const balanceText = (row: CountryRow) => {
+    const text = goodsBalanceText(row, rule);
+    return text ? `，${text}` : "";
+  };
   const itemProps = (row: CountryRow, index: number) => ({
     tabIndex: index === activeIndex ? 0 : -1,
-    "aria-label": `${countryLabel(row.country)}${badge(row.country) ? `（例子 ${badge(row.country)}）` : ""}：${data.year} 年各行业平均 X = ${points(row.mean_exposure)} 个百分点，${countryIndustryNote(row)}；方向键切换国家`,
-    onMouseMove: (event: { clientX: number; clientY: number }) => show(event, countryTipLines(row, data.year)),
+    "aria-label": `${countryLabel(row.country)}${badge(row.country) ? `（例子 ${badge(row.country)}）` : ""}：${data.year} 年各行业平均 X = ${points(row.mean_exposure)} 个百分点，${countryIndustryNote(row)}${balanceText(row)}；方向键切换国家`,
+    onMouseMove: (event: { clientX: number; clientY: number }) => show(event, countryTipLines(row, data.year, rule)),
     onMouseLeave: hide,
     onKeyDown: (event: KeyboardEvent) => onKeyDown(event, index),
     onFocus: (event: { currentTarget: Element }) => {
       setActiveIndex(index);
       setFocused(index);
-      showFor(event.currentTarget, countryTipLines(row, data.year));
+      showFor(event.currentTarget, countryTipLines(row, data.year, rule));
     },
     onBlur: () => { setFocused(null); hide(); },
   });
@@ -137,15 +174,16 @@ export function CountryExposureChart({ data, highlight = [] }: {
   );
   const top = taxed[0], bottom = taxed.at(-1);
   const summary = top && bottom
-    ? `${taxed.length} 个加税国家的关税暴露 X（${data.year} 年各行业平均，个百分点），从高到低：最高 ${countryLabel(top.country)} ${points(top.mean_exposure)}，最低 ${countryLabel(bottom.country)} ${points(bottom.mean_exposure)}；另有 ${untaxed.length} 国未加税，X = 0`
-    : `${untaxed.length} 国未加税，X = 0`;
+    ? `${taxed.length} 个被加税国家的关税暴露 X（${data.year} 年各行业平均，个百分点），从高到低：最高 ${countryLabel(top.country)} ${points(top.mean_exposure)}，最低 ${countryLabel(bottom.country)} ${points(bottom.mean_exposure)}；另有 ${untaxed.length} 国未被加税，X = 0`
+    : `${untaxed.length} 国未被加税，X = 0`;
   const axisTitle = `${data.year} 年各行业平均 X（个百分点）`;
+  const showBalance = data.countries.some((row) => goodsBalance(row, rule) !== undefined);
 
   return (
     <div ref={wrapRef} className="hover-wrap country-exposure">
       <div className="country-exposure-legend" aria-hidden="true">
-        <span><i style={{ background: TAXED }} />加税（{taxed.length} 国，按 X 从高到低）</span>
-        <span><i className="line" style={{ background: UNTAXED }} />未加税（{untaxed.length} 国，X = 0）</span>
+        <span><i style={{ background: TAXED }} />被加税（{taxed.length} 国，按 X 从高到低）</span>
+        <span><i className="line" style={{ background: UNTAXED }} />未被加税（{untaxed.length} 国，X = 0）</span>
         {highlight.length > 0 && <span><b className="country-exposure-badge">A</b>{highlight[1] ? <b className="country-exposure-badge">B</b> : null}你跟踪的例子</span>}
       </div>
       {taxed.length > 0 && (
@@ -159,8 +197,8 @@ export function CountryExposureChart({ data, highlight = [] }: {
         </svg>
       )}
       {untaxed.length > 0 && (
-        <div className="country-exposure-untaxed" role="group" aria-label={`${untaxed.length} 国未加税，X = 0`}>
-          <b><i style={{ background: UNTAXED }} aria-hidden="true" />{untaxed.length} 国未加税（X = 0）</b>
+        <div className="country-exposure-untaxed" role="group" aria-label={`${untaxed.length} 国未被加税，X = 0`}>
+          <b><i style={{ background: UNTAXED }} aria-hidden="true" />{untaxed.length} 国未被加税（X = 0）</b>
           <span className="country-exposure-codes">
             {untaxed.map((row, i) => {
               const index = taxed.length + i;
@@ -176,16 +214,18 @@ export function CountryExposureChart({ data, highlight = [] }: {
           </span>
         </div>
       )}
+      {ruleText && <p className="country-exposure-rule">被加税的规则来自 ICIO 数据：{ruleText}。</p>}
       <p className="country-exposure-note">
-        {countryLabel(data.market)} 是加征关税的一方，不在样本中，图上没有它。悬停或用方向键查看每个国家。
+        {countryLabel(data.market)} 是加征关税的一方，不在样本中，图上没有它。悬停或用方向键查看每个国家{ruleText ? "的 X 与对美货物顺差" : ""}。
       </p>
       <details className="country-exposure-table">
         <summary>{data.countries.length} 国读数表</summary>
         <table className="data-table">
-          <thead><tr><th>国家</th><th>是否加税</th><th>{data.year} 年各行业平均 X（个百分点）</th><th>X &gt; 0 的行业</th></tr></thead>
+          <thead><tr><th>国家</th><th>是否被加税</th><th>{data.year} 年各行业平均 X（个百分点）</th><th>X &gt; 0 的行业</th>{showBalance && <th>{ruleYear(rule)}对美货物顺差（负数为逆差）</th>}</tr></thead>
           <tbody>{data.countries.map((row) => <tr key={row.country}>
-            <td>{countryLabel(row.country)}</td><td>{row.taxed ? "加税" : "未加税"}</td>
+            <td>{countryLabel(row.country)}</td><td>{row.taxed ? "被加税" : "未被加税"}</td>
             <td>{points(row.mean_exposure)}</td><td>{row.exposed_industries}/{row.industries}</td>
+            {showBalance && <td>{typeof row.market_goods_surplus === "number" && Number.isFinite(row.market_goods_surplus) ? yiUsd(row.market_goods_surplus) : "—"}</td>}
           </tr>)}</tbody>
         </table>
       </details>

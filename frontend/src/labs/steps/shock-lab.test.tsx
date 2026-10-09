@@ -13,12 +13,14 @@ const step: Step = {
   handoff: { input: "", action: "", output: "" },
 };
 
-const countryRow = (country: string, mean: number, industries = 44) => ({
+const countryRow = (country: string, mean: number, industries = 44, surplus = mean > 0 ? 5000 : -800) => ({
   country, taxed: mean > 0, mean_exposure: mean, max_exposure: mean * 2, industries, exposed_industries: mean > 0 ? industries : 0,
+  market_goods_surplus: surplus,
 });
-/** The whole-sample overview step 10 leads with (the real release has 44 taxed and 31 untaxed countries). */
+/** The whole-sample overview step 10 leads with; the real counts come from the release (the API), not the page. */
 const countriesOverview: TeachingCountriesResponse = {
   version: "step10-tariff-teaching-v7", year: 2020, market: "USA", tariff_rate: 0.25, policy_year: 2018,
+  taxed_rule: { basis: "first-year goods trade surplus with the market (ICIO sectors A-C)", min_million_usd: 1000, year: 2016 },
   taxed_countries: 3, untaxed_countries: 2, entities: 210,
   countries: [countryRow("CAN", 0.143), countryRow("CRI", 0.0782), countryRow("BRN", 0.0142), countryRow("AUT", 0), countryRow("MEX", 0, 43)],
 };
@@ -148,7 +150,7 @@ test("step 10 can follow a single taxed country and records it alone", async () 
   } as never);
   const save = mock(() => {});
   render(<ShockLab meta={meta} step={step} state={{ data: { compared: ["CAN"], teaching_industry: "C29" }, save, complete: false, syncing: false, syncError: null, syncNow: () => {} }} />);
-  await waitFor(() => expect(screen.getByText(/只看一个加税国家时/)).toBeTruthy());
+  await waitFor(() => expect(screen.getByText(/只看一个被加税国家时/)).toBeTruthy());
   expect(series).toHaveBeenCalledWith(["CAN"], "C29");
   expect((screen.getByRole("combobox", { name: "对比国家 B" }) as HTMLSelectElement).value).toBe("");
   expect(document.querySelectorAll(".teaching-example-summary li")).toHaveLength(1);
@@ -401,10 +403,12 @@ test("step 10 leads with the whole sample: four tiles from the overview, then th
   render(<ShockLab meta={meta} step={step} state={tenState(undefined)} />);
   await waitFor(() => expect(document.querySelector(".teaching-tiles")).not.toBeNull());
   const tiles = [...document.querySelectorAll(".teaching-tiles li")].map((tile) => tile.textContent);
-  // Counts, the imposer, the rate and the year all come from the response.
-  expect(tiles).toEqual(["3 国被美国加税", "2 国未被加税（X 始终为 0）", "USA 美国加征关税的一方（不在样本中）", "25%2018 年起的税率（此前为 0）"]);
-  // The scenario is named as US-centred before any number.
-  expect(document.querySelector(".teaching-scenario")?.textContent).toMatch(/^情景以美国为中心：USA 美国从 2018 年起对 3 个国家的商品加征 25% 关税，其余 2 个国家未被加税。/);
+  // Counts, the taxed rule, the imposer, the rate and the year all come from the response.
+  expect(tiles).toEqual(["3 国被美国加税（对美货物顺差 ≥ 10 亿美元）", "2 国未被加税（X 始终为 0）", "USA 美国加征关税的一方（不在样本中）", "25%2018 年起的税率（此前为 0）"]);
+  // The scenario is named as US-centred before any number, with the data rule that picks the taxed countries.
+  expect(document.querySelector(".teaching-scenario")?.textContent).toMatch(/^情景以美国为中心：USA 美国从 2018 年起对 2016 年对美货物贸易顺差超过 10 亿美元的 3 个国家加征 25% 关税，其余 2 个国家未被加税。/);
+  // The rule is restated under the chart.
+  expect(document.querySelector(".country-exposure-rule")!.textContent).toBe("被加税的规则来自 ICIO 数据：2016 年对美货物贸易顺差 ≥ 10 亿美元。");
   // The sample sentence is one line: countries, country×industry units and records (rows from teaching-groups).
   expect(document.querySelector(".teaching-one-line")!.textContent).toBe("回归样本：5 国的 210 个国家×行业 × 5 年 = 10 条记录。下图是每个国家 2020 年各行业的平均 X。");
   // The generated-data note stays as one line at the top.
@@ -416,7 +420,7 @@ test("step 10 leads with the whole sample: four tiles from the overview, then th
   expect(document.querySelector(".country-exposure-note")!.textContent).toContain("是加征关税的一方，不在样本中");
   // The example section is optional and names CAN as one of the taxed countries, with the count from the data.
   expect(document.body.textContent).toContain("跟踪一个例子（可选）");
-  expect(document.querySelector(".teaching-example-lead")!.textContent).toContain("默认的加拿大是 3 个加税国家之一");
+  expect(document.querySelector(".teaching-example-lead")!.textContent).toContain("默认的加拿大是 3 个被加税国家之一");
   // What the next four steps do is one line now.
   expect(document.body.textContent).toContain("步骤 11–14 用每个国家×行业的 X 对照四类指标 Y");
   expect(document.body.textContent).not.toContain("后面四步用它做什么");
@@ -430,6 +434,23 @@ test("step 10 leads with the whole sample: four tiles from the overview, then th
   cleanup();
 });
 
+test("a server without the taxed rule keeps the plain scenario, tile and chart notes", async () => {
+  const { taxed_rule: _rule, ...legacy } = countriesOverview;
+  countriesSpy.mockResolvedValue({ ...legacy, countries: legacy.countries.map(({ market_goods_surplus: _surplus, ...row }) => row) });
+  const meta: Meta = { years: tenYears, countries: ["CAN", "MEX", "USA"], sectors: ["C29"] };
+  const groups = tenGroups();
+  const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.5, country === "CAN")));
+  render(<ShockLab meta={meta} step={step} state={tenState(undefined)} />);
+  await waitFor(() => expect(document.querySelector(".teaching-tiles")).not.toBeNull());
+  expect(document.querySelector(".teaching-tiles li.taxed")!.textContent).toBe("3 国被美国加税");
+  expect(document.querySelector(".teaching-scenario")?.textContent).toMatch(/^情景以美国为中心：USA 美国从 2018 年起对 3 个国家的商品加征 25% 关税，其余 2 个国家未被加税。/);
+  expect(document.querySelector(".country-exposure-rule")).toBeNull();
+  expect(document.body.textContent).not.toContain("对美货物");
+  groups.mockRestore();
+  series.mockRestore();
+  cleanup();
+});
+
 test("an untaxed example works X = w × τ through CAN's industry mean instead, and says why", async () => {
   const meta: Meta = { years: tenYears, countries: ["CAN", "MEX", "USA"], sectors: ["C29"] };
   const groups = tenGroups();
@@ -437,7 +458,7 @@ test("an untaxed example works X = w × τ through CAN's industry mean instead, 
   render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["MEX"], teaching_industry: "C29", teaching_example_chosen: true })} />);
   await waitFor(() => expect(document.querySelector(".teaching-example-summary")).not.toBeNull());
   expect(document.querySelector(WORKED)).toBeNull();
-  const card = document.querySelector('[aria-label="用加税国家算一次 X"]')!.textContent!;
+  const card = document.querySelector('[aria-label="用被加税国家算一次 X"]')!.textContent!;
   // CAN's mean X 14.30 pp over 44 industries at τ = 25% means a mean w of 57.20%.
   expect(card).toContain("CAN 加拿大 · 2020 年 · 44 个行业平均");
   expect(card).toContain("X = 57.20% × 25% = 14.30 个百分点");
