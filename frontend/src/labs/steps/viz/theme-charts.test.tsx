@@ -137,6 +137,17 @@ describe("undefined values in the theme charts read as such (round 12)", () => {
     expect(mixed.container.querySelector(".dot-plot-values")?.textContent).toBe("5.622无法计算");
   });
 
+  test("历年构成 that stops early names the missing year and why on the chart (ITA·C19 2020, round 27)", () => {
+    const rows: Row[] = [2016, 2019, 2020].map((year) => year === 2020
+      ? { country: "ITA", year, total: -217, DVAex: -150, FVA: -50, taxsub: -17 }
+      : { country: "ITA", year, total: 100, DVAex: 70, FVA: 25, taxsub: 5 });
+    const view = render(<StackedAreaFacets facets={[{ key: "ITA", label: "ITA 意大利", rows }, { key: "USA", label: "USA 美国", rows: rows.map((row) => ({ ...row, total: 100, DVAex: 70, FVA: 25, taxsub: 5 })) }]}
+      years={[2016, 2019, 2020]} segments={segments} total="total" totalLabel="总增加值" />);
+    const notes = view.getAllByRole("note");
+    expect(notes).toHaveLength(1);
+    expect(notes[0].textContent).toBe("2020 年总增加值为负，构成份额无法计算，图中留空。");
+  });
+
   test("历年构成 whose total is negative in every year says the shares are undefined", () => {
     const rows: Row[] = [2016, 2020].map((year) => ({ country: "MLT", year, total: -1.268, DVAex: -0.6, FVA: -0.4, taxsub: -0.268 }));
     render(<StackedAreaFacets facets={[{ key: "MLT", label: "MLT 马耳他", rows }]} years={[2016, 2020]} segments={segments} total="total" totalLabel="总增加值" />);

@@ -49,6 +49,17 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
   // A total of 0 or below leaves that year's shares undefined, which is not missing data.
   const nonPositive = (row: Row | undefined) => Boolean(row) && finiteValue(row![total]) && (row![total] as number) <= 0;
   const allUndefined = facets.every((facet) => years.every((year) => nonPositive(facet.rows.find((item) => item.year === year))));
+  /** "2020 年总增加值为负，构成份额无法计算，图中留空。" for a facet whose area stops early (ITA·C19). */
+  const undefinedNote = (rows: Row[]) => {
+    const clauses = (["为负", "为 0"] as const).flatMap((word) => {
+      const at = years.filter((year) => {
+        const value = rows.find((item) => item.year === year)?.[total];
+        return finiteValue(value) && (word === "为负" ? value < 0 : value === 0);
+      });
+      return at.length ? [`${at.join("、")} 年${totalLabel}${word}`] : [];
+    });
+    return clauses.length ? `${clauses.join("，")}，构成份额无法计算，图中留空。` : null;
+  };
   if (!extremes.length) return <p role="status">{allUndefined
     ? `没有可画出的历年构成：所选年份的${totalLabel}都为 0 或为负，份额无法计算（不是缺少数据）；请换一个行业或国家。`
     : "没有可画出的历年构成，请更换国家、行业或年份（缺少的数据留空，不当作 0）。"}</p>;
@@ -161,6 +172,9 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
               </svg>
             </div>
             <p className="muted" style={{ fontSize: 11.5, margin: "4px 0 0" }}>{facetIndex === 0 ? `每一色带是该分项占${totalLabel}的比重${anyNegative ? "；负分项（红）画在零轴下方" : ""}。` : "同一刻度、同一分项颜色。"}</p>
+            {undefinedNote(facet.rows) && (
+              <p className="muted" role="note" style={{ fontSize: 11.5, margin: "2px 0 0" }}>{undefinedNote(facet.rows)}</p>
+            )}
           </section>
         ))}
       </div>
