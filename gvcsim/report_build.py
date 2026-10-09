@@ -94,19 +94,19 @@ _REFERENCES = (
         "https://doi.org/10.1257/aer.104.2.459",
     ),
     (
-        "Wang, Wei & Zhu, ",
+        "Wang, Wei & Zhu (2013), ",
         "Quantifying International Production Sharing at the Bilateral and Sector Levels",
         ", NBER w19677",
         "https://www.nber.org/papers/w19677",
     ),
     (
-        "Wang, Wei, Yu & Zhu, ",
+        "Wang, Wei, Yu & Zhu (2017), ",
         "Measures of Participation in Global Value Chains and Global Business Cycles",
         ", NBER w23222",
         "https://www.nber.org/papers/w23222",
     ),
     (
-        "Wang, Wei, Yu & Zhu, ",
+        "Wang, Wei, Yu & Zhu (2017), ",
         "Characterizing Global Value Chains: Production Length and Upstreamness",
         ", NBER w23261",
         "https://www.nber.org/papers/w23261",
@@ -117,7 +117,7 @@ _REFERENCES = (
         "",
         "https://doi.org/10.1080/0022250X.2001.9990249",
     ),
-    ("", "Gephi 软件特征向量中心性实现说明", "（Gephi 项目讨论 #2145）", "https://github.com/gephi/gephi/issues/2145"),
+    ("Gephi 项目讨论 #2145：", "特征向量中心性的实现说明", "", "https://github.com/gephi/gephi/issues/2145"),
     (
         "Wasserstein & Lazar (2016), ",
         "The ASA Statement on p-Values",

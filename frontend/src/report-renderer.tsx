@@ -944,6 +944,23 @@ export function closeBoldBeforeCjkPunctuation(markdown: string): string {
   return markdown.replace(/\*\*([^*\n]+?)([。，；：！？、）])\*\*(?=[^\s*\p{P}\p{S}])/gu, "**$1**$2");
 }
 
+/** External links open in a new tab, so a click does not leave the report. A link whose text is already its address
+ * is marked, so the printed report does not add the same address again (styles.css, @media print). */
+function ReportLink({ node: _node, href, children, ...props }: ComponentPropsWithoutRef<"a"> & { node?: unknown }) {
+  const external = typeof href === "string" && /^https?:\/\//.test(href);
+  const text = typeof children === "string" ? children : Array.isArray(children) && children.every((part) => typeof part === "string") ? children.join("") : null;
+  return (
+    <a
+      href={href}
+      {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+      {...(external && text === href ? { "data-bare-url": "" } : {})}
+      {...props}
+    >
+      {children}
+    </a>
+  );
+}
+
 /** Shared student/teacher report body. Raw HTML is intentionally not enabled. */
 export function ReportMarkdown({ markdown, className = "report-md" }: { markdown: string; className?: string }) {
   return (
@@ -966,6 +983,7 @@ export function ReportMarkdown({ markdown, className = "report-md" }: { markdown
           // 链接保留可点(react-markdown 默认 urlTransform 已拦截 javascript: 等危险协议),
           // 教师主动点击学生提供的外部链接是已接受的残余风险。
           img: ({ alt }) => <span className="muted">[图片已禁用{alt ? `：${alt}` : ""}]</span>,
+          a: ReportLink,
         }}
       >
         {closeBoldBeforeCjkPunctuation(markdown)}

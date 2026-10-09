@@ -1412,8 +1412,11 @@ def test_report_prints_automatically_saved_teaching_row(tmp_path, monkeypatch):
         "(https://doi.org/10.1787/5a5d0665-en)"
     )
     assert references[7] == (
-        "8. [*Gephi 软件特征向量中心性实现说明*](https://github.com/gephi/gephi/issues/2145)（Gephi 项目讨论 #2145）"
+        "8. Gephi 项目讨论 #2145：[*特征向量中心性的实现说明*](https://github.com/gephi/gephi/issues/2145)"
     )
+    # Every work names its year, and nothing follows the link that the printed address would collide with.
+    assert all(re.search(r"\(\d{4}\), \[|#2145：\[", line) for line in references)
+    assert all(line.endswith(")") or ", NBER w" in line for line in references)
     assert all(re.search(r"\]\(https://[^)\s]+\)", line) and ", https://" not in line for line in references)
     # The section is named after the step; the data version is provenance, not body text.
     step_ten = markdown.split("### 步骤 10 · 认识关税暴露 X", 1)[1].split("###", 1)[0]

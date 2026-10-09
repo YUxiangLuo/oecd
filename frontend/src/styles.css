@@ -933,7 +933,7 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
     white-space: pre-wrap;
   }
   /* A link reads as its title on screen (the references, the TiVA guide page); on paper its address follows. */
-  .report-md a[href^="http"]::after { content: "（" attr(href) "）"; color: #4b5563; font-size: 9pt; word-break: break-all; }
+  .report-md a[href^="http"]:not([data-bare-url])::after { content: "（" attr(href) "）"; color: #4b5563; font-size: 9pt; word-break: break-all; }
   /* Paper has no horizontal scrollbar. Keep all report columns in the printable
      width, including long indicator names/URLs, and allow long tables to paginate. */
   .report-md p:has(+ .table-wrap) { break-after: avoid; }

@@ -69,8 +69,20 @@ describe("report tables", () => {
     const link = new DOMParser().parseFromString(html, "text/html").querySelector("a")!;
     expect(link.textContent).toBe("Development of the OECD Inter-Country Input-Output Database 2023");
     expect(link.getAttribute("href")).toBe("https://doi.org/10.1787/5a5d0665-en");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(link.hasAttribute("data-bare-url")).toBe(false);
     const css = await Bun.file(new URL("./styles.css", import.meta.url)).text();
-    expect(css.slice(css.indexOf("@media print"))).toMatch(/\.report-md a\[href\^="http"\]::after\s*\{[^}]*content:\s*"（" attr\(href\) "）"/);
+    expect(css.slice(css.indexOf("@media print"))).toMatch(/\.report-md a\[href\^="http"\]:not\(\[data-bare-url\]\)::after\s*\{[^}]*content:\s*"（" attr\(href\) "）"/);
+  });
+
+  test("a link that shows its own address is not printed twice", () => {
+    const html = renderToStaticMarkup(createElement(ReportMarkdown, {
+      markdown: "- 指标输入数据集：https://doi.org/10.1787/5a5d0665-en",
+    }));
+    const link = new DOMParser().parseFromString(html, "text/html").querySelector("a")!;
+    expect(link.textContent).toBe("https://doi.org/10.1787/5a5d0665-en");
+    expect(link.hasAttribute("data-bare-url")).toBe(true);
   });
 
   test("print rules fit report tables to paper without changing screen tables", async () => {
