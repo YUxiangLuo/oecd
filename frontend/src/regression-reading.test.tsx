@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { RegressionCoefficientTable, RegressionResultCard, TEACHING_MODEL_VERSION } from "./regression";
+import { BASELINE_LESSONS, REGRESSION_LESSONS } from "./regression-lessons";
 import type { RegressionResponse } from "./types";
 
 afterEach(cleanup);
@@ -32,13 +33,30 @@ describe("fixed teaching regression reading", () => {
     // Without an example: two one-liners, what not to claim and the generated-data note.
     const points = [...dom.querySelectorAll(".reg-result-points > li")].map((item) => item.textContent);
     expect(points).toEqual([
-      "解释限制 不要写成“已经证明生产回流”。这一项占比的变化，不能说明企业是否把生产搬回国内。",
+      "解释限制 不要写成“已经证明生产回流”。这一项占比较高或较低，不能说明企业是否把生产搬回国内。",
       "关税情景与步骤 11–14 的四个 Y 由课程按设定生成（参照真实指标的量级），用于练习读回归，不是真实关税或 OECD 发布的结果。",
     ]);
     expect(html).not.toContain("估计值可能落在");
     expect(dom.querySelector("details")).toBeNull();
     expect(html).not.toMatch(/β|本次样本|置信区间|标称/);
     expect(html).not.toMatch(/处理组|对照组|处理聚类|同时置信带|与生成时的预设关系|使用的年度记录/);
+  });
+
+  test("step 14 says its unit is not the 百万美元 of steps 5 and 9; other steps do not", () => {
+    const network = response();
+    network.design.depvar_kind = "network";
+    Object.assign(network.result.coefs[0], { coef: -4080, ci_low: -4180, ci_high: -3980 });
+    network.result.depvar_std = 850;
+    const dom = new DOMParser().parseFromString(renderToStaticMarkup(<RegressionResultCard outcome="network" response={network} />), "text/html");
+    expect(dom.querySelector(".reg-unit-note")?.textContent).toBe("中心性原始单位：本步的 Y 是课程按真实网络指标的排名校准生成的数值，不是步骤 5、9 的百万美元，不能和那两步的数值直接比较。");
+    expect(renderToStaticMarkup(<RegressionResultCard outcome="trade" response={response()} />)).not.toContain("reg-unit-note");
+  });
+
+  test("limitation lines are associations: 较高／较低, not 上升／下降 or 变化", () => {
+    for (const lesson of [...Object.values(REGRESSION_LESSONS), ...Object.values(BASELINE_LESSONS)]) {
+      // Quoted phrases are the claims not to make; the explanation around them compares levels.
+      expect(lesson.dontClaim.replace(/“[^”]*”/g, "")).not.toMatch(/上升|下降|变化/);
+    }
   });
 
   test.each([

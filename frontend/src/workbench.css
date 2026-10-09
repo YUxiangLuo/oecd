@@ -496,5 +496,13 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 
 /* Steps 11–15 result bars (diverging-bars.tsx) and the lines around them. */
 .reg-family-bars, .reg-summary-bars { margin: 10px 0 6px; }
-.reg-identity-note { margin: 2px 0 10px; font-size: 12px; line-height: 1.6; }
+/* Inside the chart card, under the drawing (step 12's identity, the notice after a bar replaced the saved Y). */
+.diverging-bars .reg-identity-note { margin: 6px 0 0; font-size: 12px; line-height: 1.6; }
+.diverging-bars .reg-replaced-notice { margin: 8px 0 0; }
+/* Under the trend chart: what the dashed bracket is. */
+.reg-gap-caption { margin: 6px 0 0; font-size: 12px; line-height: 1.6; }
+/* Step 14's numbers are long ("[-4109.8400, -3911.5600]"): headers wrap and cells are narrower, so the table fits
+   a 1280 px window instead of clipping its p 值 column. */
+.data-table.reg-coef-table th { white-space: normal; padding: 8px 8px; vertical-align: bottom; }
+.data-table.reg-coef-table td { padding-left: 8px; padding-right: 8px; }
 .verdict-card p.reg-verdict-direction .reg-interval-words { color: #4f586b; font-weight: 500; font-size: 12.5px; }

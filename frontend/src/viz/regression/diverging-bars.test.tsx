@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { barFigures, barUnitFor, type BarEstimate } from "../../regression-verdict";
 import type { DepvarKind } from "../../types";
 import { svgTextWidth } from "./charts";
-import { DivergingBarChart, endLabel, layoutDivergingBars, unitTitleX, type DivergingBarRow } from "./diverging-bars";
+import { DivergingBarChart, endLabel, endLabelLines, layoutDivergingBars, unitTitleX, type DivergingBarRow } from "./diverging-bars";
 import { NEGATIVE, POSITIVE, UNCERTAIN, ZERO_LINE } from "./palette";
 
 afterEach(cleanup);
@@ -39,6 +39,23 @@ const STEP14 = rowsOf([
 /** Content widths of the chart at 1024 and 1280 px windows (sidebar, page and card padding taken off). */
 const WIDTHS = [650, 860];
 
+// Step 15's summary as the page builds it (regressionSummaryRows): native value with its unit, signed size in SD.
+// depvar_std values chosen so the sizes are those of the course release (-0.062, +0.001, -0.004, -0.047 SD).
+const SUMMARY: DivergingBarRow[] = ([
+  ["trade", "外国增加值项占比", "步骤 11 · 贸易流", "share", estimate(-0.5493, -0.5711, -0.5274, 0.0887)],
+  ["production", "后向复杂 GVC 生产份额", "步骤 12 · 生产", "share", estimate(0.00752, -0.0112, 0.0262, 0.058)],
+  ["length", "GVC 位置指数", "步骤 13 · 长度", "position", estimate(-0.0768, -0.112, -0.041, 0.1736)],
+  ["network", "加权总度", "步骤 14 · 网络", "network", estimate(-4010.70, -4100, -3920, 852.8)],
+] as [string, string, string, DepvarKind, BarEstimate][]).map(([key, label, sublabel, kind, value]) => ({
+  key, label, sublabel, ...barFigures(value, kind, "sd", true),
+}));
+/**
+ * Drawing widths of that chart at 900, 1024 and 1280 px windows: the window (900 is laid out at the 1000 px
+ * minimum width), minus the sidebar (240 below 1200 px, else 288), the content padding (2 × 18 / 2 × 26), the
+ * "查看已保存的四项回归结果" box (2 × 17) and the chart card (2 × 16).
+ */
+const SUMMARY_WIDTHS = [[900, 1000 - 240 - 36 - 34 - 32], [1024, 1024 - 240 - 36 - 34 - 32], [1280, 1280 - 288 - 52 - 34 - 32]];
+
 describe("diverging bar layout", () => {
   test.each(WIDTHS.flatMap((width) => [STEP11, STEP12, STEP14].map((rows) => [width, rows] as const)))(
     "at %ipx every text stays inside, names in the left column, end labels away from 0 and past their whisker",
@@ -70,6 +87,62 @@ describe("diverging bar layout", () => {
       expect(Math.max(...layout.rows.map((placed) => placed.x1 - placed.x0))).toBeGreaterThan(span / 3);
     },
   );
+
+  test.each(SUMMARY_WIDTHS)("step 15's summary at a %ipx window (drawn %ipx wide): finite ticks, bars that use the plot, labels inside", (_window, width) => {
+    const layout = layoutDivergingBars(SUMMARY, width);
+    // Drawn at the container's width: text keeps its size.
+    expect(layout.width).toBe(width);
+    // The axis is in standard deviations of about ±0.1: never ±2e14 (k fell to 1e-12 when the labels did not fit).
+    expect(layout.ticks.length).toBeGreaterThanOrEqual(3);
+    for (const tick of layout.ticks) {
+      expect(Number.isFinite(tick.value)).toBe(true);
+      expect(Math.abs(tick.value)).toBeLessThan(1);
+      expect(tick.text).toMatch(/^-?\d(\.\d+)?$/);
+    }
+    expect(layout.ticks.some((tick) => tick.value === 0 && Math.abs(tick.x - layout.zeroX) < 1e-6)).toBe(true);
+    const span = layout.plotRight - layout.plotLeft;
+    expect(Math.max(...layout.rows.map((placed) => placed.x1 - placed.x0))).toBeGreaterThan(span / 3);
+    for (const placed of layout.rows) {
+      const [left, right] = placed.anchor === "start" ? [placed.labelX, placed.labelX + placed.labelWidth] : [placed.labelX - placed.labelWidth, placed.labelX];
+      expect(left).toBeGreaterThanOrEqual(layout.plotLeft - 0.5);
+      expect(right).toBeLessThanOrEqual(width + 0.5);
+      const farLeft = Math.min(placed.x0, placed.whisker?.[0] ?? placed.x0, layout.zeroX);
+      const farRight = Math.max(placed.x1, placed.whisker?.[1] ?? placed.x1, layout.zeroX);
+      if (placed.anchor === "start") expect(left).toBeGreaterThan(farRight);
+      else expect(right).toBeLessThan(farLeft);
+      // A stacked label fits its row.
+      expect(placed.lines.length * 15).toBeLessThan(placed.height);
+      expect(placed.lines.join("").replace(/ · /g, "")).toBe(endLabel(placed.row).replace(/ · /g, ""));
+    }
+    // The rendered axis says the same.
+    const dom = new DOMParser().parseFromString(renderToStaticMarkup(<DivergingBarChart rows={SUMMARY} unitTitle="个标准差" width={width} />), "text/html");
+    const tickTexts = [...dom.querySelectorAll("svg > g[aria-hidden='true'] > text")].map((node) => Number(node.textContent));
+    expect(tickTexts.length).toBe(layout.ticks.length);
+    expect(tickTexts.every((value) => Number.isFinite(value) && Math.abs(value) < 1)).toBe(true);
+  });
+
+  test("narrow windows stack the end labels as the report does: value, then standard deviations and 方向不确定", () => {
+    expect(layoutDivergingBars(SUMMARY, 682).labelLayout).toBeGreaterThan(0);
+    expect(endLabelLines(SUMMARY[1], 1)).toEqual(["+0.008 个百分点", "（+0.001 个标准差） · 方向不确定"]);
+    expect(endLabelLines(SUMMARY[1], 2)).toEqual(["+0.008 个百分点", "（+0.001 个标准差）", "方向不确定"]);
+    expect(endLabelLines(SUMMARY[0], 2)).toEqual(["-0.55 个百分点", "（-0.062 个标准差）"]);
+    // Step 11's short labels stay on one line.
+    expect(layoutDivergingBars(STEP11, 650).labelLayout).toBe(0);
+    const dom = new DOMParser().parseFromString(renderToStaticMarkup(<DivergingBarChart rows={SUMMARY} unitTitle="个标准差" width={682} />), "text/html");
+    const weak = dom.querySelector('[data-bar="production"] [data-end-label]')!;
+    expect(weak.querySelectorAll("[data-line]").length).toBeGreaterThan(1);
+  });
+
+  test("far below the supported width the chart is drawn wider and scaled down, never with a collapsed axis", () => {
+    const layout = layoutDivergingBars(SUMMARY, 300);
+    expect(layout.width).toBeGreaterThan(300);
+    expect(layout.ticks.every((tick) => Number.isFinite(tick.value) && Math.abs(tick.value) < 1)).toBe(true);
+    // The widest bar with its whisker gets a third of the plot.
+    const span = layout.plotRight - layout.plotLeft;
+    const reach = (placed: (typeof layout.rows)[number]) =>
+      Math.max(placed.x1, placed.whisker?.[1] ?? placed.x1) - Math.min(placed.x0, placed.whisker?.[0] ?? placed.x0);
+    expect(Math.max(...layout.rows.map(reach))).toBeGreaterThan(span / 3);
+  });
 
   test("an all-negative family puts the zero line near the right edge, so the bars use the width", () => {
     const layout = layoutDivergingBars(STEP14, 650);
@@ -115,11 +188,11 @@ describe("DivergingBarChart", () => {
   });
 
   test("a suppressed interval draws no whisker and says so in the tooltip text", () => {
-    const rows: DivergingBarRow[] = [{ key: "a", label: "加权总度", value: -0.05, low: null, high: null, uncertain: true, valueLabel: "-40.11（0.047 个标准差）", note: "这次的数据不够判断方向，不显示 95% 区间" }];
+    const rows: DivergingBarRow[] = [{ key: "a", label: "加权总度", value: -0.05, low: null, high: null, uncertain: true, valueLabel: "-40.11（-0.047 个标准差）", note: "这次的数据不够判断方向，不显示 95% 区间" }];
     const dom = parse(renderToStaticMarkup(<DivergingBarChart rows={rows} unitTitle="个标准差" width={650} />));
     expect(dom.querySelector("[data-whisker]")).toBeNull();
     expect(dom.querySelector("path")?.getAttribute("fill")).toBe(UNCERTAIN);
-    expect(endLabel(rows[0])).toBe("-40.11（0.047 个标准差） · 方向不确定");
+    expect(endLabel(rows[0])).toBe("-40.11（-0.047 个标准差） · 方向不确定");
   });
 
   test("bars are buttons: arrows move between them, Enter and Space select, and a run in flight blocks selecting", () => {

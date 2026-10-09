@@ -203,6 +203,24 @@ def standardized_digits(point: float | None, bounds: tuple[float, float] | None)
     return next((d for d in range(start, 5) if _signed(bounds[0], d) != _signed(bounds[1], d)), 4)
 
 
+def network_digits(size: float) -> int:
+    """Decimals of a centrality amount, by its size (frontend ``networkDigits``)."""
+    return 0 if size >= 100 else 1 if size >= 10 else 2 if size >= 1 else 3 if size >= 0.1 else 4 if size >= 0.01 else 5
+
+
+def network_interval_digits(point: float, bounds: tuple[float, float] | None) -> int:
+    """Decimals of a network estimate and its 95% interval, one count for all three (frontend
+    ``networkIntervalDigits``): 2 ("-40.80"); more when a nonzero value would round to 0 at 2, so it keeps two
+    significant digits; more again until the interval's ends print differently. Closeness used to read
+    "[-0.01, -0.0047]": one end at 2 decimals, the other at two significant digits."""
+    values = [point, *(bounds or ())]
+    tiny = [value for value in values if math.isfinite(value) and value != 0 and float(f"{value:.2f}") == 0]
+    digits = max([2, *(max(0, 1 - math.floor(math.log10(abs(value)))) for value in tiny)])
+    while bounds is not None and digits < 8 and _signed(bounds[0], digits) == _signed(bounds[1], digits):
+        digits += 1
+    return digits
+
+
 def _signed(value: float, digits: int) -> str:
     rounded = f"{value:+,.{digits}f}"
     # Match the result card (toPrecision(2)): a small nonzero estimate/CI endpoint is not zero, and keeps
@@ -326,12 +344,14 @@ def _natural_effect(
         sd_bounds = (ci[0] * increment / positive_sd, ci[1] * increment / positive_sd) if ci and positive_sd else None
         sd_point = effect / positive_sd if positive_sd is not None else None
         sd_digits = standardized_digits(sd_point, sd_bounds)
-        effect_text = f"{_signed(effect, 2)} 个中心性原始单位"
+        # The estimate and both interval ends in the same decimals, as on the page.
+        digits = network_interval_digits(effect, (ci[0] * increment, ci[1] * increment) if ci else None)
+        effect_text = f"{_signed(effect, digits)} 个中心性原始单位"
         # Unsigned, as on the page ("平均下降 39.70 …（幅度约 0.047 个标准差）"): the number before it carries the sign.
         if positive_sd is not None:
             effect_text += f"（幅度约 {_signed(cast(float, sd_point), sd_digits)[1:]} 个标准差）"
         interval = (
-            f"[{_signed(ci[0] * increment, 2)}, {_signed(ci[1] * increment, 2)}] 个中心性原始单位"
+            f"[{_signed(ci[0] * increment, digits)}, {_signed(ci[1] * increment, digits)}] 个中心性原始单位"
             + (
                 f"（约 [{_signed(sd_bounds[0], sd_digits)}, {_signed(sd_bounds[1], sd_digits)}]"
                 " 个标准差）"
@@ -381,7 +401,7 @@ def _effect_size(outcome: str, design: dict[str, Any] | None, coefficient: dict[
     if kind == "share":
         return f"{_signed(effect * 100, _share_digits(effect * 100))[1:]} 个百分点"
     if kind == "network":
-        return f"{_signed(effect, 2)[1:]} 个中心性原始单位"
+        return f"{_signed(effect, network_interval_digits(effect, None))[1:]} 个中心性原始单位"
     if kind == "position":
         return f"{_signed(effect, 4)[1:]} 个位置指数单位"
     return f"{_signed(effect, 3)[1:]} 个长度单位"

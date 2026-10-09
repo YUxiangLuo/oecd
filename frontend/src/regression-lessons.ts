@@ -48,7 +48,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     definition: "WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 总出口的比重。",
     downMeaning: "外国增加值项占比下降：出口价值中来自国外投入的部分变小。",
     upMeaning: "外国增加值项占比上升：出口价值中来自国外投入的部分变大。",
-    dontClaim: "不要写成“已经证明生产回流”。这一项占比的变化，不能说明企业是否把生产搬回国内。",
+    dontClaim: "不要写成“已经证明生产回流”。这一项占比较高或较低，不能说明企业是否把生产搬回国内。",
   },
   production: {
     outcome: "production",
@@ -62,7 +62,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     definition: "增加值经过多次跨境生产后被最终吸收的比例。",
     downMeaning: "复杂 GVC 生产份额下降：SVA 中经多次跨境生产的部分占比变小。",
     upMeaning: "复杂 GVC 生产份额上升：SVA 中经多次跨境生产的部分占比变大。",
-    dontClaim: "不要写成“复杂 GVC 生产规模缩小”。这一项是占总增加值的份额，份额下降不代表复杂 GVC 生产的绝对量减少。",
+    dontClaim: "不要写成“复杂 GVC 生产规模缩小”。这一项是占总增加值的份额，份额较低不代表复杂 GVC 生产的绝对量较小。",
   },
   length: {
     outcome: "length",
@@ -111,7 +111,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "被国外最终吸收的国内增加值占 VA+TLS 账户闭合总出口的比重。",
     downMeaning: "国内增加值出口占比下降：出口价值中由本国创造的部分变小。",
     upMeaning: "国内增加值出口占比上升：出口价值中由本国创造的部分变大。",
-    dontClaim: "不要写成“已经证明生产回流”。国内增加值出口占比上升，不能告诉我们企业是否把生产搬回国内。",
+    dontClaim: "不要写成“已经证明生产回流”。国内增加值出口占比较高，不能告诉我们企业是否把生产搬回国内。",
   },
   "3_VA_GVC_share": {
     shortMetric: "前向 GVC 生产总份额",
@@ -119,7 +119,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "增加值经过至少一次跨境后被最终吸收的比例（简单加复杂）。",
     downMeaning: "前向 GVC 生产总份额下降：SVA 中与跨境生产相关的部分占比变小。",
     upMeaning: "前向 GVC 生产总份额上升：SVA 中与跨境生产相关的部分占比变大。",
-    dontClaim: "不要写成“GVC 生产规模缩小”。这一项是占总增加值的份额，份额下降不代表 GVC 相关生产的绝对量减少。",
+    dontClaim: "不要写成“GVC 生产规模缩小”。这一项是占总增加值的份额，份额较低不代表 GVC 相关生产的绝对量较小。",
   },
   "3a_VA_GVC_S_share": {
     shortMetric: "简单 GVC 生产份额",
@@ -127,7 +127,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "增加值只跨境一次就被吸收的比例。",
     downMeaning: "简单 GVC 生产份额下降：只跨境一次就被吸收的增加值占比变小。",
     upMeaning: "简单 GVC 生产份额上升：只跨境一次就被吸收的增加值占比变大。",
-    dontClaim: "不要写成“简单 GVC 生产规模缩小”。这一项是占总增加值的份额，份额下降不代表绝对量减少。",
+    dontClaim: "不要写成“简单 GVC 生产规模缩小”。这一项是占总增加值的份额，份额较低不代表绝对量较小。",
   },
   "3_FGY_GVC_share": {
     shortMetric: "后向 GVC 生产总份额",
@@ -135,7 +135,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "从最终产品端衡量 GVC 相关生产占最终品生产的比例。",
     downMeaning: "后向 GVC 生产总份额下降：最终品生产中与跨境生产相关的部分占比变小。",
     upMeaning: "后向 GVC 生产总份额上升：最终品生产中与跨境生产相关的部分占比变大。",
-    dontClaim: "不要写成“GVC 生产规模缩小”。这一项是占最终品生产的份额，份额下降不代表绝对量减少。",
+    dontClaim: "不要写成“GVC 生产规模缩小”。这一项是占最终品生产的份额，份额较低不代表绝对量较小。",
   },
   "3b_FGY_GVC_C_share": {
     shortMetric: "后向复杂 GVC 生产份额",
@@ -151,7 +151,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "增加值经一次出口直接被进口国吸收的比例。",
     downMeaning: "传统贸易生产份额下降：经一次出口直接被进口国吸收的增加值占比变小。",
     upMeaning: "传统贸易生产份额上升：经一次出口直接被进口国吸收的增加值占比变大。",
-    dontClaim: "不要写成“传统贸易萎缩”。这一项是占总增加值的份额，份额下降不代表绝对量减少。",
+    dontClaim: "不要写成“传统贸易萎缩”。这一项是占总增加值的份额，份额较低不代表绝对量较小。",
   },
   "1_VA_D_share": {
     shortMetric: "纯国内生产份额",
@@ -159,7 +159,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     definition: "增加值不经出口、在国内被最终吸收的比例。",
     downMeaning: "纯国内生产份额下降：不经出口、在国内被吸收的增加值占比变小。",
     upMeaning: "纯国内生产份额上升：不经出口、在国内被吸收的增加值占比变大。",
-    dontClaim: "不要写成“生产已经回流国内”。纯国内生产份额上升，不代表国内生产的绝对量增加。",
+    dontClaim: "不要写成“生产已经回流国内”。纯国内生产份额较高，不代表国内生产的绝对量较大。",
   },
   PLy_GVC: {
     shortMetric: "后向 GVC 段长度",

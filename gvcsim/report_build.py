@@ -24,7 +24,13 @@ from gvcsim.data.citations import (
     report_source_label,
     validate_data_sources,
 )
-from gvcsim.regression.teaching import GENERATED_DATA_NOTE, VERSION as TEACHING_VERSION, X_COLUMN
+from gvcsim.regression.teaching import (
+    GENERATED_DATA_NOTE,
+    MARKET,
+    VERSION as TEACHING_VERSION,
+    X_COLUMN,
+    country_exposure_overview,
+)
 from gvcsim.session import SESSION_VERSION
 from gvcsim.report_common import ReportGateError, TeachingReport, _safe
 from gvcsim.report_gate import _step_data, check_gate
@@ -59,6 +65,54 @@ def _regression_overview() -> dict[str, Any] | None:
         return None
 
 
+def _teaching_scenario(session: dict[str, Any]) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    """Step 10 as the page shows it, from the release's teaching panel: the scenario (taxed and untaxed counts, rate,
+    policy year, the surplus rule, each country's taxed flag) and the examples followed into steps 11–14 in the
+    page's order, the recorded one as saved and its comparison country read from the panel in the same industry
+    and year. Without the panel the report keeps the recorded example alone and leaves the scenario out."""
+    step_ten = _step_data(session, 10)
+    raw_observation = step_ten.get("teaching_observation")
+    observation: dict[str, Any] | None = raw_observation if isinstance(raw_observation, dict) else None
+    recorded = [observation] if observation is not None else []
+    try:
+        panel = read_csv_artifact(config.PROCESSED_DIR / "panel_teaching.csv")
+        overview = country_exposure_overview(panel)
+    except (ArtifactContractError, OSError, ValueError, KeyError, TypeError):
+        return None, recorded
+    scenario = {
+        key: overview.get(key)
+        for key in ("market", "policy_year", "tariff_rate", "taxed_rule", "taxed_countries", "untaxed_countries")
+    }
+    scenario["taxed"] = {str(item["country"]): bool(item["taxed"]) for item in overview.get("countries", [])}
+    compared = step_ten.get("compared")
+    if observation is None or not isinstance(compared, list) or len(compared) != 2:
+        return scenario, recorded
+    examples: list[dict[str, Any]] = []
+    industry, year = observation.get("industry"), observation.get("year")
+    for country in (str(code) for code in compared):
+        if country == str(observation.get("country")):
+            examples.append(observation)
+        elif country == MARKET:
+            examples.append({"country": country, "industry": industry, X_COLUMN: 0.0, "teaching_tariff_rate_tau": 0.0})
+        else:
+            rows = panel.loc[
+                panel["country"].astype(str).eq(country)
+                & panel["industry"].astype(str).eq(str(industry))
+                & panel["year"].eq(year)
+            ]
+            if len(rows) == 1:
+                row = rows.iloc[0]
+                examples.append(
+                    {
+                        "country": country,
+                        "industry": industry,
+                        X_COLUMN: float(row[X_COLUMN]),
+                        "teaching_tariff_rate_tau": float(row["teaching_tariff_rate_tau"]),
+                    }
+                )
+    return scenario, examples if observation in examples else recorded
+
+
 def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: Any) -> TeachingReport:
     blocked = check_gate(session)
     if blocked:
@@ -68,8 +122,9 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         raise ReportGateError([{"step": 0, "title": "数据不可用", "missing": ["课程数据暂时不可用，请联系老师。"]}])
     runs = _saved_runs(session)
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    # The pages show server-local wall-clock time (PostgreSQL now()); the report says the same.
-    generated_local = datetime.now().astimezone().isoformat(timespec="minutes").replace("T", " ")
+    # The pages show server-local wall-clock time (PostgreSQL now()) as "YYYY-MM-DD HH:MM"; the report says the same,
+    # without the "+09:00" offset an ISO time carries.
+    generated_local = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
     fingerprint = hashlib.sha256(json.dumps(session, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:12]
     try:
         validate_release_cached()
@@ -143,6 +198,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         re.sub(r"（生成器 [^@（）]*@([^（）]+)）", r"（生成程序版本 `\1`）", line) for line in provenance_disclosures
     ]
     body_disclosures = [line for line in disclosures if line not in provenance_disclosures]
+    scenario, teaching_examples = _teaching_scenario(session)
     lines = [
         "# GVC 指标与关税实验报告",
         "",
@@ -160,11 +216,11 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         *_evidence_summary(
             runs,
             metadata["simulation_contract"]["source_filter_disclosure"],
-            _step_data(session, 10).get("teaching_observation"),
+            teaching_examples,
             _regression_overview() if runs else None,
         ),
         *_quiz_sections(session),
-        *_experiment_sections(session),
+        *_experiment_sections(session, scenario),
         *_run_sections(runs),
         *_qc_disclosure_section(qc_summary, integrity_metadata),
         "## 数据与方法说明",

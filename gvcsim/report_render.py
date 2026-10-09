@@ -30,6 +30,7 @@ from gvcsim.report_common import (
     _setting_value,
     _summary_design_limit,
     _y_label,
+    network_digits,
     reading_number,
     y_display,
 )
@@ -113,8 +114,54 @@ def _country_reading(item: dict[str, Any]) -> str:
     return f"{_safe(item.get('year', '—'))} 年 {_safe(country_label(str(item.get('country', ''))))} {metric} {shown}"
 
 
-def _experiment_sections(session: dict[str, Any]) -> list[str]:
-    """Render only snapshots produced by explicit student interactions."""
+def _yi_usd(million_usd: float) -> str:
+    """An amount in million USD as 亿美元, as step 10 writes it ("10 亿美元", "2,489 亿美元")."""
+    yi = million_usd / 100
+    digits = 0 if abs(yi) >= 100 else 1 if abs(yi) >= 1 or yi == 0 else 2
+    text = f"{yi:,.{digits}f}"
+    return f"{text.rstrip('0').rstrip('.') if '.' in text else text} 亿美元"
+
+
+def _tax_status(country: str, scenario: dict[str, Any] | None) -> str | None:
+    """被加税／未被加税 for a sample country (the market is 加征关税的一方); None when the release does not say."""
+    if country == MARKET:
+        return "加征关税的一方"
+    taxed = (scenario or {}).get("taxed", {}).get(country)
+    return None if taxed is None else "被加税" if taxed else "未被加税"
+
+
+def _with_tax_status(country: str, scenario: dict[str, Any] | None) -> str:
+    status = _tax_status(country, scenario)
+    return f"{_safe(country_label(country))}{f'（{status}）' if status else ''}"
+
+
+def _scenario_line(scenario: dict[str, Any] | None) -> str | None:
+    """Step 10's scenario and the rule that picks the taxed countries, as the page states it: "美国从 2018 年起对
+    2016 年对美货物贸易顺差达到 10 亿美元及以上的 N 国加征 25% 关税，其余 M 国未被加税"."""
+    if not scenario:
+        return None
+    taxed, untaxed = scenario.get("taxed_countries"), scenario.get("untaxed_countries")
+    rate, policy_year = scenario.get("tariff_rate"), scenario.get("policy_year")
+    if not isinstance(taxed, int) or not isinstance(untaxed, int) or not isinstance(rate, (int, float)):
+        return None
+    raw_rule = scenario.get("taxed_rule")
+    rule: dict[str, Any] = raw_rule if isinstance(raw_rule, dict) else {}
+    minimum, rule_year = rule.get("min_million_usd"), rule.get("year")
+    since = f"从 {policy_year} 年起" if isinstance(policy_year, int) else ""
+    who = (
+        f"{f'{rule_year} 年' if isinstance(rule_year, int) else '首年'}对美货物贸易顺差达到 {_yi_usd(float(minimum))}及以上的 {taxed} 国"
+        if isinstance(minimum, (int, float)) and math.isfinite(minimum)
+        else f"{taxed} 国"
+    )
+    # A space between 对 and a number ("对 2016 年"), none before 首年.
+    space = " " if who[:1].isdigit() else ""
+    return f"- 情景：美国{since}对{space}{who}加征 {_rate(float(rate) * 100)}% 关税，其余 {untaxed} 国未被加税。"
+
+
+def _experiment_sections(session: dict[str, Any], scenario: dict[str, Any] | None = None) -> list[str]:
+    """Render only snapshots produced by explicit student interactions. ``scenario`` is step 10's scenario from the
+    release (``teaching.country_exposure_overview`` plus each country's taxed flag); without it the step 10
+    section leaves out the scenario line and the 被加税／未被加税 labels."""
     lines = [
         "## 保存的实验快照",
         "",
@@ -202,7 +249,9 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
         if compared:
             # One saved economy is read against the global reference; two or more are a comparison.
             if step in (2, 3, 4, 5):
-                compared_label = "学生选定的国家" if chosen else "系统自动记录的国家" if automatic else "记录的国家"
+                # The student picks the country on the page and the reading is recorded for it: "系统自动记录的国家"
+                # read as if the system had chosen the country.
+                compared_label = "学生选定的国家" if chosen else "记录的国家"
             elif len(compared) == 1:
                 compared_label = "学生选定的国家" if chosen else "所看国家"
             else:
@@ -281,15 +330,18 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
     shock = _step_data(session, 10)
     if shock.get("viewed_teaching_panel"):
         captured = True
+        # The scenario first (who is taxed and why), as at the top of step 10; then the example followed.
+        scenario_line = _scenario_line(scenario)
         lines.extend(
             (
                 f"### 步骤 10 · {_STEP_TITLES.get(10, '')}",
                 "",
+                *([scenario_line] if scenario_line else []),
                 (
-                    f"- 两国趋势示例：{'、'.join(_safe(country_label(str(value))) for value in shock.get('compared', []))} · "
+                    f"- 两国趋势示例：{'、'.join(_with_tax_status(str(value), scenario) for value in shock.get('compared', []))} · "
                     f"{_safe(sector_label(str(shock.get('teaching_industry'))))} · 全部可用年份"
                     if isinstance(shock.get("compared"), list) and len(shock["compared"]) == 2
-                    else f"- 查看对象：{_safe(country_label(str(shock.get('teaching_country'))))}"
+                    else f"- 查看对象：{_with_tax_status(str(shock.get('teaching_country')), scenario)}"
                     + (
                         f" · {_safe(sector_label(str(shock.get('teaching_industry'))))}"
                         if shock.get("teaching_industry")
@@ -426,16 +478,11 @@ def _teaching_sample_lines(source_filter: dict[str, Any] | None) -> list[str]:
     ]
 
 
-def _network_digits(size: float) -> int:
-    """Decimals of a centrality amount, by its size (frontend ``networkDigits``)."""
-    return 0 if size >= 100 else 1 if size >= 10 else 2 if size >= 1 else 3 if size >= 0.1 else 4 if size >= 0.01 else 5
-
-
 def _example_size(kind: str, change: float) -> str:
     """The unsigned Y change implied for the step 10 example, in the step's unit (frontend ``exampleEffect``)."""
     size = abs(change)
     if kind == "network":
-        digits, unit = _network_digits(size), "个中心性原始单位"
+        digits, unit = network_digits(size), "个中心性原始单位"
     else:
         digits, unit = {"share": (2, "个百分点"), "position": (4, "个位置指数单位")}.get(kind, (3, "个长度单位"))
     if kind == "share":
@@ -448,34 +495,52 @@ def _example_size(kind: str, change: float) -> str:
 def _example_conversion(
     outcome: str, design: dict[str, Any], coefficient: dict[str, Any], directional: bool, example: Any
 ) -> str | None:
-    """The page's "按你在步骤 10 选的例子换算…" line for the example step 10 recorded (its X, as saved there)."""
-    if not isinstance(example, dict):
+    """The page's "按你在步骤 10 选的例子换算…" line. ``example`` is the example step 10 recorded (its X, as saved
+    there) or, as on the page, the examples followed from step 10 in order: the recorded one and its comparison
+    country ("CRI 哥斯达黎加 · C29 汽车 未被加税，X = 0，按估计没有与 X 相关的差异")."""
+    examples = [example] if isinstance(example, dict) else list(example) if isinstance(example, (list, tuple)) else []
+    parsed: list[tuple[dict[str, Any], float, float]] = []
+    for item in examples:
+        if not isinstance(item, dict):
+            continue
+        try:
+            x = float(item["teaching_tariff_exposure"])
+            tau = float(item.get("teaching_tariff_rate_tau") or 0)
+        except (KeyError, TypeError, ValueError):
+            continue
+        if math.isfinite(x):
+            parsed.append((item, x, tau))
+    if not parsed:
         return None
-    try:
-        x = float(example["teaching_tariff_exposure"])
-        tau = float(example.get("teaching_tariff_rate_tau") or 0)
-    except (KeyError, TypeError, ValueError):
-        return None
-    if not math.isfinite(x):
-        return None
-    label = f"{_safe(country_label(str(example.get('country'))))} · {_safe(sector_label(str(example.get('industry'))))}"
-    if str(example.get("country")) == MARKET:
-        text = f"{label} 属于加征关税的一方，按设计不在回归样本中，X 记为 0 只是定义，不做换算"
-    elif x > 0:
-        change = float(coefficient["coef"]) * x
-        size = _example_size(_depvar_kind(outcome, design), change)
-        words = _difference_words(_depvar_kind(outcome, design))
-        if size.startswith("不到"):
-            amount = size
+    # Only an example with X > 0 converts; an open direction is said once, after the last of them.
+    converted = [item for item, x, _tau in parsed if x > 0 and str(item.get("country")) != MARKET]
+    parts = []
+    for item, x, tau in parsed:
+        label = f"{_safe(country_label(str(item.get('country'))))} · {_safe(sector_label(str(item.get('industry'))))}"
+        if str(item.get("country")) == MARKET:
+            text = f"{label} 属于加征关税的一方，按设计不在回归样本中，X 记为 0 只是定义，不做换算"
+        elif x > 0:
+            change = float(coefficient["coef"]) * x
+            size = _example_size(_depvar_kind(outcome, design), change)
+            words = _difference_words(_depvar_kind(outcome, design))
+            if size.startswith("不到"):
+                amount = size
+            else:
+                amount = f"约为 {'-' if change < 0 else '+'}{size}"
+            reading = (
+                f"（Y 偏{words[0] if change < 0 else words[1]}）"
+                if directional
+                else "；但区间包含 0，差异的高低方向并不确定"
+                if item is converted[-1]
+                else ""
+            )
+            text = f"{label} 的 X 为 {_points(x)} 个百分点，按估计与 X 相关的差异{amount}{reading}"
+        elif tau > 0:
+            text = f"{label} 被加税但首年不向美国出口（w = 0），X = 0，按估计没有与 X 相关的差异"
         else:
-            amount = f"约为 {'-' if change < 0 else '+'}{size}"
-        reading = f"（Y 偏{words[0] if change < 0 else words[1]}）" if directional else "；但区间包含 0，差异的高低方向并不确定"
-        text = f"{label} 的 X 为 {_points(x)} 个百分点，按估计与 X 相关的差异{amount}{reading}"
-    elif tau > 0:
-        text = f"{label} 被加税但首年不向美国出口（w = 0），X = 0，按估计没有与 X 相关的差异"
-    else:
-        text = f"{label} 未被加税，X = 0，按估计没有与 X 相关的差异"
-    return f"- **按步骤 10 的例子换算**：{text}。"
+            text = f"{label} 未被加税，X = 0，按估计没有与 X 相关的差异"
+        parts.append(text)
+    return f"- **按步骤 10 的例子换算**：{'；'.join(parts)}。"
 
 
 def _difference_words(kind: str) -> tuple[str, str]:

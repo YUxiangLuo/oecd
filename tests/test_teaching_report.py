@@ -1106,10 +1106,12 @@ def test_steps_two_to_five_record_one_country():
     session = _complete()
     assert check_material_gate(session) == []
 
-    # The report states honestly that the reading was recorded by the system, and reads it as one phrase.
+    # The student picked the country; the reading was recorded for it, read as one phrase. "系统自动记录的国家"
+    # read as if the system had chosen the country.
     sections = "\n".join(_experiment_sections(session)).split("### 步骤 ")
     step_two = next(part for part in sections if part.startswith("2 "))
-    assert "系统自动记录的国家：CHN 中国" in step_two
+    assert "- 记录的国家：CHN 中国" in step_two
+    assert "系统自动记录的国家" not in "\n".join(sections)
     assert "记录的读数：2020 年 CHN 中国 外国增加值项占比 20.000%" in step_two
     assert "| CHN 中国 | 2020 | 外国增加值项占比 | % | 20.000 |" in step_two
     assert "数值为国家级代表指标：页面可按国家×行业浏览" in step_two
@@ -1157,8 +1159,7 @@ def test_steps_two_to_five_keep_legacy_two_country_records(source):
     step_three = next(
         part for part in "\n".join(_experiment_sections(session)).split("### 步骤 ") if part.startswith("3 ")
     )
-    label = "系统自动记录的国家" if source == "auto-indicator-comparison" else "记录的国家"
-    assert f"{label}：CHN 中国、USA 美国" in step_three
+    assert "- 记录的国家：CHN 中国、USA 美国" in step_three
     assert (
         "记录的读数：2020 年 CHN 中国 复杂 GVC 生产份额 20.000%；2020 年 USA 美国 复杂 GVC 生产份额 10.000%"
         in step_three
@@ -2319,7 +2320,7 @@ def test_report_draws_every_y_of_each_family_with_the_saved_one_marked(tmp_path,
     network = next(chart for chart in charts if chart["title"].startswith("步骤 14"))
     assert len(network["items"]) == len(teaching.BASELINES["network"])
     assert network["x_label"] == "X 每高 1 个百分点，Y 平均相差（个标准差）"
-    assert network["items"][1]["text"] == "-20.00（0.040 个标准差）"
+    assert network["items"][1]["text"] == "-20.00（-0.040 个标准差）"
     assert "介数" in [item["label"] for item in network["items"]]
     assert "生成报告时不会重算" in markdown and "其余 Y 的条形是课程用同一份数据、同一个模型算出的结果" in markdown
 
@@ -2361,11 +2362,11 @@ def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(
     assert length["x_label"] == "X 每高 1 个百分点，Y 平均相差（个标准差）"
     saved = length["items"][2]
     assert saved["value"] == pytest.approx(-0.004 / 0.17, rel=1e-3)
-    assert saved["text"] == "-0.0040（0.024 个标准差）"
+    assert saved["text"] == "-0.0040（-0.024 个标准差）"
     assert "| 关税暴露 X 每高 1 个百分点，Y 平均相差 | **-0.0040 个位置指数单位** |" in markdown
     assert [item["sub"] for item in length["items"]] == ["长度单位", "长度单位", "位置指数单位"]
     summary = next(chart for chart in charts if chart["title"] == "四步保存的结果（都换算成标准差）")
-    assert summary["items"][2]["text"] == "-0.0040 个位置指数单位（0.024 个标准差）"
+    assert summary["items"][2]["text"] == "-0.0040 个位置指数单位（-0.024 个标准差）"
 
     # A baseline from another family, or one the snapshot does not match, is not a reportable run.
     forged = copy.deepcopy(run)
@@ -2505,3 +2506,169 @@ def test_report_example_conversion_below_network_precision_says_so():
 
     assert _example_size("network", -0.49 * 0.0000039) == "不到 0.00001 个中心性原始单位"
     assert _example_size("network", -4000 * 0.0932) == "373 个中心性原始单位"
+
+
+def _network_reading(coef: float, low: float, high: float, std: float) -> tuple[str, str]:
+    _, effect, interval = teaching_report._natural_effect(
+        "network",
+        {"method": "twfe_intensity"},
+        {"status": "ok", "depvar_std": std},
+        {"name": X_COLUMN, "coef": coef, "ci_low": low, "ci_high": high},
+    )
+    return effect, interval
+
+
+def test_report_network_interval_ends_share_the_estimate_digits():
+    """Closeness read "[-0.01, -0.0047]": one end at 2 decimals, the other at two significant digits (page too)."""
+    from gvcsim.report_common import network_interval_digits
+
+    effect, interval = _network_reading(-0.4884, -0.5045, -0.4722, 0.11)
+    assert effect.startswith("-0.0049 个中心性原始单位（幅度约 ")
+    assert interval.startswith("[-0.0050, -0.0047] 个中心性原始单位（约 [")
+    # The other network Ys keep their two decimals.
+    effect, interval = _network_reading(-4080, -4180, -3980, 850)
+    assert effect.startswith("-40.80 个中心性原始单位") and interval.startswith("[-41.80, -39.80] 个中心性原始单位")
+    effect, interval = _network_reading(-5933, -6400, -5466, 1300)
+    assert effect.startswith("-59.33 个中心性原始单位") and interval.startswith("[-64.00, -54.66] 个中心性原始单位")
+    # Same rule as the page's networkIntervalDigits.
+    assert network_interval_digits(-0.004884, (-0.005045, -0.004722)) == 4
+    assert network_interval_digits(-0.004884, (-0.004891, -0.004877)) == 5
+    assert network_interval_digits(-40.8, (-41.8, -39.8)) == 2
+    # The association sentence states the same unsigned size.
+    from gvcsim.report_common import _effect_size
+
+    reading = _effect_size(
+        "network", {"depvar_kind": "network"}, {"coef": -0.4884, "ci_low": -0.5045, "ci_high": -0.4722}
+    )
+    assert reading == "0.0049 个中心性原始单位"
+
+
+def test_report_generation_time_is_written_like_the_page(tmp_path, monkeypatch):
+    """The page shows "2026-10-09 09:31"; the report used to add an ISO offset ("09:33+09:00")."""
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    markdown = build(_complete(), "同学").markdown
+    line = next(line for line in markdown.splitlines() if line.startswith("- 生成时间："))
+    assert re.fullmatch(r"- 生成时间：\d{4}-\d{2}-\d{2} \d{2}:\d{2}。", line)
+
+
+def test_report_step_ten_states_the_scenario_and_who_is_taxed(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    panel = pd.read_csv(tmp_path / "panel_teaching.csv")
+    overview = teaching.country_exposure_overview(panel)
+    taxed = {str(item["country"]): bool(item["taxed"]) for item in overview["countries"]}
+    # The example followed: the most exposed record of the last year, and a comparison country in the same industry
+    # (untaxed when the fixture has one, as CRI is next to CAN on the page).
+    year = int(panel.year.max())
+    first_row = panel.loc[panel.year.eq(year)].sort_values(X_COLUMN, ascending=False).iloc[0]
+    first, industry = str(first_row.country), str(first_row.industry)
+    candidates = [
+        str(code)
+        for code in panel.loc[panel.year.eq(year) & panel.industry.eq(industry), "country"]
+        if str(code) != first
+    ]
+    other = next((code for code in candidates if not taxed[code]), candidates[0])
+    session = _complete()
+    observation = {
+        "country": first,
+        "industry": industry,
+        "year": year,
+        "teaching_export_share_w": float(first_row.teaching_export_share_w),
+        "teaching_tariff_rate_tau": float(first_row.teaching_tariff_rate_tau),
+        "teaching_tariff_exposure": float(first_row.teaching_export_share_w) * float(first_row.teaching_tariff_rate_tau),
+        "version": TEACHING_VERSION,
+    }
+    session["steps"]["10"]["data"].update(
+        {
+            "teaching_country": first,
+            "teaching_year": year,
+            "teaching_industry": industry,
+            "teaching_observation": observation,
+            "compared": [first, other],
+        }
+    )
+    markdown = build(session, "同学").markdown
+
+    # The saved-snapshot section's step 10 (the quiz record has a heading of the same name).
+    snapshots = markdown.split("## 保存的实验快照", 1)[1]
+    step_ten = snapshots.split("### 步骤 10 · 认识关税暴露 X", 1)[1].split("###", 1)[0]
+    status ={code: "被加税" if flag else "未被加税" for code, flag in taxed.items()}
+    assert (
+        f"- 两国趋势示例：{country_label(first)}（{status[first]}）、{country_label(other)}（{status[other]}） · "
+        f"{_sector(industry)} · 全部可用年份"
+    ) in step_ten
+    rule_year = overview["taxed_rule"]["year"]
+    # (The small fixture panel may have no policy year; the course release has 2018.)
+    since = f"从 {overview['policy_year']} 年起" if overview["policy_year"] else ""
+    assert (
+        f"- 情景：美国{since}对 {rule_year} 年对美货物贸易顺差达到 10 亿美元及以上的 "
+        f"{overview['taxed_countries']} 国加征 25% 关税，其余 {overview['untaxed_countries']} 国未被加税。"
+    ) in step_ten
+    # The scenario comes before the example, as at the top of step 10.
+    assert step_ten.index("- 情景：") < step_ten.index("- 两国趋势示例：")
+
+    # Each step's conversion follows both examples, as the page does: the comparison country's clause from the panel.
+    row = panel.loc[panel.country.eq(other) & panel.industry.eq(industry) & panel.year.eq(year)].iloc[0]
+    summary = markdown.split("## 关键证据摘要", 1)[1].split("## 理解题答题记录", 1)[0]
+    conversions = [line for line in summary.splitlines() if line.startswith("- **按步骤 10 的例子换算**：")]
+    assert len(conversions) == 4
+    label = f"{country_label(other)} · {_sector(industry)}"
+    for line in conversions:
+        assert line.startswith(f"- **按步骤 10 的例子换算**：{country_label(first)} · {_sector(industry)} ")
+        if row[X_COLUMN] > 0:
+            assert f"；{label} 的 X 为 " in line
+        elif row["teaching_tariff_rate_tau"] > 0:
+            assert line.endswith(f"；{label} 被加税但首年不向美国出口（w = 0），X = 0，按估计没有与 X 相关的差异。")
+        else:
+            assert line.endswith(f"；{label} 未被加税，X = 0，按估计没有与 X 相关的差异。")
+
+
+def test_report_step_ten_without_the_panel_keeps_the_recorded_example():
+    from gvcsim.report_render import _experiment_sections
+
+    session = _complete()
+    session["steps"]["10"]["data"].update({"compared": ["CHN", "USA"], "teaching_industry": "s1"})
+    step_ten = "\n".join(_experiment_sections(session)).split("### 步骤 10 · 认识关税暴露 X", 1)[1].split("###", 1)[0]
+    # No scenario without the release; the market is named for what it is either way.
+    assert "- 情景：" not in step_ten
+    assert "- 两国趋势示例：CHN 中国、USA 美国（加征关税的一方） · s1" in step_ten
+
+
+def test_report_scenario_line_and_two_example_conversion_read_like_step_ten():
+    from gvcsim.report_render import _example_conversion, _scenario_line, _with_tax_status
+
+    flags = {"taxed": {"CAN": True, "CRI": False}}
+    assert _with_tax_status("CAN", flags) == f"{country_label('CAN')}（被加税）"
+    assert _with_tax_status("CRI", flags) == f"{country_label('CRI')}（未被加税）"
+    assert _with_tax_status("USA", flags) == f"{country_label('USA')}（加征关税的一方）"
+    assert _with_tax_status("PER", flags) == country_label("PER")
+
+    scenario = {
+        "taxed_countries": 44,
+        "untaxed_countries": 32,
+        "tariff_rate": 0.25,
+        "policy_year": 2018,
+        "taxed_rule": {"min_million_usd": 1000.0, "year": 2016},
+    }
+    assert _scenario_line(scenario) == (
+        "- 情景：美国从 2018 年起对 2016 年对美货物贸易顺差达到 10 亿美元及以上的 44 国加征 25% 关税，其余 32 国未被加税。"
+    )
+    assert _scenario_line(None) is None
+    taxed = {"country": "CAN", "industry": "C29", X_COLUMN: 0.2325, "teaching_tariff_rate_tau": 0.25}
+    untaxed = {"country": "CRI", "industry": "C29", X_COLUMN: 0.0, "teaching_tariff_rate_tau": 0.0}
+    line = _example_conversion("trade", {}, {"coef": -0.55}, True, [taxed, untaxed])
+    assert line == (
+        f"- **按步骤 10 的例子换算**：{country_label('CAN')} · {_sector('C29')} 的 X 为 23.25 个百分点，按估计与 X 相关的"
+        f"差异约为 -12.79 个百分点（Y 偏低）；{country_label('CRI')} · {_sector('C29')} 未被加税，X = 0，按估计没有与 X 相关的差异。"
+    )
+    # An open direction is said once, after the converted example, not after the untaxed one.
+    open_line = _example_conversion("trade", {}, {"coef": -0.55}, False, [untaxed, taxed])
+    assert open_line is not None and open_line.endswith("；但区间包含 0，差异的高低方向并不确定。")
+    assert open_line.count("区间包含 0") == 1
+
+
+def _sector(code: str) -> str:
+    from gvcsim.report_labels import sector_label
+
+    return sector_label(code)

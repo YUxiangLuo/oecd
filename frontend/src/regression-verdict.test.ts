@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
-  barFigures, barUnitFor, buildRegressionVerdict, chartDisplayScale, REGRESSION_STATUS_LABELS, regressionStatusLabel,
-  standardizedEffect,
+  barFigures, barUnitFor, buildRegressionVerdict, chartDisplayScale, networkIntervalDigits, REGRESSION_STATUS_LABELS,
+  regressionStatusLabel, standardizedEffect,
 } from "./regression-verdict";
 import type { CoefStat, RegressionOutcome, RegressionResponse, TreatmentSupport } from "./types";
 
@@ -118,6 +118,35 @@ describe("network size in standard deviations (same digits as the report)", () =
     expect(verdict.interval).toContain("约 [-0.048, -0.046] 个标准差");
   });
 
+  test("both ends of a network interval use the estimate's digits: closeness is not [-0.01, -0.0047]", () => {
+    // Closeness: β = -0.4884, [-0.5045, -0.4722]; per 1 percentage point (× 0.01) all three are below 0.01.
+    const closeness = network(-0.4884, -0.5045, -0.4722, 0.11);
+    expect(closeness.intervalShort).toBe("[-0.0050, -0.0047] 个中心性原始单位");
+    expect(closeness.effect).toMatch(/^-0\.0049 个中心性原始单位/);
+    expect(closeness.interval.startsWith("[-0.0050, -0.0047] 个中心性原始单位；约 [")).toBe(true);
+    expect(closeness.evidence).toContain("[-0.0050, -0.0047] 个中心性原始单位");
+    // The other network Ys keep their two decimals.
+    expect(network(-4080, -4180, -3980, 850).intervalShort).toBe("[-41.80, -39.80] 个中心性原始单位");
+    expect(network(-4080, -4180, -3980, 850).effect).toMatch(/^-40\.80 个中心性原始单位/);
+    expect(network(-5933, -6400, -5466, 1300).intervalShort).toBe("[-64.00, -54.66] 个中心性原始单位");
+    expect(network(-5933, -6400, -5466, 1300).effect).toMatch(/^-59\.33 个中心性原始单位/);
+  });
+
+  test("network digits: two decimals, two significant digits for a value that would round to 0, more until the ends differ", () => {
+    expect(networkIntervalDigits(-40.8, [-41.8, -39.8])).toBe(2);
+    expect(networkIntervalDigits(-0.004884, [-0.005045, -0.004722])).toBe(4);
+    expect(networkIntervalDigits(-0.004884, null)).toBe(4);
+    // Ends that agree at two significant digits get a third.
+    expect(networkIntervalDigits(-0.004884, [-0.004891, -0.004877])).toBe(5);
+    // The estimate always prints inside its printed interval.
+    for (const [point, low, high] of [[-0.004884, -0.005045, -0.004722], [-40.8, -41.8, -39.8], [0.00012, -0.0004, 0.0007]]) {
+      const digits = networkIntervalDigits(point, [low, high]);
+      expect(Number(point.toFixed(digits))).toBeGreaterThanOrEqual(Number(low.toFixed(digits)));
+      expect(Number(point.toFixed(digits))).toBeLessThanOrEqual(Number(high.toFixed(digits)));
+      expect(low.toFixed(digits)).not.toBe(high.toFixed(digits));
+    }
+  });
+
   test("below 0.1 the size keeps 3 decimals, so the point never sits on its interval's edge", () => {
     const verdict = network(-4590, -4800, -4300, 1000);
     expect(verdict.effect).toContain("（幅度约 0.046 个标准差，");
@@ -153,15 +182,25 @@ describe("bars repeat the headline's numbers", () => {
   test("a network bar is its size in standard deviations, labelled with the native value as the headline gives it", () => {
     expect(standardizedEffect(-4010.70, 856)).toBeCloseTo(-0.04685, 5);
     const bar = barFigures(estimate(-4010.70, -4109.84, -3911.56, 856), "network", "sd");
-    expect(bar.valueLabel).toBe("-40.11（0.047 个标准差）");
+    expect(bar.valueLabel).toBe("-40.11（-0.047 个标准差）");
     expect(bar.intervalLabel).toBe("[-0.048, -0.046] 个标准差");
     expect(bar.value).toBeCloseTo(-0.04685, 5);
     const data = response("network", coefficient(-4010.70, -4109.84, -3911.56));
     data.result.depvar_std = 856;
     expect(buildRegressionVerdict("network", data).effect).toMatch(/^-40\.11 个中心性原始单位（幅度约 0\.047 个标准差/);
     // Step 15 mixes units, so the native value names its unit.
-    expect(barFigures(estimate(-0.5493, -0.5711, -0.5274, 0.05), "share", "sd", true).valueLabel).toBe("-0.55 个百分点（0.110 个标准差）");
-    expect(barFigures(estimate(-1.8143, -1.9, -1.7, 0.4), "length", "sd", true).valueLabel).toBe("-0.018 个长度单位（0.045 个标准差）");
+    expect(barFigures(estimate(-0.5493, -0.5711, -0.5274, 0.05), "share", "sd", true).valueLabel).toBe("-0.55 个百分点（-0.110 个标准差）");
+    expect(barFigures(estimate(-1.8143, -1.9, -1.7, 0.4), "length", "sd", true).valueLabel).toBe("-0.018 个长度单位（-0.045 个标准差）");
+  });
+
+  test("a size in standard deviations keeps its sign, so it sits inside its signed interval on the signed axis", () => {
+    const negative = barFigures(estimate(-1.8143, -1.9, -1.7, 0.4), "length", "sd");
+    expect(negative.valueLabel).toBe("-0.018（-0.045 个标准差）");
+    expect(negative.intervalLabel).toBe("[-0.047, -0.043] 个标准差");
+    const positive = barFigures(estimate(0.00752, -0.0112, 0.0262, 0.05), "share", "sd", true);
+    expect(positive.valueLabel).toBe("+0.008 个百分点（+0.002 个标准差）");
+    // Every SD number on a bar, its label and its tooltip has a sign; only 幅度约 … in the headline is a size.
+    for (const bar of [negative, positive]) expect(bar.valueLabel).toMatch(/（[+-]\d/);
   });
 
   test("suppressed inference or a missing interval draws no whisker and reads 方向不确定", () => {

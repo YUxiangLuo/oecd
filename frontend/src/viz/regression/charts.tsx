@@ -81,7 +81,7 @@ export function GroupChangeChart({
   };
   const [estimateHead, ...estimateRest] = (estimate?.label ?? "").split(" ");
   const estimateValue = estimateRest.join(" ");
-  const description = `${title}：被加税组与未被加税组相对加税前平均水平的变化，${policyYear} 年起加税`;
+  const description = `${title}：被加税组与未被加税组相对加税前平均水平的变化，${policyYear} 年起加税${estimate ? `；${estimate.label}` : ""}`;
   return (
     <div className="group-change-chart" style={{ ...cardStyle, flex: "1 1 320px", minWidth: 280 }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3a4050" }}>{title}</div>
@@ -106,9 +106,10 @@ export function GroupChangeChart({
               <line x1={bx} x2={bx} y1={y0} y2={y1} strokeDasharray="3 3" />
               <line x1={bx - 4} x2={bx + 4} y1={y0} y2={y0} />
               <line x1={bx - 4} x2={bx + 4} y1={y1} y2={y1} />
-              {/* Two lines ("回归估计的差距" / value and unit): on one line a unit such as 中心性原始单位 ran off the chart. */}
-              <text x={bx + 7} y={slots.estimate + 4} fontSize={10.5} fill="#2a2f3a" stroke="none">
-                <tspan x={bx + 7} dy={estimate.uncertain ? "-1.2em" : "-0.6em"}>{estimateHead}</tspan>
+              {/* Two lines ("回归估计的差距" / value and unit): on one line a unit such as 中心性原始单位 ran off the chart.
+                  The head keeps its trailing space, so the text reads "回归估计的差距 -1.98 个百分点" when copied or read aloud. */}
+              <text data-estimate-label x={bx + 7} y={slots.estimate + 4} fontSize={10.5} fill="#2a2f3a" stroke="none">
+                <tspan x={bx + 7} dy={estimate.uncertain ? "-1.2em" : "-0.6em"}>{`${estimateHead} `}</tspan>
                 <tspan x={bx + 7} dy="1.2em">{estimateValue}</tspan>
                 {estimate.uncertain && <tspan data-estimate-uncertain x={bx + 7} dy="1.2em">（方向不确定）</tspan>}
               </text>

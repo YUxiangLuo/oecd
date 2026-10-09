@@ -18,6 +18,7 @@ import {
   countUnit,
   depvarKind,
   globalInferenceIsSuppressed,
+  networkDigits,
   signed,
   type BarEstimate,
 } from "./regression-verdict";
@@ -119,10 +120,8 @@ export interface RegressionExample {
   imposer?: boolean;
 }
 
-/** Network units span closeness (~0.01) to weighted degree (thousands): keep about three significant figures. */
-export function networkDigits(size: number): number {
-  return size >= 100 ? 0 : size >= 10 ? 1 : size >= 1 ? 2 : size >= 0.1 ? 3 : size >= 0.01 ? 4 : 5;
-}
+/** Defined with the other number formats (regression-verdict.ts); re-exported where it was first used. */
+export { networkDigits };
 
 /** Y change implied by the estimate for an example's X, in the step's display units. */
 export function exampleEffect(outcome: RegressionOutcome, coef: number, x: number, design?: { depvar_kind?: string } | null): string {
@@ -137,6 +136,9 @@ export function exampleEffect(outcome: RegressionOutcome, coef: number, x: numbe
   const size = Math.abs(change);
   return sized(size, networkDigits(size), "个中心性原始单位");
 }
+
+/** Step 14's unit, worded as the report's line beside the step 14 numbers (gvcsim/report_render.py). */
+export const NETWORK_UNIT_NOTE = "中心性原始单位：本步的 Y 是课程按真实网络指标的排名校准生成的数值，不是步骤 5、9 的百万美元，不能和那两步的数值直接比较。";
 
 const BADGE_COLORS = { negative: NEGATIVE, positive: POSITIVE, insufficient: UNCERTAIN, suppressed: UNCERTAIN } as const;
 
@@ -220,6 +222,8 @@ export function RegressionResultCard({ outcome, response, examples = [], example
               ? "换一个向美国出口的被加税国家或行业（如加拿大的汽车行业）"
               : examples.length === 1 ? "换成被加税的国家（如加拿大），或再选一个被加税的对比国家" : "选一个被加税的国家（如加拿大）"}。`}</li>;
         })()}
+        {/* As the report says next to the number: step 14's unit is not the 百万美元 of steps 5 and 9. */}
+        {kind === "network" && <li className="muted reg-unit-note">{NETWORK_UNIT_NOTE}</li>}
         <li className="reg-caveat"><b>解释限制</b> {lesson.dontClaim}</li>
         <li className="muted reg-data-note">{GENERATED_DATA_NOTE}</li>
       </ul>
@@ -243,7 +247,8 @@ export function RegressionCoefficientTable({ response }: { response: RegressionR
   const display = chartDisplayScale(outcome, response.design);
   return (
     <ScrollableRegion className="table-wrap" label="完整回归系数表，可横向滚动">
-      <table className="data-table">
+      {/* Headers wrap and cells are narrower (workbench.css), so step 14's long numbers fit without clipping p 值. */}
+      <table className="data-table reg-coef-table">
         <thead><tr>
           <th>变量</th>
           <th>X 每高 1 个百分点，Y 平均相差（{display.unit}）</th>
@@ -401,6 +406,17 @@ export function familyBarRows(
   return { rows, unitTitle: BAR_UNIT_TITLES[unit] };
 }
 
+/** After the report was submitted, a run has already replaced the saved material; said by what replaced it. */
+export const REPLACED_NOTICE = {
+  bar: "已改为保存这个 Y 的结果；报告已提交，请到步骤 15 更新报告并重新提交给老师。",
+  button: "已改为保存这次算出的结果；报告已提交，请到步骤 15 更新报告并重新提交给老师。",
+} as const;
+
+/** The line under the 加税前后 chart: what its dashed bracket is (β × the taxed group's mean X), as an association. */
+export function gapCaption(meanExposureTaxed: number): string {
+  return `虚线标出的差距 = 估计值 × 被加税组平均 X（${percentagePoints(meanExposureTaxed)} 个百分点），即按回归估计，加税后被加税组与未被加税组平均相差多少。`;
+}
+
 /** Step 12's four forward shares add up to 100% of value added, so their four estimates add up to about 0. */
 const FORWARD_SHARES = ["1_VA_D_share", "2_VA_RT_share", "3a_VA_GVC_S_share", "3b_VA_GVC_C_share"];
 
@@ -430,7 +446,10 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   const [result, setResult] = useState<RegressionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
-  const [replacedAfterSubmit, setReplacedAfterSubmit] = useState(false);
+  // What replaced the saved material after the report was submitted: a bar click or the run button.
+  const [replacedBy, setReplacedBy] = useState<"bar" | "button" | null>(null);
+  const replacedNoticeRef = useRef<HTMLParagraphElement>(null);
+  const revealReplacedNotice = useRef(false);
   // The bars are fetched with the first run (or with a restored one), never before.
   const [overviewWanted, setOverviewWanted] = useState(false);
   // A 429 carries Retry-After: the retry button waits it out with a visible countdown.
@@ -539,7 +558,10 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
       // A bar click keeps keyboard focus on the bars; only the button moves on to the answer.
       scrollToVerdictAfterRun.current = fromButton;
       // After the report was submitted, this run has already replaced the saved material: the notice says so.
-      if (state.materialLocked) setReplacedAfterSubmit(true);
+      if (state.materialLocked) {
+        setReplacedBy(fromButton ? "button" : "bar");
+        revealReplacedNotice.current = !fromButton;
+      }
       setResult(response);
     } catch (cause) {
       if (mountedRef.current) {
@@ -571,6 +593,18 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
     return () => window.cancelAnimationFrame(frame);
   }, [result]);
 
+  // A bar click after submission: the notice under the bars is brought into view (never focused, so keyboard focus
+  // stays on the bars). The run button's path scrolls to the verdict anchor, which holds the bars and the notice.
+  useEffect(() => {
+    if (!replacedBy || !revealReplacedNotice.current) return;
+    revealReplacedNotice.current = false;
+    const frame = window.requestAnimationFrame(() => {
+      const reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      replacedNoticeRef.current?.scrollIntoView?.({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [replacedBy, result]);
+
   const bars = result && overviewItems.length > 0 ? familyBarRows(outcome, overviewItems, selectedKey, result) : null;
   const identity = outcome === "production" && bars ? forwardShareIdentity(overviewItems) : null;
   const latinGap = /^[A-Za-z]/.test(lesson.shortMetric) ? " " : "";
@@ -599,12 +633,11 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         </button>
         {/* Mounted before it has text, so screen readers announce the change. */}
         <span className={running ? "muted reg-inline-status" : "sr-only"} role="status" aria-live="polite">{running ? "正在计算…" : ""}</span>
-        {!running && savedRun && state.materialLocked && (
-          <p className="reg-rerun-warning" role="note">
-            <b>报告已提交</b>{replacedAfterSubmit
-              ? "报告材料里保存的结果已换成这次算出的结果；请到步骤 15 更新报告，并重新提交给老师。"
-              : "重新计算或点另一条，会替换报告材料里保存的结果；之后要到步骤 15 更新报告，并重新提交给老师。"}
-          </p>
+        {/* Before a replacement; afterwards the notice sits under the bars, where the click happened. */}
+        {!running && savedRun && state.materialLocked && (!replacedBy || !bars) && (
+          replacedBy
+            ? <p className="reg-rerun-warning reg-replaced-notice" role="status">{REPLACED_NOTICE[replacedBy]}</p>
+            : <p className="reg-rerun-warning" role="note"><b>报告已提交</b>重新计算或点另一条，会替换报告材料里保存的结果；之后要到步骤 15 更新报告，并重新提交给老师。</p>
         )}
         {groups && (() => {
           const series = selectedKey === defaultKey ? groups.outcomes[outcome] : groups.series?.[outcome]?.[selectedKey];
@@ -634,6 +667,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
                 title={`加税前后：两组${latinGap}${lesson.shortMetric}的平均变化`}
                 estimate={gap == null ? null : { gap, label: `回归估计的差距 ${shown > 0 ? "+" : ""}${shown.toFixed(digits)} ${countUnit(kind)}`, uncertain }}
               />
+              {gap != null && groups.mean_exposure_taxed != null && <p className="muted reg-gap-caption">{gapCaption(groups.mean_exposure_taxed)}</p>}
             </div>
           );
         })()}
@@ -657,8 +691,13 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
                   title={`本类 ${bars.rows.length} 个 Y · 点一条，换成它并保存`}
                   onSelect={(key) => { if (key !== selectedKey) void run(key, false); }}
                   disabled={running}
-                />
-                {identity && <p className="muted reg-identity-note">{identity}</p>}
+                >
+                  {identity && <p className="muted reg-identity-note">{identity}</p>}
+                  {/* Next to the bar that was clicked, so the student sees it without scrolling up. */}
+                  {replacedBy && state.materialLocked && (
+                    <p ref={replacedNoticeRef} className="reg-rerun-warning reg-replaced-notice" role="status">{REPLACED_NOTICE[replacedBy]}</p>
+                  )}
+                </DivergingBarChart>
               </div>
             ) : overviewQuery.status === "error" && overviewQuery.error
               ? <RegressionRequestError label="条形图" error={overviewQuery.error} onRetry={overviewQuery.retry} />

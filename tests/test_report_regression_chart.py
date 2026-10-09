@@ -110,7 +110,8 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
             assert bar["value"] == pytest.approx(point, rel=1e-3)
             assert bar["ci_low"] == pytest.approx(bounds[0], rel=1e-3)
             assert bar["ci_high"] == pytest.approx(bounds[1], rel=1e-3)
-            sd = _signed(point, standardized_digits(point, bounds))[1:]
+            # Signed: the bar, its whisker and its label sit on a signed axis.
+            sd = _signed(point, standardized_digits(point, bounds))
             assert bar["text"] == f"{native}（{sd} 个标准差）"
             assert (
                 bar["sub"]
@@ -119,8 +120,8 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
                 ]
             )
             if outcome == "network":
-                # The table states the same SD size ("幅度约 0.047 个标准差").
-                assert f"幅度约 {sd} 个标准差" in effect
+                # The table states the same SD size, unsigned after 幅度约 ("幅度约 0.047 个标准差").
+                assert f"幅度约 {sd[1:]} 个标准差" in effect
         # The other bars are the course's estimates of the other Ys.
         for item, course in zip(chart["items"], overview["outcomes"][outcome]):
             if item.get("saved"):
@@ -166,7 +167,7 @@ def test_summary_chart_has_one_standardized_bar_per_saved_run(panel, overview):
         bounds = (coefficient["ci_low"] * 0.01 / std, coefficient["ci_high"] * 0.01 / std)
         assert item["value"] == pytest.approx(point, rel=1e-3)
         assert (item["ci_low"], item["ci_high"]) == pytest.approx(bounds, rel=1e-3)
-        sd = _signed(point, standardized_digits(point, bounds))[1:]
+        sd = _signed(point, standardized_digits(point, bounds))
         _label, effect, _interval = _natural_effect(run["outcome"], run["design"], run["result"], coefficient)
         native = effect.split("（", 1)[0]
         assert item["text"] == f"{native}（{sd} 个标准差）"
@@ -225,7 +226,7 @@ def test_uncertain_and_suppressed_bars_and_a_missing_overview():
     length_coefficient = {"name": X_COLUMN, "coef": -1.8143, "ci_low": -1.9155, "ci_high": -1.7132}
     length_result = {"status": "ok", "support": {"status": "ok"}, "depvar_std": 0.5819, "coefs": [length_coefficient]}
     (bar,) = json.loads(family_chart(13, "length", length, length_result, length_coefficient, None)[1])["items"]
-    assert bar["text"] == "-0.018（0.031 个标准差）"
+    assert bar["text"] == "-0.018（-0.031 个标准差）"
     assert bar["sub"] == "长度单位"
     # Without a recorded SD the bar is 0 and says so, after the native value (the page's "（没有标准差）").
     (bare,) = json.loads(
@@ -242,7 +243,7 @@ def test_uncertain_and_suppressed_bars_and_a_missing_overview():
     )
     assert [item["sub"] for item in summary["items"]] == ["步骤 12 · 生产", "步骤 13 · 长度"]
     assert [item["text"] for item in summary["items"]] == [
-        "+0.008 个百分点（0.001 个标准差）",
+        "+0.008 个百分点（+0.001 个标准差）",
         "-0.018 个长度单位（没有标准差）",
     ]
     assert summary["note"].endswith("步骤 11 · 贸易流、步骤 14 · 网络：还没计算。")

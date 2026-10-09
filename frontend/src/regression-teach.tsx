@@ -55,7 +55,7 @@ export function familyVerdict(
 /**
  * The four saved estimates as four bars on one axis. Their units differ, so each bar is the standardized size
  * ((β × 0.01) / sd(Y): Y's gap in standard deviations per 1 percentage point of X), and its end gives the native
- * value with its unit and the size ("-0.55 个百分点（0.12 个标准差）"). Each bar is the step's SAVED run, as in the report.
+ * value with its unit and the signed size ("-0.55 个百分点（-0.062 个标准差）"). Each bar is the step's SAVED run, as in the report.
  */
 export function regressionSummaryRows(getStep?: (step: number) => SiblingStepData | undefined): { rows: DivergingBarRow[]; missing: string[] } {
   const rows: DivergingBarRow[] = [];
