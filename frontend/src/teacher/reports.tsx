@@ -14,10 +14,20 @@ import { LEAVE_MESSAGE, useTeacherReviewGuard } from "./review-guard";
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
 type Filter = "pending" | "graded" | "all";
 
-/** Empty list copy: "no match" only when a search or class filter is active, not when all pending work is done. */
-export function reportsEmptyState(total: number, filter: Filter, narrowed: boolean): { title: string; hint: string } {
+/**
+ * Empty list copy: "no match" only when a search or class filter is active, not when all pending work is done.
+ * `pendingElsewhere`: reports still to grade that the filter or search leaves out (the sidebar badge counts them).
+ */
+export function reportsEmptyState(total: number, filter: Filter, narrowed: boolean, pendingElsewhere = 0): { title: string; hint: string } {
   if (!total) return { title: "还没有学生提交报告", hint: "学生提交报告后会出现在这里" };
-  if (narrowed) return { title: "没有匹配的报告", hint: "请调整筛选条件或关键词" };
+  if (narrowed) {
+    return {
+      title: "没有匹配的报告",
+      hint: filter !== "graded" && pendingElsewhere > 0
+        ? `筛选范围外还有 ${pendingElsewhere} 份待评阅报告；请调整筛选条件或关键词`
+        : "请调整筛选条件或关键词",
+    };
+  }
   if (filter === "pending") return { title: "暂无待评阅报告", hint: "已提交的报告都评阅完了；新的提交会出现在这里" };
   return { title: "暂无已评阅报告", hint: "评阅后的报告会出现在这里" };
 }
@@ -94,12 +104,14 @@ function scrollPaneToTop(node: HTMLElement | null) {
   if (pane) pane.scrollTop = 0;
 }
 
-export function ReportsTab({ user, initialReview, onGraded, onRefresh }: {
+export function ReportsTab({ user, initialReview, onGraded, onRefresh, onReturn }: {
   user: AuthUser;
   /** Open this report first (from the student table), moving through `queue` with 上一份/下一份. */
   initialReview?: { accountId: number; queue: number[] };
   onGraded?: () => void;
   onRefresh?: () => void;
+  /** Leaving a review opened from 学生与进度 goes back there (where the teacher came from), not to this list. */
+  onReturn?: () => void;
 }) {
   const [refresh, setRefresh] = useState(0);
   const [openAccountId, setOpenAccountId] = useState<number | null>(initialReview?.accountId ?? null);
@@ -151,10 +163,12 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh }: {
   const semesters = academic?.semesters ?? [];
   // Normalized like stored names (full-width letters/digits, zero-width characters), then case-folded.
   const needle = normalizeLabel(query).toLowerCase();
-  const shown = reports
-    .filter((report) => filter === "all" || report.state === filter)
+  // The term/class filter and the search narrow every tab alike, so the 待评阅 count is taken after them
+  // (as 学生与进度 counts its summary over the rows its filters leave); only the sidebar badge counts them all.
+  const narrowed = reports
     .filter((report) => matchesAcademicFilter(report.enrollments, semesterId, classId))
     .filter((report) => !needle || [report.display_name, report.username, report.student_no].some((value) => normalizeLabel(value ?? "").toLowerCase().includes(needle)));
+  const shown = narrowed.filter((report) => filter === "all" || report.state === filter);
   // The open review comes first: a list refresh failing in the background must not unmount an unsaved review.
   if (openAccountId != null) {
     return <div ref={rootRef}><ReportView key={openAccountId} accountId={openAccountId} queue={queue}
@@ -163,7 +177,13 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh }: {
         if (changed) saved();
         setOpenAccountId(accountId);
       }}
+      backLabel={initialReview && onReturn ? "← 返回学生与进度" : undefined}
       onBack={(changed) => {
+        if (initialReview && onReturn) {
+          if (changed) saved();
+          onReturn();
+          return;
+        }
         returnFocus.current = { accountId: openAccountId, afterLoad: loads };
         setOpenAccountId(null);
         if (changed) saved();
@@ -176,7 +196,8 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh }: {
       if (academicError) retryAcademic();
     }} />;
   }
-  const pending = reports.filter((report) => report.state === "pending").length;
+  const pending = narrowed.filter((report) => report.state === "pending").length;
+  const pendingElsewhere = reports.filter((report) => report.state === "pending").length - pending;
   const open = (accountId: number) => {
     setQueue(shown.map((report) => report.account_id));
     setOpenAccountId(accountId);
@@ -221,7 +242,7 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh }: {
             <td><ReportRowAction report={report} onOpen={() => open(report.account_id)} /></td>
           </tr>)}
         </tbody></table>
-        {data && shown.length === 0 && <EmptyState icon="📝" {...reportsEmptyState(reports.length, filter, Boolean(needle) || semesterId != null)} />}
+        {data && shown.length === 0 && <EmptyState icon="📝" {...reportsEmptyState(reports.length, filter, Boolean(needle) || semesterId != null, pendingElsewhere)} />}
       </ScrollableRegion>
     </div>
   );
@@ -229,8 +250,11 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh }: {
 
 export type GradeDraft = { score: string; feedback: string };
 
-function ReportView({ accountId, queue, grader, semesters, onBack, onMove }: {
+const BACK_TO_LIST = "← 返回列表";
+
+function ReportView({ accountId, queue, grader, semesters, backLabel = BACK_TO_LIST, onBack, onMove }: {
   accountId: number; queue: readonly number[]; grader: string; semesters: readonly AcademicSemester[];
+  backLabel?: string;
   onBack: (changed: boolean) => void;
   /** Open another report of the queue; `changed` when this one was just saved. */
   onMove: (accountId: number, changed: boolean) => void;
@@ -243,7 +267,7 @@ function ReportView({ accountId, queue, grader, semesters, onBack, onMove }: {
   if (error) {
     return (
       <div>
-        <div className="review-topbar"><button className="back-btn" onClick={() => onBack(false)}>← 返回列表</button></div>
+        <div className="review-topbar"><button className="back-btn" onClick={() => onBack(false)}>{backLabel}</button></div>
         <LoadFailure what="报告" error={error} onRetry={retry} />
       </div>
     );
@@ -254,6 +278,7 @@ function ReportView({ accountId, queue, grader, semesters, onBack, onMove }: {
     data={data}
     grader={grader}
     semesters={semesters}
+    backLabel={backLabel}
     onBack={onBack}
     position={position ?? undefined}
     onPrevious={position?.previous != null ? () => onMove(position.previous!, false) : undefined}
@@ -266,9 +291,11 @@ function ReportView({ accountId, queue, grader, semesters, onBack, onMove }: {
   />;
 }
 
-export function GradeView({ data, grader, semesters = [], onBack, onReload, initialDraft, position, onPrevious, onNext }: {
+export function GradeView({ data, grader, semesters = [], backLabel = BACK_TO_LIST, onBack, onReload, initialDraft, position, onPrevious, onNext }: {
   data: TeacherReport;
   grader: string;
+  /** The back button names where it goes: the list, or 学生与进度 for a report opened from there. */
+  backLabel?: string;
   /** Marks an archived class in the header, as the list does. */
   semesters?: readonly AcademicSemester[];
   onBack: (changed: boolean) => void;
@@ -363,7 +390,7 @@ export function GradeView({ data, grader, semesters = [], onBack, onReload, init
   return (
     <div>
       <div className="review-topbar">
-        <button className="back-btn" disabled={saving} onClick={() => attemptLocalLeave(() => onBack(false))}>← 返回列表</button>
+        <button className="back-btn" disabled={saving} onClick={() => attemptLocalLeave(() => onBack(false))}>{backLabel}</button>
         <a className="review-skip" href={`#${formHeadingId}`} onClick={skipToForm}>跳到评阅表单</a>
         <h3 ref={headingRef} tabIndex={-1} className="stage-chip review-student">{data.display_name}（{data.username}）</h3>
         <span className="muted">{data.enrollments.map((item) => enrollmentLabel(item, semesters)).join("；") || "未分班"} · 提交于 {fmtTime(data.submitted_at)}</span>
@@ -385,13 +412,6 @@ export function GradeView({ data, grader, semesters = [], onBack, onReload, init
           </div>
           <div className="grade-panel-body">
             {reloaded && <p ref={reloadedRef} className="muted grade-note" role="status" tabIndex={-1}>{RELOADED_REVIEW_NOTE}</p>}
-            <details ref={rubricRef} className="grade-rubric" open={rubricOpen}>
-              {/* Only the teacher's own clicks are remembered (a toggle event also fires when the page sets `open`). */}
-              <summary onClick={() => rememberRubric(!rubricRef.current?.open)}>评分参考（四项各 25 分）</summary>
-              <ol>
-                {GRADE_RUBRIC.map(([title, detail]) => <li key={title}><b>{title}</b><span>{detail}</span></li>)}
-              </ol>
-            </details>
             <label className="grade-field">评语（选填）<textarea disabled={saving} value={feedback} onChange={(event) => {
               // 4000 characters as the server counts them (an emoji is one); only text beyond that is cut, and said so.
               const characters = [...event.target.value];
@@ -401,10 +421,18 @@ export function GradeView({ data, grader, semesters = [], onBack, onReload, init
               setFeedback(next);
               reviewGuard.publish({ dirty: score !== initialScore || next !== data.feedback, saving: false });
               setSaveError(null);
-            }} rows={8} /></label>
+            }} rows={6} /></label>
             {/* Not a live region: announcing the count on every keystroke drowned out typing; only the limit is announced. */}
             <span className="muted grade-count">评语 {[...feedback.trim()].length} / 4000 字</span>
             {feedbackCut && <span className="muted grade-cut" role="status">超过 4000 字上限，多出的内容没有保留。</span>}
+            {/* After the 评语 box, so an open rubric never pushes the box out of the panel (1024×768 included). */}
+            <details ref={rubricRef} className="grade-rubric" open={rubricOpen}>
+              {/* Only the teacher's own clicks are remembered (a toggle event also fires when the page sets `open`). */}
+              <summary onClick={() => rememberRubric(!rubricRef.current?.open)}>评分参考（四项各 25 分）</summary>
+              <ol>
+                {GRADE_RUBRIC.map(([title, detail]) => <li key={title}><b>{title}</b><span>{detail}</span></li>)}
+              </ol>
+            </details>
           </div>
           {/* Always in view at the bottom of the panel: the score and the save buttons. */}
           <div className="grade-panel-foot">

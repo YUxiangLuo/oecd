@@ -162,7 +162,8 @@ export function useTip() {
         if (i === 0) { div.style.cssText = "font-weight:700;font-size:12.5px;margin-bottom:3px"; div.textContent = value; }
         else {
           const b = document.createElement("b");
-          b.style.cssText = "color:#fff;font-weight:600";
+          // A value keeps its unit on the same line ("274,951 百万美元", not "百万 / 美元"); the label may wrap.
+          b.style.cssText = "color:#fff;font-weight:600;white-space:nowrap";
           b.textContent = value;
           const span = document.createElement("span");
           span.style.color = "#c8ccd6";
@@ -173,8 +174,12 @@ export function useTip() {
       }),
     );
     const r = wrap.getBoundingClientRect();
+    // Measured at the left edge, where nothing squeezes it: the tip flips to the pointer's left when its own
+    // width would not fit on the right (a fixed 190px guess squeezed wider tips and broke their lines).
+    box.style.left = "0px";
+    const width = box.offsetWidth || 190;
     let x = e.clientX - r.left + 14, y = e.clientY - r.top + 12;
-    if (x > r.width - 190) x = e.clientX - r.left - 195;
+    if (x + width > r.width) x = Math.max(0, e.clientX - r.left - width - 14);
     if (anchor) {
       const above = anchor.top - r.top - box.offsetHeight - 6;
       y = above >= 0 ? above : anchor.bottom - r.top + 6;
@@ -186,7 +191,7 @@ export function useTip() {
     <div ref={boxRef} style={{
       position: "absolute", pointerEvents: "none", opacity: 0, transition: "opacity .12s",
       background: "#1b1f2b", color: "#fff", padding: "9px 12px", borderRadius: 10,
-      fontSize: 11.5, lineHeight: 1.75, boxShadow: "0 8px 24px rgba(0,0,0,.22)", zIndex: 6, minWidth: 150,
+      fontSize: 11.5, lineHeight: 1.75, boxShadow: "0 8px 24px rgba(0,0,0,.22)", zIndex: 6, minWidth: 150, maxWidth: 320,
     }} />
   );
   return { wrapRef, Tip, show, hide };

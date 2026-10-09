@@ -280,11 +280,22 @@ function markHiddenColumns(region: HTMLElement | null | undefined) {
   region.dataset.moreRight = region.scrollLeft + region.clientWidth < region.scrollWidth - 1 - gutter ? "true" : "false";
 }
 
-/** What the enrollment toast says: the class the student is now in, or that they left the semester's class. */
+/**
+ * What the enrollment toast says: the class the student is now in, that they left the semester's class, or,
+ * when the saved choice is what they already had (不分班 for a student never in a class), that nothing changed.
+ * `student` is the row as it was before the save.
+ */
 export function enrollmentToast(student: StudentRow, semesters: readonly AcademicSemester[], termId: number, classId: number | null): string {
   const semester = semesters.find((item) => item.id === termId);
   const group = semester?.classes.find((item) => item.id === classId);
-  if (!group) return `已把 ${student.display_name} 移出${semester ? `“${semester.name}”的` : ""}班级`;
+  const before = student.enrollments.find((item) => item.term_id === termId)?.class_id ?? null;
+  const term = semester ? `“${semester.name}”` : "该学期";
+  if (!group) {
+    return before == null
+      ? `${student.display_name} 在${term}仍未分班，没有改动`
+      : `已把 ${student.display_name} 移出${semester ? `“${semester.name}”的` : ""}班级`;
+  }
+  if (before === group.id) return `${student.display_name} 仍在“${semester!.name} · ${group.name}”，没有改动`;
   return `已把 ${student.display_name} 分到“${semester!.name} · ${group.name}”`;
 }
 

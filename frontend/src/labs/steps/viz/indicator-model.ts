@@ -40,6 +40,8 @@ export interface CompositionSpec {
     note: string;
     /** The note under 历年构成 when `note` describes the single-year bars ("每条是…"). */
     evolutionNote?: string;
+    /** The note under the single-year bars in 金额 (when `note` speaks of shares). */
+    amountNote?: string;
 }
 
 export interface AxesOption {

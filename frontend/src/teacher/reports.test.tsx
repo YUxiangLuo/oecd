@@ -338,6 +338,42 @@ describe("teacher review flow", () => {
     }
   });
 
+  test("the 待评阅 count follows the term filter; the sidebar badge stays the global count and says so", async () => {
+    const semesters = [
+      { id: 1, name: "2026 秋", is_active: true, student_count: 1, created_at: "2026-09-01",
+        classes: [{ id: 11, term_id: 1, name: "一班", is_active: true, student_count: 1, created_at: "2026-09-01" }] },
+      { id: 2, name: "2027 春", is_active: true, student_count: 0, created_at: "2027-02-01", classes: [] },
+    ];
+    const autumn = { ...pendingReport, account_id: 8, display_name: "秋季学生", enrollments: [{ term_id: 1, term_name: "2026 秋", class_id: 11, class_name: "一班" }] };
+    const spies = [
+      spyOn(api.classroom, "reports").mockResolvedValue({ reports: [pendingReport, autumn] }),
+      spyOn(api.classroom, "students").mockResolvedValue({ students: [] }),
+      spyOn(api.classroom, "semesters").mockResolvedValue({ semesters }),
+    ];
+    try {
+      renderReports();
+      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+      await screen.findByRole("button", { name: "评阅报告：秋季学生" });
+      const pill = () => screen.getByRole("button", { name: /^待评阅/ }).querySelector(".seg-badge")?.textContent ?? null;
+      expect(pill()).toBe("2");
+      await waitFor(() => expect(document.querySelector(".nav-badge")?.textContent).toBe("2"));
+
+      fireEvent.change(await screen.findByLabelText("筛选学期"), { target: { value: "1" } });
+      expect(pill()).toBe("1");
+      fireEvent.change(screen.getByLabelText("筛选学期"), { target: { value: "2" } });
+      expect(pill()).toBeNull();
+      expect(screen.getByText("没有匹配的报告")).toBeTruthy();
+      expect(screen.getByText("筛选范围外还有 2 份待评阅报告；请调整筛选条件或关键词")).toBeTruthy();
+      // The sidebar keeps counting every pending report, and its name says it is not filtered.
+      expect(document.querySelector(".nav-badge")?.textContent).toBe("2");
+      const nav = screen.getByRole("button", { name: /报告评阅/, current: "page" });
+      expect(nav.getAttribute("title")).toBe("报告评阅（全部学期、班级共 2 份待评阅）");
+      expect(nav.textContent).toContain("全部学期、班级共 2 份待评阅");
+    } finally {
+      spies.forEach((spy) => spy.mockRestore());
+    }
+  });
+
   test("a failed list load reads as Chinese and can be retried", async () => {
     const reports = spyOn(api.classroom, "reports").mockRejectedValue(new TypeError("Failed to fetch"));
     const spies = [
@@ -376,6 +412,14 @@ test("the review header marks an archived class and the feedback counter ignores
   expect(container.querySelector(".grade-count")?.textContent).toBe("评语 0 / 4000 字");
   fireEvent.change(screen.getByRole("textbox"), { target: { value: "  很好  " } });
   expect(container.querySelector(".grade-count")?.textContent).toBe("评语 2 / 4000 字");
+});
+
+test("the 评语 box comes before the rubric, so an open rubric never pushes it out of the panel", () => {
+  const { container } = render(<GradeView data={report} grader="teacher" onBack={() => {}} onReload={() => {}} />);
+  const textarea = container.querySelector(".grade-panel-body textarea")!;
+  const rubric = container.querySelector(".grade-panel-body .grade-rubric")!;
+  expect(textarea.compareDocumentPosition(rubric) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(textarea.getAttribute("rows")).toBe("6");
 });
 
 test("a report's place in its list gives 第 k / n 份 and its neighbours", () => {
@@ -480,7 +524,16 @@ describe("moving through the list while grading", () => {
       await screen.findByRole("heading", { level: 3, name: "学生8（s8）" });
       expect(document.title).toContain("报告评阅");
       expect(screen.getByText("第 1 / 1 份")).toBeTruthy();
-      fireEvent.click(screen.getByRole("button", { name: "← 返回列表" }));
+      // Back goes where the teacher came from, and the button says so.
+      expect(screen.queryByRole("button", { name: "← 返回列表" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "← 返回学生与进度" }));
+      expect(await screen.findByRole("button", { name: "待评阅，打开报告：学生8（s8）" })).toBeTruthy();
+      expect(document.title).toContain("学生与进度");
+      await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { level: 2, name: "学生与进度" })));
+      // Opened from the sidebar instead, the same report returns to the list.
+      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "评阅报告：学生8" }));
+      fireEvent.click(await screen.findByRole("button", { name: "← 返回列表" }));
       expect(await screen.findByRole("button", { name: "评阅报告：学生8" })).toBeTruthy();
     } finally {
       spies.forEach((spy) => spy.mockRestore());
