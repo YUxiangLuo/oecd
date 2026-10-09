@@ -60,7 +60,7 @@ test("step 10 uses the dedicated teaching tariff panel independently of the old 
 test("step 10 prefers the configured two-country industry example", () => {
   const meta: Meta = {
     years: [2016, 2017, 2018, 2019, 2020],
-    countries: ["CAN", "CHN", "KOR", "MEX", "USA"],
+    countries: ["CAN", "CHN", "CRI", "KOR", "MEX", "USA"],
     sectors: ["C26", "C29"],
   };
   const html = renderToStaticMarkup(<ShockLab meta={meta} step={step} state={{
@@ -68,7 +68,7 @@ test("step 10 prefers the configured two-country industry example", () => {
     syncError: null, syncNow: () => {},
   }} />);
   expect(html).toContain('<option value="CAN" selected="">CAN 加拿大</option>');
-  expect(html).toContain('<option value="MEX" selected="">MEX 墨西哥</option>');
+  expect(html).toContain('<option value="CRI" selected="">CRI 哥斯达黎加</option>');
   expect(html).toContain('<option value="C29" selected="">C29 汽车及零部件</option>');
 });
 

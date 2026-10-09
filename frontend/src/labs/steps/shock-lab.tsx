@@ -203,7 +203,7 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panel, complete, savedExample, savedFlagCurrent, first, second, industry]);
   const recordStripRef = useRef<HTMLDivElement>(null);
-  // The recorded example as saved (not the current selects): "CAN 加拿大 · C29 汽车（对比 MEX 墨西哥）".
+  // The recorded example as saved (not the current selects): "CAN 加拿大 · C29 汽车（对比 CRI 哥斯达黎加）".
   const savedCompared = state.data?.teaching_observation ? state.data.compared ?? [] : [];
   const recordedExample = savedCompared.length && state.data?.teaching_industry
     ? `${countryLabel(savedCompared[0])} · ${sectorLabel(state.data.teaching_industry)}${savedCompared[1] ? `（对比 ${countryLabel(savedCompared[1])}）` : ""}`
@@ -307,7 +307,7 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
     <section className="reg-run-card">
       <span className="reg-section-step">跟踪一个例子（可选）</span>
       <p className="teaching-example-lead">
-        看 X 在加税那年怎样跳起来。默认的加拿大是{taxedCount ? ` ${taxedCount} 个` : ""}被加税国家之一，对比的墨西哥未被加税；行业沿用步骤 9 最后看的行业。步骤 11–14 会把回归结果换算到你选的例子上。
+        看 X 在加税那年怎样跳起来。默认的加拿大是{taxedCount ? ` ${taxedCount} 个` : ""}被加税国家之一，对比的哥斯达黎加未被加税（两国汽车业都主要卖给美国）；行业沿用步骤 9 最后看的行业。步骤 11–14 会把回归结果换算到你选的例子上。
       </p>
       <div className="controls" role="group" aria-label="跟随的例子">
         <label className="model-control"><span className="model-control-label">国家 A</span>
@@ -386,7 +386,7 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
           const hint = lastRows.some((row) => isImposer(row.country))
             ? (lastRows.length === 1
               ? "想看加税带来的 X，换成被加税的国家（如加拿大），或再选一个被加税的对比国家。"
-              : "想看被加税与未被加税国家的差别，把美国换成别的国家（被加税的如加拿大，未被加税的如墨西哥）。")
+              : "想看被加税与未被加税国家的差别，把美国换成别的国家（被加税的如加拿大，未被加税的如哥斯达黎加）。")
             : unexposed.length && exposed.length
             // The other country already shows the exposure: nothing to switch.
             ? `${unexposedNames} 被加税，但该行业首年不向美国出口（w = 0），所以 X 一直为 0；图上 ${exposed.map((row) => countryLabel(row.country)).join("、")} 的 X 就是加税带来的暴露。`
@@ -394,11 +394,11 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
             ? `${unexposedNames} 被加税，但该行业首年不向美国出口（w = 0），所以 X 一直为 0；换一个行业或国家才能看到加税带来的暴露。`
             : taxed.length === 1
             ? (taxed[0]
-              ? "只看一个被加税国家时，图上是它自己的 X 跳起来；再选一个未被加税的对比国家（如墨西哥），就能看到两者的差距。"
+              ? "只看一个被加税国家时，图上是它自己的 X 跳起来；再选一个未被加税的对比国家（如哥斯达黎加），就能看到两者的差距。"
               : "这个国家未被加税，X 一直为 0；换成被加税的国家（如加拿大），或再选一个被加税的对比国家，才能看到差距。")
             : taxed.length === 2 && taxed[0] === taxed[1]
               ? (taxed[0]
-                ? "两个国家都被加税，缺少未被加税的对照；可以把其中一个换成未被加税的国家（如墨西哥）。"
+                ? "两个国家都被加税，缺少未被加税的对照；可以把其中一个换成未被加税的国家（如哥斯达黎加）。"
                 : "两个国家都未被加税，X 一直为 0，看不到加税前后的差距；可以把其中一个换成被加税的国家（如加拿大）。")
               : null;
           return hint && <p className="teaching-example-hint" role="note">{hint}</p>;

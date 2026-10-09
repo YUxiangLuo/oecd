@@ -19,9 +19,9 @@ export interface TeachingExampleSelection {
 
 /**
  * The example followed from step 10 into steps 11–14: a country and an optional comparison country.
- * Defaults to Canada vs Mexico in motor vehicles: both export heavily to the US, but only Canada is in
- * the simulated tariff group, so the pair shows that X comes from the tariff, not from export dependence
- * alone. A saved selection with one country stays a single example (second is "").
+ * Defaults to Canada vs Costa Rica in motor vehicles: both sell most of those exports to the US, but only Canada
+ * has a goods surplus with the US and is taxed (v7 rule), so the pair shows that X comes from the tariff, not from
+ * export dependence alone. Peru is the fallback untaxed comparison. A saved selection with one country stays a single example (second is "").
  */
 export function teachingExample(
   meta: Pick<Meta, "countries" | "sectors">,
@@ -34,7 +34,7 @@ export function teachingExample(
   const first = carried[0] ?? (countries.includes("CAN") ? "CAN" : countries[0] ?? "");
   const second = carried.length
     ? carried.find((code) => code !== first) ?? ""
-    : ["MEX", "KOR"].find((code) => code !== first && countries.includes(code))
+    : ["CRI", "PER"].find((code) => code !== first && countries.includes(code))
       ?? countries.find((code) => code !== first) ?? "";
   const industry = saved?.teaching_industry && meta.sectors.includes(saved.teaching_industry)
     ? saved.teaching_industry
