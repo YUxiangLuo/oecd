@@ -101,6 +101,12 @@ export function carriedComparisonFor(
   return carriedComparisonSource(step, current, savedComparison, countries)?.compared ?? [];
 }
 
+function firstCountry(candidates: unknown): string | null {
+  if (!Array.isArray(candidates)) return null;
+  const first = candidates.find((code) => typeof code === "string" && code !== "" && code !== "ROW");
+  return typeof first === "string" ? first : null;
+}
+
 /** {@link carriedComparisonFor} with the earlier step it came from, so a step can say where its country came from. */
 export function carriedComparisonSource(
   step: number,
@@ -117,10 +123,14 @@ export function carriedComparisonSource(
       typeof code === "string" && code !== "" && code !== "ROW" && candidates.indexOf(code) === index);
     if (prior <= 5) {
       if (unique.length === 0) continue;
-      if (singleCountry) return { compared: unique.slice(0, 1), from: prior };
-      if (unique.length >= 2) return { compared: unique.slice(0, 2), from: prior };
+      // Opening a step records the carried country, so the nearest earlier record may itself be a carry: name the
+      // earliest of the consecutive steps 2–5 that hold the same country, i.e. where the student picked it.
+      let from = prior;
+      while (from > 2 && firstCountry(savedComparison(from - 1)) === unique[0]) from -= 1;
+      if (singleCountry) return { compared: unique.slice(0, 1), from };
+      if (unique.length >= 2) return { compared: unique.slice(0, 2), from };
       const partner = countries.length ? defaultPartner(countries.filter((code) => code !== "ROW"), unique[0]) : "";
-      return { compared: partner ? [unique[0], partner] : [unique[0]], from: prior };
+      return { compared: partner ? [unique[0], partner] : [unique[0]], from };
     }
     if (unique.length >= 2) return { compared: unique.slice(0, 5), from: prior };
   }

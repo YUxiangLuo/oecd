@@ -74,6 +74,9 @@ describe("steps 2–5 record one country, which the later steps carry", () => {
   test("the carried country names the step it came from", () => {
     expect(carriedComparisonSource(3, [], from({ 2: ["DEU"] }), countries)).toEqual({ compared: ["DEU"], from: 2 });
     expect(carriedComparisonSource(5, [], from({ 2: ["JPN"], 3: ["DEU"] }), countries)).toEqual({ compared: ["DEU"], from: 3 });
+    // Steps 3 and 4 recorded the carried DEU on opening: the note names step 2, where the student picked it.
+    expect(carriedComparisonSource(5, [], from({ 2: ["DEU"], 3: ["DEU"], 4: ["DEU"] }), countries)).toEqual({ compared: ["DEU"], from: 2 });
+    expect(carriedComparisonSource(5, [], from({ 2: ["DEU"], 3: ["JPN"], 4: ["JPN"] }), countries)).toEqual({ compared: ["JPN"], from: 3 });
     // Step 4 never visited: the country comes from step 3.
     expect(carriedComparisonSource(5, [], from({ 3: ["JPN"] }), countries)).toEqual({ compared: ["JPN"], from: 3 });
     expect(carriedComparisonSource(4, ["JPN"], from({ 3: ["DEU"] }), countries)).toBeNull();

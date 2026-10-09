@@ -137,7 +137,7 @@ def _with_tax_status(country: str, scenario: dict[str, Any] | None) -> str:
 
 def _scenario_line(scenario: dict[str, Any] | None) -> str | None:
     """Step 10's scenario and the rule that picks the taxed countries, as the page states it: "美国从 2018 年起对
-    2016 年对美货物贸易顺差达到 10 亿美元及以上的 N 国加征 25% 关税，其余 M 国未被加税"."""
+    2016 年对美货物贸易顺差达到或超过 10 亿美元的 N 国加征 25% 关税，其余 M 国未被加税"."""
     if not scenario:
         return None
     taxed, untaxed = scenario.get("taxed_countries"), scenario.get("untaxed_countries")
@@ -149,7 +149,7 @@ def _scenario_line(scenario: dict[str, Any] | None) -> str | None:
     minimum, rule_year = rule.get("min_million_usd"), rule.get("year")
     since = f"从 {policy_year} 年起" if isinstance(policy_year, int) else ""
     who = (
-        f"{f'{rule_year} 年' if isinstance(rule_year, int) else '首年'}对美货物贸易顺差达到 {_yi_usd(float(minimum))}及以上的 {taxed} 国"
+        f"{f'{rule_year} 年' if isinstance(rule_year, int) else '首年'}对美货物贸易顺差达到或超过 {_yi_usd(float(minimum))}的 {taxed} 国"
         if isinstance(minimum, (int, float)) and math.isfinite(minimum)
         else f"{taxed} 国"
     )

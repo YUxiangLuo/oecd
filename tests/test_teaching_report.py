@@ -2602,7 +2602,7 @@ def test_report_step_ten_states_the_scenario_and_who_is_taxed(tmp_path, monkeypa
     # (The small fixture panel may have no policy year; the course release has 2018.)
     since = f"从 {overview['policy_year']} 年起" if overview["policy_year"] else ""
     assert (
-        f"- 情景：美国{since}对 {rule_year} 年对美货物贸易顺差达到 10 亿美元及以上的 "
+        f"- 情景：美国{since}对 {rule_year} 年对美货物贸易顺差达到或超过 10 亿美元的 "
         f"{overview['taxed_countries']} 国加征 25% 关税，其余 {overview['untaxed_countries']} 国未被加税。"
     ) in step_ten
     # The scenario comes before the example, as at the top of step 10.
@@ -2652,7 +2652,7 @@ def test_report_scenario_line_and_two_example_conversion_read_like_step_ten():
         "taxed_rule": {"min_million_usd": 1000.0, "year": 2016},
     }
     assert _scenario_line(scenario) == (
-        "- 情景：美国从 2018 年起对 2016 年对美货物贸易顺差达到 10 亿美元及以上的 44 国加征 25% 关税，其余 32 国未被加税。"
+        "- 情景：美国从 2018 年起对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 44 国加征 25% 关税，其余 32 国未被加税。"
     )
     assert _scenario_line(None) is None
     taxed = {"country": "CAN", "industry": "C29", X_COLUMN: 0.2325, "teaching_tariff_rate_tau": 0.25}
