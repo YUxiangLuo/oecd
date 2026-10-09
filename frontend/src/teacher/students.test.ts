@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  DEMO_PASSWORD_HINT, EnrollmentModal, FieldModal, StudentModal, StudentRowMenu, newStudentError, newStudentProblem, nextStudentSort,
+  DEMO_PASSWORD_HINT, EnrollmentModal, enrollmentToast, FieldModal, StudentModal, StudentRowMenu, newStudentError, newStudentProblem, nextStudentSort,
   settleModalSubmission, sortStudents, studentFieldError, summarizeStudents,
 } from "./students";
 import type { AcademicSemester, StudentRow } from "../types";
@@ -160,6 +160,35 @@ describe("teacher student modal submission", () => {
     expect(editHtml).toContain("历史班（已归档）");
     expect(editHtml).toContain(">不分班<");
     expect(editHtml).toContain("已归档的学期或班级只能保留现有分班或移出");
+  });
+});
+
+describe("enrollment toast", () => {
+  const semesters: AcademicSemester[] = [{
+    id: 1, name: "2026 秋季学期", is_active: true, created_at: "2026-09-01T00:00:00Z", student_count: 1,
+    classes: [
+      { id: 11, term_id: 1, name: "国贸 2401 班", is_active: true, created_at: "2026-09-01T00:00:00Z", student_count: 1 },
+      { id: 12, term_id: 1, name: "国贸 2402 班", is_active: true, created_at: "2026-09-01T00:00:00Z", student_count: 0 },
+    ],
+  }];
+  const base = {
+    id: 5, username: "student05", display_name: "演示学生 05 李明", student_no: "2026005", demo_seed: false,
+    last_login_at: null, created_at: "2026-09-01T00:00:00Z", report_state: null, score: null, submitted_at: null,
+    verified_completed_count: 0, verified_total_steps: 15, verified_completed_steps: [], completion_missing: [],
+    last_valid_activity: null,
+  } satisfies Omit<StudentRow, "enrollments">;
+  const unassigned: StudentRow = { ...base, enrollments: [] };
+  const enrolled: StudentRow = { ...base, enrollments: [{ term_id: 1, term_name: "2026 秋季学期", class_id: 11, class_name: "国贸 2401 班" }] };
+
+  test("不分班 for a student never in a class says nothing changed, not that they were moved out", () => {
+    expect(enrollmentToast(unassigned, semesters, 1, null)).toBe("演示学生 05 李明 在“2026 秋季学期”仍未分班，没有改动");
+    expect(enrollmentToast(enrolled, semesters, 1, null)).toBe("已把 演示学生 05 李明 移出“2026 秋季学期”的班级");
+  });
+
+  test("saving the same class says nothing changed; a new class names it", () => {
+    expect(enrollmentToast(enrolled, semesters, 1, 11)).toBe("演示学生 05 李明 仍在“2026 秋季学期 · 国贸 2401 班”，没有改动");
+    expect(enrollmentToast(enrolled, semesters, 1, 12)).toBe("已把 演示学生 05 李明 分到“2026 秋季学期 · 国贸 2402 班”");
+    expect(enrollmentToast(unassigned, semesters, 1, 11)).toBe("已把 演示学生 05 李明 分到“2026 秋季学期 · 国贸 2401 班”");
   });
 });
 
