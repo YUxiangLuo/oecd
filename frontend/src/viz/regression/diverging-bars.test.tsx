@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { barFigures, barUnitFor, type BarEstimate } from "../../regression-verdict";
 import type { DepvarKind } from "../../types";
 import { svgTextWidth } from "./charts";
-import { DivergingBarChart, endLabel, endLabelLines, layoutDivergingBars, unitTitleX, type DivergingBarRow } from "./diverging-bars";
+import { DivergingBarChart, endLabel, endLabelLines, layoutDivergingBars, spokenBar, unitTitleX, type DivergingBarRow } from "./diverging-bars";
 import { NEGATIVE, POSITIVE, UNCERTAIN, ZERO_LINE } from "./palette";
 
 afterEach(cleanup);
@@ -182,9 +182,17 @@ describe("DivergingBarChart", () => {
     expect(selected.querySelector("[data-selected-tag]")?.textContent).toBe("已保存");
     const svg = dom.querySelector("svg")!;
     expect(svg.getAttribute("role")).toBe("img");
-    expect(svg.getAttribute("aria-label")).toBe("X 每高 1 个百分点，Y 平均相差（个百分点）。外国增加值项占比：-0.55，已保存；国内增加值出口占比：+0.56");
+    expect(svg.getAttribute("aria-label")).toBe("X 每高 1 个百分点，Y 平均相差（个百分点）。外国增加值项占比：-0.55 个百分点，95% 区间 [-0.57, -0.53]，已保存；国内增加值出口占比：+0.56 个百分点，95% 区间 [+0.54, +0.58]");
     expect(svg.getAttribute("viewBox")).toBe(`0 0 860 ${10 + 2 * 42 + 44}`);
     expect(dom.querySelector('[role="button"]')).toBeNull();
+  });
+
+  test("a bar is read aloud with its unit, its 95% interval, an open direction and whether it is saved", () => {
+    const [saved, other] = STEP11;
+    expect(spokenBar(saved)).toBe("外国增加值项占比：-0.55 个百分点，95% 区间 [-0.57, -0.53]，已保存");
+    expect(spokenBar(other)).toBe("国内增加值出口占比：+0.56 个百分点，95% 区间 [+0.54, +0.58]");
+    const weak = STEP12.find((row) => row.uncertain)!;
+    expect(spokenBar(weak)).toBe("后向复杂 GVC 生产份额：+0.008 个百分点，95% 区间 [-0.011, +0.026]，方向不确定，已保存");
   });
 
   test("a suppressed interval draws no whisker and says so in the tooltip text", () => {
@@ -203,7 +211,7 @@ describe("DivergingBarChart", () => {
     const bars = [...container.querySelectorAll<SVGGElement>('[role="button"]')];
     expect(bars.map((bar) => bar.getAttribute("tabindex"))).toEqual(["0", "-1"]);
     expect(bars[0].getAttribute("aria-pressed")).toBe("true");
-    expect(bars[1].getAttribute("aria-label")).toBe("国内增加值出口占比：+0.56");
+    expect(bars[1].getAttribute("aria-label")).toBe("国内增加值出口占比：+0.56 个百分点，95% 区间 [+0.54, +0.58]");
     bars[0].focus();
     fireEvent.keyDown(bars[0], { key: "ArrowDown" });
     expect(document.activeElement).toBe(bars[1]);

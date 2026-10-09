@@ -79,6 +79,9 @@ const savedRun = (baseline: string, label: string, coef = 0.5, low = 0.4, high =
   variable_catalog: [],
 });
 const FVA = () => savedRun("FVA_share", "外国增加值项占比", -0.5493, -0.5711, -0.5274);
+/** The two bars as read aloud: the value with its unit and the 95% interval. */
+const FVA_BAR = "外国增加值项占比：-0.55 个百分点，95% 区间 [-0.57, -0.53]";
+const DVA_BAR = "国内增加值出口占比：+0.56 个百分点，95% 区间 [+0.54, +0.58]";
 const DVA = () => savedRun("DVAex_share", "国内增加值出口占比", 0.5561, 0.535, 0.577);
 /** A submitted report built from FVA; the page saves into its own state, as the session does. */
 function LockedLab({ initial, outdated = true }: { initial: ReturnType<typeof FVA>; outdated?: boolean }) {
@@ -143,18 +146,18 @@ describe("simple regression workbench", () => {
     expect((saves[0].run as { design: { baseline: string } }).design.baseline).toBe("FVA_share");
     const pressed = screen.getAllByRole("button", { pressed: true });
     expect(pressed).toHaveLength(1);
-    expect(pressed[0].getAttribute("aria-label")).toBe("外国增加值项占比：-0.55，已保存");
+    expect(pressed[0].getAttribute("aria-label")).toBe(`${FVA_BAR}，已保存`);
     // The saved bar's label is the headline's number.
     expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("外国增加值项占比平均低 0.55 个百分点");
     expect(screen.getByRole("group", { name: /X 每高 1 个百分点，Y 平均相差（个百分点）/ })).toBeTruthy();
     // Model and numbers are folded away.
     // (The 加税前后 chart's per-year table is folded under the chart.)
     expect([...document.querySelectorAll("details > summary")].map((node) => node.textContent)).toEqual(["两组逐年读数", "模型设定", "详细数字（可选）"]);
-    fireEvent.click(screen.getByRole("button", { name: "国内增加值出口占比：+0.56" }));
+    fireEvent.click(screen.getByRole("button", { name: DVA_BAR }));
     await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高 0.56 个百分点"));
     expect(run.mock.calls[1][2]).toBe("DVAex_share");
     expect((saves[1].run as { design: { baseline: string } }).design.baseline).toBe("DVAex_share");
-    expect(screen.getByRole("button", { pressed: true }).getAttribute("aria-label")).toBe("国内增加值出口占比：+0.56，已保存");
+    expect(screen.getByRole("button", { pressed: true }).getAttribute("aria-label")).toBe(`${DVA_BAR}，已保存`);
     // The trend chart and the question follow the saved Y.
     expect(screen.getByRole("img", { name: /加税前后：两组国内增加值出口占比的平均变化/ })).toBeTruthy();
     expect(screen.getByRole("heading", { name: /国内增加值出口占比（Y）/ })).toBeTruthy();
@@ -168,10 +171,10 @@ describe("simple regression workbench", () => {
     let finish: (value: unknown) => void = () => {};
     const run = spyOn(api, "runRegression").mockImplementation(() => new Promise((resolve) => { finish = resolve; }) as never);
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
-    const other = await screen.findByRole("button", { name: "国内增加值出口占比：+0.56" });
+    const other = await screen.findByRole("button", { name: DVA_BAR });
     fireEvent.click(other);
     await waitFor(() => expect(other.getAttribute("aria-disabled")).toBe("true"));
-    fireEvent.click(screen.getByRole("button", { name: "外国增加值项占比：-0.55，已保存" }));
+    fireEvent.click(screen.getByRole("button", { name: `${FVA_BAR}，已保存` }));
     fireEvent.keyDown(other, { key: "Enter" });
     expect(run).toHaveBeenCalledTimes(1);
     finish({ ...DVA(), benchmark });
@@ -183,7 +186,7 @@ describe("simple regression workbench", () => {
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: savedRun("DVAex_share", "国内增加值出口占比") } as never }} />);
     await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高 0.50 个百分点"));
     // The saved run, not the overview, is the selected bar: page and report agree.
-    await screen.findByRole("button", { name: "国内增加值出口占比：+0.50，已保存" });
+    await screen.findByRole("button", { name: "国内增加值出口占比：+0.50 个百分点，95% 区间 [+0.40, +0.60]，已保存" });
     expect(document.body.textContent).not.toContain("教学模拟");
     cleanup();
     const getStep = ((n: number) => n === 6 ? { indicator_selection: { metric: "DVAex_share" } } : undefined) as <T>(step: number) => T | undefined;
@@ -251,7 +254,7 @@ describe("simple regression workbench", () => {
     const scrolled: ScrollIntoViewOptions[] = [];
     const scrollIntoView = spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation((options) => { scrolled.push(options as ScrollIntoViewOptions); });
     try {
-      const bar = await screen.findByRole("button", { name: "国内增加值出口占比：+0.56" });
+      const bar = await screen.findByRole("button", { name: DVA_BAR });
       bar.focus();
       fireEvent.click(bar);
       // The notice sits under the bars, in the chart card, where the click happened (not up in the run card).
@@ -271,7 +274,7 @@ describe("simple regression workbench", () => {
     mockApis();
     const run = spyOn(api, "runRegression").mockResolvedValue({ ...DVA(), benchmark } as never);
     render(<LockedLab initial={FVA()} />);
-    fireEvent.click(await screen.findByRole("button", { name: "国内增加值出口占比：+0.56" }));
+    fireEvent.click(await screen.findByRole("button", { name: DVA_BAR }));
     await waitFor(() => expect(document.querySelector(".reg-replaced-notice")).not.toBeNull());
     // Clicking the bar of the Y the report was built from (here FVA) restores that material: no update is needed.
     run.mockResolvedValue({ ...FVA(), benchmark } as never);
@@ -333,12 +336,12 @@ describe("simple regression workbench", () => {
   test("the saved bar's tooltip says it is saved; the others say what a click does", async () => {
     mockApis();
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
-    const saved = await screen.findByRole("button", { name: "外国增加值项占比：-0.55，已保存" });
+    const saved = await screen.findByRole("button", { name: `${FVA_BAR}，已保存` });
     const tip = () => document.querySelector(".diverging-bars > div[style*='pointer-events']")?.textContent ?? "";
     fireEvent.mouseEnter(saved, { clientX: 10, clientY: 10 });
     expect(tip()).toContain("状态 · 已保存（报告用这个 Y）");
     expect(tip()).not.toContain("点击");
-    fireEvent.mouseEnter(screen.getByRole("button", { name: "国内增加值出口占比：+0.56" }), { clientX: 10, clientY: 10 });
+    fireEvent.mouseEnter(screen.getByRole("button", { name: DVA_BAR }), { clientX: 10, clientY: 10 });
     expect(tip()).toContain("操作 · 点击即改为保存此 Y");
   });
 
@@ -471,7 +474,7 @@ describe("saving another Y from the bars", () => {
     const run = spyOn(api, "runRegression").mockResolvedValue({ ...FVA(), benchmark } as never);
     const saves: Record<string, unknown>[] = [];
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, save: (patch) => { saves.push(patch); }, data: { run: DVA() } as never }} />);
-    await screen.findByRole("button", { name: "国内增加值出口占比：+0.56，已保存" });
+    await screen.findByRole("button", { name: `${DVA_BAR}，已保存` });
     const chip = document.querySelector(".diverging-bars .reg-saved-chip");
     expect(chip?.textContent).toBe("当前保存：国内增加值出口占比（不是本步默认） · 恢复默认（外国增加值项占比）");
     const reset = screen.getByRole("button", { name: "恢复默认（外国增加值项占比）" });
@@ -489,7 +492,7 @@ describe("saving another Y from the bars", () => {
   test("the default saved Y shows no chip", async () => {
     mockApis();
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
-    await screen.findByRole("button", { name: "外国增加值项占比：-0.55，已保存" });
+    await screen.findByRole("button", { name: `${FVA_BAR}，已保存` });
     expect(document.querySelector(".reg-saved-chip")).toBeNull();
   });
 
@@ -500,7 +503,7 @@ describe("saving another Y from the bars", () => {
     const group = await screen.findByRole("group", { name: /（键盘：方向键切换，Enter 保存）/ });
     expect(group.getAttribute("aria-label")).toContain("本类 2 个 Y · 点击任一条即改为保存该 Y（键盘：方向键切换，Enter 保存）");
     const tip = () => document.querySelector<HTMLElement>(".diverging-bars > div[style*='pointer-events']");
-    const other = screen.getByRole("button", { name: "国内增加值出口占比：+0.56" });
+    const other = screen.getByRole("button", { name: DVA_BAR });
     fireEvent.focus(other);
     expect(tip()?.textContent).toContain("95% 区间");
     expect(tip()?.textContent).toContain("国内增加值出口占比");

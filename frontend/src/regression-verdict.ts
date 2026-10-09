@@ -177,6 +177,8 @@ export interface BarFigures {
   uncertain: boolean;
   valueLabel: string;
   intervalLabel: string;
+  /** Read aloud for the bar: the value with its unit and the 95% interval ("-0.55 个百分点，95% 区间 [-0.57, -0.53]"). */
+  spokenLabel: string;
 }
 
 /** Bars of one chart are in 个百分点 only when every Y is a share; otherwise in 个标准差 (step 13, 14, 15). */
@@ -204,7 +206,7 @@ export function standardizedEffect(coef: number, depvarStd: number | null | unde
 export function barFigures(estimate: BarEstimate, kind: DepvarKind, unit: BarUnit, withUnit = false): BarFigures {
   const { coef } = estimate;
   if (coef == null || !Number.isFinite(coef)) {
-    return { value: 0, low: null, high: null, uncertain: true, valueLabel: "没算出估计值", intervalLabel: "—" };
+    return { value: 0, low: null, high: null, uncertain: true, valueLabel: "没算出估计值", intervalLabel: "—", spokenLabel: "没算出估计值" };
   }
   const low = estimate.suppressed ? null : estimate.ci_low;
   const high = estimate.suppressed ? null : estimate.ci_high;
@@ -215,17 +217,27 @@ export function barFigures(estimate: BarEstimate, kind: DepvarKind, unit: BarUni
   const toNative = kind === "share" ? 1 : 0.01;
   const native = coef * toNative;
   const nativeBounds: [number, number] | null = hasCi ? [low! * toNative, high! * toNative] : null;
-  const nativeText = `${signedEffect(native, kind, nativeBounds)}${withUnit ? ` ${countUnit(kind)}` : ""}`;
+  const nativeValue = signedEffect(native, kind, nativeBounds);
+  const nativeText = `${nativeValue}${withUnit ? ` ${countUnit(kind)}` : ""}`;
+  // Spoken with its unit even where the drawing leaves it to the axis title or the name's second line.
+  const spokenNative = `${nativeValue} ${countUnit(kind)}`;
   if (unit === "points") {
     const digits = estimateDigits(kind, coef, hasCi ? [low!, high!] : null);
+    const interval = hasCi ? `[${signed(low!, digits)}, ${signed(high!, digits)}]` : null;
     return {
       value: coef, low: hasCi ? low : null, high: hasCi ? high : null, uncertain,
       valueLabel: nativeText,
-      intervalLabel: hasCi ? `[${signed(low!, digits)}, ${signed(high!, digits)}] 个百分点` : "—",
+      intervalLabel: interval ? `${interval} 个百分点` : "—",
+      spokenLabel: interval ? `${spokenNative}，95% 区间 ${interval}` : spokenNative,
     };
   }
   const sd = standardizedEffect(coef, estimate.depvar_std);
-  if (sd == null) return { value: 0, low: null, high: null, uncertain: true, valueLabel: `${nativeText}（没有标准差）`, intervalLabel: "—" };
+  if (sd == null) {
+    return {
+      value: 0, low: null, high: null, uncertain: true, valueLabel: `${nativeText}（没有标准差）`, intervalLabel: "—",
+      spokenLabel: `${spokenNative}（没有标准差）`,
+    };
+  }
   const bounds: [number, number] | null = hasCi ? [standardizedEffect(low!, estimate.depvar_std)!, standardizedEffect(high!, estimate.depvar_std)!] : null;
   const digits = standardizedDigits(sd, bounds);
   return {
@@ -234,6 +246,7 @@ export function barFigures(estimate: BarEstimate, kind: DepvarKind, unit: BarUni
     // "幅度约 0.047 个标准差" is an unsigned size.
     valueLabel: `${nativeText}（${signed(sd, digits)} 个标准差）`,
     intervalLabel: bounds ? `[${signed(bounds[0], digits)}, ${signed(bounds[1], digits)}] 个标准差` : "—",
+    spokenLabel: `${spokenNative}（${signed(sd, digits)} 个标准差）${bounds ? `，95% 区间 [${signed(bounds[0], digits)}, ${signed(bounds[1], digits)}] 个标准差` : ""}`,
   };
 }
 

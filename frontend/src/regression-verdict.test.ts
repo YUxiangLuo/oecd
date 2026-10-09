@@ -170,7 +170,10 @@ describe("bars repeat the headline's numbers", () => {
 
   test("a share bar is the headline's signed number and interval", () => {
     const bar = barFigures(estimate(-0.5493, -0.5711, -0.5274), "share", "points");
-    expect(bar).toEqual({ value: -0.5493, low: -0.5711, high: -0.5274, uncertain: false, valueLabel: "-0.55", intervalLabel: "[-0.57, -0.53] 个百分点" });
+    expect(bar).toEqual({
+      value: -0.5493, low: -0.5711, high: -0.5274, uncertain: false, valueLabel: "-0.55", intervalLabel: "[-0.57, -0.53] 个百分点",
+      spokenLabel: "-0.55 个百分点，95% 区间 [-0.57, -0.53]",
+    });
     const headline = buildRegressionVerdict("trade", response("trade", coefficient(-0.5493, -0.5711, -0.5274)));
     expect(headline.effect).toBe(`${bar.valueLabel} 个百分点`);
     expect(headline.interval).toBe(bar.intervalLabel);
@@ -222,5 +225,7 @@ describe("an interval end never reads as the estimate", () => {
     expect(verdict.intervalShort).toBe("[-0.0192, -0.0176] 个长度单位");
     const bar = barFigures({ coef: -1.8414, ci_low: -1.92, ci_high: -1.76, depvar_std: 0.58, suppressed: false }, "length", "sd");
     expect(bar.valueLabel).toMatch(/^-0\.0184（/);
+    // Read aloud with its native unit (the drawing leaves it to the name's second line) and its interval.
+    expect(bar.spokenLabel).toBe("-0.0184 个长度单位（-0.032 个标准差），95% 区间 [-0.033, -0.030] 个标准差");
   });
 });

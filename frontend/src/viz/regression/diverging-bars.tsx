@@ -20,6 +20,16 @@ export interface DivergingBarRow {
   /** Tooltip only: the interval in words, and a note such as "这次不显示 95% 区间". */
   intervalLabel?: string;
   note?: string;
+  /** Read aloud: the value with its unit and the 95% interval (barFigures); the end label when absent. */
+  spokenLabel?: string;
+}
+
+/** A bar as read aloud: "外国增加值项占比：-0.55 个百分点，95% 区间 [-0.57, -0.53]，已保存". */
+export function spokenBar(row: DivergingBarRow, highlight = "已保存"): string {
+  const value = row.spokenLabel != null
+    ? `${row.spokenLabel}${row.uncertain ? `，${UNCERTAIN_TEXT}` : ""}`
+    : endLabel(row).replace(" · ", "，");
+  return `${row.label}：${value}${row.selected ? `，${highlight}` : ""}`;
 }
 
 export const UNCERTAIN_TEXT = "方向不确定";
@@ -298,7 +308,7 @@ export function DivergingBarChart({
   const rowRefs = useRef<(SVGGElement | null)[]>([]);
   const [focused, setFocused] = useState<string | null>(null);
   const tabRow = Math.max(0, rows.findIndex((row) => row.selected));
-  const spoken = (row: DivergingBarRow) => `${row.label}：${endLabel(row).replace(" · ", "，")}${row.selected ? `，${highlight}` : ""}`;
+  const spoken = (row: DivergingBarRow) => spokenBar(row, highlight);
   const summary = `${title ? `${title}；` : ""}${unitTitle}。${rows.map(spoken).join("；")}`;
   const move = (index: number) => rowRefs.current[(index + rows.length) % rows.length]?.focus();
   const select = (row: DivergingBarRow) => {
