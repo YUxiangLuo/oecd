@@ -123,7 +123,12 @@ def test_step_12_asks_to_read_the_grey_bar_without_clicking_it():
 
 def _quiz_text(question):
     return " ".join(
-        [question["prompt"], question["explanation"], quizzes.HINTS[question["id"]], *(o["label"] for o in question["options"])]
+        [
+            question["prompt"],
+            question["explanation"],
+            quizzes.HINTS[question["id"]],
+            *(o["label"] for o in question["options"]),
+        ]
     )
 
 
