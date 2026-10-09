@@ -1000,6 +1000,10 @@ test("a tab coming back says at once that its three answers are older than the s
     const notice = document.querySelector(".report-answers-outdated")!;
     expect(notice.textContent).toContain("这三段是本页的旧文字");
     expect(within(notice as HTMLElement).getByRole("button", { name: "载入服务器版本" })).toBeTruthy();
+    // This tab's text was saved over the other one: the server matches the page again, so the notice goes.
+    session.mockResolvedValue(sessionWith(mutation("pending"), { "15": { data: older } }));
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(document.querySelector(".report-answers-outdated")).toBeNull();
   } finally { session.mockRestore(); }
 });
 

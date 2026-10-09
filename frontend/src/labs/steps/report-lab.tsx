@@ -603,9 +603,9 @@ export function ReportLab({
     }
     // Another tab saved newer answers: say so now (这三段是本页的旧文字), not only after a refused update. While this
     // tab has its own unsaved typing, the server is expected to differ, so that is not a sign of another tab.
+    // When the server matches the page again (this tab's text was saved over it), the notice is withdrawn.
     if (!operationRef.current && !pendingSaveRef.current) {
-      const answers = newerServerAnswers(reflectionRef.current, readStep<ReportReflectionState>(latest.session, 15));
-      if (answers) setServerAnswers(answers);
+      setServerAnswers(newerServerAnswers(reflectionRef.current, readStep<ReportReflectionState>(latest.session, 15)));
     }
     return latest.report;
   };
