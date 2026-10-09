@@ -1404,6 +1404,17 @@ def test_report_prints_automatically_saved_teaching_row(tmp_path, monkeypatch):
 
     assert "换算用的例子：CHN 中国 · s1 · 2019" in markdown
     assert "w = 20.00%；τ = 10%；X = w × τ = 2.00 个百分点" in markdown
+    # Each reference links its title, so it is announced by name rather than by its URL.
+    references = markdown.split("## 方法参考文献", 1)[1].split("\n\n", 2)[1].splitlines()
+    assert len(references) == 10
+    assert references[0] == (
+        "1. Yamano et al. (2023), [*Development of the OECD Inter-Country Input-Output Database 2023*]"
+        "(https://doi.org/10.1787/5a5d0665-en)"
+    )
+    assert references[7] == (
+        "8. [*Gephi 软件特征向量中心性实现说明*](https://github.com/gephi/gephi/issues/2145)（Gephi 项目讨论 #2145）"
+    )
+    assert all(re.search(r"\]\(https://[^)\s]+\)", line) and ", https://" not in line for line in references)
     # The section is named after the step; the data version is provenance, not body text.
     step_ten = markdown.split("### 步骤 10 · 认识关税暴露 X", 1)[1].split("###", 1)[0]
     assert TEACHING_VERSION not in step_ten

@@ -61,8 +61,76 @@ def _regression_overview() -> dict[str, Any] | None:
         # DataFrame object for the same file, so the overview cache is shared with the endpoint.
         panel = read_csv_artifact(config.PROCESSED_DIR / "panel_teaching.csv")
         return _cached_on_panel(_ESTIMATE_OVERVIEW_CACHE, panel, _estimate_overview)
-    except (ArtifactContractError, OSError, ValueError, KeyError, np.linalg.LinAlgError, FloatingPointError, OverflowError):
+    except (
+        ArtifactContractError,
+        OSError,
+        ValueError,
+        KeyError,
+        np.linalg.LinAlgError,
+        FloatingPointError,
+        OverflowError,
+    ):
         return None
+
+
+# The method references: authors and year, title, the series it appeared in, and its address.
+_REFERENCES = (
+    (
+        "Yamano et al. (2023), ",
+        "Development of the OECD Inter-Country Input-Output Database 2023",
+        "",
+        "https://doi.org/10.1787/5a5d0665-en",
+    ),
+    (
+        "OECD (2023), ",
+        "Guide to OECD TiVA Indicators",
+        "",
+        "https://www.oecd.org/content/dam/oecd/en/topics/policy-sub-issues/trade-in-value-added/tiva-indicators-guide-2023.pdf",
+    ),
+    (
+        "Koopman, Wang & Wei (2014), ",
+        "Tracing Value-Added and Double Counting in Gross Exports",
+        "",
+        "https://doi.org/10.1257/aer.104.2.459",
+    ),
+    (
+        "Wang, Wei & Zhu, ",
+        "Quantifying International Production Sharing at the Bilateral and Sector Levels",
+        ", NBER w19677",
+        "https://www.nber.org/papers/w19677",
+    ),
+    (
+        "Wang, Wei, Yu & Zhu, ",
+        "Measures of Participation in Global Value Chains and Global Business Cycles",
+        ", NBER w23222",
+        "https://www.nber.org/papers/w23222",
+    ),
+    (
+        "Wang, Wei, Yu & Zhu, ",
+        "Characterizing Global Value Chains: Production Length and Upstreamness",
+        ", NBER w23261",
+        "https://www.nber.org/papers/w23261",
+    ),
+    (
+        "Brandes (2001), ",
+        "A Faster Algorithm for Betweenness Centrality",
+        "",
+        "https://doi.org/10.1080/0022250X.2001.9990249",
+    ),
+    ("", "Gephi 软件特征向量中心性实现说明", "（Gephi 项目讨论 #2145）", "https://github.com/gephi/gephi/issues/2145"),
+    (
+        "Wasserstein & Lazar (2016), ",
+        "The ASA Statement on p-Values",
+        "",
+        "https://doi.org/10.1080/00031305.2016.1154108",
+    ),
+    (
+        "Cameron & Miller (2015), ",
+        "A Practitioner’s Guide to Cluster-Robust Inference",
+        "",
+        "https://doi.org/10.3368/jhr.50.2.317",
+    ),
+)
 
 
 def _teaching_scenario(session: dict[str, Any]) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
@@ -247,16 +315,12 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "",
         "## 方法参考文献",
         "",
-        "1. Yamano et al. (2023), *Development of the OECD Inter-Country Input-Output Database 2023*, https://doi.org/10.1787/5a5d0665-en",
-        "2. OECD (2023), *Guide to OECD TiVA Indicators*, https://www.oecd.org/content/dam/oecd/en/topics/policy-sub-issues/trade-in-value-added/tiva-indicators-guide-2023.pdf",
-        "3. Koopman, Wang & Wei (2014), *Tracing Value-Added and Double Counting in Gross Exports*, https://doi.org/10.1257/aer.104.2.459",
-        "4. Wang, Wei & Zhu, *Quantifying International Production Sharing at the Bilateral and Sector Levels*, NBER w19677, https://www.nber.org/papers/w19677",
-        "5. Wang, Wei, Yu & Zhu, *Measures of Participation in Global Value Chains and Global Business Cycles*, NBER w23222, https://www.nber.org/papers/w23222",
-        "6. Wang, Wei, Yu & Zhu, *Characterizing Global Value Chains: Production Length and Upstreamness*, NBER w23261, https://www.nber.org/papers/w23261",
-        "7. Brandes (2001), *A Faster Algorithm for Betweenness Centrality*, https://doi.org/10.1080/0022250X.2001.9990249",
-        "8. Gephi 软件特征向量中心性实现说明（Gephi 项目讨论 #2145），https://github.com/gephi/gephi/issues/2145",
-        "9. Wasserstein & Lazar (2016), *The ASA Statement on p-Values*, https://doi.org/10.1080/00031305.2016.1154108",
-        "10. Cameron & Miller (2015), *A Practitioner’s Guide to Cluster-Robust Inference*, https://doi.org/10.3368/jhr.50.2.317",
+        # The title is the link text, so a screen reader announces the work, not its URL; the printed report adds the
+        # URL after each link (styles.css, @media print).
+        *(
+            f"{number}. {authors}[*{title}*]({url}){extra}"
+            for number, (authors, title, extra, url) in enumerate(_REFERENCES, 1)
+        ),
         "",
         *body_disclosures,
         "",

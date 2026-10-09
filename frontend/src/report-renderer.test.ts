@@ -62,6 +62,17 @@ describe("report tables", () => {
     }
   });
 
+  test("a reference is a link named by its title; printed, its address follows", async () => {
+    const html = renderToStaticMarkup(createElement(ReportMarkdown, {
+      markdown: "## 方法参考文献\n\n1. Yamano et al. (2023), [*Development of the OECD Inter-Country Input-Output Database 2023*](https://doi.org/10.1787/5a5d0665-en)",
+    }));
+    const link = new DOMParser().parseFromString(html, "text/html").querySelector("a")!;
+    expect(link.textContent).toBe("Development of the OECD Inter-Country Input-Output Database 2023");
+    expect(link.getAttribute("href")).toBe("https://doi.org/10.1787/5a5d0665-en");
+    const css = await Bun.file(new URL("./styles.css", import.meta.url)).text();
+    expect(css.slice(css.indexOf("@media print"))).toMatch(/\.report-md a\[href\^="http"\]::after\s*\{[^}]*content:\s*"（" attr\(href\) "）"/);
+  });
+
   test("print rules fit report tables to paper without changing screen tables", async () => {
     const css = await Bun.file(new URL("./styles.css", import.meta.url)).text();
     const print = css.slice(css.indexOf("@media print"));
