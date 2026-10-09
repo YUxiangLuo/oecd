@@ -23,16 +23,6 @@ describe("regression lessons", () => {
     expect(REGRESSION_LESSONS.trade.dontClaim).not.toContain("客户");
   });
 
-  test("production share copy forbids expansion/contraction overstatement", () => {
-    const productionCopy = [
-      REGRESSION_LESSONS.production.downMeaning,
-      REGRESSION_LESSONS.production.upMeaning,
-    ].join(" ");
-    expect(productionCopy).toContain("占比变小");
-    expect(productionCopy).not.toContain("模拟");
-    expect(productionCopy).not.toMatch(/与.*(?:扩张|收缩)一致/);
-  });
-
   test("reading starts with inference eligibility and keeps blocked distinct from uncertain", () => {
     expect(familyDirectionLabel("suppressed")).not.toBe(familyDirectionLabel("insufficient"));
   });
@@ -46,7 +36,7 @@ describe("regression lessons", () => {
 
   test("research question stays on the fixed teaching X", () => {
     const network = lessonQuestion("network");
-    expect(network).toContain("关税暴露（X）每高 1 个百分点的国家×行业");
+    expect(network).toContain("关税暴露（X）每高 1 个百分点");
     expect(network).not.toContain("模拟");
     expect(lessonQuestion("trade")).not.toMatch(/cohort|处理组|对照组/);
   });

@@ -540,7 +540,7 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 .reg-saved-chip-reset[aria-disabled="true"] { color: #8a8f9c; cursor: progress; }
 .reg-saved-chip-reset:focus-visible { outline: 2px solid #4b47e0; outline-offset: 2px; border-radius: 3px; }
 /* Under the trend chart: what the dashed bracket is. */
-.reg-gap-caption { margin: 6px 0 0; font-size: 12px; line-height: 1.6; }
+.reg-gap-caption, .reg-parallel-note { margin: 6px 0 0; font-size: 12px; line-height: 1.6; }
 /* Step 14's numbers are long ("[-4109.8400, -3911.5600]"): headers wrap and cells are narrower, so the table fits
    a 1280 px window instead of clipping its p 值 column. */
 .data-table.reg-coef-table th { white-space: normal; padding: 8px 8px; vertical-align: bottom; }

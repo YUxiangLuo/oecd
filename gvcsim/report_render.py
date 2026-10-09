@@ -789,8 +789,9 @@ def _technical_estimate_tables(
     # 1 percentage point of X in Y's unit, so the two can be matched (they differ 100x for lengths and centrality).
     lines = [
         "",
-        "| 变量 | 系数（X 按份额计） | X 每高 1 个百分点，Y 平均相差 | 标准误（按国家聚类） | 95% 区间（按系数计） | p 值 |",
-        "|---|---:|---:|---:|---:|---:|",
+        # The page's column order (详细数字), t 值 included.
+        "| 变量 | X 每高 1 个百分点，Y 平均相差 | 系数（X 按份额计） | 95% 区间（按系数计） | 标准误（按国家聚类） | t 值 | p 值 |",
+        "|---|---:|---:|---:|---:|---:|---:|",
     ]
     primary = _primary_coefficient(design, result)
     for coefficient in result.get("coefs", []):
@@ -810,9 +811,12 @@ def _technical_estimate_tables(
             if outcome is not None and coefficient is primary and isinstance(coefficient.get("coef"), (int, float))
             else "—"
         )
+        t = coefficient.get("t")
+        # Shown where the interval is (as the page shows t only when inference is allowed).
+        t_value = f"{t:,.2f}" if isinstance(t, (int, float)) and math.isfinite(t) and interval not in ("—", "不显示") else "—"
         lines.append(
-            f"| {_coefficient_label(coefficient.get('name', '—'), design)} | {_fixed4(coefficient.get('coef'))} | "
-            f"{per_point} | {_fixed4(coefficient.get('se'))} | {interval} | {p_value} |"
+            f"| {_coefficient_label(coefficient.get('name', '—'), design)} | {per_point} | "
+            f"{_fixed4(coefficient.get('coef'))} | {interval} | {_fixed4(coefficient.get('se'))} | {t_value} | {p_value} |"
         )
 
     return lines
@@ -879,7 +883,7 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
                 lines.extend(f"  - {reason}" for reason in reasons)
             lines.extend(_technical_support_lines(design, result, support))
             if suppressed:
-                lines.append("- **这一项不显示 95% 区间**：数据不够，不能据此判断方向，也不能写成“没有影响”。")
+                lines.append("- **这一项不显示 95% 区间**：数据不够，不能据此判断方向，也不能写成“没有关联”。")
             lines.extend(_technical_estimate_tables(design, result, suppressed=suppressed, outcome=run["outcome"]))
             notes = list(
                 dict.fromkeys(

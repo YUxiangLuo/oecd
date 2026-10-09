@@ -4,7 +4,7 @@ import { useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api";
 import {
-  degreeIdentity, exampleEffect, familyBarRows, forwardShareIdentity, gapLabel, groupedFixed, INTERRUPTED_RUN_NOTE, networkDigits, RegressionRequestError,
+  degreeIdentity, exampleEffect, parallelTrendsNote, familyBarRows, forwardShareIdentity, gapLabel, groupedFixed, INTERRUPTED_RUN_NOTE, networkDigits, RegressionRequestError,
   RegressionRunLab, scrollRegressionVerdict, stepMaterialChanged, TEACHING_MODEL_VERSION,
 } from "./regression";
 import type {
@@ -366,6 +366,8 @@ describe("simple regression workbench", () => {
     await screen.findByRole("img", { name: /加税前后/ });
     expect(document.querySelector("[data-estimate-label]")).toBeNull();
     expect(document.querySelector(".reg-gap-caption")).toBeNull();
+    // The premise is said with or without a run.
+    expect(document.querySelector(".reg-parallel-note")?.textContent).toContain("如果没有关税，两组的走势应大致平行");
   });
 
   test("the saved bar's tooltip says it is saved; the others say what a click does", async () => {
@@ -511,6 +513,12 @@ describe("simple regression workbench", () => {
     // With a chosen baseline the design says how Y is read.
     expect(exampleEffect("length", -0.004, 9.32, { depvar_kind: "position" })).toBe("0.0373");
     expect(exampleEffect("trade", 0.55, 9.32, { depvar_kind: "share" })).toBe("5.13 个百分点");
+  });
+
+  test("the 加税前后 chart states the parallel-trends premise and its two pre-tariff years", () => {
+    expect(parallelTrendsNote([2016, 2017, 2018, 2019, 2020], 2018)).toBe(
+      "这张图也用来看回归的前提：如果没有关税，两组的走势应大致平行。加税前只有 2016、2017 两年可看，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，这一前提由设计保证。",
+    );
   });
 
   test("a conversion multiplies the printed estimate by the printed X, so it checks by hand", () => {

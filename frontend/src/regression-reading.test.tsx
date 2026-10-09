@@ -22,8 +22,8 @@ describe("fixed teaching regression reading", () => {
     const html = renderToStaticMarkup(<RegressionResultCard outcome="trade" response={response()} />);
     const dom = new DOMParser().parseFromString(html, "text/html");
     // The headline answers the question with the number; a badge and the interval in words follow.
-    // An association across country×industry records ("X 每高 1 个百分点的国家×行业"), no arrow and no "上升".
-    expect(dom.querySelector(".reg-plain-verdict")?.textContent).toBe("关税暴露 X 每高 1 个百分点的国家×行业，外国增加值项占比平均高 2.00 个百分点");
+    // An association across country×industry records ("X 每高 1 个百分点"), no arrow and no "上升".
+    expect(dom.querySelector(".reg-plain-verdict")?.textContent).toBe("关税暴露 X 每高 1 个百分点，外国增加值项占比平均高 2.00 个百分点");
     expect(dom.querySelector(".reg-plain-verdict")?.textContent).not.toMatch(/→|X 每增加|上升/);
     expect(dom.querySelector(".reg-direction-badge")?.textContent).toBe("方向明确");
     expect(dom.querySelector(".reg-interval-words")?.textContent).toBe("95% 区间（真实系数的合理取值范围）为 [+1.00, +3.00] 个百分点，整个区间都在 0 的一侧，所以方向是明确的。");
@@ -149,7 +149,7 @@ describe("fixed teaching regression reading", () => {
       { label: "USA 美国·C29", x: 0, imposer: true },
     ]} />);
     expect(container.querySelector(".reg-headline-main")?.textContent).toBe(
-      "关税暴露 X 每高 1 个百分点的国家×行业，后向复杂 GVC 生产份额平均相差 +0.12 个百分点，但高低方向不确定",
+      "关税暴露 X 每高 1 个百分点，后向复杂 GVC 生产份额平均相差 +0.12 个百分点，但高低方向不确定",
     );
     expect(container.querySelector(".reg-direction-badge")?.textContent).toBe("方向不确定");
     expect(container.querySelector(".reg-interval-words")?.textContent).toBe(

@@ -21,9 +21,6 @@ interface RegressionLesson {
   unit: string;
   priorStep: number;
   priorLabel: string;
-  definition: string;
-  downMeaning: string;
-  upMeaning: string;
   dontClaim: string;
 }
 
@@ -33,9 +30,6 @@ export const FAMILY_STEPS: Record<RegressionOutcome, number> = {
   length: 13,
   network: 14,
 };
-
-export const REGRESSION_QUESTION =
-  "固定使用步骤 10 的关税暴露（X），看 X 较高的国家×行业，不同结果指标（Y）平均高还是低。";
 
 export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
   trade: {
@@ -47,9 +41,6 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "百分点",
     priorStep: 2,
     priorLabel: "GVC 总贸易流分解指标",
-    definition: "WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 总出口的比重。",
-    downMeaning: "外国增加值项占比下降：出口价值中来自国外投入的部分变小。",
-    upMeaning: "外国增加值项占比上升：出口价值中来自国外投入的部分变大。",
     dontClaim: "不要写成“已经证明生产回流”。这一项占比较高或较低，不能说明企业是否将生产迁回国内。",
   },
   production: {
@@ -61,9 +52,6 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "百分点",
     priorStep: 3,
     priorLabel: "GVC 生产分解指标",
-    definition: "增加值经过多次跨境生产后被最终吸收的比例。",
-    downMeaning: "复杂 GVC 生产份额下降：SVA 中经多次跨境生产的部分占比变小。",
-    upMeaning: "复杂 GVC 生产份额上升：SVA 中经多次跨境生产的部分占比变大。",
     dontClaim: "不要写成“复杂 GVC 生产规模缩小”。这一项是占总增加值的份额，份额较低不代表复杂 GVC 生产的绝对量较小。",
   },
   length: {
@@ -75,9 +63,6 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "长度单位",
     priorStep: 4,
     priorLabel: "GVC 长度分解指标",
-    definition: "GVC 活动诱发的累计总产出除以关联增加值。",
-    downMeaning: "前向 GVC 段长度缩短：增加值到最终吸收经过的生产环节减少。",
-    upMeaning: "前向 GVC 段长度延长：增加值到最终吸收经过的生产环节增加。",
     dontClaim: "不要将它与贸易流回归的估计值直接比较：两者单位不同。",
   },
   network: {
@@ -89,9 +74,6 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "中心性原始单位（另附标准差换算）",
     priorStep: 5,
     priorLabel: "全球生产网络指标",
-    definition: "全球国家×行业图上一个节点的加权入度加出度（买入 + 卖出；自环即行业卖给自己的部分，两侧各计一次）。",
-    downMeaning: "加权总度下降：节点买入与卖出的总流量规模变小。",
-    upMeaning: "加权总度上升：节点买入与卖出的总流量规模变大。",
     dontClaim: "不要写成连接已经减少或脱钩，也不要将其视为关税的“总影响”。",
   },
 };
@@ -100,9 +82,6 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
 export interface BaselineLesson {
   shortMetric: string;
   unit: string;
-  definition: string;
-  downMeaning: string;
-  upMeaning: string;
   dontClaim: string;
 }
 
@@ -110,105 +89,66 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
   DVAex_share: {
     shortMetric: "国内增加值出口占比",
     unit: "百分点",
-    definition: "被国外最终吸收的国内增加值占 VA+TLS 账户闭合总出口的比重。",
-    downMeaning: "国内增加值出口占比下降：出口价值中由本国创造的部分变小。",
-    upMeaning: "国内增加值出口占比上升：出口价值中由本国创造的部分变大。",
     dontClaim: "不要写成“已经证明生产回流”。国内增加值出口占比较高，不能说明企业是否将生产迁回国内。",
   },
   "3_VA_GVC_share": {
     shortMetric: "前向 GVC 生产总份额",
     unit: "百分点",
-    definition: "增加值经过至少一次跨境后被最终吸收的比例（简单加复杂）。",
-    downMeaning: "前向 GVC 生产总份额下降：SVA 中与跨境生产相关的部分占比变小。",
-    upMeaning: "前向 GVC 生产总份额上升：SVA 中与跨境生产相关的部分占比变大。",
     dontClaim: "不要写成“GVC 生产规模缩小”。这一项是占总增加值的份额，份额较低不代表 GVC 相关生产的绝对量较小。",
   },
   "3a_VA_GVC_S_share": {
     shortMetric: "简单 GVC 生产份额",
     unit: "百分点",
-    definition: "增加值只跨境一次就被吸收的比例。",
-    downMeaning: "简单 GVC 生产份额下降：只跨境一次就被吸收的增加值占比变小。",
-    upMeaning: "简单 GVC 生产份额上升：只跨境一次就被吸收的增加值占比变大。",
     dontClaim: "不要写成“简单 GVC 生产规模缩小”。这一项是占总增加值的份额，份额较低不代表绝对量较小。",
   },
   "3_FGY_GVC_share": {
     shortMetric: "后向 GVC 生产总份额",
     unit: "百分点",
-    definition: "从最终产品端衡量 GVC 相关生产占最终品生产的比例。",
-    downMeaning: "后向 GVC 生产总份额下降：最终品生产中与跨境生产相关的部分占比变小。",
-    upMeaning: "后向 GVC 生产总份额上升：最终品生产中与跨境生产相关的部分占比变大。",
     dontClaim: "不要写成“GVC 生产规模缩小”。这一项是占最终品生产的份额，份额较低不代表绝对量较小。",
   },
   "3b_FGY_GVC_C_share": {
     shortMetric: "后向复杂 GVC 生产份额",
     unit: "百分点",
-    definition: "从最终产品端看，至少两次跨境的复杂 GVC 生产占最终品生产的比例。",
-    downMeaning: "后向复杂 GVC 生产份额下降：最终品生产中经过多次跨境的部分占比变小。",
-    upMeaning: "后向复杂 GVC 生产份额上升：最终品生产中经过多次跨境的部分占比变大。",
-    dontClaim: "区间包含 0 时，只能说“看不出这一项随 X 高低有方向一致的差异”，不要写成“关税对它没有影响”。",
+    dontClaim: "区间包含 0 时，只能说“看不出这一项随 X 高低有方向一致的差异”，不要写成“关税暴露与它没有关联”。",
   },
   "2_VA_RT_share": {
     shortMetric: "传统贸易生产份额",
     unit: "百分点",
-    definition: "增加值经一次出口直接被进口国吸收的比例。",
-    downMeaning: "传统贸易生产份额下降：经一次出口直接被进口国吸收的增加值占比变小。",
-    upMeaning: "传统贸易生产份额上升：经一次出口直接被进口国吸收的增加值占比变大。",
     dontClaim: "不要写成“传统贸易萎缩”。这一项是占总增加值的份额，份额较低不代表绝对量较小。",
   },
   "1_VA_D_share": {
     shortMetric: "纯国内生产份额",
     unit: "百分点",
-    definition: "增加值不经出口、在国内被最终吸收的比例。",
-    downMeaning: "纯国内生产份额下降：不经出口、在国内被吸收的增加值占比变小。",
-    upMeaning: "纯国内生产份额上升：不经出口、在国内被吸收的增加值占比变大。",
     dontClaim: "不要写成“生产已经回流国内”。纯国内生产份额较高，不代表国内生产的绝对量较大。",
   },
   PLy_GVC: {
     shortMetric: "后向 GVC 段长度",
     unit: "长度单位",
-    definition: "从最终产品端回溯 GVC 活动的初始增加值所经过的生产长度。",
-    downMeaning: "后向 GVC 段长度缩短：从最终品回溯的 GVC 生产环节减少。",
-    upMeaning: "后向 GVC 段长度延长：从最终品回溯的 GVC 生产环节增加。",
     dontClaim: "不要将它与贸易流回归的估计值直接比较（单位不同），也不要把后向长度和前向长度的估计值相减。",
   },
   GVCPs: {
     shortMetric: "GVC 位置指数",
     unit: "无量纲",
-    definition: "前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界：大于 1 表示相对更上游。",
-    downMeaning: "位置指数下降：相对更靠下游。",
-    upMeaning: "位置指数上升：相对更上游。",
     dontClaim: "不要写成“已经变得更上游 / 更下游”。位置指数不能与长度的估计值直接比较。",
   },
   weighted_indegree: {
     shortMetric: "加权入度",
     unit: "中心性原始单位（另附标准差换算）",
-    definition: "全球国家×行业图上一个节点的加权入度，即买入侧的流量规模。",
-    downMeaning: "加权入度下降：买入侧的流量规模变小。",
-    upMeaning: "加权入度上升：买入侧的流量规模变大。",
     dontClaim: "不要写成买入已经减少或脱钩，也不要将其视为关税的“总影响”。",
   },
   weighted_outdegree: {
     shortMetric: "加权出度",
     unit: "中心性原始单位（另附标准差换算）",
-    definition: "全球国家×行业图上一个节点的加权出度，即卖出侧的流量规模。",
-    downMeaning: "加权出度下降：卖出侧的流量规模变小。",
-    upMeaning: "加权出度上升：卖出侧的流量规模变大。",
     dontClaim: "不要写成卖出已经减少或脱钩，也不要将其视为关税的“总影响”。",
   },
   betweenesscentrality: {
     shortMetric: "介数",
     unit: "中心性原始单位（另附标准差换算）",
-    definition: "全球国家×行业图上的最短路径介数（只看连接、不看金额；未归一化）。",
-    downMeaning: "介数下降：在连接网络的最短路径上，处于中转位置的程度减弱。",
-    upMeaning: "介数上升：在连接网络的最短路径上，处于中转位置的程度增强。",
     dontClaim: "不要挑数值最大的结果当作关税的“总影响”，也不要写成已经脱钩。",
   },
   closnesscentrality: {
     shortMetric: "接近中心性",
     unit: "中心性原始单位（另附标准差换算）",
-    definition: "全球国家×行业图上到其他节点最短路径距离的倒数。",
-    downMeaning: "接近中心性下降：到其他节点的网络距离变远。",
-    upMeaning: "接近中心性上升：到其他节点的网络距离变近。",
     dontClaim: "不要挑数值最大的结果当作关税的“总影响”，也不要写成网络位置已经边缘化。",
   },
 };
@@ -247,7 +187,7 @@ export const REGRESSION_FAMILIES = (["trade", "production", "length", "network"]
 
 export function lessonQuestion(outcome: RegressionOutcome, baseline?: string | null): string {
   const lesson = lessonFor(outcome, baseline);
-  return `关税暴露（X）每高 1 个百分点的国家×行业，${lesson.shortMetric}（Y）平均相差多少？`;
+  return `关税暴露（X）每高 1 个百分点，${lesson.shortMetric}（Y）平均相差多少？`;
 }
 
 /** The direction column of the four-step summary, in the result card's words. */

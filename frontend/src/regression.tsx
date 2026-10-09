@@ -104,7 +104,7 @@ function DesignEquation({ design }: { design: RegressionDesignInfo }) {
       {/* The five terms, always visible (a hover-only gloss went unnoticed). */}
       <ul className="model-eq-terms" aria-label="公式里各项的意思">
         <li><b>Y</b>：结果指标，本步是{yLabel}；i = 国家，j = 行业，t = 年份。</li>
-        <li><b>β·X</b>：X 是关税暴露（首年对美出口份额 w × 加征税率 τ）；β 就是要算的估计值：X 每高 1 个百分点的国家×行业，Y 平均相差多少。</li>
+        <li><b>β·X</b>：X 是关税暴露（首年对美出口份额 w × 加征税率 τ）；β 就是要算的估计值：扣掉下面的 α 和 γ 之后，X 每高 1 个百分点，Y 平均相差多少。</li>
         <li><b>α</b>：每个国家×行业自己的平均水平，先扣掉。</li>
         <li><b>λ</b>：每一年所有国家×行业共同的变化，先扣掉。</li>
         <li><b>ε</b>：剩下的随机波动。</li>
@@ -196,7 +196,8 @@ export function RegressionResultCard({ outcome, response, examples = [], example
   const kind = depvarKind(outcome, response.design);
   const words = differenceWords(kind);
   const directional = verdict.state === "negative" || verdict.state === "positive";
-  // An association across country×industry records, not a change over time: "X 每高 1 个百分点的国家×行业，
+  // An association within country×industry records (after each one's own mean and each year's common change), not
+  // a causal effect: "X 每高 1 个百分点，
   // 外国增加值项占比平均低 0.55 个百分点". Once the word says the direction, the number drops its sign (the
   // parenthetical sizes are unsigned already, as in the report). With an interval that includes 0 (or none
   // shown) the sign is not settled, so the signed estimate is given without 高/低.
@@ -212,7 +213,7 @@ export function RegressionResultCard({ outcome, response, examples = [], example
       <p className="reg-generated-disclosure" role="note">{GENERATED_Y_DISCLOSURE}</p>
       <h3 id="reg-result-title" tabIndex={-1} className="reg-plain-verdict">
         {verdict.coefficient
-          ? <span className="reg-headline-main">关税暴露 X 每高 1 个百分点的国家×行业，{lesson.shortMetric}{metricGap}<b>{plainResult}</b></span>
+          ? <span className="reg-headline-main">关税暴露 X 每高 1 个百分点，{lesson.shortMetric}{metricGap}<b>{plainResult}</b></span>
           : "没算出 X 的估计值"}
       </h3>
       {verdict.coefficient && (
@@ -494,6 +495,14 @@ export function stepMaterialChanged(
  */
 export function gapLabel(kind: DepvarKind, shown: number): string {
   return `回归估计的差距 ${withCountUnit(signedEffect(shown, kind), kind)}`;
+}
+
+/** Under the 加税前后 chart: the premise the regression rests on, and how little the chart can show of it. */
+export function parallelTrendsNote(years: readonly number[], policyYear: number | null | undefined): string {
+  const before = policyYear == null ? [] : years.filter((year) => year < policyYear);
+  const count = ["", "一", "两", "三", "四", "五"][before.length] ?? String(before.length);
+  const pre = before.length ? `加税前只有 ${before.join("、")} ${count}年可看` : "加税前的年份很少";
+  return `这张图也用来看回归的前提：如果没有关税，两组的走势应大致平行。${pre}，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，这一前提由设计保证。`;
 }
 
 /** The line under the 加税前后 chart: what its dashed bracket is (β × the taxed group's mean X), as an association. */
@@ -841,6 +850,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
                 estimate={gap == null ? null : { gap, label: gapLabel(kind, shown), uncertain }}
               />
               {gap != null && groups.mean_exposure_taxed != null && <p className="muted reg-gap-caption">{gapCaption(groups.mean_exposure_taxed)}</p>}
+              <p className="muted reg-parallel-note">{parallelTrendsNote(groups.years, groups.policy_year)}</p>
             </div>
           );
         })()}

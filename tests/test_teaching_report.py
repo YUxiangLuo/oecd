@@ -733,14 +733,14 @@ def test_report_statements_are_associations_with_their_number():
     falling = {"coef": -0.4, "ci_low": -0.6, "ci_high": -0.2}
     evidence, copy = teaching_report._evidence_reading("production", falling, False, {})
     assert evidence == "方向明确：X 越高，Y 越低"
-    assert copy == "关税暴露 X 越高的国家×行业，复杂 GVC 生产份额平均越低（X 每高 1 个百分点，约低 0.40 个百分点）。"
+    assert copy == "扣掉各国家×行业自身的平均水平和每年的共同变化后，关税暴露 X 越高，复杂 GVC 生产份额平均越低（X 每高 1 个百分点，约低 0.40 个百分点）。"
     assert "模拟" not in copy and "真实" not in copy and "下降" not in copy
     assert re.search(r"与.*(?:扩张|收缩)一致", copy) is None
     # A length reads in length units per percentage point of X (the raw coefficient is 100 times larger).
     _evidence, length = teaching_report._evidence_reading(
         "length", {"coef": -1.8186, "ci_low": -1.9, "ci_high": -1.7}, False, {}
     )
-    assert length == "关税暴露 X 越高的国家×行业，前向 GVC 段长度平均越短（X 每高 1 个百分点，约短 0.018 个长度单位）。"
+    assert length == "扣掉各国家×行业自身的平均水平和每年的共同变化后，关税暴露 X 越高，前向 GVC 段长度平均越短（X 每高 1 个百分点，约短 0.018 个长度单位）。"
     _evidence, network = teaching_report._evidence_reading(
         "network", {"coef": 3969.9979, "ci_low": 3000.0, "ci_high": 4900.0}, False, {}
     )
@@ -1508,11 +1508,11 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert "## 技术附录：保存的回归结果" in report.markdown
     # The raw coefficient states its scale, next to the per-percentage-point reading used in the body.
     assert (
-        "| 变量 | 系数（X 按份额计） | X 每高 1 个百分点，Y 平均相差 | 标准误（按国家聚类） | 95% 区间（按系数计） | p 值 |"
+        "| 变量 | X 每高 1 个百分点，Y 平均相差 | 系数（X 按份额计） | 95% 区间（按系数计） | 标准误（按国家聚类） | t 值 | p 值 |"
         in report.markdown
     )
     # Four decimals for every number but p, as the page's 详细数字 table prints them.
-    assert "| 关税暴露 X | 1.2000 | +1.20 个百分点 | 0.3000 | [0.5721, 1.8279] | 0.0008 |" in report.markdown
+    assert "| 关税暴露 X | +1.20 个百分点 | 1.2000 | [0.5721, 1.8279] | 0.3000 | 4.00 | 0.0008 |" in report.markdown
     assert "4 位有效数字" not in report.markdown and "保留 4 位小数" in report.markdown
     # Versions, the session digest and the unused macro controls are listed only under "报告溯源", at the end.
     body, provenance = report.markdown.split("## 报告溯源", 1)
@@ -1531,10 +1531,14 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert f"剩下 {disclosure['published_entities']} 个用于四项回归" in report.markdown
     assert "预设" not in report.markdown
     assert (
-        "关税暴露 X 越高的国家×行业，外国增加值项占比平均越高（X 每高 1 个百分点，约高 1.20 个百分点）。"
+        "扣掉各国家×行业自身的平均水平和每年的共同变化后，关税暴露 X 越高，外国增加值项占比平均越高（X 每高 1 个百分点，约高 1.20 个百分点）。"
         in report.markdown
     )
-    assert "- **可以支持的表述**：关税暴露 X 越高的国家×行业" in report.markdown
+    assert "- **可以支持的表述**：扣掉各国家×行业自身的平均水平和每年的共同变化后，关税暴露 X 越高" in report.markdown
+    # The method notes state the tariff's scope, the parallel-trends premise and the SD basis.
+    assert "美国只对被加税国家的货物行业（ICIO 行业 A–C）加税，服务业 τ = 0" in report.markdown
+    assert "前提是没有关税时两组的 Y 会平行变化" in report.markdown
+    assert "扣掉各国家×行业平均水平和每年共同变化后 Y 的标准差" in report.markdown
     assert (
         "- **按步骤 10 的例子换算**：CHN 中国 · s1 的 X 为 2.00 个百分点，按估计与 X 相关的差异约为 +2.40 个百分点（Y 偏高）。"
         in report.markdown
@@ -1997,7 +2001,7 @@ def test_report_marks_suppressed_inference_and_reasons(tmp_path, monkeypatch):
 
     assert "这一项不显示 95% 区间" in report.markdown
     assert "处理聚类不足" in report.markdown
-    assert "| 关税暴露 X | -0.2000 | -0.20 个百分点 | 0.1000 | 不显示 | 不显示 |" in report.markdown
+    assert "| 关税暴露 X | -0.20 个百分点 | -0.2000 | 不显示 | 0.1000 | — | 不显示 |" in report.markdown
 
 
 def test_report_translates_settings_controls_and_rounds_display_values(tmp_path, monkeypatch):
@@ -2823,12 +2827,12 @@ def test_report_appendix_numbers_match_the_page_detail_table():
     result = {
         "status": "ok",
         "coefs": [
-            {"name": X_COLUMN, "coef": -1.84138, "se": 0.0398641, "p": 0.00002, "ci_low": -0.41094, "ci_high": -0.37902}
+            {"name": X_COLUMN, "coef": -1.84138, "se": 0.0398641, "t": -46.19, "p": 0.00002, "ci_low": -0.41094, "ci_high": -0.37902}
         ],
     }
     lines = _technical_estimate_tables({"depvar_kind": "length"}, result, suppressed=False, outcome="length")
     row = next(line for line in lines if line.startswith("| 关税暴露 X |"))
-    assert row == "| 关税暴露 X | -1.8414 | -0.018 个长度单位 | 0.0399 | [-0.4109, -0.3790] | <0.0001 |"
+    assert row == "| 关税暴露 X | -0.018 个长度单位 | -1.8414 | [-0.4109, -0.3790] | 0.0399 | -46.19 | <0.0001 |"
 
 
 def test_report_appendix_groups_thousands_like_the_page_detail_table():
@@ -2840,13 +2844,13 @@ def test_report_appendix_groups_thousands_like_the_page_detail_table():
         "status": "ok",
         "depvar_within_std": 850,
         "coefs": [
-            {"name": X_COLUMN, "coef": -4080.37226, "se": 39.88, "p": 0.00001, "ci_low": -4158.542, "ci_high": -4002.2026}
+            {"name": X_COLUMN, "coef": -4080.37226, "se": 39.88, "t": -102.3163, "p": 0.00001, "ci_low": -4158.542, "ci_high": -4002.2026}
         ],
     }
     lines = _technical_estimate_tables({"depvar_kind": "network"}, result, suppressed=False, outcome="network")
     row = next(line for line in lines if line.startswith("| 关税暴露 X |"))
     assert row == (
-        "| 关税暴露 X | -4,080.3723 | -40.80 个中心性原始单位 | 39.8800 | [-4,158.5420, -4,002.2026] | <0.0001 |"
+        "| 关税暴露 X | -40.80 个中心性原始单位 | -4,080.3723 | [-4,158.5420, -4,002.2026] | 39.8800 | -102.32 | <0.0001 |"
     )
 
 

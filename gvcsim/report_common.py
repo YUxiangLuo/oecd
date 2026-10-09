@@ -376,7 +376,7 @@ def _natural_effect(
         and isinstance(ci_high, (int, float))
         else None
     )
-    # An association across country×industry records, as on the step pages ("X 每高 1 个百分点的国家×行业…").
+    # An association (after each unit's own mean and each year's common change), as on the step pages.
     effect_label = "关税暴露 X 每高 1 个百分点，Y 平均相差"
     kind = _depvar_kind(outcome, design)
     if kind == "share":
@@ -468,7 +468,7 @@ def _association(outcome: str, design: dict[str, Any] | None, coefficient: dict[
     more, less = ("长", "短") if long_short else ("高", "低")
     word = less if negative else more
     return (
-        f"关税暴露 X 越高的国家×行业，{_y_label(outcome, design)}平均越{word}"
+        f"扣掉各国家×行业自身的平均水平和每年的共同变化后，关税暴露 X 越高，{_y_label(outcome, design)}平均越{word}"
         f"（X 每高 1 个百分点，约{word} {_effect_size(outcome, design, coefficient)}）。"
     )
 
@@ -479,7 +479,7 @@ def _evidence_reading(
     if suppressed:
         return (
             "方向不确定（不显示区间）",
-            "这一项数据不够，不显示 95% 区间；不能据此判断方向，也不能写成“没有影响”。",
+            "这一项数据不够，不显示 95% 区间；不能据此判断方向，也不能写成“没有关联”。",
         )
     ci_low, ci_high = coefficient.get("ci_low"), coefficient.get("ci_high")
     if not isinstance(ci_low, (int, float)) or not isinstance(ci_high, (int, float)):
