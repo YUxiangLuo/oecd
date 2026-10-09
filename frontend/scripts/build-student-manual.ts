@@ -19,9 +19,9 @@ await Promise.all(imagePaths.map(async (path) => {
   images.set(path, `data:image/png;base64,${bytes.toString("base64")}`);
 }));
 
-const route = `<svg class="cover-route" viewBox="0 0 720 150" role="img" aria-label="数据、指标、可视化、冲击、回归、报告的实验路线">
+const route = `<svg class="cover-route" viewBox="0 0 720 150" role="img" aria-label="数据接入、指标计算、图表比较、关税回归、实验报告五个阶段的实验路线">
   <path d="M60 70H660" fill="none" stroke="#a2b8c4" stroke-width="2"/>
-  ${["数据", "指标", "可视化", "冲击", "回归", "报告"].map((name, index) => `<g transform="translate(${60 + 120 * index},70)"><circle r="26" fill="${index < 3 ? "#253c50" : "#15786e"}"/><text text-anchor="middle" y="5" fill="white" font-size="14">${String(index + 1).padStart(2, "0")}</text><text text-anchor="middle" y="57" fill="#263d51" font-size="17">${name}</text></g>`).join("")}
+  ${["数据接入", "指标计算", "图表比较", "关税回归", "实验报告"].map((name, index) => `<g transform="translate(${60 + 150 * index},70)"><circle r="26" fill="${index < 3 ? "#253c50" : "#15786e"}"/><text text-anchor="middle" y="5" fill="white" font-size="14">${String(index + 1).padStart(2, "0")}</text><text text-anchor="middle" y="57" fill="#263d51" font-size="17">${name}</text></g>`).join("")}
 </svg>`;
 
 const body = pages.map((markdown, index) => {

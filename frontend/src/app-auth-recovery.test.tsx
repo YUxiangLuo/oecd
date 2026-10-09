@@ -157,8 +157,8 @@ describe("authentication dependency recovery", () => {
     expect(posted).toEqual([]);
   });
 
-  test("clicking 退出登录 tells the other tabs which account logged out", async () => {
-    retainedLogin();
+  test("clicking 退出登录 tells the other tabs, and this tab's own listener does not take it as another tab's", async () => {
+    const reload = retainedLogin();
     const releaseId = "c".repeat(32);
     const me = spyOn(api, "me").mockResolvedValue({ username: "shared-pc", name: "学生", role: "student" });
     const meta = spyOn(api, "meta").mockResolvedValue({ years: [2020], countries: ["CHN"], sectors: ["C26"], dataset: { years: [2020], release_id: releaseId } });
@@ -169,23 +169,31 @@ describe("authentication dependency recovery", () => {
     const session = spyOn(api.classroom, "session").mockResolvedValue({ release_id: releaseId, session: emptySession(), updated_at: null, report: null,
       completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_gate: [], material_gate: [],
     });
+    // As the spec has it: a message reaches every other channel object of the same name, this tab's own
+    // listener included (round 24 found a logout that took itself for another tab's).
     const posted: unknown[] = [];
-    class FakeChannel {
+    const channels = new Set<SpecChannel>();
+    class SpecChannel {
       onmessage: ((event: MessageEvent) => void) | null = null;
-      constructor(readonly name: string) {}
-      postMessage(data: unknown) { posted.push(data); }
-      close() {}
+      constructor(readonly name: string) { channels.add(this); }
+      postMessage(data: unknown) {
+        posted.push(data);
+        for (const other of [...channels]) if (other !== this && other.name === this.name) other.onmessage?.({ data } as MessageEvent);
+      }
+      close() { channels.delete(this); }
     }
     const original = (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel;
-    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel = FakeChannel;
-    Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel = SpecChannel;
     restorers.push(...[me, meta, steps, session].map((mock) => () => mock.mockRestore()), () => {
-      delete (navigator as { onLine?: boolean }).onLine;
       (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel = original;
     });
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "退出登录" }));
-    expect(posted).toEqual([{ type: "logout", username: "shared-pc" }]);
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+    expect(posted).toEqual([{ type: "logout", username: "shared-pc", from: expect.any(String) }]);
+    // An ordinary logout: no "另一个标签页" notice and no returning username (which would hide the quick-login chips).
+    expect(sessionStorage.getItem("gvcsim_auth_notice")).toBeNull();
+    expect(sessionStorage.getItem("gvcsim_auth_username")).toBeNull();
   });
 
   for (const status of [500, 503]) {

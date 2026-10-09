@@ -48,6 +48,9 @@ function BootFailure({ title, message, note, primary, secondary }: {
 
 /** Tabs of the same browser tell each other about a logout (see logout in AppContent). */
 const LOGOUT_CHANNEL = "gvcsim-auth";
+/** This tab's id on that channel: a message also reaches this tab's own listener (another BroadcastChannel object
+ * with the same name), which must not treat its own logout as another tab's. */
+const TAB_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
 export default function App() {
   // Outside every branch, so login, failure pages and both workspaces get it alike.
@@ -150,7 +153,7 @@ function AppContent() {
   const logout = useCallback((fromOtherTab = false) => {
     if (!fromOtherTab && user && typeof BroadcastChannel !== "undefined") {
       const channel = new BroadcastChannel(LOGOUT_CHANNEL);
-      channel.postMessage({ type: "logout", username: user.username });
+      channel.postMessage({ type: "logout", username: user.username, from: TAB_ID });
       channel.close();
     }
     let kept = false;
@@ -180,8 +183,8 @@ function AppContent() {
   useEffect(() => {
     if (!user || typeof BroadcastChannel === "undefined") return;
     const channel = new BroadcastChannel(LOGOUT_CHANNEL);
-    channel.onmessage = (event: MessageEvent<{ type?: string; username?: string }>) => {
-      if (event.data?.type === "logout" && event.data.username === user.username) logout(true);
+    channel.onmessage = (event: MessageEvent<{ type?: string; username?: string; from?: string }>) => {
+      if (event.data?.type === "logout" && event.data.from !== TAB_ID && event.data.username === user.username) logout(true);
     };
     return () => channel.close();
   }, [logout, user]);
