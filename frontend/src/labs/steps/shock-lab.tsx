@@ -288,7 +288,6 @@ export function ShockLab({ meta, step: _step, state }: {
   const lastRows = shownCountries
     .map((country) => rows.find((row) => row.country === country && row.year === years.at(-1)))
     .filter((row): row is NonNullable<typeof row> => row != null);
-  const exampleRow = representativeRow(rows, shownCountries, years.at(-1));
   // The tariff rate as set; shares and X in percentage points come from workedNumbers (two decimals, more only where
   // needed, and an exact zero X reads "0", not "0.00").
   const rate = (value: number) => `${Number((value * 100).toFixed(2))}%`;
@@ -307,45 +306,10 @@ export function ShockLab({ meta, step: _step, state }: {
   const isImposer = (country: string) => country === TARIFF_IMPOSER;
   const imposerMissing = missing.filter(isImposer);
   const otherMissing = missing.filter((country) => !isImposer(country));
-  const bothTaxed = lastRows.length === 2 && lastRows.every((row) => row.teaching_tariff_rate_tau > 0);
-
-  // The worked X = w × τ: the followed example when it is a taxed country, else CAN's mean over its industries.
-  const workedExample = exampleRow && shownExample && exampleRow.teaching_tariff_rate_tau > 0 && !isImposer(exampleRow.country)
-    ? exampleRow
-    : undefined;
-  const workedCountry = workedExample ? undefined : fallbackWorkedCountry(overview);
+  // The one worked X = w × τ in the whole-sample part: CAN's mean over its industries, the same number as its bar.
+  const workedCountry = fallbackWorkedCountry(overview);
   const names = (codes: readonly string[]) => codes.map(countryLabel).join("、");
-  // Why the worked card does not use the student's example: every case is named, never a silent switch.
-  // The imposer has no rows in the teaching data (an older server sent X = 0 rows for it); either way it is named.
   const imposers = selectedCountries.filter(isImposer);
-  const untaxedRows = lastRows.filter((row) => !isImposer(row.country));
-  const fallbackReasons = !workedCountry ? [] : [
-    ...(imposers.length ? [`你的例子里的 ${names(imposers)} 是加征关税的一方，不在回归样本中`] : []),
-    ...(otherMissing.length ? [`你的例子 ${names(otherMissing)} · ${sectorLabel(industry)} 不在回归样本里`] : []),
-    ...(complete && untaxedRows.length
-      ? [`你的例子 ${names(untaxedRows.map((row) => row.country))} ${untaxedRows.length > 1 ? "都" : ""}未被加税，X 一直是 0`]
-      : []),
-    ...(query.status === "error" ? ["未能读取所选例子的关税数据"] : []),
-    ...(query.status === "loading" ? ["你的例子的关税数据还在读取"] : []),
-  ];
-  // The worked row is country B when A has no exposure (untaxed, taxed with w = 0, or the imposer): say so.
-  const shownFirst = shownExample?.first ?? first;
-  const firstRow = lastRows.find((row) => row.country === shownFirst);
-  const switchedToB = workedExample && workedExample.country !== shownFirst && firstRow
-    ? `国家 A ${countryLabel(shownFirst)}${isImposer(shownFirst)
-      ? " 是加征关税的一方，X 记为 0 只是定义"
-      : firstRow.teaching_tariff_rate_tau > 0
-        ? " 被加税，但该行业首年不向美国出口（w = 0），X 一直是 0"
-        : " 未被加税，X 一直是 0"}，所以这里用对比国家 B ${countryLabel(workedExample.country)} 算。`
-    : null;
-  // The chart marks the example the report records: the current selection once it can be recorded (or while it
-  // loads), else the recorded one, so the A/B marks never disagree with the "已记录的例子" line below.
-  const marksRecorded = Boolean(panel) && !complete && savedCompared.length > 0;
-  const highlight = marksRecorded ? savedCompared : selectedCountries;
-  const highlightLabel = marksRecorded
-    ? "已记录的例子"
-    : state.materialLocked && recordedExample && !savedExample ? "当前选的例子（不是已记录的报告材料）" : "你跟踪的例子";
-  const taxedCount = overview?.taxed_countries ?? sample?.taxed_countries;
   // The data rule that picks the taxed countries (teaching data v7 on); an older server sends none.
   const ruleClause = taxedRuleText(overview?.taxed_rule, "达到或超过 ");
   const ruleMin = overview?.taxed_rule?.min_million_usd;
@@ -375,65 +339,51 @@ export function ShockLab({ meta, step: _step, state }: {
   })();
 
   return <div className="shock-workbench">
+    {/* One story, top to bottom: the US tariff, what X measures, every taxed country's X, then an optional example. */}
     <section className="reg-run-card">
-      <span className="reg-section-step">全部样本</span>
-      <h3>关税暴露 X：哪些国家被加税，暴露有多大？</h3>
+      <span className="reg-section-step">美国加征关税</span>
+      <h3>美国对哪些国家加征关税？</h3>
       <p className="muted teaching-data-note" role="note">{GENERATED_DATA_NOTE}</p>
       {overviewQuery.status === "loading" && <div className="reg-request-state" role="status">正在读取全部国家的关税暴露…</div>}
       {overviewQuery.status === "error" && <div className="error-box" role="alert">{userFacingRequestError(overviewQuery.error, "全部国家的关税暴露读取失败")} <button className="secondary" onClick={overviewQuery.retry}>重试</button></div>}
       {overview && <>
-        {/* The whole scenario is centred on one market: say so before any number or example. */}
         <p className="teaching-scenario">
-          <b>情景以美国为中心：</b>{countryLabel(overview.market)}{overview.policy_year ? `从 ${overview.policy_year} 年起` : ""}对 {ruleClause ? `${ruleClause}的 ${overview.taxed_countries} 个国家` : `${overview.taxed_countries} 个国家的商品`}加征 {rate(overview.tariff_rate)} 关税，其余 {overview.untaxed_countries} 个国家未被加税。关税暴露 X 衡量一个国家×行业的出口有多依赖美国市场：X = 首年对美出口份额 w × 加征税率 τ。
+          {overview.policy_year ? `${overview.policy_year} 年起，` : ""}{countryLabel(overview.market)}对{ruleClause ? ` ${ruleClause}的 ${overview.taxed_countries} 个国家` : ` ${overview.taxed_countries} 个国家的商品`}加征 <b>{rate(overview.tariff_rate)}</b> 关税，其余 {overview.untaxed_countries} 个国家未被加税。{ruleClause ? "名单按这条规则由 ICIO 数据确定；" : ""}美国是加税方，不在回归样本中。
         </p>
-        <ul className="teaching-tiles" aria-label="全部样本的加税设定">
+        <ul className="teaching-tiles" aria-label="美国加征关税的设定">
           <li className="taxed"><b>{overview.taxed_countries} 国</b><span>被美国加税{ruleClause && ruleMin != null ? `（对美货物顺差 ≥ ${ruleYiUsd(ruleMin)}）` : ""}</span></li>
           <li className="untaxed"><b>{overview.untaxed_countries} 国</b><span>未被加税（X 始终为 0）</span></li>
-          <li className="imposer"><b>{countryLabel(overview.market)}</b><span>加征关税的一方（不在样本中）</span></li>
           <li><b>{rate(overview.tariff_rate)}</b><span>{overview.policy_year ? `${overview.policy_year} 年起的税率（此前为 0）` : "加征税率"}</span></li>
         </ul>
+        <h4 className="teaching-subhead">关税暴露 X：加税对一个国家×行业的冲击有多大</h4>
+        <p className="teaching-one-line">X = 首年对美出口份额 w × 加征税率 τ。对美出口越多，加税的冲击越大；未被加税的国家 τ = 0，所以 X = 0。</p>
+        {workedCountry && (() => {
+          const shown = workedNumbers(workedCountry.mean_w, overview.tariff_rate, workedCountry.mean_exposure);
+          return <div className="teaching-x-card" role="group" aria-label="被加税国家的 X 算例">
+            <b>算例：X = w × τ</b>
+            <p>
+              {countryLabel(workedCountry.country)} · {overview.year} 年 · {workedCountry.industries} 个行业平均：{" "}
+              <span className="teaching-x-formula">X = {shown.w}% × {rate(overview.tariff_rate)} = <b>{shown.x} 个百分点</b></span>（即下图中 {countryLabel(workedCountry.country)} 的那一条）
+            </p>
+            <p className="muted">w = 首年（{years[0]} 年）对美出口份额，之后各年不变；同一国家各行业的 τ 相同，所以平均 X = 平均 w × τ。</p>
+          </div>;
+        })()}
+        <h4 className="teaching-subhead">{overview.taxed_countries} 个被加税国家的 X（从高到低）</h4>
         <p className="teaching-one-line">
-          回归样本：{overview.countries.length} 国的 {overview.entities.toLocaleString("zh-CN")} 个国家×行业{sampleRows ? ` × ${years.length} 年 = ${sampleRows.toLocaleString("zh-CN")} 条记录` : ""}。下图是每个国家 {overview.year} 年各行业的平均 X。
+          每条是一个国家 {overview.year} 年各行业的平均 X。回归样本：{overview.countries.length} 国的 {overview.entities.toLocaleString("zh-CN")} 个国家×行业{sampleRows ? ` × ${years.length} 年 = ${sampleRows.toLocaleString("zh-CN")} 条记录` : ""}。
         </p>
-        <CountryExposureChart data={overview} highlight={highlight} highlightLabel={highlightLabel} />
+        <CountryExposureChart data={overview} />
       </>}
-      {workedExample && (() => {
-        const shown = worked(workedExample);
-        return <div className="teaching-x-card" role="group" aria-label={shownExample?.recorded ? "已记录例子的 X 算例" : "所选例子的 X 算例"}>
-          <b>算例：X = w × τ</b>
-          <p>
-            {countryLabel(workedExample.country)} · {sectorLabel(shownIndustry)} · {workedExample.year} 年：{" "}
-            <span className="teaching-x-formula">X = {shown.w}% × {rate(workedExample.teaching_tariff_rate_tau)} = <b>{shown.x} 个百分点</b></span>
-            {workedExample.teaching_tariff_exposure === 0 ? "（被加税了，但 w = 0，所以 X 仍是 0）" : bothTaxed ? "（税率相同时，对美出口份额 w 不同，X 也不同）" : ""}
-          </p>
-          {shownExample?.recorded && <p className="muted teaching-x-reason">这里用已记录的例子计算。</p>}
-          {switchedToB && <p className="muted teaching-x-reason">{switchedToB}</p>}
-          <p className="muted">w = 首年（{years[0]} 年）对美出口份额 {shown.w}%，之后各年不变；τ = 加征税率。</p>
-        </div>;
-      })()}
-      {workedCountry && overview && (() => {
-        const shown = workedNumbers(workedCountry.mean_w, overview.tariff_rate, workedCountry.mean_exposure);
-        return <div className="teaching-x-card" role="group" aria-label="被加税国家的 X 算例">
-          <b>算例：X = w × τ</b>
-          <p>
-            {countryLabel(workedCountry.country)} · {overview.year} 年 · {workedCountry.industries} 个行业平均：{" "}
-            <span className="teaching-x-formula">X = {shown.w}% × {rate(overview.tariff_rate)} = <b>{shown.x} 个百分点</b></span>
-          </p>
-          {fallbackReasons.length > 0 && (
-            <p className="muted teaching-x-reason">{fallbackReasons.join("；")}，所以这里用 {countryLabel(workedCountry.country)} 各行业的平均算。</p>
-          )}
-          <p className="muted">w = 首年（{years[0]} 年）对美出口份额，之后各年不变；同一国家各行业的 τ 相同，所以平均 X = 平均 w × τ。</p>
-        </div>;
-      })()}
       <p className="teaching-one-line">步骤 11–14 用每个国家×行业的 X 对照四类指标 Y，读“X 每高 1 个百分点，Y 平均相差多少”。</p>
     </section>
     <section className="reg-run-card">
-      <span className="reg-section-step">跟踪一个例子（可选）</span>
+      <span className="reg-section-step">举例（可选）</span>
+      <h3>加税前后：一个国家×行业的 X</h3>
       <p className="teaching-example-lead">
-        看 X 从{policyYear ? ` ${policyYear} 年` : "加税那年"}起怎样从 0 上升。默认的加拿大是{taxedCount ? ` ${taxedCount} 个` : ""}被加税国家之一，对比的哥斯达黎加未被加税（两国汽车业都主要出口到美国），行业默认是 C29 汽车及零部件。步骤 11–14 会把回归结果换算到你选的例子上。
+        选一个国家和一个行业，看 X 从{policyYear ? ` ${policyYear} 年` : "加税那年"}起怎样从 0 上升；可再选一个对照国家。默认是被加税的加拿大和未被加税的哥斯达黎加（两国汽车业都主要出口到美国），行业为 C29 汽车及零部件。步骤 11–14 会把回归结果换算到这个例子上。
       </p>
-      <div className="controls" role="group" aria-label="跟随的例子">
-        <label className="model-control"><span className="model-control-label">国家 A</span>
+      <div className="controls" role="group" aria-label="例子的国家与行业">
+        <label className="model-control"><span className="model-control-label">例子国家</span>
           <select value={first} onChange={(event) => {
             // Choosing the comparison country as A swaps the two rather than dropping one.
             choose();
@@ -444,9 +394,9 @@ export function ShockLab({ meta, step: _step, state }: {
             {countries.map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
           </select>
         </label>
-        <label className="model-control"><span className="model-control-label">对比国家 B</span>
+        <label className="model-control"><span className="model-control-label">对照国家（可选）</span>
           <select value={second} onChange={(event) => { choose(); setSecond(event.target.value); }}>
-            <option value="">不选对比国家</option>
+            <option value="">不选对照国家</option>
             {countries.filter((code) => code !== first).map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
           </select>
         </label>
@@ -483,7 +433,8 @@ export function ShockLab({ meta, step: _step, state }: {
             const taxed = row.teaching_tariff_rate_tau > 0;
             return <li key={row.country}>
               <b>{countryLabel(row.country)} · {sectorLabel(shownIndustry)}</b>
-              {isImposer(row.country) ? "加征关税的一方（不在回归样本中）" : taxed ? "被加税" : "未被加税"}：w = {worked(row).w}%，{years.at(-1)} 年 X = {worked(row).x} 个百分点{taxed && row.teaching_tariff_exposure === 0 ? "（不向美国出口：w = 0，所以 X = 0）" : ""}
+              {/* The example's own X = w × τ, at digits that check by hand (see workedNumbers). */}
+              {isImposer(row.country) ? "加征关税的一方（不在回归样本中）" : taxed ? "被加税" : "未被加税"}：{years.at(-1)} 年 X = w × τ = {worked(row).w}% × {rate(row.teaching_tariff_rate_tau)} = {worked(row).x} 个百分点{taxed && row.teaching_tariff_exposure === 0 ? "（不向美国出口：w = 0，所以 X = 0）" : ""}
             </li>;
           })}
         </ul>

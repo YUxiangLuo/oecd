@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { TeachingCountriesResponse } from "../../types";
-import { countryIndustryLines, countryIndustryNote, CountryExposureChart, countryTipLines, goodsBalanceText, ruleYiUsd, splitColumns, taxedRuleText, yiUsd } from "./country-exposure";
+import { countryIndustryLines, countryIndustryNote, CountryExposureChart, countryTipLines, goodsBalanceText, ruleYiUsd, taxedRuleText, yiUsd } from "./country-exposure";
 import { TAXED } from "./palette";
 
 const row = (country: string, mean: number, taxed = mean > 0, exposed = taxed ? 44 : 0, industries = 44) => ({
@@ -26,14 +26,9 @@ test("the industry note counts taxed industries and says when some have X = 0", 
   expect(countryIndustryNote(row("MEX", 0, false, 0, 43))).toBe("0/43 个行业被加税");
 });
 
-test("taxed countries split into two columns, the longer one first", () => {
-  expect(splitColumns([1, 2, 3, 4, 5])).toEqual([[1, 2, 3], [4, 5]]);
-  expect(splitColumns(Array.from({ length: 44 }, (_, i) => i)).map((column) => column.length)).toEqual([22, 22]);
-});
-
 test("taxed bars are sorted, orange and scaled; untaxed countries form one group at 0; the imposer is not drawn", () => {
   try {
-    render(<CountryExposureChart data={countriesFixture} highlight={["CAN", "MEX"]} />);
+    render(<CountryExposureChart data={countriesFixture} />);
     const svg = screen.getByRole("img");
     expect(svg.getAttribute("aria-label")).toBe(
       "5 个被加税国家的关税暴露 X（2020 年各行业平均，个百分点），从高到低：最高 CAN 加拿大 14.30，最低 LUX 卢森堡 0.51；另有 3 国未被加税，X = 0",
@@ -52,13 +47,13 @@ test("taxed bars are sorted, orange and scaled; untaxed countries form one group
     const group = screen.getByRole("group", { name: "3 国未被加税，X = 0" });
     expect(group.textContent).toContain("3 国未被加税（X = 0）");
     expect([...group.querySelectorAll("[data-country]")].map((item) => item.getAttribute("data-country"))).toEqual(["AUT", "CHN", "MEX"]);
-    // The USA is the imposer: named in a note, never a bar or a code.
+    // The legend counts both groups; the untaxed ones are listed under the chart.
+    expect([...document.querySelectorAll(".country-exposure-legend span")].map((item) => item.textContent)).toEqual([
+      "被加税（5 国，按 X 从高到低）", "未被加税（3 国，X = 0，列在图下）",
+    ]);
+    // The USA is the imposer: never a bar or a code (the policy line above the chart says so, not the chart).
     expect(document.querySelector('[data-country="USA"]')).toBeNull();
-    expect(document.querySelector(".country-exposure-note")!.textContent).toContain("USA 美国 是加征关税的一方，不在样本中");
-    // The example countries are marked A and B, a taxed bar and an untaxed code alike.
-    expect(document.querySelector('[data-highlight="A"]')!.getAttribute("data-country")).toBe("CAN");
-    expect(document.querySelector('[data-highlight="B"]')!.getAttribute("data-country")).toBe("MEX");
-    expect(document.querySelectorAll("[data-highlight]")).toHaveLength(2);
+    expect(document.querySelector(".country-exposure-note")!.textContent).toBe("悬停或用方向键查看每个国家的 X。");
     // All countries are listed in the collapsed table.
     expect(document.querySelectorAll(".country-exposure-table tbody tr")).toHaveLength(8);
   } finally {
@@ -66,9 +61,36 @@ test("taxed bars are sorted, orange and scaled; untaxed countries form one group
   }
 });
 
+test("one column of taxed bars and no example marks: no A/B badges, highlight, example legend or selected chip", () => {
+  try {
+    render(<CountryExposureChart data={countriesFixture} />);
+    const svg = screen.getByRole("img");
+    const bars = [...svg.querySelectorAll("g.country-exposure-bar")];
+    // Every row's hit target starts at the left edge and every bar at the same x: one column, one row a country.
+    expect(bars.map((bar) => bar.querySelectorAll("rect")[0].getAttribute("x"))).toEqual(["0", "0", "0", "0", "0"]);
+    expect(new Set(bars.map((bar) => bar.querySelectorAll("rect")[1].getAttribute("x"))).size).toBe(1);
+    const tops = bars.map((bar) => Number(bar.querySelectorAll("rect")[0].getAttribute("y")));
+    expect(new Set(tops).size).toBe(5);
+    expect([...tops].sort((a, b) => a - b)).toEqual(tops);
+    // One axis title, under the one column.
+    expect([...svg.querySelectorAll("text")].filter((text) => text.textContent!.includes("个百分点"))).toHaveLength(1);
+    // Nothing marks an example: the chart is about all countries.
+    expect(document.querySelectorAll("[data-highlight]")).toHaveLength(0);
+    expect(document.querySelector(".country-exposure-badge")).toBeNull();
+    expect(document.querySelector(".country-exposure-legend-example")).toBeNull();
+    expect(document.body.textContent).not.toContain("你跟踪的例子");
+    expect(document.body.textContent).not.toContain("例子 A");
+    const chips = [...document.querySelectorAll(".country-exposure-codes > span")];
+    expect(chips.map((chip) => chip.textContent)).toEqual(["AUT", "CHN", "MEX"]);
+    expect(chips.every((chip) => !chip.classList.contains("selected"))).toBe(true);
+  } finally {
+    cleanup();
+  }
+});
+
 test("hover and keyboard focus show the country, X and the industry count; arrows move one stop", () => {
   try {
-    render(<CountryExposureChart data={countriesFixture} highlight={["CAN"]} />);
+    render(<CountryExposureChart data={countriesFixture} />);
     const tip = () => document.querySelector(".hover-tip")!.textContent;
     const cri = document.querySelector('[data-country="CRI"]')!;
     fireEvent.mouseMove(cri, { clientX: 10, clientY: 10 });
@@ -94,7 +116,7 @@ test("hover and keyboard focus show the country, X and the industry count; arrow
     fireEvent.keyDown(document.activeElement!, { key: "Home" });
     expect(document.activeElement?.getAttribute("data-country")).toBe("CAN");
     expect(document.activeElement?.getAttribute("aria-label")).toBe(
-      "CAN 加拿大（例子 A）：2020 年各行业平均 X = 14.30 个百分点，44/44 个行业被加税；方向键切换国家",
+      "CAN 加拿大：2020 年各行业平均 X = 14.30 个百分点，44/44 个行业被加税；方向键切换国家",
     );
   } finally {
     cleanup();
@@ -126,15 +148,17 @@ test("amounts in million USD read in 亿美元, and the goods balance names a su
   expect(taxedRuleText(null)).toBeUndefined();
 });
 
-test("with the taxed rule, the chart states it and every country's readout gives its goods balance with the US", () => {
+test("with the taxed rule, every country's readout gives its goods balance with the US (the rule itself is stated above the chart)", () => {
   const data: TeachingCountriesResponse = {
     ...countriesFixture,
     taxed_rule: RULE,
     countries: countriesFixture.countries.map((item) => (item.country in SURPLUS ? { ...item, market_goods_surplus: SURPLUS[item.country] } : item)),
   };
   try {
-    render(<CountryExposureChart data={data} highlight={["CAN"]} />);
-    expect(document.querySelector(".country-exposure-rule")!.textContent).toBe("被加税的规则来自 ICIO 数据：2016 年对美货物贸易顺差达到或超过 10 亿美元。");
+    render(<CountryExposureChart data={data} />);
+    // The rule line moved to the policy sentence on the page; the note says what the readout adds.
+    expect(document.querySelector(".country-exposure-rule")).toBeNull();
+    expect(document.querySelector(".country-exposure-note")!.textContent).toBe("悬停或用方向键查看每个国家的 X 与对美货物顺差。");
     const tip = () => document.querySelector(".hover-tip")!.textContent;
     // A taxed bar on hover.
     fireEvent.mouseMove(document.querySelector('[data-country="CAN"]')!, { clientX: 10, clientY: 10 });
@@ -167,6 +191,7 @@ test("without the taxed rule (an older server) the chart adds no rule line or ba
   try {
     render(<CountryExposureChart data={countriesFixture} />);
     expect(document.querySelector(".country-exposure-rule")).toBeNull();
+    expect(document.querySelector(".country-exposure-note")!.textContent).toBe("悬停或用方向键查看每个国家的 X。");
     expect(document.body.textContent).not.toContain("对美货物");
     expect(document.querySelector('[data-country="CAN"]')!.getAttribute("aria-label")).not.toContain("对美货物");
   } finally {
@@ -174,7 +199,7 @@ test("without the taxed rule (an older server) the chart adds no rule line or ba
   }
 });
 
-test("44 taxed countries keep every label inside its column at the 700-unit width", () => {
+test("44 taxed countries form one column of 44 rows, every value label inside the 600-unit width", () => {
   const many: TeachingCountriesResponse = {
     ...countriesFixture,
     countries: Array.from({ length: 44 }, (_, index) => row(["CRI", "SAU", "KAZ", "SVN"][index % 4] + index, 0.15 - index * 0.003)),
@@ -183,17 +208,19 @@ test("44 taxed countries keep every label inside its column at the 700-unit widt
     render(<CountryExposureChart data={many} />);
     const svg = screen.getByRole("img");
     const [, , width, height] = svg.getAttribute("viewBox")!.split(" ").map(Number);
-    expect(width).toBe(700);
-    // 22 rows a column, so 44 named bars fit in under 430 units of height.
-    expect(height).toBeLessThan(430);
-    const valueEnds = [...svg.querySelectorAll("g.country-exposure-bar")].map((bar) => {
+    expect(width).toBe(600);
+    // One 15-unit row a country, plus the top padding and the axis.
+    expect(height).toBe(6 + 44 * 15 + 34);
+    const bars = [...svg.querySelectorAll("g.country-exposure-bar")];
+    expect(bars).toHaveLength(44);
+    expect(bars.every((bar) => bar.querySelectorAll("rect")[0].getAttribute("x") === "0")).toBe(true);
+    const valueEnds = bars.map((bar) => {
       const texts = bar.querySelectorAll("text");
       const value = texts[texts.length - 1];
       return Number(value.getAttribute("x")) + value.textContent!.length * 6.6;
     });
-    // The value labels never run into the next column or past the right edge.
-    expect(valueEnds.slice(0, 22).every((end) => end < 336)).toBe(true);
-    expect(valueEnds.slice(22).every((end) => end <= 700)).toBe(true);
+    // The value labels never run past the right edge.
+    expect(valueEnds.every((end) => end <= 600)).toBe(true);
   } finally {
     cleanup();
   }
@@ -215,25 +242,7 @@ test("the readout fits its 260 px box: the industry count is split into short li
   expect(css).toContain(".country-exposure .hover-tip > div > b { white-space: normal; }");
 });
 
-test("marking an untaxed chip A or B does not change its width, so the rows never re-wrap", async () => {
-  const css = await Bun.file(new URL("../../workbench.css", import.meta.url)).text();
-  const rule = (selector: string) => css.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{([^}]*)\\}`))?.[1] ?? "";
-  // The badge sits over the chip's corner instead of taking room inside it.
-  expect(rule(".country-exposure-codes > span > .country-exposure-badge")).toContain("position: absolute");
-  expect(rule(".country-exposure-codes > span")).toContain("position: relative");
-  // The selected chip is not bold (bold digits are wider).
-  expect(rule(".country-exposure-codes > span.selected")).not.toContain("font-weight");
-  try {
-    render(<CountryExposureChart data={countriesFixture} highlight={["CAN", "MEX"]} />);
-    const mex = document.querySelector('[data-country="MEX"]')!;
-    expect(mex.className).toBe("selected");
-    expect(mex.querySelector(".country-exposure-badge")!.textContent).toBe("B");
-  } finally {
-    cleanup();
-  }
-});
-
-test("keyboard focus in the lower half puts the readout above the item, clear of the rule line and the table summary", async () => {
+test("keyboard focus in the lower half puts the readout above the item, clear of the note and the table summary", async () => {
   const box = (top: number, height: number) => ({ top, bottom: top + height, left: 0, right: 700, width: 700, height, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
   try {
     const view = render(<CountryExposureChart data={{ ...countriesFixture, taxed_rule: RULE }} />);

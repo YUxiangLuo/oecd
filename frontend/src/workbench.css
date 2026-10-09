@@ -335,25 +335,21 @@
 .teaching-example-summary li { padding: 7px 10px; border: 1px solid #e3e4ee; border-radius: 8px; background: #fff; font-size: 12px; color: #4a5265; }
 .teaching-example-summary b { margin-right: 6px; color: #2a3040; }
 .teaching-example-hint { margin: -4px 0 12px; padding: 8px 12px; border-radius: 8px; background: #fff8e8; color: #7a5300; font-size: 12.5px; }
-/* 步骤 10：全部样本的四个数字卡、75 国关税暴露条形图（viz/regression/country-exposure.tsx） */
-.teaching-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 10px 0 6px; padding: 0; list-style: none; }
+/* 步骤 10：美国加税的三个数字卡、被加税国家的单列 X 条形图（viz/regression/country-exposure.tsx） */
+.teaching-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 10px 0 6px; padding: 0; list-style: none; }
 .teaching-tiles li { min-width: 0; padding: 10px 12px; border: 1px solid #e3e5ee; border-radius: 10px; background: #fafbfe; }
 .teaching-tiles b { display: block; color: #1b1f2b; font-size: 21px; line-height: 1.2; font-variant-numeric: tabular-nums; word-break: keep-all; }
 .teaching-tiles span { display: block; margin-top: 2px; color: #5a6274; font-size: 11.5px; line-height: 1.45; }
 .teaching-tiles li.taxed { border-top: 3px solid #d6731f; }
 .teaching-tiles li.untaxed { border-top: 3px solid #6b7487; }
-.teaching-tiles li.imposer b { font-size: 17px; }
 .teaching-one-line { margin: 4px 0 0; color: #5a6274; font-size: 12px; line-height: 1.6; }
+.teaching-subhead { margin: 20px 0 4px; padding-top: 14px; border-top: 1px solid #eceef3; color: #1b1f2b; font-size: 14.5px; }
 .teaching-scenario { margin: 6px 0 10px; padding: 10px 12px; border-left: 3px solid #d6731f; background: #fff7ef; color: #3a4050; font-size: 13.5px; line-height: 1.7; border-radius: 6px; }
 .country-exposure { margin: 8px 0 0; }
 .country-exposure-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 8px; color: #4a5265; font-size: 11.5px; }
 .country-exposure-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .country-exposure-legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; }
 .country-exposure-legend i.line { height: 3px; width: 14px; border-radius: 2px; }
-.country-exposure-badge {
-  display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-right: 3px;
-  border-radius: 50%; background: #1f2430; color: #fff; font-size: 9.5px; font-weight: 800;
-}
 .country-exposure-bar { cursor: default; outline: none; }
 .country-exposure-untaxed { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; align-items: start; margin: 10px 0 0; padding-top: 9px; border-top: 1px dashed #dde1ea; }
 .country-exposure-untaxed > b { display: inline-flex; align-items: center; gap: 6px; padding-top: 3px; color: #3a4050; font-size: 12px; white-space: nowrap; }
@@ -363,13 +359,9 @@
   position: relative; display: inline-flex; align-items: center; padding: 2px 6px; border: 1px solid #d5d9e2; border-bottom: 3px solid #6b7487;
   border-radius: 5px; background: #fff; color: #4a5265; font-size: 11px; font-variant-numeric: tabular-nums;
 }
-/* A marked chip keeps its width (no bold, the badge sits over its corner), so the rows never re-wrap when A/B move. */
-.country-exposure-codes > span.selected { border-color: #1f2430; background: #fff1e3; color: #1b1f2b; box-shadow: inset 0 0 0 1px #1f2430; }
-.country-exposure-codes > span > .country-exposure-badge { position: absolute; top: -7px; left: -7px; width: 13px; height: 13px; margin: 0; font-size: 8.5px; }
 /* The hover readout wraps a long value instead of running past its 260 px box. */
 .country-exposure .hover-tip > div > b { white-space: normal; }
 .country-exposure-codes > span:focus-visible { outline: 2px solid #4b47e0; outline-offset: 1px; }
-.country-exposure-rule { margin: 10px 0 0; color: #3a4050; font-size: 12px; }
 .country-exposure-note { margin: 8px 0 0; color: #5a6274; font-size: 11.5px; }
 /* Room above the summary, so its focus ring does not run into the note above it. */
 .country-exposure-table { margin-top: 10px; }
@@ -379,7 +371,7 @@
 .teaching-x-card > b { display: block; color: #35328d; font-size: 12.5px; }
 .teaching-x-card > p { margin: 4px 0 0; color: #3f4759; font-size: 12.5px; line-height: 1.6; }
 .teaching-x-card .teaching-x-formula { font-size: 15px; color: #1b1f2b; font-variant-numeric: tabular-nums; }
-@media (max-width: 900px) { .teaching-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .teaching-tiles { grid-template-columns: minmax(0, 1fr); } }
 .reg-group-figure { margin: 10px 0 12px; }
 
 /* ---- 图表悬停读数层（viz/hover.tsx）：所有数值同时在图下读数表可得，提示只做增强 ---- */

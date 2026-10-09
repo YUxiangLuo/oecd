@@ -5,7 +5,6 @@ import { api } from "../../api";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Meta, Step, TeachingCountriesResponse } from "../../types";
 import { exampleWasChosen, fallbackWorkedCountry, representativeRow, ShockLab, stepTenGapNote, workedNumbers } from "./shock-lab";
-import { CountryExposureChart } from "../../viz/regression/country-exposure";
 import { SHOCK_ARTIFACT_CONTRACT_VERSION } from "./shock/shock-contract";
 
 const step: Step = {
@@ -39,15 +38,19 @@ test("step 10 uses the dedicated teaching tariff panel independently of the old 
     data: undefined, save: () => {}, complete: false, syncing: false,
     syncError: null, syncNow: () => {},
   }} />);
-  // One screen: the whole sample first (loading), then the optional example with its selectors; no variable primer.
-  expect(html).toContain("关税暴露 X：哪些国家被加税，暴露有多大？");
+  // One screen: the US tariff first (loading), then the optional example with its selectors; no variable primer.
+  expect(html).toContain("美国对哪些国家加征关税？");
   expect(html).toContain("正在读取全部国家的关税暴露");
-  expect(html.indexOf("全部样本")).toBeLessThan(html.indexOf("跟踪一个例子（可选）"));
+  expect(html.indexOf(">美国加征关税<")).toBeGreaterThan(-1);
+  expect(html.indexOf(">美国加征关税<")).toBeLessThan(html.indexOf(">举例（可选）<"));
+  expect(html).toContain("加税前后：一个国家×行业的 X");
   expect(html).not.toContain("模拟");
-  expect(html).toContain("国家 A");
-  expect(html).toContain("对比国家 B");
-  expect(html).toContain("不选对比国家");
-  expect(html).toContain("步骤 11–14 会把回归结果换算到你选的例子上");
+  expect(html).toContain("例子国家");
+  expect(html).toContain("对照国家（可选）");
+  expect(html).toContain("不选对照国家");
+  expect(html).not.toContain("国家 A");
+  expect(html).not.toContain("对比国家 B");
+  expect(html).toContain("步骤 11–14 会把回归结果换算到这个例子上");
   expect(html).toContain("正在读取关税数据");
   // The old long lead, the four-step card and the sample paragraph are gone.
   expect(html).not.toContain("默认国家是加拿大和墨西哥");
@@ -97,8 +100,9 @@ test("step 10 keeps the saved example when the chosen unit is not in the teachin
   render(<ShockLab meta={meta} step={step} state={{ data: saved, save, complete: false, syncing: false, syncError: null, syncNow: () => {} }} />);
   await waitFor(() => expect(document.querySelector(".reg-boundary[role=status]")?.textContent).toContain("不在回归样本里"));
   expect(document.querySelector(".reg-boundary[role=status]")!.textContent).toContain("已记录的例子保持不变");
-  // The worked card says why it does not use the example.
-  expect(document.querySelector(".teaching-x-reason")!.textContent).toBe("你的例子 MEX 墨西哥 · C29 汽车及零部件 不在回归样本里，所以这里用 CAN 加拿大 各行业的平均算。");
+  // Card 1's worked X is CAN's industry mean anyway: nothing to explain about the example there.
+  await waitFor(() => expect(document.querySelector('[aria-label="被加税国家的 X 算例"]')).not.toBeNull());
+  expect(document.querySelector(".teaching-x-reason")).toBeNull();
   expect(save).not.toHaveBeenCalled();
   await waitFor(() => expect(screen.queryByRole("option", { name: "T 家庭自用生产" })).toBeNull());
   expect(screen.getByRole("option", { name: "C29 汽车及零部件" })).toBeTruthy();
@@ -155,9 +159,12 @@ test("step 10 can follow a single taxed country and records it alone", async () 
   render(<ShockLab meta={meta} step={step} state={{ data: { compared: ["CAN"], teaching_industry: "C29" }, save, complete: false, syncing: false, syncError: null, syncNow: () => {} }} />);
   await waitFor(() => expect(screen.getByText(/只看一个被加税国家时，图上只有它自己的 X 从 2018 年起上升；/)).toBeTruthy());
   expect(series).toHaveBeenCalledWith(["CAN"], "C29");
-  expect((screen.getByRole("combobox", { name: "对比国家 B" }) as HTMLSelectElement).value).toBe("");
+  expect((screen.getByRole("combobox", { name: "对照国家（可选）" }) as HTMLSelectElement).value).toBe("");
   expect(document.querySelectorAll(".teaching-example-summary li")).toHaveLength(1);
-  expect(document.querySelector('[aria-label="所选例子的 X 算例"]')!.textContent).toContain("X = 90.00% × 25% = 22.50 个百分点");
+  // The example's own X = w × τ is its summary line.
+  expect(document.querySelector(".teaching-example-summary li")!.textContent).toBe(
+    "CAN 加拿大 · C29 汽车及零部件被加税：2020 年 X = w × τ = 90.00% × 25% = 22.50 个百分点",
+  );
   // X jumps in one year: a step line whose jump and the policy marker both sit on 2018, read in percentage points.
   await waitFor(() => expect(document.querySelector('[data-mark-year="2018"]')).not.toBeNull());
   const svg = document.querySelector('[data-mark-year="2018"]')!.closest("svg")!;
@@ -195,8 +202,10 @@ test("the step 10 gap note matches whether the two countries were taxed", () => 
 });
 
 const tenYears = [2016, 2017, 2018, 2019, 2020];
-/** The worked X = w × τ for the followed example (the whole-sample card for CAN has another label). */
-const WORKED = '[aria-label="所选例子的 X 算例"]';
+/** Card 1's one worked X = w × τ: CAN's industry mean from the overview, whatever the example. */
+const CAN_CARD = '[aria-label="被加税国家的 X 算例"]';
+/** The example's summary lines in the trend section, one per country: its own "X = w × τ = …". */
+const summaryLines = () => [...document.querySelectorAll(".teaching-example-summary li")].map((li) => li.textContent!);
 const tenGroups = () => spyOn(api, "teachingGroups").mockResolvedValue({
   version: "step10-tariff-teaching-v5", years: tenYears, policy_year: 2018,
   sample: { rows: 10, entities: 2, countries: 2, industries: 1, taxed_countries: 1, untaxed_countries: 1 },
@@ -244,7 +253,7 @@ test("a fresh step 10 always opens on C29 (the autos example), whatever step 9 l
   expect(series).not.toHaveBeenCalledWith(expect.anything(), "C26");
   const lead = document.querySelector(".teaching-example-lead")!.textContent!;
   expect(lead).toContain("两国汽车业都主要出口到美国");
-  expect(lead).toContain("行业默认是 C29 汽车及零部件");
+  expect(lead).toContain("行业为 C29 汽车及零部件");
   expect(lead).not.toContain("步骤 9");
   await waitFor(() => expect(save).toHaveBeenCalled());
   expect((save.mock.calls.at(-1) as unknown[])[0]).toMatchObject({ teaching_industry: "C29", teaching_example_chosen: false });
@@ -256,7 +265,7 @@ test("a fresh step 10 always opens on C29 (the autos example), whatever step 9 l
     teaching_observation: { country: "CAN", industry: "C26", year: 2020, teaching_export_share_w: 0.5, teaching_tariff_rate_tau: 0.25, teaching_tariff_exposure: 0.125, version: "step10-tariff-teaching-v5" },
   };
   render(<ShockLab meta={meta} step={step} state={tenState(saved, kept)} />);
-  await waitFor(() => expect(document.querySelector(WORKED)).not.toBeNull());
+  await waitFor(() => expect(document.querySelector(".teaching-example-summary")).not.toBeNull());
   expect((screen.getByRole("combobox", { name: "行业" }) as HTMLSelectElement).value).toBe("C26");
   expect(kept).not.toHaveBeenCalled();
   groups.mockRestore();
@@ -264,18 +273,20 @@ test("a fresh step 10 always opens on C29 (the autos example), whatever step 9 l
   cleanup();
 });
 
-test("both taxed, one with w = 0: the exposed country is worked through and nobody is told to switch", async () => {
+test("both taxed, one with w = 0: each line works its own X, the exposed country is recorded, and nobody is told to switch", async () => {
   const meta: Meta = { years: tenYears, countries: ["CAN", "CHE", "MEX"], sectors: ["B05_06"] };
   const groups = tenGroups();
   const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, country === "CAN" ? 0.93 : 0, true)));
   const save = mock(() => {});
   render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["CHE", "CAN"], teaching_industry: "B05_06", teaching_example_chosen: true }, save)} />);
-  await waitFor(() => expect(document.querySelector(WORKED)).not.toBeNull());
-  const worked = document.querySelector(WORKED)!.textContent!;
-  expect(worked).toContain("CAN 加拿大 · B05_06");
-  expect(worked).toContain("X = 93.00% × 25% = 23.25 个百分点");
-  // Both taxed at the same rate: the tail sentence fits here.
-  expect(worked).toContain("（税率相同时，对美出口份额 w 不同，X 也不同）");
+  await waitFor(() => expect(document.querySelector(".teaching-example-summary")).not.toBeNull());
+  const [che, can] = summaryLines();
+  expect(che).toStartWith("CHE 瑞士 · B05_06");
+  expect(che).toContain("被加税：2020 年 X = w × τ = 0.00% × 25% = 0 个百分点（不向美国出口：w = 0，所以 X = 0）");
+  expect(can).toStartWith("CAN 加拿大 · B05_06");
+  expect(can).toContain("被加税：2020 年 X = w × τ = 93.00% × 25% = 23.25 个百分点");
+  // The old example-driven card and its tail sentence are gone.
+  expect(document.body.textContent).not.toContain("税率相同时");
   const hint = document.querySelector(".teaching-example-hint")!.textContent!;
   expect(hint).toContain("图上 CAN 加拿大 的 X 就是加税带来的暴露");
   expect(hint).not.toContain("换一个行业或国家");
@@ -286,16 +297,16 @@ test("both taxed, one with w = 0: the exposed country is worked through and nobo
   cleanup();
 });
 
-test("one taxed and one untaxed: no 税率相同 sentence; a tiny w keeps significant digits", async () => {
+test("one taxed and one untaxed: a tiny w keeps significant digits in its X = w × τ line; the untaxed one reads τ = 0%", async () => {
   const meta: Meta = { years: tenYears, countries: ["BRN", "CAN", "MEX"], sectors: ["C30"] };
   const groups = tenGroups();
   const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, country === "BRN" ? 0.000033 : 0.4, country === "BRN")));
   render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["BRN", "MEX"], teaching_industry: "C30", teaching_example_chosen: true })} />);
-  await waitFor(() => expect(document.querySelector(WORKED)).not.toBeNull());
-  const worked = document.querySelector(WORKED)!.textContent!;
-  expect(worked).toContain("对美出口份额 0.0033%");
-  expect(worked).toContain("X = 0.0033% × 25% = 0.00083 个百分点");
-  expect(worked).not.toContain("税率相同时");
+  await waitFor(() => expect(document.querySelector(".teaching-example-summary")).not.toBeNull());
+  const [brn, mex] = summaryLines();
+  expect(brn).toContain("被加税：2020 年 X = w × τ = 0.0033% × 25% = 0.00083 个百分点");
+  expect(mex).toContain("未被加税：2020 年 X = w × τ = 40.00% × 0% = 0 个百分点");
+  expect(document.body.textContent).not.toContain("税率相同时");
   expect(document.body.textContent).not.toContain("不到");
   groups.mockRestore();
   series.mockRestore();
@@ -376,50 +387,118 @@ test("an exact zero X reads 0 next to a tiny one, not 0.00", async () => {
   const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, country === "KHM" ? 0.000033 : 0.4, country === "KHM")));
   render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["KHM", "MEX"], teaching_industry: "B07_08", teaching_example_chosen: true })} />);
   await waitFor(() => expect(document.querySelector(".teaching-example-summary")).not.toBeNull());
-  const summary = document.querySelector(".teaching-example-summary")!.textContent!;
-  expect(summary).toContain("2020 年 X = 0 个百分点");
-  expect(summary).not.toContain("X = 0.00 个百分点");
-  expect(summary).toContain("2020 年 X = 0.00083 个百分点");
+  const [khm, mex] = summaryLines();
+  expect(khm).toContain("2020 年 X = w × τ = 0.0033% × 25% = 0.00083 个百分点");
+  expect(mex).toContain("2020 年 X = w × τ = 40.00% × 0% = 0 个百分点");
+  expect(mex).not.toContain("= 0.00 个百分点");
   groups.mockRestore();
   series.mockRestore();
   cleanup();
 });
 
-test("step 10 leads with the whole sample: four tiles from the overview, then the sorted chart with A and B marked", async () => {
+test("card 1 tells the US tariff: one policy line, three tiles, what X is with CAN's worked mean, then one unmarked chart", async () => {
   const meta: Meta = { years: tenYears, countries: ["CAN", "MEX", "USA"], sectors: ["C29"] };
   const groups = tenGroups();
   const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.5, country === "CAN")));
   render(<ShockLab meta={meta} step={step} state={tenState(undefined)} />);
   await waitFor(() => expect(document.querySelector(".teaching-tiles")).not.toBeNull());
-  const tiles = [...document.querySelectorAll(".teaching-tiles li")].map((tile) => tile.textContent);
-  // Counts, the taxed rule, the imposer, the rate and the year all come from the response.
-  expect(tiles).toEqual(["3 国被美国加税（对美货物顺差 ≥ 10 亿美元）", "2 国未被加税（X 始终为 0）", "USA 美国加征关税的一方（不在样本中）", "25%2018 年起的税率（此前为 0）"]);
-  // The scenario is named as US-centred before any number, with the data rule that picks the taxed countries.
-  expect(document.querySelector(".teaching-scenario")?.textContent).toMatch(/^情景以美国为中心：USA 美国从 2018 年起对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 3 个国家加征 25% 关税，其余 2 个国家未被加税。/);
-  // The rule is restated under the chart.
-  expect(document.querySelector(".country-exposure-rule")!.textContent).toBe("被加税的规则来自 ICIO 数据：2016 年对美货物贸易顺差达到或超过 10 亿美元。");
-  // The sample sentence is one line: countries, country×industry units and records (rows from teaching-groups).
-  expect(document.querySelector(".teaching-one-line")!.textContent).toBe("回归样本：5 国的 210 个国家×行业 × 5 年 = 10 条记录。下图是每个国家 2020 年各行业的平均 X。");
+  const card = document.querySelector(".teaching-tiles")!.closest("section")!;
+  expect(card.querySelector(".reg-section-step")!.textContent).toBe("美国加征关税");
+  expect(card.querySelector("h3")!.textContent).toBe("美国对哪些国家加征关税？");
+  // One policy sentence: the year, the imposer, the data rule, the counts and the rate, all from the response.
+  expect(card.querySelector(".teaching-scenario")!.textContent).toBe(
+    "2018 年起，USA 美国对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 3 个国家加征 25% 关税，其余 2 个国家未被加税。名单按这条规则由 ICIO 数据确定；美国是加税方，不在回归样本中。",
+  );
+  // Three tiles: taxed, untaxed and the rate (the imposer is in the sentence, not a tile).
+  const tiles = [...card.querySelectorAll(".teaching-tiles li")].map((tile) => tile.textContent);
+  expect(tiles).toEqual(["3 国被美国加税（对美货物顺差 ≥ 10 亿美元）", "2 国未被加税（X 始终为 0）", "25%2018 年起的税率（此前为 0）"]);
+  expect(card.querySelector(".teaching-tiles li.imposer")).toBeNull();
+  // Then X, with CAN's industry mean worked through, and the chart under its own heading.
+  expect([...card.querySelectorAll("h4")].map((h) => h.textContent)).toEqual([
+    "关税暴露 X：加税对一个国家×行业的冲击有多大", "3 个被加税国家的 X（从高到低）",
+  ]);
+  const lines = [...card.querySelectorAll(".teaching-one-line")].map((line) => line.textContent);
+  expect(lines[0]).toBe("X = 首年对美出口份额 w × 加征税率 τ。对美出口越多，加税的冲击越大；未被加税的国家 τ = 0，所以 X = 0。");
+  // The sample sentence: countries, country×industry units and records (rows from teaching-groups).
+  expect(lines[1]).toBe("每条是一个国家 2020 年各行业的平均 X。回归样本：5 国的 210 个国家×行业 × 5 年 = 10 条记录。");
+  expect(lines[2]).toContain("步骤 11–14 用每个国家×行业的 X 对照四类指标 Y");
+  expect(card.querySelectorAll(CAN_CARD)).toHaveLength(1);
+  expect(card.querySelectorAll(".teaching-x-card")).toHaveLength(1);
+  // The order inside the card: policy, tiles, X heading, 算例, chart heading, chart.
+  const order = [".teaching-scenario", ".teaching-tiles", "h4", CAN_CARD, "h4:nth-of-type(2)", ".country-exposure"]
+    .map((selector) => card.querySelector(selector)!);
+  for (let i = 1; i < order.length; i += 1) {
+    expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  }
+  // The rule is said once, in the policy line; the chart marks no example.
+  expect(document.querySelector(".country-exposure-rule")).toBeNull();
+  expect(document.querySelector(".country-exposure-note")!.textContent).toBe("悬停或用方向键查看每个国家的 X 与对美货物顺差。");
+  expect(document.querySelectorAll("[data-highlight]")).toHaveLength(0);
+  expect(document.querySelector(".country-exposure-legend-example")).toBeNull();
   // The generated-data note stays as one line at the top.
   expect(document.querySelectorAll(".teaching-data-note")).toHaveLength(1);
-  expect(document.querySelector(".country-exposure")).not.toBeNull();
-  // The default example: CAN (taxed bar) is A, MEX (untaxed code) is B.
-  await waitFor(() => expect(document.querySelector('[data-highlight="B"]')?.getAttribute("data-country")).toBe("MEX"));
-  expect(document.querySelector('[data-highlight="A"]')!.getAttribute("data-country")).toBe("CAN");
-  expect(document.querySelector(".country-exposure-note")!.textContent).toContain("是加征关税的一方，不在样本中");
-  // The example section is optional and names CAN as one of the taxed countries, with the count from the data.
-  expect(document.body.textContent).toContain("跟踪一个例子（可选）");
-  expect(document.querySelector(".teaching-example-lead")!.textContent).toContain("默认的加拿大是 3 个被加税国家之一");
-  // What the next four steps do is one line now.
-  expect(document.body.textContent).toContain("步骤 11–14 用每个国家×行业的 X 对照四类指标 Y");
+  expect(document.body.textContent).not.toContain("情景以美国为中心");
+  // The example section is optional, with its own heading.
+  expect(document.body.textContent).toContain("举例（可选）");
+  expect(document.body.textContent).toContain("加税前后：一个国家×行业的 X");
   expect(document.body.textContent).not.toContain("后面四步用它做什么");
   expect(document.body.textContent).not.toContain("设定：");
-  // Picking another country moves the A mark.
-  fireEvent.change(screen.getByRole("combobox", { name: "国家 A" }), { target: { value: "MEX" } });
-  await waitFor(() => expect(document.querySelector('[data-highlight="A"]')!.getAttribute("data-country")).toBe("MEX"));
-  expect(document.querySelector('[data-highlight="B"]')!.getAttribute("data-country")).toBe("CAN");
   groups.mockRestore();
   series.mockRestore();
+  cleanup();
+});
+
+test("card 1's chart and CAN 算例 stay the same whatever example is chosen: untaxed, the imposer, outside the sample or loading", async () => {
+  const meta: Meta = { years: tenYears, countries: ["CAN", "CHN", "MEX", "USA"], sectors: ["C29", "O"] };
+  const groups = tenGroups();
+  // MEX is untaxed; the USA has no rows; nobody has rows in O.
+  const series = tenSeries((countries, industry) => countries
+    .filter((country) => country !== "USA" && industry !== "O")
+    .flatMap((country) => tenRows(country, industry, 0.8, country === "CAN")));
+  render(<ShockLab meta={meta} step={step} state={tenState(undefined)} />);
+  await waitFor(() => expect(document.querySelector(".teaching-example-summary")).not.toBeNull());
+  // CAN's mean X 14.30 pp over 44 industries at τ = 25% means a mean w of 57.20%.
+  const canCard = () => document.querySelector(CAN_CARD)!.textContent!;
+  const shown = canCard();
+  expect(shown).toBe(
+    "算例：X = w × τCAN 加拿大 · 2020 年 · 44 个行业平均： X = 57.20% × 25% = 14.30 个百分点（即下图中 CAN 加拿大 的那一条）w = 首年（2016 年）对美出口份额，之后各年不变；同一国家各行业的 τ 相同，所以平均 X = 平均 w × τ。",
+  );
+  const chart = () => document.querySelector(".country-exposure")!.innerHTML;
+  const shownChart = chart();
+  const unchanged = () => {
+    expect(canCard()).toBe(shown);
+    expect(chart()).toBe(shownChart);
+    expect(document.querySelectorAll("[data-highlight]")).toHaveLength(0);
+    expect(document.querySelectorAll(".teaching-x-card")).toHaveLength(1);
+    expect(document.querySelector(".teaching-x-reason")).toBeNull();
+    expect(document.body.textContent).not.toMatch(/所以这里用|这里用已记录的例子计算|各行业的平均算/);
+  };
+  unchanged();
+  // An untaxed example country.
+  fireEvent.change(screen.getByRole("combobox", { name: "例子国家" }), { target: { value: "MEX" } });
+  await waitFor(() => expect(summaryLines()[0]).toStartWith("MEX 墨西哥"));
+  unchanged();
+  // The imposer.
+  fireEvent.change(screen.getByRole("combobox", { name: "例子国家" }), { target: { value: "USA" } });
+  await waitFor(() => expect(screen.getByText(/不能作为例子/)).toBeTruthy());
+  unchanged();
+  // Outside the sample.
+  fireEvent.change(screen.getByRole("combobox", { name: "例子国家" }), { target: { value: "CHN" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "行业" }), { target: { value: "O" } });
+  await waitFor(() => expect(document.querySelector(".reg-boundary")?.textContent).toContain("不在回归样本里"));
+  unchanged();
+  groups.mockRestore();
+  series.mockRestore();
+  cleanup();
+  // Still loading.
+  const loadingGroups = tenGroups();
+  const loading = spyOn(api, "teachingSeries").mockImplementation(() => new Promise(() => {}));
+  render(<ShockLab meta={meta} step={step} state={tenState(undefined)} />);
+  await waitFor(() => expect(document.querySelector(CAN_CARD)).not.toBeNull());
+  expect(screen.getByText("正在读取关税数据…")).toBeTruthy();
+  unchanged();
+  loadingGroups.mockRestore();
+  loading.mockRestore();
   cleanup();
 });
 
@@ -432,26 +511,14 @@ test("a server without the taxed rule keeps the plain scenario, tile and chart n
   render(<ShockLab meta={meta} step={step} state={tenState(undefined)} />);
   await waitFor(() => expect(document.querySelector(".teaching-tiles")).not.toBeNull());
   expect(document.querySelector(".teaching-tiles li.taxed")!.textContent).toBe("3 国被美国加税");
-  expect(document.querySelector(".teaching-scenario")?.textContent).toMatch(/^情景以美国为中心：USA 美国从 2018 年起对 3 个国家的商品加征 25% 关税，其余 2 个国家未被加税。/);
+  expect(document.querySelectorAll(".teaching-tiles li")).toHaveLength(3);
+  // No rule: no rule clause and no "名单按这条规则…".
+  expect(document.querySelector(".teaching-scenario")!.textContent).toBe(
+    "2018 年起，USA 美国对 3 个国家的商品加征 25% 关税，其余 2 个国家未被加税。美国是加税方，不在回归样本中。",
+  );
   expect(document.querySelector(".country-exposure-rule")).toBeNull();
+  expect(document.querySelector(".country-exposure-note")!.textContent).toBe("悬停或用方向键查看每个国家的 X。");
   expect(document.body.textContent).not.toContain("对美货物");
-  groups.mockRestore();
-  series.mockRestore();
-  cleanup();
-});
-
-test("an untaxed example works X = w × τ through CAN's industry mean instead, and says why", async () => {
-  const meta: Meta = { years: tenYears, countries: ["CAN", "MEX", "USA"], sectors: ["C29"] };
-  const groups = tenGroups();
-  const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.8, false)));
-  render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["MEX"], teaching_industry: "C29", teaching_example_chosen: true })} />);
-  await waitFor(() => expect(document.querySelector(".teaching-example-summary")).not.toBeNull());
-  expect(document.querySelector(WORKED)).toBeNull();
-  const card = document.querySelector('[aria-label="被加税国家的 X 算例"]')!.textContent!;
-  // CAN's mean X 14.30 pp over 44 industries at τ = 25% means a mean w of 57.20%.
-  expect(card).toContain("CAN 加拿大 · 2020 年 · 44 个行业平均");
-  expect(card).toContain("X = 57.20% × 25% = 14.30 个百分点");
-  expect(card).toContain("你的例子 MEX 墨西哥 未被加税，X 一直是 0，所以这里用 CAN 加拿大 各行业的平均算。");
   groups.mockRestore();
   series.mockRestore();
   cleanup();
@@ -472,99 +539,39 @@ test("the whole-sample overview shows a loading line, then an error with a retry
   render(<ShockLab meta={meta} step={step} state={tenState(undefined)} />);
   expect(screen.getByText("正在读取全部国家的关税暴露…")).toBeTruthy();
   await waitFor(() => expect(screen.getByText(/全部国家的关税暴露读取失败/)).toBeTruthy());
-  // The followed example still works while the overview is missing.
-  await waitFor(() => expect(document.querySelector(WORKED)).not.toBeNull());
+  // The followed example still works while the overview is missing; card 1 has no 算例 without it.
+  await waitFor(() => expect(document.querySelector(".teaching-example-summary")).not.toBeNull());
+  expect(document.querySelector(CAN_CARD)).toBeNull();
   const alert = screen.getByText(/全部国家的关税暴露读取失败/).closest(".error-box")!;
   fireEvent.click(alert.querySelector("button")!);
   await waitFor(() => expect(document.querySelector(".teaching-tiles")).not.toBeNull());
+  expect(document.querySelector(CAN_CARD)!.textContent).toContain("X = 57.20% × 25% = 14.30 个百分点");
   expect(countriesSpy).toHaveBeenCalledTimes(2);
   groups.mockRestore();
   series.mockRestore();
   cleanup();
 });
 
-test("A = USA: the card says why it uses CAN, and the chart marks the recorded example, as the record line names it", async () => {
-  const meta: Meta = { years: tenYears, countries: ["CAN", "CRI", "USA"], sectors: ["C29"] };
-  const groups = tenGroups();
-  // The USA has no rows in the teaching data.
-  const series = tenSeries((countries, industry) => countries.filter((country) => country !== "USA").flatMap((country) => tenRows(country, industry, 0.5, country === "CAN")));
-  const recorded = {
-    compared: ["CAN", "CRI"], teaching_industry: "C29", teaching_example_chosen: true,
-    teaching_observation: { country: "CAN", industry: "C29", year: 2020, teaching_export_share_w: 0.5, teaching_tariff_rate_tau: 0.25, teaching_tariff_exposure: 0.125, version: "step10-tariff-teaching-v5" },
-  };
-  const save = mock(() => {});
-  render(<ShockLab meta={meta} step={step} state={tenState(recorded, save)} />);
-  await waitFor(() => expect(document.querySelector(WORKED)).not.toBeNull());
-  const legend = () => document.querySelector(".country-exposure-legend-example")!.textContent;
-  expect(legend()).toBe("AB你跟踪的例子");
-  fireEvent.change(screen.getByRole("combobox", { name: "国家 A" }), { target: { value: "USA" } });
-  await waitFor(() => expect(document.querySelector(".teaching-x-reason")).not.toBeNull());
-  expect(document.querySelector(".teaching-x-reason")!.textContent).toBe(
-    "你的例子里的 USA 美国 是加征关税的一方，不在回归样本中，所以这里用 CAN 加拿大 各行业的平均算。",
-  );
-  // The recorded example is unchanged, and the chart marks it (not the USA, which has no bar).
-  expect(document.querySelector(".teaching-example-record")!.textContent).toContain("CAN 加拿大 · C29 汽车及零部件（对比 CRI 哥斯达黎加）");
-  expect(document.querySelector('[data-highlight="A"]')!.getAttribute("data-country")).toBe("CAN");
-  expect(document.querySelector('[data-highlight="B"]')!.getAttribute("data-country")).toBe("CRI");
-  expect(legend()).toBe("AB已记录的例子");
-  expect(save).not.toHaveBeenCalled();
-  groups.mockRestore();
-  series.mockRestore();
-  cleanup();
-});
-
-test("while the example loads, the CAN card says so rather than switching silently", async () => {
-  const meta: Meta = { years: tenYears, countries: ["CAN", "CRI", "USA"], sectors: ["C29"] };
-  const groups = tenGroups();
-  const series = spyOn(api, "teachingSeries").mockImplementation(() => new Promise(() => {}));
-  render(<ShockLab meta={meta} step={step} state={tenState(undefined)} />);
-  await waitFor(() => expect(document.querySelector(".teaching-x-reason")?.textContent).toBe(
-    "你的例子的关税数据还在读取，所以这里用 CAN 加拿大 各行业的平均算。",
-  ));
-  groups.mockRestore();
-  series.mockRestore();
-  cleanup();
-});
-
-test("before anything is recorded, a marked country with no bar is named in the legend", () => {
-  try {
-    render(<CountryExposureChart data={countriesOverview} highlight={["USA", "CRI"]} />);
-    expect(document.querySelector('[data-highlight="A"]')).toBeNull();
-    expect(document.querySelector(".country-exposure-legend-example")!.textContent).toBe("AB你跟踪的例子；A = USA 美国 不在图上");
-  } finally {
-    cleanup();
-  }
-});
-
-test("A taxed with w = 0 and B taxed: the card works B through and says why", async () => {
+test("A taxed with w = 0 and B taxed: A's own line says why its X is 0, and B is the recorded row", async () => {
   const meta: Meta = { years: tenYears, countries: ["CAN", "ISR", "MEX"], sectors: ["B05_06"] };
   const groups = tenGroups();
   const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, country === "ISR" ? 0 : 0.3, true)));
-  render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["ISR", "MEX"], teaching_industry: "B05_06", teaching_example_chosen: true })} />);
-  await waitFor(() => expect(document.querySelector(WORKED)).not.toBeNull());
-  const worked = document.querySelector(WORKED)!;
-  expect(worked.textContent).toContain("MEX 墨西哥 · B05_06");
-  expect(worked.querySelector(".teaching-x-reason")!.textContent).toBe(
-    "国家 A ISR 以色列 被加税，但该行业首年不向美国出口（w = 0），X 一直是 0，所以这里用对比国家 B MEX 墨西哥 算。",
-  );
-  cleanup();
-  series.mockRestore();
-  // An untaxed A says so too.
-  const untaxedA = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.3, country === "MEX")));
-  render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["CAN", "MEX"], teaching_industry: "B05_06", teaching_example_chosen: true })} />);
-  await waitFor(() => expect(document.querySelector(WORKED)).not.toBeNull());
-  expect(document.querySelector(`${WORKED} .teaching-x-reason`)!.textContent).toBe("国家 A CAN 加拿大 未被加税，X 一直是 0，所以这里用对比国家 B MEX 墨西哥 算。");
-  cleanup();
-  // An example worked through as A gets no such line.
-  render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["MEX", "CAN"], teaching_industry: "B05_06", teaching_example_chosen: true })} />);
-  await waitFor(() => expect(document.querySelector(WORKED)).not.toBeNull());
-  expect(document.querySelector(`${WORKED} .teaching-x-reason`)).toBeNull();
+  const save = mock(() => {});
+  render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["ISR", "MEX"], teaching_industry: "B05_06", teaching_example_chosen: true }, save)} />);
+  await waitFor(() => expect(document.querySelector(".teaching-example-summary")).not.toBeNull());
+  const [isr, mex] = summaryLines();
+  expect(isr).toContain("被加税：2020 年 X = w × τ = 0.00% × 25% = 0 个百分点（不向美国出口：w = 0，所以 X = 0）");
+  expect(mex).toContain("被加税：2020 年 X = w × τ = 30.00% × 25% = 7.50 个百分点");
+  // No switch to B is announced: the old example-driven card is gone.
+  expect(document.body.textContent).not.toMatch(/所以这里用|对比国家 B/);
+  await waitFor(() => expect(save).toHaveBeenCalled());
+  expect((save.mock.calls.at(-1) as unknown[])[0]).toMatchObject({ teaching_country: "MEX" });
   groups.mockRestore();
-  untaxedA.mockRestore();
+  series.mockRestore();
   cleanup();
 });
 
-test("two countries not in the sample: plural wording, and the card says why it uses CAN", async () => {
+test("two countries not in the sample: plural wording in the one note under the selects", async () => {
   const meta: Meta = { years: tenYears, countries: ["CAN", "CHN", "MEX"], sectors: ["C29", "O"] };
   const groups = tenGroups();
   const series = tenSeries((countries, industry) => countries
@@ -575,9 +582,8 @@ test("two countries not in the sample: plural wording, and the card says why it 
   expect(document.querySelector(".reg-boundary[role=status]")!.textContent).toBe(
     "CHN 中国、MEX 墨西哥 · O 公共管理与国防 不在回归样本里：这两个国家的这个行业在首年（2016 年）都缺少必要数据，回归没有用到它们。请换国家或行业。",
   );
-  expect(document.querySelector(".teaching-x-reason")!.textContent).toBe(
-    "你的例子 CHN 中国、MEX 墨西哥 · O 公共管理与国防 不在回归样本里，所以这里用 CAN 加拿大 各行业的平均算。",
-  );
+  expect(document.querySelectorAll(".reg-boundary")).toHaveLength(1);
+  expect(document.querySelector(".teaching-x-reason")).toBeNull();
   groups.mockRestore();
   series.mockRestore();
   cleanup();
@@ -598,14 +604,17 @@ test("w and X carry enough digits that the shown w × τ gives the shown X by ha
   }
 });
 
-test("a small X reads with the digits that check, in the X card and the trend card", async () => {
+test("a small X reads with the digits that check, in the example's X = w × τ line and the trend card", async () => {
   const meta: Meta = { years: tenYears, countries: ["CHN", "CRI", "MEX"], sectors: ["B05_06"] };
   const groups = tenGroups();
   const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, country === "CHN" ? 0.000985 : 0.3, country === "CHN")));
   render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["CHN", "CRI"], teaching_industry: "B05_06", teaching_example_chosen: true })} />);
   await waitFor(() => expect(document.querySelector(".teaching-example-summary")).not.toBeNull());
-  expect(document.querySelector(WORKED)!.textContent).toContain("X = 0.10% × 25% = 0.025 个百分点");
-  expect(document.querySelector(".teaching-example-summary")!.textContent).toContain("w = 0.10%，2020 年 X = 0.025 个百分点");
+  const [chn, cri] = summaryLines();
+  expect(chn).toContain("被加税：2020 年 X = w × τ = 0.10% × 25% = 0.025 个百分点");
+  expect(cri).toContain("未被加税：2020 年 X = w × τ = 30.00% × 0% = 0 个百分点");
+  await waitFor(() => expect(document.querySelector(".comparison-summary")).not.toBeNull());
+  expect(document.querySelectorAll(".comparison-summary > div")[0].textContent).toContain("0.000 → 0.025");
   expect(document.body.textContent).not.toContain("= 0.02 个百分点");
   groups.mockRestore();
   series.mockRestore();
@@ -623,8 +632,8 @@ test("the USA as A with a valid recorded example: one note, and the recorded exa
   const series = tenSeries((countries, industry) => countries.filter((country) => country !== "USA")
     .flatMap((country) => tenRows(country, industry, country === "CAN" ? 0.93 : 0.4, country === "CAN")));
   render(<ShockLab meta={meta} step={step} state={tenState(RECORDED_CAN)} />);
-  fireEvent.change(screen.getByRole("combobox", { name: "国家 A" }), { target: { value: "USA" } });
-  await waitFor(() => expect(document.querySelector('[aria-label="已记录例子的 X 算例"]')).not.toBeNull());
+  fireEvent.change(screen.getByRole("combobox", { name: "例子国家" }), { target: { value: "USA" } });
+  await waitFor(() => expect(document.body.textContent).toContain("已记录的例子 · 五年趋势"));
   // One note under the selects: the imposer, what to do, and what is shown instead.
   const notes = document.querySelectorAll(".reg-boundary");
   expect(notes).toHaveLength(1);
@@ -632,10 +641,14 @@ test("the USA as A with a valid recorded example: one note, and the recorded exa
     "美国是加征关税的一方，按设计不在回归样本中，X 记为 0 只是定义（w 是“对美出口份额”，美国不会向自己出口），不是数据缺失，不能作为例子。请换一个国家。下面仍显示已记录的例子 CAN 加拿大 · C29 汽车及零部件（对比 MEX 墨西哥）。",
   );
   expect(document.body.textContent).not.toContain("见上面的说明");
-  const worked = document.querySelector('[aria-label="已记录例子的 X 算例"]')!.textContent!;
-  expect(worked).toContain("CAN 加拿大 · C29 汽车及零部件 · 2020 年");
-  expect(worked).toContain("X = 93.00% × 25% = 23.25 个百分点");
-  expect(document.body.textContent).not.toContain("各行业的平均算");
+  // The recorded example's own lines replace the selection's: CAN · C29 against MEX.
+  expect(summaryLines()).toEqual([
+    "CAN 加拿大 · C29 汽车及零部件被加税：2020 年 X = w × τ = 93.00% × 25% = 23.25 个百分点",
+    "MEX 墨西哥 · C29 汽车及零部件未被加税：2020 年 X = w × τ = 40.00% × 0% = 0 个百分点",
+  ]);
+  // Card 1 keeps CAN's industry mean, not the recorded example.
+  expect(document.querySelector(CAN_CARD)!.textContent).toContain("X = 57.20% × 25% = 14.30 个百分点");
+  expect(document.body.textContent).not.toContain("这里用已记录的例子计算");
   expect(document.querySelector(".reg-section-step")).not.toBeNull();
   expect(document.body.textContent).toContain("已记录的例子 · 五年趋势");
   await waitFor(() => expect(document.querySelector('[data-mark-year="2018"]')).not.toBeNull());
@@ -659,13 +672,14 @@ test("ISR · D outside the sample while ISR · S is recorded: one note, and the 
   };
   render(<ShockLab meta={meta} step={step} state={tenState(saved)} />);
   fireEvent.change(screen.getByRole("combobox", { name: "行业" }), { target: { value: "D" } });
-  await waitFor(() => expect(document.querySelector('[aria-label="已记录例子的 X 算例"]')).not.toBeNull());
+  await waitFor(() => expect(document.body.textContent).toContain("已记录的例子 · 五年趋势"));
   const notes = document.querySelectorAll(".reg-boundary");
   expect(notes).toHaveLength(1);
   expect(notes[0].textContent).toMatch(/^ISR 以色列 · D .* 不在回归样本里：这个国家的这个行业在首年（2016 年）缺少必要数据，回归没有用到它。请换一个国家或行业。下面仍显示已记录的例子 ISR 以色列 · S /);
-  expect(document.querySelector('[aria-label="已记录例子的 X 算例"]')!.textContent).toContain("ISR 以色列 · S");
-  expect(document.body.textContent).not.toContain("各行业的平均算");
-  expect(document.body.textContent).toContain("已记录的例子 · 五年趋势");
+  const [isr] = summaryLines();
+  expect(isr).toStartWith("ISR 以色列 · S");
+  expect(isr).toContain("被加税：2020 年 X = w × τ = 20.00% × 25% = 5.00 个百分点");
+  expect(summaryLines()).toHaveLength(1);
   groups.mockRestore();
   series.mockRestore();
   cleanup();
@@ -683,6 +697,10 @@ test("each country's trend card reads X at its own digits; the marker sits betwe
   expect(cards[0]).toContain("0.00 → 23.25");
   expect(cards[0]).not.toContain("23.250");
   expect(cards[1]).toContain("0.000 → 0.025");
+  // The lines above the cards read X at the same digits.
+  const [can, chn] = summaryLines();
+  expect(can).toContain("= 93.00% × 25% = 23.25 个百分点");
+  expect(chn).toContain("= 0.10% × 25% = 0.025 个百分点");
   const svg = document.querySelector('[data-mark-year="2018"]')!.closest("svg")!;
   const marker = Number(svg.querySelector('[data-mark-year="2018"] line')!.getAttribute("x1"));
   const dots = [...svg.querySelectorAll('[data-series-group="CAN"] circle')].map((dot) => Number(dot.getAttribute("cx")));
@@ -690,7 +708,7 @@ test("each country's trend card reads X at its own digits; the marker sits betwe
   expect(marker).toBeLessThan(dots[2]);
   expect(marker).toBeCloseTo((dots[1] + dots[2]) / 2);
   // The lead names the year X rises from 0.
-  expect(document.body.textContent).toContain("看 X 从 2018 年起怎样从 0 上升。");
+  expect(document.body.textContent).toContain("看 X 从 2018 年起怎样从 0 上升；");
   expect(document.body.textContent).not.toContain("跳起来");
   groups.mockRestore();
   series.mockRestore();
@@ -733,13 +751,13 @@ test("after the report is submitted, an unconfirmed step 10 selection is kept as
   const views: unknown[] = [];
   const locked = { ...tenState(RECORDED_CAN, mock(() => {}), true), saveView: (patch: unknown) => views.push(patch) };
   const first = render(<ShockLab meta={meta} step={step} state={locked} />);
-  fireEvent.change(screen.getByRole("combobox", { name: "对比国家 B" }), { target: { value: "CRI" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "对照国家（可选）" }), { target: { value: "CRI" } });
   await waitFor(() => expect(views.at(-1)).toEqual({ browse_selection: { first: "CAN", second: "CRI", industry: "C29" } }));
   first.unmount();
   // Coming back: the selection on screen is the browsed one; the recorded example (CAN vs MEX) is unchanged.
   const save = mock(() => {});
   render(<ShockLab meta={meta} step={step} state={tenState({ ...RECORDED_CAN, browse_selection: { first: "CAN", second: "CRI", industry: "C29" } }, save, true)} />);
-  expect((screen.getByRole("combobox", { name: "对比国家 B" }) as HTMLSelectElement).value).toBe("CRI");
+  expect((screen.getByRole("combobox", { name: "对照国家（可选）" }) as HTMLSelectElement).value).toBe("CRI");
   await waitFor(() => expect(document.querySelector(".teaching-example-record")!.textContent).toContain("对比 MEX 墨西哥"));
   expect(save).not.toHaveBeenCalled();
   groups.mockRestore();

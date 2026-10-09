@@ -88,26 +88,14 @@ export function focusTipHeight(lines: readonly TipLine[]): number {
   return 16 + lines.length * 19;
 }
 
-/** Taxed countries split into two side-by-side columns (left: ranks 1…half, right: the rest), highest first. */
-export function splitColumns<T>(rows: readonly T[]): [T[], T[]] {
-  const half = Math.ceil(rows.length / 2);
-  return [rows.slice(0, half), rows.slice(half)];
-}
-
 /**
- * Step 10's whole-sample view: every taxed country's mean tariff exposure X in the last year, sorted from the
- * highest, as horizontal bars in two columns on one shared scale (so 44 named bars fit at 1024 px without rotated
- * labels); the untaxed countries, all at X = 0, are one labelled slate group of codes below. The example countries
- * (A, B) are marked. Every bar and code is a keyboard stop (one tab stop, arrows move) with the same readout as
- * hover; a collapsed table lists all countries.
+ * Step 10's whole-sample view: every taxed country's mean tariff exposure X in the last year as one ranked column of
+ * horizontal bars, highest first (one column, so the list never reads as two groups to compare); the untaxed
+ * countries, all at X = 0, are one labelled slate group of codes below. The chart is about all countries only: the
+ * student's example has its own section and trend below. Every bar and code is a keyboard stop (one tab stop,
+ * arrows move) with the same readout as hover; a collapsed table lists all countries.
  */
-export function CountryExposureChart({ data, highlight = [], highlightLabel = "你跟踪的例子" }: {
-  data: TeachingCountriesResponse;
-  /** The example countries in order (A, then B); either may be absent from the sample. */
-  highlight?: readonly string[];
-  /** What the A/B marks stand for, in the legend (e.g. the recorded example rather than the current selection). */
-  highlightLabel?: string;
-}) {
+export function CountryExposureChart({ data }: { data: TeachingCountriesResponse }) {
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
   const [activeIndex, setActiveIndex] = useState(0);
   // The focused item draws its own ring (an SVG group shows no outline in every browser).
@@ -115,20 +103,14 @@ export function CountryExposureChart({ data, highlight = [], highlightLabel = "�
   const nodeRefs = useRef<(Element & { focus: () => void } | null)[]>([]);
   const taxed = data.countries.filter((row) => row.taxed);
   const untaxed = data.countries.filter((row) => !row.taxed);
-  // Keyboard order: the taxed bars as read (left column, then right), then the untaxed codes.
+  // Keyboard order: the taxed bars from the top, then the untaxed codes.
   const order = [...taxed, ...untaxed];
-  const badge = (country: string) => (highlight[0] === country ? "A" : highlight[1] === country ? "B" : null);
-  // A marked country with no bar or code (the imposer, or one outside the sample) is named in the legend instead.
-  const offChart = highlight.slice(0, 2).map((code, i) => [i === 0 ? "A" : "B", code] as const)
-    .filter(([, code]) => code && !data.countries.some((row) => row.country === code));
-  const [left, right] = splitColumns(taxed);
-  const rows = Math.max(left.length, 1);
+  const rows = Math.max(taxed.length, 1);
 
-  const width = 700, gutter = 28, colW = (width - gutter) / 2;
-  const labelW = 106, valueRoom = 42, rowH = 17, barH = 11, padT = 6, axisH = 34;
-  const barW = colW - labelW - valueRoom;
+  const width = 600, labelW = 110, valueRoom = 44, rowH = 15, barH = 10, padT = 6, axisH = 34;
+  const barW = width - labelW - valueRoom;
   const height = padT + rows * rowH + axisH;
-  const { hi, ticks } = niceDomain(0, Math.max(...taxed.map((row) => row.mean_exposure * 100), 1), 3);
+  const { hi, ticks } = niceDomain(0, Math.max(...taxed.map((row) => row.mean_exposure * 100), 1), 4);
   const scale = (pp: number) => (pp / hi) * barW;
 
   const focusAt = (index: number) => {
@@ -165,7 +147,7 @@ export function CountryExposureChart({ data, highlight = [], highlightLabel = "�
   };
   const itemProps = (row: CountryRow, index: number) => ({
     tabIndex: index === activeIndex ? 0 : -1,
-    "aria-label": `${countryLabel(row.country)}${badge(row.country) ? `（例子 ${badge(row.country)}）` : ""}：${data.year} 年各行业平均 X = ${points(row.mean_exposure)} 个百分点，${countryIndustryNote(row)}${balanceText(row)}；方向键切换国家`,
+    "aria-label": `${countryLabel(row.country)}：${data.year} 年各行业平均 X = ${points(row.mean_exposure)} 个百分点，${countryIndustryNote(row)}${balanceText(row)}；方向键切换国家`,
     onMouseMove: (event: { clientX: number; clientY: number }) => show(event, countryTipLines(row, data.year, rule)),
     onMouseLeave: hide,
     onKeyDown: (event: KeyboardEvent) => onKeyDown(event, index),
@@ -177,39 +159,28 @@ export function CountryExposureChart({ data, highlight = [], highlightLabel = "�
     onBlur: () => { setFocused(null); hide(); },
   });
 
-  const column = (items: CountryRow[], offsetX: number, startIndex: number) => items.map((row, i) => {
-    const index = startIndex + i;
-    const y = padT + i * rowH;
+  const bars = taxed.map((row, index) => {
+    const y = padT + index * rowH;
     const pp = row.mean_exposure * 100;
-    const end = offsetX + labelW + scale(pp);
-    const mark = badge(row.country);
-    const label = countryLabel(row.country);
     return (
-      <g key={row.country} data-country={row.country} data-highlight={mark ?? undefined}
+      <g key={row.country} data-country={row.country}
         ref={(node) => { nodeRefs.current[index] = node; }}
         role="graphics-symbol" className="country-exposure-bar" {...itemProps(row, index)}>
         {/* The whole row is the hit target, wider than the bar. */}
-        <rect x={offsetX} y={y} width={colW} height={rowH} rx={4}
-          fill={mark ? "#fff1e3" : "transparent"} stroke={focused === index ? "#4b47e0" : "none"} strokeWidth={1.5} />
-        {mark && <g aria-hidden="true">
-          <circle cx={offsetX + 8} cy={y + rowH / 2} r={6.5} fill={ZERO_LINE} />
-          <text x={offsetX + 8} y={y + rowH / 2 + 3.3} textAnchor="middle" fontSize={9} fontWeight={800} fill="#fff">{mark}</text>
-        </g>}
-        <text x={offsetX + labelW - 6} y={y + rowH / 2 + 3.8} textAnchor="end" fontSize={11}
-          fontWeight={mark ? 800 : 500} fill={mark ? "#1b1f2b" : "#3a4050"}>{label}</text>
-        <rect x={offsetX + labelW} y={y + (rowH - barH) / 2} width={Math.max(scale(pp), 1.5)} height={barH} rx={2}
-          fill={TAXED} fillOpacity={mark || highlight.length === 0 ? 1 : 0.82}
-          stroke={mark ? ZERO_LINE : "none"} strokeWidth={mark ? 1.2 : 0} />
-        <text x={end + 4} y={y + rowH / 2 + 3.6} fontSize={10.5} fill="#3a4050" fontWeight={mark ? 800 : 400}
+        <rect x={0} y={y} width={width} height={rowH} rx={4}
+          fill="transparent" stroke={focused === index ? "#4b47e0" : "none"} strokeWidth={1.5} />
+        <text x={labelW - 6} y={y + rowH / 2 + 3.8} textAnchor="end" fontSize={11} fontWeight={500} fill="#3a4050">{countryLabel(row.country)}</text>
+        <rect x={labelW} y={y + (rowH - barH) / 2} width={Math.max(scale(pp), 1.5)} height={barH} rx={2} fill={TAXED} />
+        <text x={labelW + scale(pp) + 4} y={y + rowH / 2 + 3.6} fontSize={10.5} fill="#3a4050"
           style={{ fontVariantNumeric: "tabular-nums" }}>{points(row.mean_exposure)}</text>
       </g>
     );
   });
 
-  const axis = (offsetX: number) => (
+  const axis = (
     <g aria-hidden="true">
       {ticks.map((tick) => {
-        const x = offsetX + labelW + scale(tick);
+        const x = labelW + scale(tick);
         return <g key={tick}>
           <line x1={x} x2={x} y1={padT} y2={padT + rows * rowH} stroke={tick === 0 ? ZERO_LINE : "#eceef3"} strokeWidth={1} />
           <text x={x} y={padT + rows * rowH + 13} textAnchor="middle" fontSize={10} fill="#5f6677">{tick}</text>
@@ -228,17 +199,13 @@ export function CountryExposureChart({ data, highlight = [], highlightLabel = "�
     <div ref={wrapRef} className="hover-wrap country-exposure">
       <div className="country-exposure-legend" aria-hidden="true">
         <span><i style={{ background: TAXED }} />被加税（{taxed.length} 国，按 X 从高到低）</span>
-        <span><i className="line" style={{ background: UNTAXED }} />未被加税（{untaxed.length} 国，X = 0）</span>
-        {highlight.length > 0 && <span className="country-exposure-legend-example"><b className="country-exposure-badge">A</b>{highlight[1] ? <b className="country-exposure-badge">B</b> : null}{highlightLabel}{offChart.length > 0 && `；${offChart.map(([mark, code]) => `${mark} = ${countryLabel(code)}`).join("，")} 不在图上`}</span>}
+        <span><i className="line" style={{ background: UNTAXED }} />未被加税（{untaxed.length} 国，X = 0，列在图下）</span>
       </div>
       {taxed.length > 0 && (
-        <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={summary}          style={{ display: "block", width: "100%", maxWidth: 820, height: "auto" }}>
-          {axis(0)}
-          {right.length > 0 && axis(colW + gutter)}
-          {column(left, 0, 0)}
-          {column(right, colW + gutter, left.length)}
+        <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={summary} style={{ display: "block", width: "100%", maxWidth: width, height: "auto" }}>
+          {axis}
+          {bars}
           <text x={labelW + barW / 2} y={height - 4} textAnchor="middle" fontSize={10.5} fill="#5f6677">{axisTitle}</text>
-          {right.length > 0 && <text x={colW + gutter + labelW + barW / 2} y={height - 4} textAnchor="middle" fontSize={10.5} fill="#5f6677">{axisTitle}</text>}
         </svg>
       )}
       {untaxed.length > 0 && (
@@ -247,22 +214,19 @@ export function CountryExposureChart({ data, highlight = [], highlightLabel = "�
           <span className="country-exposure-codes">
             {untaxed.map((row, i) => {
               const index = taxed.length + i;
-              const mark = badge(row.country);
               return (
-                <span key={row.country} data-country={row.country} data-highlight={mark ?? undefined}
+                <span key={row.country} data-country={row.country}
                   ref={(node) => { nodeRefs.current[index] = node; }}
-                  role="graphics-symbol" className={mark ? "selected" : undefined} {...itemProps(row, index)}>
-                  {mark && <b className="country-exposure-badge" aria-hidden="true">{mark}</b>}{row.country}
+                  role="graphics-symbol" {...itemProps(row, index)}>
+                  {row.country}
                 </span>
               );
             })}
           </span>
         </div>
       )}
-      {ruleText && <p className="country-exposure-rule">被加税的规则来自 ICIO 数据：{ruleText}。</p>}
-      <p className="country-exposure-note">
-        {countryLabel(data.market)} 是加征关税的一方，不在样本中，图上没有它。悬停或用方向键查看每个国家{ruleText ? "的 X 与对美货物顺差" : ""}。
-      </p>
+      {/* The rule and the imposer are stated once, in the policy line above the chart. */}
+      <p className="country-exposure-note">悬停或用方向键查看每个国家的 X{ruleText ? " 与对美货物顺差" : ""}。</p>
       <details className="country-exposure-table">
         <summary>{data.countries.length} 国读数表</summary>
         <table className="data-table">
