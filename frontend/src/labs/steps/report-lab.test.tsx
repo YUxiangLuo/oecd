@@ -717,7 +717,11 @@ test("receipt distinguishes busy export from outdated content and preserves pend
   rerender(<ReportOutro {...props} reportOutdated />);
   expect(screen.getByText(/后续修改尚未纳入/)).toBeTruthy();
   expect(screen.queryByText(/清除当前评分/)).toBeNull();
-  expect(screen.getByText("提交成功 · 等待教师评阅")).toBeTruthy();
+  // Outdated: the receipt leads with the caveat, never with "提交成功".
+  const receipt = screen.getByRole("region", { name: "报告提交回执" });
+  expect(receipt.firstElementChild?.textContent).toStartWith("报告需更新");
+  expect(receipt.textContent).not.toContain("提交成功");
+  expect(screen.getByText("已提交的版本 · 等待教师评阅")).toBeTruthy();
   expect((screen.getByRole("button", { name: "导出 PDF 留存" }) as HTMLButtonElement).disabled).toBe(true);
   rerender(<ReportOutro {...props} />);
   expect(screen.getByText(/你可以离开页面/)).toBeTruthy();
@@ -978,6 +982,40 @@ test("a tab coming back shows a report changed elsewhere, and will not export a 
     expect(screen.getByRole("alert").textContent).toBe(gradedExportRefusal(regenerated));
     expect(gradedExportRefusal(regenerated)).toContain("原评分和评语已清除，不能再导出已评阅版本");
   } finally { session.mockRestore(); print.mockRestore(); }
+});
+
+test("a tab coming back says at once that its three answers are older than the server's", async () => {
+  const newer = { research_question: "新的研究问题", evidence_interpretation: "新的结果解释", limitations: "新的局限" };
+  const older = { research_question: "旧的研究问题", evidence_interpretation: "旧的结果解释", limitations: "旧的局限" };
+  const session = spyOn(api.classroom, "session").mockResolvedValue(sessionWith(mutation("pending"), { "15": { data: newer } }));
+  try {
+    // While this tab has its own unsaved typing, a different server text is expected: no notice.
+    const typing = render(<ReportLab {...finishProps} report={report("pending")} sessionUnsynced state={{ ...finishProps.state, data: older }} />);
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(document.querySelector(".report-answers-outdated")).toBeNull();
+    typing.unmount();
+    render(<ReportLab {...finishProps} report={report("pending")} state={{ ...finishProps.state, data: older }} />);
+    expect(document.querySelector(".report-answers-outdated")).toBeNull();
+    await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+    const notice = document.querySelector(".report-answers-outdated")!;
+    expect(notice.textContent).toContain("这三段是本页的旧文字");
+    expect(within(notice as HTMLElement).getByRole("button", { name: "载入服务器版本" })).toBeTruthy();
+  } finally { session.mockRestore(); }
+});
+
+test("a combined emoji that does not fit is said to take several characters", async () => {
+  const base = "甲".repeat(REFLECTION_MAX_LENGTH - 3);
+  const family = limitInsertion(base, `${base}👨‍👩‍👧`, base.length + 8);
+  expect([family.value, family.cut, family.wide]).toEqual([base, true, true]);
+  expect(limitInsertion(base, `${base}乙乙乙乙`, base.length + 4).wide).toBe(false);
+  function Harness() {
+    const [data, setData] = useState<Record<string, unknown>>({ limitations: base });
+    return <ReportLab {...finishProps} state={{ ...finishProps.state, data, save: (patch) => setData((value) => ({ ...value, ...patch })) }} />;
+  }
+  render(<Harness />);
+  act(() => { fireEvent.change(screen.getByRole("textbox", { name: "局限与反思" }), { target: { value: `${base}👨‍👩‍👧` } }); });
+  expect(screen.getByText(/这个表情按实际字符计算占多个字，剩余字数不够/)).toBeTruthy();
+  expect(screen.queryByText(/一部分没有保留/)).toBeNull();
 });
 
 test("a refused regeneration says why inside the 旧文字 notice it brings into view", async () => {

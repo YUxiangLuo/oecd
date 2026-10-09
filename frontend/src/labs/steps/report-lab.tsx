@@ -291,13 +291,15 @@ const isLowSurrogate = (code: number) => code >= 0xdc00 && code <= 0xdfff;
  * Keep a change within the limit without touching the student's own text: when the new value is too long,
  * only the newly inserted part (at the caret) is shortened, at whole characters, and the text before and after
  * it stays as it was. `caret` is the textarea's caret right after the change (the end of the insertion).
+ * `wide` (with a cut): the first character left out takes several code points (a combined emoji such as a family),
+ * so it did not fit although it looks like one character.
  */
 export function limitInsertion(
   previous: string,
   next: string,
   caret: number | null,
   max = REFLECTION_MAX_LENGTH,
-): { value: string; caret: number; cut: boolean } {
+): { value: string; caret: number; cut: boolean; wide?: boolean } {
   const end = caret ?? next.length;
   if (codePointLength(next) <= max) return { value: next, caret: end, cut: false };
   // Split the new value into unchanged head, insertion and unchanged tail, for a given tail length.
@@ -327,14 +329,19 @@ export function limitInsertion(
   const inserted = next.slice(prefix, next.length - suffix);
   let room = max - codePointLength(before) - codePointLength(after);
   let kept = "";
+  let wide = false;
   for (const part of graphemes(inserted)) {
     const size = codePointLength(part);
-    if (size > room) break;
+    if (size > room) {
+      wide = size > 1;
+      break;
+    }
     kept += part;
     room -= size;
   }
   // A field already over the limit (saved elsewhere) may still lose characters: that is not a cut.
-  return { value: before + kept + after, caret: before.length + kept.length, cut: kept.length !== inserted.length };
+  const cut = kept.length !== inserted.length;
+  return { value: before + kept + after, caret: before.length + kept.length, cut, ...(cut ? { wide } : {}) };
 }
 
 /**
@@ -527,7 +534,7 @@ export function ReportLab({
   const reflection = (state.data ?? {}) as ReportReflectionState;
   const writtenCount = REFLECTION_FIELDS.filter((field) => reflectionLength(String(reflection[field.key] ?? "")) >= field.min).length;
   // A paste beyond the limit is cut by the browser; say so instead of losing the end silently.
-  const [pasteCut, setPasteCut] = useState<string | null>(null);
+  const [pasteCut, setPasteCut] = useState<{ key: string; wide: boolean } | null>(null);
   // A shortened insertion re-renders the field with a value the browser did not type, which puts the caret at
   // the end; put it back right after the kept part of the insertion.
   const caretAfterCut = useRef<{ key: string; value: string; caret: number } | null>(null);
@@ -577,6 +584,10 @@ export function ReportLab({
   reportRef.current = report;
   const reportChangedRef = useRef(onReportChanged);
   reportChangedRef.current = onReportChanged;
+  const reflectionRef = useRef(reflection);
+  reflectionRef.current = reflection;
+  const pendingSaveRef = useRef(false);
+  pendingSaveRef.current = sessionUnsynced || sessionSyncing || Boolean(state.syncError);
 
   /**
    * Read the server's report (a cheap GET of the session) and show it when it differs from this page's: another
@@ -589,6 +600,12 @@ export function ReportLab({
     // A generate or submit started meanwhile owns the report; its own response is newer than this read.
     if (latest.report && !operationRef.current && reportStatusChanged(reportRef.current, latest.report)) {
       reportChangedRef.current({ report: latest.report, completion: latest.completion, report_gate: latest.report_gate, material_gate: latest.material_gate });
+    }
+    // Another tab saved newer answers: say so now (这三段是本页的旧文字), not only after a refused update. While this
+    // tab has its own unsaved typing, the server is expected to differ, so that is not a sign of another tab.
+    if (!operationRef.current && !pendingSaveRef.current) {
+      const answers = newerServerAnswers(reflectionRef.current, readStep<ReportReflectionState>(latest.session, 15));
+      if (answers) setServerAnswers(answers);
     }
     return latest.report;
   };
@@ -838,7 +855,7 @@ export function ReportLab({
                 <textarea
                   aria-label={field.label}
                   data-report-field={field.key}
-                  aria-describedby={`report-hint-${field.key} ${countId}${pasteCut === field.key ? ` report-paste-${field.key}` : ""}`}
+                  aria-describedby={`report-hint-${field.key} ${countId}${pasteCut?.key === field.key ? ` report-paste-${field.key}` : ""}`}
                   aria-invalid={attemptedIncomplete && short ? true : undefined}
                   value={value}
                   // Tall enough for the two-line placeholder (a starter sentence and “（输入后自动保存）”).
@@ -854,7 +871,7 @@ export function ReportLab({
                     if (limited.cut) {
                       caretAfterCut.current = { key: field.key, value: limited.value, caret: limited.caret };
                       state.save({ [field.key]: limited.value });
-                      setPasteCut(field.key);
+                      setPasteCut({ key: field.key, wide: Boolean(limited.wide) });
                       return;
                     }
                     // The cut warning belongs to the paste that caused it: the next edit of any field clears it.
@@ -862,9 +879,11 @@ export function ReportLab({
                     state.save({ [field.key]: event.target.value });
                   }}
                 />
-                {pasteCut === field.key && (
+                {pasteCut?.key === field.key && (
                   <small id={`report-paste-${field.key}`} className="report-writing-hint" role="status">
-                    超过 {REFLECTION_MAX_LENGTH} 字上限：刚粘贴或输入的文字有一部分没有保留，原有文字没有改动。请精简后再补充。
+                    {pasteCut.wide
+                      ? `超过 ${REFLECTION_MAX_LENGTH} 字上限：这个表情按实际字符计算占多个字，剩余字数不够，没有保留；原有文字没有改动。`
+                      : `超过 ${REFLECTION_MAX_LENGTH} 字上限：刚粘贴或输入的文字有一部分没有保留，原有文字没有改动。请精简后再补充。`}
                   </small>
                 )}
               </label>
