@@ -438,7 +438,7 @@ describe("simple regression workbench", () => {
     expect(length.rows.map((row) => [row.sublabel, row.valueLabel])).toEqual([
       // One decimal count per chart: the position index's four.
       ["长度单位", "-0.0181（-0.045 个标准差）"],
-      ["位置指数单位", "-0.0008（-0.015 个标准差）"],
+      ["无量纲", "-0.0008（-0.015 个标准差）"],
     ]);
     const network = familyBarRows("network", [
       estimate("weighted_degree", "加权总度（入+出）", -4010.70, -4109.84, -3911.56, { kind: "network", default: true, depvar_std: 856 }),
@@ -495,7 +495,7 @@ describe("simple regression workbench", () => {
     expect(networkDigits(0.012)).toBe(4);
     expect(networkDigits(59)).toBe(1);
     // With a chosen baseline the design says how Y is read.
-    expect(exampleEffect("length", -0.4, 0.0932, { depvar_kind: "position" })).toBe("0.0373 个位置指数单位");
+    expect(exampleEffect("length", -0.4, 0.0932, { depvar_kind: "position" })).toBe("0.0373");
     expect(exampleEffect("trade", 0.55, 0.0932, { depvar_kind: "share" })).toBe("5.13 个百分点");
   });
 

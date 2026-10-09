@@ -204,7 +204,14 @@ describe("fixed teaching regression reading", () => {
     data.result.depvar_std = 0.17;
     const { container } = render(<RegressionResultCard outcome="length" response={data} />);
     expect(container.querySelector(".reg-headline-main")?.textContent)
-      .toContain("平均低 0.0021 个位置指数单位（幅度约 0.012 个标准差，标准差即 Y 的典型差距）");
+      .toContain("平均低 0.0021（幅度约 0.012 个标准差，标准差即 Y 的典型差距）");
+    // A ratio: no unit after its amounts, "无量纲" where a unit is named (as step 7 and the report say).
+    expect(container.querySelector(".reg-interval-words")?.textContent).toContain("[-0.0030, -0.0012]；约 [");
+    expect(container.textContent).not.toContain("位置指数单位");
+    cleanup();
+    const table = render(<RegressionCoefficientTable response={data} />);
+    expect(table.container.querySelectorAll("th")[1].textContent).toBe("X 每高 1 个百分点，Y 平均相差（无量纲）");
+    expect(table.container.querySelectorAll("tbody td")[1].textContent).toBe("-0.0021");
   });
 
   test("allowed estimates still disclose design warnings", () => {

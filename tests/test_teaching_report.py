@@ -78,8 +78,8 @@ def test_report_small_effects_match_card_precision(outcome, coef, low, high, eff
             -0.30,
             -0.12,
             0.17,
-            "-0.0021 个位置指数单位（幅度约 0.012 个标准差）",
-            "[-0.0030, -0.0012] 个位置指数单位（约 [-0.018, -0.007] 个标准差）",
+            "-0.0021（幅度约 0.012 个标准差）",
+            "[-0.0030, -0.0012]（约 [-0.018, -0.007] 个标准差）",
         ),
     ],
 )
@@ -2399,8 +2399,8 @@ def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(
 
     markdown = build(session, "同学").markdown
     assert "| 结果指标 Y | GVC 位置指数 |" in markdown
-    assert "个位置指数单位" in markdown
-    assert "GVC 位置指数平均越低（X 每高 1 个百分点，约低 0.0040 个位置指数单位）" in markdown
+    assert "位置指数单位" not in markdown
+    assert "GVC 位置指数平均越低（X 每高 1 个百分点，约低 0.0040）" in markdown
     charts = [
         json.loads(block)
         for block in re.findall("```gvcsim-chart" + chr(10) + "(.*?)" + chr(10) + "```", markdown, re.S)
@@ -2414,10 +2414,10 @@ def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(
     saved = length["items"][2]
     assert saved["value"] == pytest.approx(-0.004 / 0.17, rel=1e-3)
     assert saved["text"] == "-0.0040（-0.024 个标准差）"
-    assert "| 关税暴露 X 每高 1 个百分点，Y 平均相差 | **-0.0040 个位置指数单位（幅度约 0.024 个标准差）** |" in markdown
-    assert [item["sub"] for item in length["items"]] == ["长度单位", "长度单位", "位置指数单位"]
+    assert "| 关税暴露 X 每高 1 个百分点，Y 平均相差 | **-0.0040（幅度约 0.024 个标准差）** |" in markdown
+    assert [item["sub"] for item in length["items"]] == ["长度单位", "长度单位", "无量纲"]
     summary = next(chart for chart in charts if chart["title"] == "四步保存的结果（都换算成标准差）")
-    assert summary["items"][2]["text"] == "-0.0040 个位置指数单位（-0.024 个标准差）"
+    assert summary["items"][2]["text"] == "-0.0040（-0.024 个标准差）"
 
     # A baseline from another family, or one the snapshot does not match, is not a reportable run.
     forged = copy.deepcopy(run)
@@ -2438,7 +2438,7 @@ def test_technical_appendix_states_the_chosen_y_unit_not_the_family_unit():
         "result": {"status": "ok", "coefs": []},
     }
     lines = _run_sections([run])
-    assert "- 单位：位置指数单位；另附标准差换算（标准差即 Y 的典型差距）" in lines
+    assert "- 单位：无量纲（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（标准差即 Y 的典型差距）" in lines
     assert "- 结果指标 Y：GVC 位置指数" in lines
     default = {**run, "design": {"depvar_label": "前向生产长度", "equation": "Y = βX + FE"}}
     assert (

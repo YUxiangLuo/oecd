@@ -16,7 +16,8 @@ import {
   familyChartDigits,
   teachingEffect,
   chartDisplayScale,
-  countUnit,
+  unitName,
+  withCountUnit,
   depvarKind,
   globalInferenceIsSuppressed,
   networkDigits,
@@ -153,13 +154,15 @@ export function exampleEffect(outcome: RegressionOutcome, coef: number, x: numbe
   const kind = depvarKind(outcome, design);
   // A change that rounds to zero at the shown precision says so instead of printing "0.0000"; thousands are
   // grouped ("约为 -1,382 个中心性原始单位"), as in the report.
-  const sized = (size: number, digits: number, unit: string) =>
-    size > 0 && size < 0.5 * 10 ** -digits ? `不到 ${(10 ** -digits).toFixed(digits)} ${unit}` : `${groupedFixed(size, digits)} ${unit}`;
-  if (kind === "share") return sized(Math.abs(change * 100), 2, "个百分点");
-  if (kind === "length") return sized(Math.abs(change), 3, "个长度单位");
-  if (kind === "position") return sized(Math.abs(change), 4, "个位置指数单位");
+  // The position index has no unit: a bare number.
+  const sized = (size: number, digits: number) => withCountUnit(
+    size > 0 && size < 0.5 * 10 ** -digits ? `不到 ${(10 ** -digits).toFixed(digits)}` : groupedFixed(size, digits), kind,
+  );
+  if (kind === "share") return sized(Math.abs(change * 100), 2);
+  if (kind === "length") return sized(Math.abs(change), 3);
+  if (kind === "position") return sized(Math.abs(change), 4);
   const size = Math.abs(change);
-  return sized(size, networkDigits(size), "个中心性原始单位");
+  return sized(size, networkDigits(size));
 }
 
 /** Step 14's unit, worded as the report's line beside the step 14 numbers (gvcsim/report_render.py). */
@@ -437,7 +440,7 @@ export function familyBarRows(
     return {
       key: item.key,
       label: displayBaselineLabel(item.label),
-      sublabel: unit === "sd" ? countUnit(kind).replace(/^个/, "") : undefined,
+      sublabel: unit === "sd" ? unitName(kind) : undefined,
       ...figures,
       selected: isSelected,
       note: suppressed ? "这次的数据不够判断方向，不显示 95% 区间" : undefined,
@@ -480,7 +483,7 @@ export function stepMaterialChanged(
  * Y reads "-147.12" and "-73.80" alike (by size they read "-147" and "-73.8"), grouped from 1,000.
  */
 export function gapLabel(kind: DepvarKind, shown: number): string {
-  return `回归估计的差距 ${signedEffect(shown, kind)} ${countUnit(kind)}`;
+  return `回归估计的差距 ${withCountUnit(signedEffect(shown, kind), kind)}`;
 }
 
 /** The line under the 加税前后 chart: what its dashed bracket is (β × the taxed group's mean X), as an association. */

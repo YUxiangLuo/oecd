@@ -22,7 +22,7 @@ _STEP_OUTCOMES = {
 _KIND_DIMENSIONS = {
     "share": "份额（×100 = 百分点）",
     "length": "长度单位（1 个长度单位约等于平均多经过 1 个生产环节）；另附标准差换算（标准差即 Y 的典型差距）",
-    "position": "位置指数单位；另附标准差换算（标准差即 Y 的典型差距）",
+    "position": "无量纲（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（标准差即 Y 的典型差距）",
     "network": "中心性原始单位（按真实网络指标的排名校准生成，不是步骤 5、9 的百万美元）；另附标准差换算（标准差即 Y 的典型差距）",
 }
 _STUDENT_METRIC_LABELS = {
@@ -254,6 +254,18 @@ def estimate_digits(kind: str, value: float, bounds: tuple[float, float] | None)
     return distinct_digits(base, value, bounds)
 
 
+# The unit as named beside a chart or a bar, and as a counted quantity (frontend ``unitName`` / ``countUnit``): the
+# position index is a ratio, "无量纲" as on step 7, so its amounts are bare numbers ("约低 0.0021").
+UNIT_NAMES = {"share": "百分点", "length": "长度单位", "position": "无量纲", "network": "中心性原始单位"}
+COUNT_UNITS = {"share": "个百分点", "length": "个长度单位", "position": "", "network": "个中心性原始单位"}
+
+
+def with_count_unit(amount: str, kind: str) -> str:
+    """An amount with its counted unit (frontend ``withCountUnit``): "-0.018 个长度单位"; the position index's "-0.0021"."""
+    unit = COUNT_UNITS.get(kind, "个长度单位")
+    return f"{amount} {unit}" if unit else amount
+
+
 def _signed(value: float, digits: int) -> str:
     # -0.0 reads "+0.000", as on the page (``signed``), never "-0.000".
     value = 0.0 if value == 0 else value
@@ -377,7 +389,7 @@ def _natural_effect(
         # Lengths, the position index and centrality: the value in its own unit, with its size in standard
         # deviations of Y as on the page ("-0.018 个长度单位（幅度约 0.031 个标准差）"); the sd size is unsigned,
         # the number before it carries the sign.
-        unit = {"position": "位置指数单位", "network": "中心性原始单位"}.get(kind, "长度单位")
+        # The position index has no unit ("无量纲"): its amounts are bare numbers, as on the page.
         sd = result.get("depvar_std")
         positive_sd = float(sd) if isinstance(sd, (int, float)) and math.isfinite(sd) and float(sd) > 0 else None
         sd_bounds = (ci[0] * increment / positive_sd, ci[1] * increment / positive_sd) if ci and positive_sd else None
@@ -386,11 +398,11 @@ def _natural_effect(
         # The estimate and both interval ends in the same decimals, more where an end would read as the estimate,
         # as on the page.
         digits = estimate_digits(kind, effect, (ci[0] * increment, ci[1] * increment) if ci else None)
-        effect_text = f"{_signed(effect, digits)} 个{unit}"
+        effect_text = with_count_unit(_signed(effect, digits), kind)
         if sd_point is not None:
             effect_text += f"（幅度约 {_signed(sd_point, sd_digits)[1:]} 个标准差）"
         interval = (
-            f"[{_signed(ci[0] * increment, digits)}, {_signed(ci[1] * increment, digits)}] 个{unit}"
+            with_count_unit(f"[{_signed(ci[0] * increment, digits)}, {_signed(ci[1] * increment, digits)}]", kind)
             + (
                 f"（约 [{_signed(sd_bounds[0], sd_digits)}, {_signed(sd_bounds[1], sd_digits)}] 个标准差）"
                 if sd_bounds is not None
@@ -433,8 +445,7 @@ def _effect_size(outcome: str, design: dict[str, Any] | None, coefficient: dict[
         else None
     )
     size = _signed(effect, estimate_digits(kind, effect, bounds)).lstrip("+-")
-    unit = {"share": "个百分点", "network": "个中心性原始单位", "position": "个位置指数单位"}.get(kind, "个长度单位")
-    return f"{size} {unit}"
+    return with_count_unit(size, kind)
 
 
 def _association(outcome: str, design: dict[str, Any] | None, coefficient: dict[str, Any], negative: bool) -> str:

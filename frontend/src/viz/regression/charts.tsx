@@ -77,6 +77,8 @@ export function GroupChangeChart({
   const decimals = Math.max(0, Math.min(4, 1 - Math.floor(Math.log10(extent / 2))));
   // A per-year reading; a small change that rounds to zero reads "0.00", never "-0.00".
   const reading = (change: number) => stripNegativeZero((change * scale).toFixed(decimals + 1));
+  // A dimensionless Y (the position index) has its unit named once, in the axis title; its readings are bare numbers.
+  const withUnit = (text: string) => (unit === "无量纲" ? text : `${text} ${unit}`);
   const x = (year: number) => padL + ((year - years[0]) / Math.max(1, years.at(-1)! - years[0])) * (width - padL - padR);
   const y = (value: number) => padT + ((extent - value) / (2 * extent)) * (height - padT - padB);
   const path = (series: { year: number; change: number }[]) => series
@@ -142,7 +144,7 @@ export function GroupChangeChart({
             <path d={path(series)} fill="none" stroke={color} strokeWidth={2.4} />
             {series.map((point) => (
               <circle key={point.year} cx={x(point.year)} cy={y(point.change * scale)} r={3.5} fill={color}>
-                <title>{`${point.year} 年：${reading(point.change)} ${unit}`}</title>
+                <title>{`${point.year} 年：${withUnit(reading(point.change))}`}</title>
               </circle>
             ))}
           </g>

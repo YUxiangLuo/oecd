@@ -9,8 +9,8 @@ describe("two-group chart bracket longer than the gap between the lines", () => 
     const years = [2016, 2017, 2018, 2019, 2020];
     const series = (end: number) => years.map((year, index) => ({ year, change: index < 2 ? 0 : end }));
     const markup = renderToStaticMarkup(createElement(GroupChangeChart, {
-      years, policyYear: 2018, taxed: series(-0.0007), untaxed: series(0), scale: 1, unit: "位置指数单位", title: "t",
-      estimate: { gap: -0.0016, label: "回归估计的差距 -0.0016 个位置指数单位" },
+      years, policyYear: 2018, taxed: series(-0.0007), untaxed: series(0), scale: 1, unit: "无量纲", title: "t",
+      estimate: { gap: -0.0016, label: "回归估计的差距 -0.0016" },
     }));
     const taxedEnds = [...markup.matchAll(/<circle cx="[\d.]+" cy="([\d.]+)" r="3.5" fill="#d6731f"/g)].map((match) => Number(match[1]));
     const taxedEnd = taxedEnds.at(-1)!;

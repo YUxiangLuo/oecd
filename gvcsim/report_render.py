@@ -34,6 +34,7 @@ from gvcsim.report_common import (
     _y_label,
     network_digits,
     reading_number,
+    with_count_unit,
     y_display,
 )
 from gvcsim.report_gate import _indicator_material_complete, _step_data, _valid_indicator_observations
@@ -533,15 +534,16 @@ def _example_size(kind: str, change: float) -> str:
     """The unsigned Y change implied for the step 10 example, in the step's unit (frontend ``exampleEffect``)."""
     size = abs(change)
     if kind == "network":
-        digits, unit = network_digits(size), "个中心性原始单位"
+        digits = network_digits(size)
     else:
-        digits, unit = {"share": (2, "个百分点"), "position": (4, "个位置指数单位")}.get(kind, (3, "个长度单位"))
+        digits = {"share": 2, "position": 4}.get(kind, 3)
     if kind == "share":
         size *= 100
+    # The position index has no unit: a bare number, as on the page.
     if 0 < size < 0.5 * 10**-digits:
-        return f"不到 {10**-digits:.{digits}f} {unit}"
+        return with_count_unit(f"不到 {10**-digits:.{digits}f}", kind)
     # Thousands separators, as the page writes them ("约为 -1,382 个中心性原始单位").
-    return f"{size:,.{digits}f} {unit}"
+    return with_count_unit(f"{size:,.{digits}f}", kind)
 
 
 def _example_conversion(

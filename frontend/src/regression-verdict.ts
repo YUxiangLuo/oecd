@@ -68,11 +68,26 @@ export const signed = (value: number, digits = 3) => {
 };
 
 const DEFAULT_KINDS: Record<RegressionOutcome, DepvarKind> = { trade: "share", production: "share", length: "length", network: "network" };
-const KIND_UNITS: Record<DepvarKind, string> = { share: "个百分点", length: "长度单位", position: "位置指数单位", network: "中心性原始单位" };
+/** The unit as named beside a chart, a column or a bar ("长度单位"); the position index is a ratio: "无量纲", as on step 7. */
+const KIND_UNITS: Record<DepvarKind, string> = { share: "个百分点", length: "长度单位", position: "无量纲", network: "中心性原始单位" };
 
-/** The unit as a counted quantity ("个百分点", "个长度单位"), used wherever an amount of it is stated. */
+/** The unit name under a bar's Y in 个标准差 charts ("长度单位", "无量纲"), as the report's chart. */
+export function unitName(kind: DepvarKind): string {
+  return KIND_UNITS[kind].replace(/^个/, "");
+}
+
+/**
+ * The unit as a counted quantity ("个百分点", "个长度单位"), used wherever an amount of it is stated; the position
+ * index has none, so its amounts are bare numbers ("平均低 0.0021"), as step 7 prints the index itself.
+ */
 export function countUnit(kind: DepvarKind): string {
-  return kind === "share" ? KIND_UNITS.share : `个${KIND_UNITS[kind]}`;
+  return kind === "share" ? KIND_UNITS.share : kind === "position" ? "" : `个${KIND_UNITS[kind]}`;
+}
+
+/** An amount with its counted unit: "-0.018 个长度单位"; the position index's bare "-0.0021". */
+export function withCountUnit(amount: string, kind: DepvarKind): string {
+  const unit = countUnit(kind);
+  return unit ? `${amount} ${unit}` : amount;
 }
 
 /** How the saved Y is read: its family default, or the kind the design carries for a chosen baseline. */
@@ -101,7 +116,7 @@ export function teachingEffect(
 ): string {
   const kind = depvarKind(outcome, design);
   const { scale } = chartDisplayScale(outcome, design);
-  return `${signedEffect(beta * scale, kind, bounds ? [bounds[0] * scale, bounds[1] * scale] : null)} ${countUnit(kind)}`;
+  return withCountUnit(signedEffect(beta * scale, kind, bounds ? [bounds[0] * scale, bounds[1] * scale] : null), kind);
 }
 
 /**
@@ -278,9 +293,9 @@ export function barFigures(estimate: BarEstimate, kind: DepvarKind, unit: BarUni
   // In the headline's digits (with its interval, so it reads as the headline does), or the chart's.
   const nativeDigits = chart.native ?? estimateDigits(kind, native, nativeBounds);
   const nativeValue = signed(native, nativeDigits);
-  const nativeText = `${nativeValue}${withUnit ? ` ${countUnit(kind)}` : ""}`;
+  const nativeText = withUnit ? withCountUnit(nativeValue, kind) : nativeValue;
   // Spoken with its unit even where the drawing leaves it to the axis title or the name's second line.
-  const spokenNative = `${nativeValue} ${countUnit(kind)}`;
+  const spokenNative = withCountUnit(nativeValue, kind);
   if (unit === "points") {
     // Shares: the native value is the coefficient, so its interval has the same digits.
     const digits = nativeDigits;
@@ -337,13 +352,14 @@ function naturalScale(
   const standardizedInterval = sdBounds ? `；约 [${signed(sdBounds[0], sdDigits)}, ${signed(sdBounds[1], sdDigits)}] 个标准差` : "";
   // The estimate and both interval ends in the same decimals, more where an end would read as the estimate.
   const digits = estimateDigits(kind, effect, hasCi ? [ciLow, ciHigh] : null);
-  const intervalShort = hasCi ? `[${signed(ciLow, digits)}, ${signed(ciHigh, digits)}] ${countUnit(kind)}` : "—";
+  const intervalShort = hasCi ? withCountUnit(`[${signed(ciLow, digits)}, ${signed(ciHigh, digits)}]`, kind) : "—";
   // Unsigned, as in the report ("幅度约 0.047 个标准差"): the number before it carries the sign.
   const size = standardized == null ? "" : `幅度约 ${signed(standardized, sdDigits).replace(/^[+−-]/, "")} 个标准差`;
+  const amount = withCountUnit(signed(effect, digits), kind);
   return {
     // A standard deviation is the typical gap in Y between country×industry records; said once, in the headline.
-    effect: `${signed(effect, digits)} ${countUnit(kind)}${size ? `（${size}，${SD_DEFINITION}）` : ""}`,
-    effectBrief: `${signed(effect, digits)} ${countUnit(kind)}${size ? `（${size}）` : ""}`,
+    effect: `${amount}${size ? `（${size}，${SD_DEFINITION}）` : ""}`,
+    effectBrief: `${amount}${size ? `（${size}）` : ""}`,
     interval: hasCi ? `${intervalShort}${standardizedInterval}` : "—",
     intervalShort,
   };

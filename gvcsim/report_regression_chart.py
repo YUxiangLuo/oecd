@@ -16,6 +16,7 @@ from typing import Any, TypeGuard
 
 from gvcsim.regression.teaching import BASELINES
 from gvcsim.report_common import (
+    UNIT_NAMES,
     _depvar_kind,
     _global_inference_suppressed,
     _primary_coefficient,
@@ -23,15 +24,10 @@ from gvcsim.report_common import (
     _y_label,
     estimate_digits,
     standardized_digits,
+    with_count_unit,
     y_display,
 )
 
-_COUNT_UNITS = {
-    "share": "个百分点",
-    "length": "个长度单位",
-    "position": "个位置指数单位",
-    "network": "个中心性原始单位",
-}
 _FAMILIES = {11: "贸易流", 12: "生产", 13: "长度", 14: "网络"}
 UNIT_TITLES = {
     "points": "X 每高 1 个百分点，Y 平均相差（个百分点）",
@@ -112,7 +108,7 @@ def _bar(
     native_digits = digits[0] if digits[0] is not None else estimate_digits(kind, native, native_bounds)
     native_text = _signed(native, native_digits)
     if with_unit:
-        native_text += f" {_COUNT_UNITS.get(kind, '个原始单位')}"
+        native_text = with_count_unit(native_text, kind)
     if not standardized:
         item: dict[str, Any] = {"value": _shown(native), "text": native_text}
         if ci is not None:
@@ -221,7 +217,7 @@ def family_chart(
         {
             "label": str(entry["label"]),
             # In 个标准差 the native unit goes under the name, as on the page.
-            **({"sub": _COUNT_UNITS.get(entry["kind"], "个原始单位").removeprefix("个")} if standardized else {}),
+            **({"sub": UNIT_NAMES.get(entry["kind"], "原始单位")} if standardized else {}),
             **_bar(
                 entry["kind"],
                 entry["coef"],

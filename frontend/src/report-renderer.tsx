@@ -656,7 +656,8 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
         {ticks.map((tick) => (
           <g key={tick}>
             {tick !== 0 && <line x1={x(tick)} x2={x(tick)} y1={m.t} y2={H - m.b} stroke="#eef0f4" />}
-            <text x={x(tick)} y={H - m.b + 19} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{tickText(tick)}</text>
+            {/* The axis range can end at the plot's right edge: that tick is right-aligned there, as on the page. */}
+            <text x={x(tick)} y={H - m.b + 19} textAnchor={x(tick) > plotRight - 20 ? "end" : "middle"} fontSize={AXIS_FONT} fill="#5f6677">{tickText(tick)}</text>
           </g>
         ))}
         <line x1={plotLeft} x2={plotRight} y1={H - m.b} y2={H - m.b} stroke="#d7dae2" />

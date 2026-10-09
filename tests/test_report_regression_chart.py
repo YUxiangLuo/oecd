@@ -94,7 +94,7 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
         assert f"**{effect}**" in table
         native = bar["text"].split("（", 1)[0]
         # The same number; the chart may give it more decimals than the table (one count for all its bars).
-        shown = effect.split(" ", 1)[0]
+        shown = re.match(r"[+-]?[\d,]*\.?\d+", effect).group()  # type: ignore[union-attr]
         decimals = len(shown.split(".")[1]) if "." in shown else 0
         assert len(native.split(".")[1]) >= decimals
         assert float(native.replace(",", "")) == pytest.approx(float(shown.replace(",", "")), abs=0.51 * 10**-decimals)
@@ -122,9 +122,7 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
             assert float(bar_sd) == pytest.approx(float(sd), abs=0.51 * 10 ** -len(sd.split(".")[1]))
             assert (
                 bar["sub"]
-                == {"length": "长度单位", "position": "位置指数单位", "network": "中心性原始单位"}[
-                    design["depvar_kind"]
-                ]
+                == {"length": "长度单位", "position": "无量纲", "network": "中心性原始单位"}[design["depvar_kind"]]
             )
             if outcome == "network":
                 # The table states the same SD size, unsigned after 幅度约 ("幅度约 0.047 个标准差").
@@ -177,7 +175,8 @@ def test_summary_chart_has_one_standardized_bar_per_saved_run(panel, overview):
         "步骤 14 · 网络",
     ]
     assert not any(item.get("saved") for item in chart["items"])
-    units = {"trade": "个百分点", "production": "个百分点", "length": "个位置指数单位", "network": "个中心性原始单位"}
+    # The position index (step 13's saved Y here) is a ratio: its amount is a bare number.
+    units = {"trade": " 个百分点", "production": " 个百分点", "length": "", "network": " 个中心性原始单位"}
     for item, run in zip(chart["items"], runs):
         coefficient, std = run["result"]["coefs"][0], run["result"]["depvar_std"]
         point = coefficient["coef"] * 0.01 / std
@@ -188,7 +187,7 @@ def test_summary_chart_has_one_standardized_bar_per_saved_run(panel, overview):
         _label, effect, _interval = _natural_effect(run["outcome"], run["design"], run["result"], coefficient)
         native = effect.split("（", 1)[0]
         assert item["text"] == f"{native}（{sd} 个标准差）"
-        assert native.endswith(units[run["outcome"]])
+        assert re.fullmatch(r"[+-][\d,.]+" + units[run["outcome"]], native)
     assert chart["title"] == "四步保存的结果（都换算成标准差）"
     # The table (whose columns the PDF check reads) stays ahead of the chart.
     assert summary.index("| 步骤 | 指标 |") < summary.index("```gvcsim-chart")
