@@ -86,7 +86,7 @@ export function useAutoMaterial({ topic, meta, state, country, year, schema, bro
   };
 }
 
-export function AutoMaterialStatus({ state, schema, metric, current, record, loadFailed, loadError = null, onRetryLoad, where, note }: {
+export function AutoMaterialStatus({ state, schema, metric, current, record, loadFailed, loadError = null, onRetryLoad, where, lead, note }: {
   state: StepStateApi<IndicatorStepState>;
   schema: IndicatorSchema | null | undefined;
   /** The step's country-level indicator, named in the explanation line. */
@@ -100,6 +100,9 @@ export function AutoMaterialStatus({ state, schema, metric, current, record, loa
   onRetryLoad?: () => void;
   /** Where the country is chosen, e.g. “上方所选国家”. */
   where: string;
+  /** Replaces "记录{where}" when the view and the record differ, e.g. step 5 with 国家 = 全部:
+   * "表格显示全部国家；报告材料记录最近选的国家 DEU 德国。" */
+  lead?: string;
   /** Extra reading caveat for this step's indicator. */
   note?: string;
 }) {
@@ -117,7 +120,7 @@ export function AutoMaterialStatus({ state, schema, metric, current, record, loa
         </span>}
       {state.materialLocked
         ? <small>{MATERIAL_LOCKED_NOTE}{record && <button type="button" className="secondary" onClick={record}>{MATERIAL_LOCKED_ACTION.replace("图表", "选择")}</button>}</small>
-        : <small>记录{where}{cjkSpace("同一年的", metric ? fieldLabel(metric, schema) : "本步指标")}（国家整体），换国家或年份后自动更新，无需另外保存。{note ? ` ${note}` : ""}</small>}
+        : <small>{lead ?? `记录${where}`}{cjkSpace(lead ? "记录的是同一年的" : "同一年的", metric ? fieldLabel(metric, schema) : "本步指标")}（国家整体），换国家或年份后自动更新，无需另外保存。{note ? ` ${note}` : ""}</small>}
     </div>
   );
 }

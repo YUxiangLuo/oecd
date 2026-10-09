@@ -5,6 +5,7 @@
 import { api } from "../../../api";
 import { NetworkCentralityDemo } from "../../../demos";
 import type { IndicatorSchema, Meta, Step, StepStateApi } from "../../../types";
+import { countryLabel } from "../../../viz";
 import { useAsync } from "../../shared";
 import { AutoMaterialStatus, useAutoMaterial } from "./auto-comparison";
 import { IndicatorMethodIntro } from "./indicator-method-intro";
@@ -48,9 +49,11 @@ export function NetworkIndicatorStep({ meta, step: _step, state }: { meta: Meta;
         <IndicatorTable
           meta={meta} groupKey="network" schema={schema.data} state={state}
           year={controls.year} country={controls.country} page={controls.page} interacted={controls.interacted}
+          countryNote={controls.carriedNote}
           onYear={controls.setYear} onCountry={controls.setCountry} onPage={controls.setPage}
         />
         <AutoMaterialStatus state={state} schema={schema.data} {...auto} where="上方表格所选国家"
+          lead={controls.country === "" && auto.country ? `表格显示全部国家；报告材料记录最近选的国家 ${countryLabel(auto.country)}。` : undefined}
           note="报告记录的是国家整体的加权总度：该国全部出口 + 进口，中间品和最终品都算在内（不含国内流量）。上表的行业数值只算中间品流量，两者不能直接比较。" />
       </section>
     </div>

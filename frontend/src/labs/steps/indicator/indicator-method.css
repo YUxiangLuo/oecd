@@ -52,3 +52,6 @@
 .method-demo { margin: 0 0 14px; padding: 2px 14px; border: 1px solid #e2e5ef; border-radius: 10px; background: #fafbfd; }
 .method-demo > summary { cursor: pointer; padding: 10px 0; color: #4b47e0; font-size: 13px; font-weight: 600; }
 .method-demo[open] { padding-bottom: 14px; }
+
+/* Steps 3–5: where the opening country came from, beside the country select. */
+.indicator-carried-note { margin: 0 0 6px; font-size: 12px; }

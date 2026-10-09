@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   carriedComparisonFor,
+  carriedComparisonSource,
   StudentWorkspaceSkipLink,
   focusStepMainContent,
   stepMainContentId,
@@ -68,6 +69,15 @@ describe("steps 2–5 record one country, which the later steps carry", () => {
     // Once the step records its own country, that one is used.
     expect(carriedComparisonFor(4, ["JPN"], from({ 3: ["DEU"] }), countries)).toEqual([]);
     expect(carriedComparisonFor(2, [], from({}), countries)).toEqual([]);
+  });
+
+  test("the carried country names the step it came from", () => {
+    expect(carriedComparisonSource(3, [], from({ 2: ["DEU"] }), countries)).toEqual({ compared: ["DEU"], from: 2 });
+    expect(carriedComparisonSource(5, [], from({ 2: ["JPN"], 3: ["DEU"] }), countries)).toEqual({ compared: ["DEU"], from: 3 });
+    // Step 4 never visited: the country comes from step 3.
+    expect(carriedComparisonSource(5, [], from({ 3: ["JPN"] }), countries)).toEqual({ compared: ["JPN"], from: 3 });
+    expect(carriedComparisonSource(4, ["JPN"], from({ 3: ["DEU"] }), countries)).toBeNull();
+    expect(carriedComparisonSource(2, [], from({}), countries)).toBeNull();
   });
 
   test("step 6 takes country A from steps 2–5 and the default comparison country B", () => {

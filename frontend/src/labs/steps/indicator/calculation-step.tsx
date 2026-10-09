@@ -29,6 +29,8 @@ export function CalculationStep({ topic, meta, state }: CalculationStepProps & {
     <section className="indicator-real-heading" aria-label="真实数据动手拆解">
       <span className="icio-kicker">02 / 动手拆解 · OECD ICIO 数据</span>
       <h2>{cfg.title}</h2><p>{cfg.hint} 时间趋势与国家比较在步骤 {topic === "trade" ? 6 : topic === "production" ? 7 : 8}。</p>
+      {/* The country select is the first control of the panel below. */}
+      {controls.carriedNote && <p className="muted indicator-carried-note" role="note">{controls.carriedNote}</p>}
       <DecompositionDemo step={cfg.demo} meta={meta} primaryYear={year}
         primaryCountry={auto.country} onPrimaryChange={controls.setPrimary} />
       <AutoMaterialStatus state={state} schema={schema.data} {...auto} where="上方所选国家" />

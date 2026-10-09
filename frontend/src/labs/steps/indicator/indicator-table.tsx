@@ -240,6 +240,19 @@ export function restoreIndicatorSelection(meta: Meta, saved?: IndicatorStepState
 }
 
 /** 指标表与分解演示共享一套选择，并只把学生真实交互后的变化写回会话。 */
+/** The step an opening country was carried from, when the step shows that very country (see `carriedFrom`). */
+function carriedSource(meta: Meta, state: StepStateApi<IndicatorStepState>): number | undefined {
+  if (state.carriedFrom == null) return undefined;
+  const shown = restoreIndicatorSelection(meta, state.data).country;
+  return shown !== "" && shown === state.data?.compared?.[0] ? state.carriedFrom : undefined;
+}
+
+/** "沿用你在步骤 2 选的国家，可以更换。", shown beside the country select of a step that opened on a carried country. */
+export function carriedCountryNote(from: number | undefined): string | null {
+  return from == null ? null : `沿用你在步骤 ${from} 选的国家，可以更换。`;
+}
+
+/** 指标表与分解演示共享一套选择，并只把学生真实交互后的变化写回会话。 */
 export function useIndicatorControls(meta: Meta, state: StepStateApi<IndicatorStepState>) {
   const initial = restoreIndicatorSelection(meta, state.data);
   const [year, setYearValue] = useState(initial.year);
@@ -247,6 +260,10 @@ export function useIndicatorControls(meta: Meta, state: StepStateApi<IndicatorSt
   const [page, setPageValue] = useState(1);
   const [interacted, setInteracted] = useState(false);
   const restored = useRef(state.data !== undefined);
+  // Where the opening country came from. The workspace offers it only until the step records its own country
+  // (right after it opens), so it is kept from the first render; it goes once the student picks a country here.
+  const [carriedFrom, setCarriedFrom] = useState(() => carriedSource(meta, state));
+  const [countryChosen, setCountryChosen] = useState(false);
 
   useEffect(() => {
     if (restored.current || interacted || state.data === undefined) return;
@@ -254,9 +271,16 @@ export function useIndicatorControls(meta: Meta, state: StepStateApi<IndicatorSt
     setYearValue(next.year);
     setCountryValue(next.country);
     setPageValue(1);
+    setCarriedFrom(carriedSource(meta, state));
     restored.current = true;
+    // state is a new object each render; state.data carries every change that matters here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interacted, meta, state.data]);
 
+  const chooseCountry = (next: string) => {
+    if (next !== country) setCountryChosen(true);
+    setCountryValue(next);
+  };
   const setYear = (next: number) => {
     setInteracted(true);
     setYearValue(next);
@@ -264,7 +288,7 @@ export function useIndicatorControls(meta: Meta, state: StepStateApi<IndicatorSt
   };
   const setCountry = (next: string) => {
     setInteracted(true);
-    setCountryValue(next);
+    chooseCountry(next);
     setPageValue(1);
   };
   const setPage = (next: number) => {
@@ -274,11 +298,12 @@ export function useIndicatorControls(meta: Meta, state: StepStateApi<IndicatorSt
   const setPrimary = (nextYear: number, nextCountry: string) => {
     setInteracted(true);
     setYearValue(nextYear);
-    setCountryValue(nextCountry);
+    chooseCountry(nextCountry);
     setPageValue(1);
   };
 
-  return { year, country, page, interacted, setYear, setCountry, setPage, setPrimary };
+  const carriedNote = countryChosen ? null : carriedCountryNote(carriedFrom);
+  return { year, country, page, interacted, carriedNote, setYear, setCountry, setPage, setPrimary };
 }
 
 export function indicatorRowHeaderLabel(row: Record<string, string | number | null>): string {
@@ -375,7 +400,7 @@ export function IndicatorDataTable({
   );
 }
 
-export function IndicatorTable({ meta, groupKey, schema, state, year, country, page, interacted, onYear, onCountry, onPage }: {
+export function IndicatorTable({ meta, groupKey, schema, state, year, country, page, interacted, countryNote, onYear, onCountry, onPage }: {
   meta: Meta;
   groupKey: IndicatorGroupKey;
   schema: IndicatorSchema | null | undefined;
@@ -384,6 +409,8 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
   country: string;
   page: number;
   interacted: boolean;
+  /** A short muted line beside the country select (where an opening country came from). */
+  countryNote?: string | null;
   onYear: (year: number) => void;
   onCountry: (country: string) => void;
   onPage: (page: number) => void;
@@ -451,6 +478,7 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
           )}
         </LabeledControl>
         <span className="muted">{countLabel}</span>
+        {countryNote && <span className="muted indicator-carried-note" role="note">{countryNote}</span>}
         {!country && <span className="muted">“全部”也包括世界其他地区（ROW，是一个汇总项，不能单独选）。</span>}
         <FullscreenTriggerSlot />
       </div>

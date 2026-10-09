@@ -498,6 +498,11 @@ export interface StepStateApi<T = Record<string, unknown>> {
    * automatically; a step records its current view only when the student explicitly asks.
    */
   materialLocked?: boolean;
+  /**
+   * The step opened on a country carried over from this earlier step (its first visit, before it saved its own),
+   * so it can say where the country came from.
+   */
+  carriedFrom?: number;
 }
 
 /** 单步完成判定。由服务端从会话重算，客户端不参与判定。 */

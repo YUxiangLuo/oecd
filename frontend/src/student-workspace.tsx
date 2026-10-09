@@ -98,8 +98,18 @@ export function carriedComparisonFor(
   savedComparison: (prior: number) => unknown,
   countries: readonly string[] = [],
 ): string[] {
+  return carriedComparisonSource(step, current, savedComparison, countries)?.compared ?? [];
+}
+
+/** {@link carriedComparisonFor} with the earlier step it came from, so a step can say where its country came from. */
+export function carriedComparisonSource(
+  step: number,
+  current: readonly string[],
+  savedComparison: (prior: number) => unknown,
+  countries: readonly string[] = [],
+): { compared: string[]; from: number } | null {
   const singleCountry = step <= 5;
-  if (step < 3 || step > 9 || current.length >= (singleCountry ? 1 : 2)) return [];
+  if (step < 3 || step > 9 || current.length >= (singleCountry ? 1 : 2)) return null;
   for (let prior = step - 1; prior >= 2; prior -= 1) {
     const candidates = savedComparison(prior);
     if (!Array.isArray(candidates)) continue;
@@ -107,14 +117,14 @@ export function carriedComparisonFor(
       typeof code === "string" && code !== "" && code !== "ROW" && candidates.indexOf(code) === index);
     if (prior <= 5) {
       if (unique.length === 0) continue;
-      if (singleCountry) return unique.slice(0, 1);
-      if (unique.length >= 2) return unique.slice(0, 2);
+      if (singleCountry) return { compared: unique.slice(0, 1), from: prior };
+      if (unique.length >= 2) return { compared: unique.slice(0, 2), from: prior };
       const partner = countries.length ? defaultPartner(countries.filter((code) => code !== "ROW"), unique[0]) : "";
-      return partner ? [unique[0], partner] : [unique[0]];
+      return { compared: partner ? [unique[0], partner] : [unique[0]], from: prior };
     }
-    if (unique.length >= 2) return unique.slice(0, 5);
+    if (unique.length >= 2) return { compared: unique.slice(0, 5), from: prior };
   }
-  return [];
+  return null;
 }
 
 export function StudentWorkspace({
@@ -175,11 +185,14 @@ export function StudentWorkspace({
   // Steps 3–9 record their country (steps 3–5) or comparison (steps 6–9) as soon as they open, so a step
   // visited for the first time starts from the country used in the latest earlier step instead of the default
   // CHN (and USA). Once the step saves its own, that one is used.
-  const carriedComparison = carriedComparisonFor(step.n, currentComparison,
+  const carried = carriedComparisonSource(step.n, currentComparison,
     (prior) => session.getStep<{ compared?: string[] }>(prior)?.compared, meta?.countries ?? []);
-  const labState: typeof stepState = carriedComparison.length >= 1
+  const carriedComparison = carried?.compared ?? [];
+  const labState: typeof stepState = carried && carriedComparison.length >= 1
     ? {
       ...stepState,
+      // Lets the step say where its opening country came from (steps 3–5 show it beside the country select).
+      carriedFrom: carried.from,
       data: {
         ...(stepState.data ?? {}),
         compared: carriedComparison,
