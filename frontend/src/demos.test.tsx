@@ -672,6 +672,21 @@ describe("steps 2–4 decomposition demo: all-zero rows and the remembered level
     }
   });
 
+  test("step 2: an industry with value added but no exports says it does not export (CHN·E, round 27)", async () => {
+    const mocks = mockRows([{ ...tradeRow("CHN", "E", 0), SVA: 75_000 } as ReturnType<typeof tradeRow>]);
+    try {
+      const view = render(
+        <DecompositionDemo step={4} meta={{ years: [2020], countries: ["CHN"], sectors: ["E"], dataset: null }}
+          primaryYear={2020} primaryCountry="CHN" initialView={{ level: "sector", industry: "E" }} />,
+      );
+      await waitFor(() => expect(view.container.textContent).toContain("该行业这一年没有出口，出口分解各项为 0"));
+      expect(view.container.textContent).not.toContain("可能没有相关活动");
+    } finally {
+      cleanup();
+      mocks.forEach((mock) => mock.mockRestore());
+    }
+  });
+
   test("单个行业 and the chosen industry are saved and reopen where the student left them", async () => {
     const mocks = mockRows([tradeRow("CHN", "C26", 1), tradeRow("CHN", "C29", 2)]);
     const meta = { years: [2020], countries: ["CHN"], sectors: ["C26", "C29"], dataset: null };

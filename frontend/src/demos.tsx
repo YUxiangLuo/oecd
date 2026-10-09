@@ -486,10 +486,14 @@ export const PLY_DECOMP: DecompCfg = {
   ],
 };
 
-export function zeroTotalDecompositionHint(model: DecompositionModel, totalLabel: string): string | null {
+/** Step 2: an industry that produces (SVA ≠ 0) but exports nothing has every export part 0 (CHN·E). */
+export const NO_EXPORTS_NOTE = "该行业这一年没有出口，出口分解各项为 0";
+
+/** `noExports`: step 2's total is 0 because the industry does not export, although it has activity. */
+export function zeroTotalDecompositionHint(model: DecompositionModel, totalLabel: string, noExports = false): string | null {
   const kind = directZeroTotalKind(model);
   if (kind === "all-zero") {
-    return "所有分项都是 0，这一年可能没有相关活动，请换一个行业。";
+    return noExports ? `${NO_EXPORTS_NOTE}，无法算比重；请换一个行业。` : "所有分项都是 0，这一年可能没有相关活动，请换一个行业。";
   }
   if (kind === "signed-offset") {
     return `${cjkJoin(totalLabel, "为 0：")}正负分项相互抵消，无法算比重。`;
@@ -500,7 +504,7 @@ export function zeroTotalDecompositionHint(model: DecompositionModel, totalLabel
   return null;
 }
 
-export function decompositionModelReason(model: DecompositionModel, weightLabel?: string): string {
+export function decompositionModelReason(model: DecompositionModel, weightLabel?: string, noExports = false): string {
   const weight = weightLabel ?? "权重";
   if (model.reason === "zero-weight-denominator") {
     return cjkJoin(weight, "为 0（没有这类活动），无法计算加权长度。");
@@ -515,7 +519,7 @@ export function decompositionModelReason(model: DecompositionModel, weightLabel?
   if (model.reason === "zero-total") {
     const kind = directZeroTotalKind(model);
     if (kind === "all-zero") {
-      return "所有分项都是 0，这一年可能没有相关活动；无法算比重。";
+      return noExports ? `${NO_EXPORTS_NOTE}；无法算比重。` : "所有分项都是 0，这一年可能没有相关活动；无法算比重。";
     }
     if (kind === "signed-offset") {
       return "总量为 0：正负分项相互抵消，无法算比重。";
@@ -751,7 +755,10 @@ export function DecompositionDemo({
       if (value == null) return acc;
       return finiteNumber(acc + Math.abs(value));
     }, 0);
-    const zeroTotalHint = zeroTotalDecompositionHint(model, cfg.totalLabel);
+    // Step 2: exports of 0 with value added is an industry that does not export, not one without activity.
+    const sva = finiteNumber(row.SVA);
+    const noExports = cfg.total === "gross_exports" && sva != null && sva !== 0;
+    const zeroTotalHint = zeroTotalDecompositionHint(model, cfg.totalLabel, noExports);
     // A negative total is not "too small": the identity line already explains it (总量为负，无法算比重).
     const negligible = model.total != null && gran === "sector" && (
       model.total === 0 || (model.total > 0 && countryTotal != null && countryTotal > 0 && model.total / countryTotal < 1e-4)
@@ -768,7 +775,7 @@ export function DecompositionDemo({
           {step !== 6 && <IndicatorCalculationDisclosure step={step} row={row} />}
           <div className="decomp-unavailable" role="status">
             <b>当前分解不可用</b>
-            <div>{decompositionModelReason(model, cfg.weightTotal)}</div>
+            <div>{decompositionModelReason(model, cfg.weightTotal, noExports)}</div>
             {unavailableTotalNote(model, cfg) && <div>{unavailableTotalNote(model, cfg)}</div>}
             <div>{unavailableDashNote(model)}</div>
           </div>
@@ -838,7 +845,7 @@ export function DecompositionDemo({
         ) : negligible && zeroTotalHint ? null : (
           // A zero total is explained once, by the specific hint below.
           <div className="decomp-identity neutral" role="status">
-            ℹ {decompositionModelReason(model, cfg.weightTotal)}
+            ℹ {decompositionModelReason(model, cfg.weightTotal, noExports)}
             {model.amountCloses != null && ` ${cfg.parts.length} 项金额相加${model.amountCloses ? "等于" : "不等于"}总量。`}
           </div>
         )}
