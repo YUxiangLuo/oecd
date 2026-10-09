@@ -85,10 +85,20 @@ export function chartDisplayScale(outcome: RegressionOutcome, design?: { depvar_
   return { scale: 0.01, unit: KIND_UNITS[kind] };
 }
 
-export function teachingEffect(outcome: RegressionOutcome, beta: number, design?: { depvar_kind?: string } | null): string {
+/**
+ * β per 1 percentage point of X with its unit, in the headline's digits: with the 95% interval (`bounds`, per 1.00 of
+ * X as the coefficient), more where an end would read as the estimate ("-0.0184", not "-0.018"), as the report's
+ * appendix prints it.
+ */
+export function teachingEffect(
+  outcome: RegressionOutcome,
+  beta: number,
+  design?: { depvar_kind?: string } | null,
+  bounds: [number, number] | null = null,
+): string {
   const kind = depvarKind(outcome, design);
   const { scale } = chartDisplayScale(outcome, design);
-  return `${signed(beta * scale, kind === "position" ? 4 : kind === "length" ? 3 : shareDigits(beta * scale))} ${countUnit(kind)}`;
+  return `${signedEffect(beta * scale, kind, bounds ? [bounds[0] * scale, bounds[1] * scale] : null)} ${countUnit(kind)}`;
 }
 
 /**

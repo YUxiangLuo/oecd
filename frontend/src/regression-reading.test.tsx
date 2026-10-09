@@ -230,6 +230,25 @@ describe("fixed teaching regression reading", () => {
     expect(cells[1]).toBe("-0.018 个长度单位");
     expect(cells[2]).toBe("-1.8186");
   });
+
+  test("the table's per-percentage-point reading has the headline's digits (an interval end would read alike)", () => {
+    // Step 13's default Y: -0.0184 with [-0.0192, -0.0176] read "-0.018" in the table but "-0.0184" in the headline.
+    const data = response();
+    data.design.outcome = "length";
+    data.design.depvar_kind = "length";
+    Object.assign(data.result.coefs[0], { coef: -1.8414, ci_low: -1.92, ci_high: -1.76 });
+    data.result.depvar_std = 0.58;
+    const card = render(<RegressionResultCard outcome="length" response={data} />);
+    expect(card.container.querySelector(".reg-headline-main")?.textContent).toContain("0.0184 个长度单位");
+    cleanup();
+    const table = render(<RegressionCoefficientTable response={data} />);
+    expect(table.container.querySelectorAll("tbody td")[1].textContent).toBe("-0.0184 个长度单位");
+    // Without an interval (suppressed inference) the base digits stay, as in the report.
+    cleanup();
+    data.result.support!.suppress_inference = true;
+    const suppressed = render(<RegressionCoefficientTable response={data} />);
+    expect(suppressed.container.querySelectorAll("tbody td")[1].textContent).toBe("-0.018 个长度单位");
+  });
 });
 
 test.each(["unknown", "conflicting"])("%s status suppresses table inference", (status) => {

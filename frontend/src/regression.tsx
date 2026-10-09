@@ -289,7 +289,10 @@ export function RegressionCoefficientTable({ response }: { response: RegressionR
           return (
             <tr key={coef.name}>
               <td>{COEFFICIENT_NAMES[coef.name] ?? coef.name}</td>
-              <td>{coef.name === response.design.shock_col ? teachingEffect(outcome, coef.coef, response.design) : "—"}</td>
+              {/* The headline's digits: with the interval it shows (none when suppressed), as the report's appendix. */}
+              <td>{coef.name === response.design.shock_col
+                ? teachingEffect(outcome, coef.coef, response.design, ciLow != null && ciHigh != null ? [ciLow, ciHigh] : null)
+                : "—"}</td>
               <td>{coef.coef.toFixed(4)}</td>
               <td>{ciLow != null && ciHigh != null ? `[${ciLow.toFixed(4)}, ${ciHigh.toFixed(4)}]` : "—"}</td>
               {/* With inference suppressed, SE and t are not read either (the backend keeps them for integrity checks). */}
