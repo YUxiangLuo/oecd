@@ -128,7 +128,7 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
                 continue
             scale = 1.0 if course["kind"] == "share" else 0.01 / course["depvar_std"]
             assert item["value"] == pytest.approx(course["coef"] * scale, rel=1e-3)
-        assert "其余 Y 是课程用同一份数据、同一个模型算出的结果" in section
+        assert "其余 Y 由课程用同一份数据、同一模型计算，对所有学生相同" in section
         if outcome == "production":
             # As on the page: the four forward shares add up to 100%, so their four estimates add up to about 0.
             total = sum(
@@ -149,10 +149,10 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
         )
         if outcome in ("length", "network"):
             assert (
-                "条长都换算成标准差（标准差即 Y 在国家×行业之间的典型差距），这样单位或大小差很多的 Y 也能放在一起比"
+                "条长都换算成标准差（标准差即 Y 在国家×行业之间的典型差距），这样单位或量级差异较大的 Y 也能并列比较"
                 in section
             )
-            assert "才能放在一起比" not in section
+            assert "放在一起比" not in section
         # The binned scatter and the single-dot coefficient plot are gone.
         assert '"type":"binscatter"' not in section and '"type":"coefficient"' not in section
 

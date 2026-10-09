@@ -444,7 +444,7 @@ def _summary_design_limit(status: str, support: dict[str, Any], reasons: list[An
         untreated_entities = _count(support.get("untreated_entities"))
         return (
             f"没有完全不受关税影响的国家可以对照：{treated_clusters} 个国家都至少有一个行业受到影响"
-            f"（仍有 {untreated_entities} 个国家×行业没受影响），所以结果更依赖模型假设。"
+            f"（仍有 {untreated_entities} 个国家×行业未受影响），所以结果更依赖模型假设。"
         )
     if status == "warning" and reasons:
         return _safe(reasons[0], 360)

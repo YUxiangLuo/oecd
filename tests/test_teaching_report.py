@@ -1500,7 +1500,7 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert "区间说明：95% 区间是真实系数的合理取值范围，包含 0 时方向不确定。" in report.markdown
     assert "估计值可能落在" not in report.markdown
     # The sample-building exclusion and each run's own check are two different stages.
-    assert "和上面不是同一批，也不重复计算" in report.markdown
+    assert "与上述剔除互不重复" in report.markdown
     # Step 14's unit is explained next to its number, not only in the appendix.
     body = report.markdown.split("## 关键证据摘要", 1)[1].split("## 技术附录", 1)[0]
     step_14 = body.split("### 步骤 14", 1)[1]
@@ -1508,7 +1508,8 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert "不是步骤 5、9 里以百万美元计的加权总度" in step_14
     # The appendix note on coefficient units, in plain steps.
     assert "两次换算抵消" not in report.markdown
-    assert "一除一乘，两栏数字相同" in report.markdown
+    assert "先除以 100 再乘以 100，两栏数值相同" in report.markdown
+    assert "一除一乘" not in report.markdown
     assert "标称" not in report.markdown
     assert "Goodman-Bacon" not in report.markdown
 
