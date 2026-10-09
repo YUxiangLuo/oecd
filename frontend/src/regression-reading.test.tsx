@@ -167,14 +167,32 @@ describe("fixed teaching regression reading", () => {
     }
   });
 
-  test("a length reading gives its size against the mean without a sign, as the report does", () => {
+  test("a length reading gives its size in standard deviations, unsigned, as step 14 and the report do", () => {
     const data = response();
     data.design.outcome = "length";
     data.design.depvar_kind = "length";
     Object.assign(data.result.coefs[0], { coef: -1.8186, ci_low: -1.9, ci_high: -1.7 });
     data.result.depvar_mean = 3.95;
+    data.result.depvar_std = 0.58;
     const { container } = render(<RegressionResultCard outcome="length" response={data} />);
-    expect(container.querySelector(".reg-headline-main")?.textContent).toContain("前向 GVC 段长度平均短 0.018 个长度单位（幅度约为样本均值的 0.46%）");
+    expect(container.querySelector(".reg-headline-main")?.textContent)
+      .toContain("前向 GVC 段长度平均短 0.018 个长度单位（幅度约 0.031 个标准差，标准差即 Y 的典型差距）");
+    expect(container.querySelector(".reg-interval-words")?.textContent).toContain("[-0.019, -0.017] 个长度单位；约 [-0.033, -0.029] 个标准差");
+    expect(container.textContent).not.toContain("样本均值");
+    // The definition is said once on the card.
+    expect(container.textContent?.match(/标准差即 Y 的典型差距/g)).toHaveLength(1);
+  });
+
+  test("the position index reads in standard deviations too", () => {
+    const data = response();
+    data.design.outcome = "length";
+    data.design.depvar_kind = "position";
+    data.design.baseline = "GVCPs";
+    Object.assign(data.result.coefs[0], { coef: -0.21, ci_low: -0.30, ci_high: -0.12 });
+    data.result.depvar_std = 0.17;
+    const { container } = render(<RegressionResultCard outcome="length" response={data} />);
+    expect(container.querySelector(".reg-headline-main")?.textContent)
+      .toContain("平均低 0.0021 个位置指数单位（幅度约 0.012 个标准差，标准差即 Y 的典型差距）");
   });
 
   test("allowed estimates still disclose design warnings", () => {

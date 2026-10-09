@@ -24,6 +24,9 @@ import {
   reportConflictMessage,
   reportOutdatedAdvice,
   newerServerAnswers,
+  gradedExportRefusal,
+  reportStatusChanged,
+  revealWithOffset,
 } from "./report-lab";
 import { useState } from "react";
 
@@ -751,6 +754,11 @@ test("an exported graded report carries the score and feedback, and the PDF is n
   fireEvent.click(screen.getByRole("button", { name: "取消" }));
   const titles: string[] = [];
   const print = spyOn(globalThis, "print").mockImplementation(() => { titles.push(document.title); });
+  // A graded export first checks the server still has this graded version (it does here).
+  const session = spyOn(api.classroom, "session").mockResolvedValue({
+    release_id: "a".repeat(32), session: { version: "experiment-session-simple-v3", steps: {}, shared: {} }, updated_at: null,
+    ...mutation("graded"), report: graded,
+  });
   document.title = "步骤 15 · 生成实验报告";
   try {
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "导出 PDF" })); });
@@ -759,7 +767,8 @@ test("an exported graded report carries the score and feedback, and the PDF is n
     expect(titles).toEqual(["实验报告 · 演示学生 05 · 2026-10-09"]);
     act(() => { window.dispatchEvent(new Event("afterprint")); });
     expect(document.title).toBe("步骤 15 · 生成实验报告");
-  } finally { print.mockRestore(); }
+    expect(session).toHaveBeenCalledTimes(1);
+  } finally { print.mockRestore(); session.mockRestore(); }
 });
 
 test("a draft or pending report prints no grade block", () => {
@@ -840,6 +849,21 @@ describe("the 2,400 limit shortens only the inserted text", () => {
     expect(screen.getByText(/刚粘贴或输入的文字有一部分没有保留，原有文字没有改动/)).toBeTruthy();
     expect(screen.getByText(/已写 2400 \/ 2400 字 · 已达上限/)).toBeTruthy();
   });
+
+  test("the cut warning goes away with the next edit, in any field", () => {
+    function Harness() {
+      const [data, setData] = useState<Record<string, unknown>>({ limitations: original });
+      return <ReportLab {...finishProps} state={{ ...finishProps.state, data, save: (patch) => setData((value) => ({ ...value, ...patch })) }} />;
+    }
+    render(<Harness />);
+    const field = screen.getByRole("textbox", { name: "局限与反思" }) as HTMLTextAreaElement;
+    act(() => { fireEvent.change(field, { target: { value: "粘贴".repeat(9) + original } }); });
+    expect(screen.queryByText(/超过 2400 字上限/)).not.toBeNull();
+    const other = screen.getByRole("textbox", { name: "研究问题" });
+    act(() => { fireEvent.change(other, { target: { value: "我比较了中国和美国" } }); });
+    expect(screen.queryByText(/超过 2400 字上限/)).toBeNull();
+    expect(field.getAttribute("aria-describedby")).not.toContain("report-paste-");
+  });
 });
 
 test("offline, the two report buttons read differently", () => {
@@ -874,4 +898,115 @@ test("a blocked generate click marks the short analysis fields invalid at once; 
 test("in a save conflict the report actions ask for the server version, not a retry", () => {
   expect(reportWaitLabel("ready", true, false, "冲突", true)).toBe("请先载入服务器版本");
   expect(reportWaitLabel("ready", true, false, "网络中断")).toBe("保存失败，请先重试");
+});
+
+const sessionWith = (latest: ReportMutationResponse, steps: Record<string, unknown> = {}) => ({
+  release_id: "a".repeat(32), updated_at: null, ...latest,
+  session: { version: "experiment-session-simple-v3", steps, shared: {} } as never,
+});
+const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+
+test("once a submitted report exists, an unfinished answer blocks updating it, not generating it", () => {
+  const gate = [{ step: 15, title: "你的分析", missing: ["填写研究问题"] }];
+  render(<ReportLab {...finishProps} report={report("pending")} reportGate={gate} sessionUpdatedAt="2026-08-14T00:00:00Z" />);
+  expect(screen.getByRole("heading", { name: "还不能更新报告" })).toBeTruthy();
+  expect(screen.getByText("还有 1 项没完成，现在还不能更新报告；请先按上方“还不能更新报告”的清单补齐。")).toBeTruthy();
+  expect(screen.queryByText(/还不能生成报告/)).toBeNull();
+  cleanup();
+  render(<ReportLab {...finishProps} reportGate={gate} />);
+  expect(screen.getByRole("heading", { name: "还不能生成报告" })).toBeTruthy();
+});
+
+test("closing the receipt shown after a submit focuses the status card, in view, not the report body far above", async () => {
+  const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("draft"));
+  const submit = spyOn(api.classroom, "submitReport").mockResolvedValue(mutation("pending"));
+  const revealed: Element[] = [];
+  const scrolled = spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (this: HTMLElement) { revealed.push(this); });
+  function Harness() {
+    const [current, setCurrent] = useState<ClassroomReport | null>(null);
+    return <ReportLab {...finishProps} report={current} onReportChanged={(response) => setCurrent(response.report)} />;
+  }
+  try {
+    render(<Harness />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "生成并提交报告" })); });
+    const dialog = screen.getByRole("dialog", { name: "报告已提交" });
+    revealed.length = 0;
+    await act(async () => { fireEvent.keyDown(dialog, { key: "Escape" }); });
+    await settle();
+    expect(document.activeElement?.id).toBe("report-status-card");
+    expect(revealed.at(-1)?.id).toBe("report-status-card");
+    // The report body is a named region (its aria-label needs a role).
+    expect(screen.getByRole("region", { name: "报告正文" }).className).toBe("report-body");
+  } finally { generate.mockRestore(); submit.mockRestore(); scrolled.mockRestore(); }
+});
+
+test("closing a receipt opened from 查看提交回执与实验总结 returns focus to that button", async () => {
+  render(<ReportLab {...finishProps} report={report("graded")} />);
+  const opener = screen.getByRole("button", { name: "查看提交回执与实验总结" });
+  opener.focus();
+  fireEvent.click(opener);
+  await act(async () => { fireEvent.keyDown(screen.getByRole("dialog", { name: "报告已评阅" }), { key: "Escape" }); });
+  await settle();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(document.activeElement).toBe(opener);
+});
+
+test("a tab coming back shows a report changed elsewhere, and will not export a grade that is gone", async () => {
+  const graded = report("graded");
+  const session = spyOn(api.classroom, "session").mockResolvedValue(sessionWith({ ...mutation("graded"), report: graded }));
+  const print = spyOn(globalThis, "print").mockImplementation(() => {});
+  const changed: ClassroomReport["state"][] = [];
+  try {
+    render(<ReportLab {...finishProps} report={graded} sessionUpdatedAt="2026-08-14T00:00:00Z" onReportChanged={(response) => changed.push(response.report.state)} />);
+    // Unchanged on the server: nothing to apply.
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(session).toHaveBeenCalledTimes(1);
+    expect(changed).toEqual([]);
+    // Another tab regenerated the report, which cleared the grade.
+    const regenerated = { ...report("pending"), updated_at: "2026-08-13T01:00:00Z", generated_at: "2026-08-13T01:00:00Z" };
+    session.mockResolvedValue(sessionWith({ ...mutation("pending"), report: regenerated }));
+    await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+    expect(changed).toEqual(["pending"]);
+    // This parent does not apply it, so the page still offers the graded PDF: the export checks again and refuses.
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "导出已评阅版本 PDF" })); });
+    await settle();
+    expect(print).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toBe(gradedExportRefusal(regenerated));
+    expect(gradedExportRefusal(regenerated)).toContain("原评分和评语已清除，不能再导出已评阅版本");
+  } finally { session.mockRestore(); print.mockRestore(); }
+});
+
+test("a refused regeneration says why inside the 旧文字 notice it brings into view", async () => {
+  const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new ApiError(409, "报告或评分已更新，请刷新页面核对后再确认重新生成", "Conflict"));
+  const newer = { research_question: "新的研究问题", evidence_interpretation: "新的结果解释", limitations: "新的局限" };
+  const session = spyOn(api.classroom, "session").mockResolvedValue(sessionWith(mutation("graded"), { "15": { data: newer } }));
+  const revealed: Element[] = [];
+  const scrolled = spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (this: HTMLElement) { revealed.push(this); });
+  try {
+    render(<ReportLab {...finishProps} report={report("pending")} state={{ ...finishProps.state, data: { research_question: "旧的研究问题", evidence_interpretation: "旧的结果解释", limitations: "旧的局限" } }} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /重新生成并提交/ })); });
+    await settle();
+    const notice = document.querySelector(".report-answers-outdated")!;
+    expect(notice.querySelector(".report-conflict-reason")?.textContent).toContain("老师刚刚评阅了这份报告");
+    // Said once, at the top of the notice, not again in a box below the fold.
+    expect(notice.firstElementChild?.className).toBe("report-conflict-reason");
+    expect(document.querySelector(".error-box")).toBeNull();
+    expect(revealed.at(-1) === notice).toBe(true);
+  } finally { generate.mockRestore(); session.mockRestore(); scrolled.mockRestore(); }
+});
+
+test("an element is revealed at the top of the course scroller with room above it", () => {
+  const calls: ScrollToOptions[] = [];
+  const scroller = { scrollTop: 10, getBoundingClientRect: () => ({ top: 20 }), scrollTo: (options: ScrollToOptions) => calls.push(options) };
+  const target = { closest: () => scroller, getBoundingClientRect: () => ({ top: 500 }) } as unknown as HTMLElement;
+  revealWithOffset(target);
+  expect(calls).toEqual([{ top: 474, left: 0, behavior: "smooth" }]);
+});
+
+test("the report status is compared by version, state and grade", () => {
+  const graded = report("graded");
+  expect(reportStatusChanged(graded, { ...graded })).toBe(false);
+  expect(reportStatusChanged(graded, { ...graded, state: "pending", graded_at: null })).toBe(true);
+  expect(reportStatusChanged(graded, { ...graded, updated_at: "2026-08-14T00:00:00Z" })).toBe(true);
+  expect(reportStatusChanged(null, graded)).toBe(true);
 });

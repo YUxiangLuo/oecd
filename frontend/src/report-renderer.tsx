@@ -1,5 +1,5 @@
 import { isValidElement, useLayoutEffect, useRef, useState } from "react";
-import type { ComponentPropsWithoutRef, ReactNode } from "react";
+import type { ComponentPropsWithoutRef, CSSProperties, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ScrollableRegion } from "./a11y";
@@ -255,10 +255,16 @@ function textWidth(text: string, size: number) {
   return [...text].reduce((width, char) => width + (/[⺀-￿]/.test(char) ? size : size * 0.6), 0);
 }
 
-// The charts are drawn 720 units wide and shown at the report column's width (about 0.75× on screen and in
-// print; about 0.71× at a 1024px window), so text is 15 units to render at 10px or more.
+// The charts are drawn 720 units wide and shown at the report column's width (about 0.75× in print; about 0.71×
+// at a 1024px window), so text is 15 units to render at 10px or more.
 const AXIS_FONT = 15;
 const LABEL_FONT = 15;
+/**
+ * Wider windows would scale the drawing up with the column (about 1.4× at 1280 px: 21px chart text beside 13px body
+ * text), so the drawing stops growing at 13/15 of its width: chart text is never larger than the report body.
+ */
+export const REPORT_CHART_MAX_WIDTH = Math.round((720 * 13) / AXIS_FONT);
+const CHART_SVG_STYLE: CSSProperties = { display: "block", width: "100%", maxWidth: REPORT_CHART_MAX_WIDTH, height: "auto" };
 /** Centre of the rotated y-axis unit ("百万美元"), left of the tick labels. */
 const Y_UNIT_X = 12;
 
@@ -329,7 +335,7 @@ function BarChart({ chart }: { chart: Extract<ReportChart, { type: "bar" }> }) {
 
   return (
     <ReportFigure title={chart.title ?? "指标 Top 5"}>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "指标条形图"} style={{ width: "100%", height: "auto" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "指标条形图"} style={CHART_SVG_STYLE}>
         {groups.map((group, index) => {
           const position = legend.positions[index];
           const y = 6 + position.row * 24;
@@ -391,7 +397,7 @@ function BinscatterChart({ chart }: { chart: Extract<ReportChart, { type: "binsc
   return (
     <ReportFigure title={chart.title ?? "分箱散点图"}>
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>把全部记录按 X 从小到大最多分成 {chart.points.length} 组，每个点是一组的平均值；很多记录的 X 相同时，几组的点会重合，看到的点会少一些。X 和 Y 都先扣掉了每个国家×行业自己的平均水平和每年的共同变化。直线的斜率就是估计值（X 每高 1 个百分点，Y 平均相差多少）。</div>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "分箱散点图"} style={{ width: "100%", height: "auto" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "分箱散点图"} style={CHART_SVG_STYLE}>
         {yAxis.ticks.map((tick) => <g key={`y${tick}`}><line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke="#eef0f4" /><text x={m.l - 8} y={y(tick) + 5} textAnchor="end" fontSize={AXIS_FONT} fill="#5f6677">{fy(tick)}</text></g>)}
         {xAxis.ticks.map((tick) => <g key={`x${tick}`}><line x1={x(tick)} x2={x(tick)} y1={m.t} y2={H - m.b} stroke="#eef0f4" /><text x={x(tick)} y={H - m.b + 18} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{fx(tick)}</text></g>)}
         <line x1={x(0)} x2={x(0)} y1={m.t} y2={H - m.b} stroke="#9aa3b5" strokeDasharray="4 3" />
@@ -447,7 +453,7 @@ function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coef
           ? "点 = 估计值 · 横线 = 95% 区间（真实系数的合理取值范围） · 竖线 = 0（X 与 Y 没有关联）；区间包含 0 时方向不确定"
           : "这次的数据不够判断方向，只显示估计值，不显示 95% 区间"}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "系数图"} style={{ width: "100%", height: "auto" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "系数图"} style={CHART_SVG_STYLE}>
         {ticks.map((tickValue) => (
           <g key={tickValue}>
             {tickValue !== 0 && <line x1={x(tickValue)} x2={x(tickValue)} y1={m.t} y2={H - m.b} stroke="#eef0f4" />}
@@ -639,7 +645,7 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
         </span>
       </div>
       {chart.note && <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>{chart.note}</div>}
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${chart.title ?? "回归结果条形图"}。${summary}`} style={{ width: "100%", height: "auto" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${chart.title ?? "回归结果条形图"}。${summary}`} style={CHART_SVG_STYLE}>
         {ticks.map((tick) => (
           <g key={tick}>
             {tick !== 0 && <line x1={x(tick)} x2={x(tick)} y1={m.t} y2={H - m.b} stroke="#eef0f4" />}
@@ -728,7 +734,7 @@ function EventChart({ chart }: { chart: Extract<ReportChart, { type: "event-stud
 
   return (
     <ReportFigure title={chart.title ?? "事件研究动态效应"}>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "事件研究动态图"} style={{ width: "100%", height: "auto" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "事件研究动态图"} style={CHART_SVG_STYLE}>
         {[-extent, 0, extent].map((tick) => (
           <g key={tick}>
             <line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke={tick === 0 ? "#b9bec9" : "#eceef3"} />
@@ -775,7 +781,7 @@ function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> })
 
   return (
     <ReportFigure title={chart.title ?? "历年趋势"}>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "历年趋势折线图"} style={{ width: "100%", height: "auto" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "历年趋势折线图"} style={CHART_SVG_STYLE}>
         {ticks.map((tick) => (
           <g key={tick}>
             <line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke="#e5e7ed" />

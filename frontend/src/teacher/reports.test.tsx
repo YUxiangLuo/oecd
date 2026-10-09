@@ -5,7 +5,7 @@ import { TeacherWorkspace } from "../app-shell";
 import type { TeacherReport } from "../types";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  GradeView, RELOADED_REVIEW_NOTE, REPORT_FILTER_LABELS, ReportRowAction, STALE_REVIEW_HINT, UNCHANGED_REVIEW_HINT, reportRowAction, reportsEmptyState,
+  GRADE_RUBRIC, GradeView, RELOADED_REVIEW_NOTE, REPORT_FILTER_LABELS, ReportRowAction, STALE_REVIEW_HINT, UNCHANGED_REVIEW_HINT, reportRowAction, reportsEmptyState,
   reviewPosition,
 } from "./reports";
 
@@ -486,4 +486,10 @@ describe("moving through the list while grading", () => {
       spies.forEach((spy) => spy.mockRestore());
     }
   });
+});
+
+test("the rubric names the control group generically: with 38 untaxed countries it is not small", () => {
+  const boundary = GRADE_RUBRIC.find(([title]) => title.startsWith("识别与边界"))?.[1] ?? "";
+  expect(boundary).toContain("对照组的大小与可比性");
+  expect(boundary).not.toContain("对照组少");
 });

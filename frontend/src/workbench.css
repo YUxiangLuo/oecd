@@ -223,6 +223,9 @@
 .report-version-notice { padding: 12px 16px; margin: 14px 0; border: 1px solid #dfe3ee; border-radius: 10px; background: #f8faff; line-height: 1.6; }
 .report-version-notice p { margin: 4px 0 0; }
 .report-version-notice.outdated { border-color: #e8c77b; background: #fff8e8; color: #6b450b; }
+/* Scrolled to after a refused regeneration or a closed receipt: kept clear of the scroller's top edge. */
+.report-answers-outdated, .report-error, #report-status-card { scroll-margin-top: 16px; }
+.report-version-notice .report-conflict-reason { margin: 0 0 6px; color: #9a3412; font-weight: 700; }
 .report-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .report-actions code { font-size: 11px; background: #f4f5f8; padding: 1px 5px; border-radius: 4px; }
 .report-provenance-slot { display: inline-block; flex: 1 1 320px; min-height: 18px; }
@@ -499,6 +502,16 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 /* Inside the chart card, under the drawing (step 12's identity, the notice after a bar replaced the saved Y). */
 .diverging-bars .reg-identity-note { margin: 6px 0 0; font-size: 12px; line-height: 1.6; }
 .diverging-bars .reg-replaced-notice { margin: 8px 0 0; }
+/* The saved Y is not the step's default (a bar was clicked): a compact chip with the way back. */
+.diverging-bars .reg-saved-chip {
+  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; margin: 6px 0 0; padding: 3px 10px;
+  border: 1px solid #e3c98a; border-radius: 999px; background: #fff8e6; color: #75521a; font-size: 12px; line-height: 1.5;
+}
+.reg-saved-chip-reset {
+  padding: 0; border: 0; background: none; color: #4b47e0; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer;
+}
+.reg-saved-chip-reset[aria-disabled="true"] { color: #8a8f9c; cursor: progress; }
+.reg-saved-chip-reset:focus-visible { outline: 2px solid #4b47e0; outline-offset: 2px; border-radius: 3px; }
 /* Under the trend chart: what the dashed bracket is. */
 .reg-gap-caption { margin: 6px 0 0; font-size: 12px; line-height: 1.6; }
 /* Step 14's numbers are long ("[-4109.8400, -3911.5600]"): headers wrap and cells are narrower, so the table fits

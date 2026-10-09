@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api";
 import {
-  exampleEffect, familyBarRows, forwardShareIdentity, networkDigits, RegressionRequestError,
+  degreeIdentity, exampleEffect, familyBarRows, forwardShareIdentity, groupedFixed, INTERRUPTED_RUN_NOTE, networkDigits, RegressionRequestError,
   RegressionRunLab, scrollRegressionVerdict, TEACHING_MODEL_VERSION,
 } from "./regression";
 import type {
@@ -245,7 +245,8 @@ describe("simple regression workbench", () => {
     // -0.5493 × 0.03 × 100 = -1.65 points.
     expect(document.querySelector("[data-estimate-label]")?.textContent).toBe("回归估计的差距 -1.65 个百分点");
     expect(document.querySelector(".reg-gap-caption")?.textContent)
-      .toBe("虚线标出的差距 = 估计值 × 被加税组平均 X（3.00 个百分点），即按回归估计，加税后被加税组与未被加税组平均相差多少。");
+      .toBe("虚线标出的差距 = 估计值 × 被加税组平均 X（3.00 个百分点），即按回归估计，加税后被加税组与未被加税组平均相差多少；"
+        + "它与两条线的实际距离接近但不必相同（回归按每个国家×行业自己的 X 计算，并扣掉各自的平均水平）。");
     // Under the chart, in its figure; association words only.
     expect(document.querySelector(".reg-group-figure .reg-gap-caption")).not.toBeNull();
     expect(document.querySelector(".reg-gap-caption")?.textContent).not.toMatch(/导致|影响|应拉开/);
@@ -321,7 +322,7 @@ describe("simple regression workbench", () => {
     const weak = rows.find((row) => row.key === "3b_FGY_GVC_C_share")!;
     expect([weak.uncertain, weak.valueLabel, weak.intervalLabel]).toEqual([true, "+0.008", "[-0.011, +0.026] 个百分点"]);
     expect(rows.filter((row) => row.uncertain)).toHaveLength(1);
-    expect(forwardShareIdentity(items)).toBe("纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（0.00）。");
+    expect(forwardShareIdentity(items)).toBe("纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（0.00）；前向 GVC 生产总份额 = 简单 + 复杂。");
     expect(forwardShareIdentity(items.slice(0, 3))).toBeNull();
   });
 
@@ -365,6 +366,22 @@ describe("simple regression workbench", () => {
     expect(exampleEffect("trade", 0.55, 0.0932, { depvar_kind: "share" })).toBe("5.13 个百分点");
   });
 
+  test("network conversions group thousands, as the report does", () => {
+    expect(exampleEffect("network", -4000, 0.3455)).toBe("1,382 个中心性原始单位");
+    expect(groupedFixed(-1382.4, 0)).toBe("-1,382");
+    expect(groupedFixed(12.345, 2)).toBe("12.35");
+  });
+
+  test("step 14 says weighted degree is in + out once all three are in the family", () => {
+    const degree = [
+      estimate("weighted_degree", "加权总度（入+出）", -4010.7, -4109.8, -3911.6, { kind: "network", default: true }),
+      estimate("weighted_indegree", "加权入度", -1991, -2050, -1930, { kind: "network" }),
+      estimate("weighted_outdegree", "加权出度", -2020, -2080, -1960, { kind: "network" }),
+    ];
+    expect(degreeIdentity(degree)).toBe("加权总度 = 加权入度 + 加权出度，所以这两条的原始值相加约等于加权总度那一条。");
+    expect(degreeIdentity(degree.slice(0, 2))).toBeNull();
+  });
+
   test("keeps request states accessible", () => {
     expect(renderToStaticMarkup(<RegressionRequestError label="回归选项" error="Failed to fetch" onRetry={() => {}} />)).toContain('role="alert"');
   });
@@ -375,5 +392,68 @@ describe("simple regression workbench", () => {
     const target = { closest: () => scroller, getBoundingClientRect: () => ({ top: 50 }) } as unknown as HTMLElement;
     scrollRegressionVerdict(target, "smooth");
     expect(calls).toEqual([{ top: 40, left: 0, behavior: "smooth" }]);
+  });
+});
+
+describe("saving another Y from the bars", () => {
+  test("a saved Y that is not the default shows a chip whose button saves the default again", async () => {
+    mockApis();
+    const run = spyOn(api, "runRegression").mockResolvedValue({ ...FVA(), benchmark } as never);
+    const saves: Record<string, unknown>[] = [];
+    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, save: (patch) => { saves.push(patch); }, data: { run: DVA() } as never }} />);
+    await screen.findByRole("button", { name: "国内增加值出口占比：+0.56，已保存" });
+    const chip = document.querySelector(".diverging-bars .reg-saved-chip");
+    expect(chip?.textContent).toBe("当前保存：国内增加值出口占比（不是本步默认） · 恢复默认（外国增加值项占比）");
+    const reset = screen.getByRole("button", { name: "恢复默认（外国增加值项占比）" });
+    reset.focus();
+    await act(async () => { fireEvent.click(reset); });
+    expect(document.querySelector(".reg-saved-chip")).toBeNull();
+    // Through the run flow: the default Y is run and saved.
+    expect(run.mock.calls[0][2]).toBeNull();
+    expect((saves[0].run as { design: { baseline: string } }).design.baseline).toBe("FVA_share");
+    // The chip's button is gone: keyboard focus lands on the bar that is saved now.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+    expect(document.activeElement?.getAttribute("data-bar")).toBe("FVA_share");
+  });
+
+  test("the default saved Y shows no chip", async () => {
+    mockApis();
+    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
+    await screen.findByRole("button", { name: "外国增加值项占比：-0.55，已保存" });
+    expect(document.querySelector(".reg-saved-chip")).toBeNull();
+  });
+
+  test("the bars say how to use them from the keyboard, show the tooltip on focus and announce a save", async () => {
+    mockApis();
+    spyOn(api, "runRegression").mockResolvedValue({ ...DVA(), benchmark } as never);
+    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
+    const group = await screen.findByRole("group", { name: /（键盘：方向键切换，Enter 保存）/ });
+    expect(group.getAttribute("aria-label")).toContain("本类 2 个 Y · 点一条，换成它并保存（键盘：方向键切换，Enter 保存）");
+    const tip = () => document.querySelector<HTMLElement>(".diverging-bars > div[style*='pointer-events']");
+    const other = screen.getByRole("button", { name: "国内增加值出口占比：+0.56" });
+    fireEvent.focus(other);
+    expect(tip()?.textContent).toContain("95% 区间");
+    expect(tip()?.textContent).toContain("国内增加值出口占比");
+    expect(tip()?.style.opacity).toBe("1");
+    fireEvent.blur(other);
+    expect(tip()?.style.opacity).toBe("0");
+    other.focus();
+    fireEvent.keyDown(other, { key: "Enter" });
+    await waitFor(() => expect([...document.querySelectorAll("[role='status'][aria-live='polite']")].map((node) => node.textContent))
+      .toContain("已保存：国内增加值出口占比"));
+  });
+
+  test("a run cut off by leaving the step says so once when the step is shown again", async () => {
+    mockApis();
+    spyOn(api, "runRegression").mockImplementation(() => new Promise(() => {}) as never);
+    const first = render(<RegressionRunLab step={step} meta={meta} state={state} />);
+    fireEvent.click(await screen.findByRole("button", { name: /^计算贸易流回归/ }));
+    await screen.findAllByText("正在计算…");
+    first.unmount();
+    const back = render(<RegressionRunLab step={step} meta={meta} state={state} />);
+    expect(screen.getByText(INTERRUPTED_RUN_NOTE)).toBeTruthy();
+    back.unmount();
+    render(<RegressionRunLab step={step} meta={meta} state={state} />);
+    expect(screen.queryByText(INTERRUPTED_RUN_NOTE)).toBeNull();
   });
 });

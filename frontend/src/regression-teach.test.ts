@@ -123,6 +123,26 @@ describe("student-first regression reading", () => {
     expect(html).not.toMatch(/方向明确|平均高|平均低/);
   });
 
+  test("steps 13 and 14 state their size the same way, in standard deviations, defined once", () => {
+    const length = response("length", coefficient(-1.8414, -1.92, -1.76));
+    length.design.depvar_kind = "length";
+    length.result.depvar_std = 0.58;
+    const network = response("network", coefficient(-4010.7, -4109.84, -3911.56));
+    network.design.depvar_kind = "network";
+    network.result.depvar_std = 856;
+    const html = renderToStaticMarkup(createElement(RegressionEvidenceMatrix, {
+      getStep: (step: number) => step === 13 ? { run: { design: length.design, result: length.result } }
+        : step === 14 ? { run: { design: network.design, result: network.result } } : undefined,
+    }));
+    const dom = new DOMParser().parseFromString(html, "text/html");
+    const effect = (step: string) => [...dom.querySelectorAll("tbody tr")].find((item) => item.querySelector("th")?.textContent === step)!
+      .querySelectorAll("td")[2].textContent;
+    expect(effect("13")).toBe("-0.018 个长度单位（幅度约 0.032 个标准差）");
+    expect(effect("14")).toBe("-40.11 个中心性原始单位（幅度约 0.047 个标准差）");
+    expect(html).not.toContain("样本均值");
+    expect(html.match(/标准差即 Y 的典型差距/g)).toHaveLength(1);
+  });
+
 });
 
 describe("RegressionSummaryBars", () => {

@@ -123,13 +123,19 @@ export interface RegressionExample {
 /** Defined with the other number formats (regression-verdict.ts); re-exported where it was first used. */
 export { networkDigits };
 
+/** A number with fixed decimals and thousands separators: 1382.4 → "1,382" (0 digits), -12.5 → "-12.50" (2). */
+export function groupedFixed(value: number, digits: number): string {
+  return value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
 /** Y change implied by the estimate for an example's X, in the step's display units. */
 export function exampleEffect(outcome: RegressionOutcome, coef: number, x: number, design?: { depvar_kind?: string } | null): string {
   const change = coef * x;
   const kind = depvarKind(outcome, design);
-  // A change that rounds to zero at the shown precision says so instead of printing "0.0000".
+  // A change that rounds to zero at the shown precision says so instead of printing "0.0000"; thousands are
+  // grouped ("约为 -1,382 个中心性原始单位"), as in the report.
   const sized = (size: number, digits: number, unit: string) =>
-    size > 0 && size < 0.5 * 10 ** -digits ? `不到 ${(10 ** -digits).toFixed(digits)} ${unit}` : `${size.toFixed(digits)} ${unit}`;
+    size > 0 && size < 0.5 * 10 ** -digits ? `不到 ${(10 ** -digits).toFixed(digits)} ${unit}` : `${groupedFixed(size, digits)} ${unit}`;
   if (kind === "share") return sized(Math.abs(change * 100), 2, "个百分点");
   if (kind === "length") return sized(Math.abs(change), 3, "个长度单位");
   if (kind === "position") return sized(Math.abs(change), 4, "个位置指数单位");
@@ -414,7 +420,15 @@ export const REPLACED_NOTICE = {
 
 /** The line under the 加税前后 chart: what its dashed bracket is (β × the taxed group's mean X), as an association. */
 export function gapCaption(meanExposureTaxed: number): string {
-  return `虚线标出的差距 = 估计值 × 被加税组平均 X（${percentagePoints(meanExposureTaxed)} 个百分点），即按回归估计，加税后被加税组与未被加税组平均相差多少。`;
+  return `虚线标出的差距 = 估计值 × 被加税组平均 X（${percentagePoints(meanExposureTaxed)} 个百分点），即按回归估计，加税后被加税组与未被加税组平均相差多少；它与两条线的实际距离接近但不必相同（回归按每个国家×行业自己的 X 计算，并扣掉各自的平均水平）。`;
+}
+
+/** Step 14: weighted degree is in-degree + out-degree in every row (the report says the same under its chart). */
+export const NETWORK_DEGREE_IDENTITY = "加权总度 = 加权入度 + 加权出度，所以这两条的原始值相加约等于加权总度那一条。";
+const DEGREE_KEYS = ["weighted_degree", "weighted_indegree", "weighted_outdegree"];
+
+export function degreeIdentity(items: TeachingEstimate[]): string | null {
+  return DEGREE_KEYS.every((key) => items.some((item) => item.key === key)) ? NETWORK_DEGREE_IDENTITY : null;
 }
 
 /** Step 12's four forward shares add up to 100% of value added, so their four estimates add up to about 0. */
@@ -424,7 +438,16 @@ export function forwardShareIdentity(items: TeachingEstimate[]): string | null {
   const coefs = FORWARD_SHARES.map((key) => items.find((item) => item.key === key)?.coef);
   if (coefs.some((coef) => coef == null || !Number.isFinite(coef))) return null;
   const sum = (coefs as number[]).reduce((total, coef) => total + coef, 0);
-  return `纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（${Math.abs(sum) < 0.005 ? "0.00" : signed(sum, 2)}）。`;
+  return `纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（${Math.abs(sum) < 0.005 ? "0.00" : signed(sum, 2)}）；前向 GVC 生产总份额 = 简单 + 复杂。`;
+}
+
+/** Steps whose run was still in flight when the student left the step (the request is aborted then). */
+const interruptedRuns = new Set<RegressionOutcome>();
+export const INTERRUPTED_RUN_NOTE = "上次计算没有完成，请重新计算。";
+
+/** The bars' title: a click (or Enter on the focused bar) saves that Y. */
+export function familyBarsTitle(count: number): string {
+  return `本类 ${count} 个 Y · 点一条，换成它并保存（键盘：方向键切换，Enter 保存）`;
 }
 
 /**
@@ -446,6 +469,10 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   const [result, setResult] = useState<RegressionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  // A run cut off by leaving the step earlier: said once, until the next run starts.
+  const [interrupted, setInterrupted] = useState(() => interruptedRuns.has(outcome));
+  // Said by the polite live region after a bar saved its Y ("已保存：…"): keyboard focus stays on the bars.
+  const [savedAnnouncement, setSavedAnnouncement] = useState("");
   // What replaced the saved material after the report was submitted: a bar click or the run button.
   const [replacedBy, setReplacedBy] = useState<"bar" | "button" | null>(null);
   const replacedNoticeRef = useRef<HTMLParagraphElement>(null);
@@ -500,8 +527,12 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
 
   useEffect(() => {
     mountedRef.current = true;
+    // Said once: the note is in state now, and a later visit starts clean.
+    interruptedRuns.delete(outcome);
     return () => {
       mountedRef.current = false;
+      // Leaving the step aborts the run and nothing is saved: the step says so when the student comes back.
+      if (runningRef.current) interruptedRuns.add(outcome);
       runController.current?.abort();
     };
   }, []);
@@ -540,6 +571,8 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
     setRunning(true);
     setOverviewWanted(true);
     setError(null);
+    setInterrupted(false);
+    setSavedAnnouncement("");
     try {
       const response = await api.runRegression(outcome, controller.signal, key == null || key === defaultKey ? null : key);
       if (!mountedRef.current) return;
@@ -555,8 +588,12 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         run: saved.run,
         ...(saved.qualified_run ? { qualified_run: saved.qualified_run } : {}),
       });
-      // A bar click keeps keyboard focus on the bars; only the button moves on to the answer.
+      // A bar click keeps keyboard focus on the bars (the live region says what was saved); only the button
+      // moves on to the answer.
       scrollToVerdictAfterRun.current = fromButton;
+      if (!fromButton) {
+        setSavedAnnouncement(`已保存：${lessonFor(outcome, response.design.baseline, response.design.baseline_label).shortMetric}`);
+      }
       // After the report was submitted, this run has already replaced the saved material: the notice says so.
       if (state.materialLocked) {
         setReplacedBy(fromButton ? "button" : "bar");
@@ -564,6 +601,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
       }
       setResult(response);
     } catch (cause) {
+      focusSavedBarAfterRun.current = false;
       if (mountedRef.current) {
         setError(userFacingRequestError(cause, `${runName}没有算完`));
         if (cause instanceof ApiError && cause.status === 429 && cause.retryAfter) {
@@ -593,6 +631,17 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
     return () => window.cancelAnimationFrame(frame);
   }, [result]);
 
+  // 恢复默认 removes its own chip: keyboard focus moves to the bar that is saved now, not to the page.
+  const focusSavedBarAfterRun = useRef(false);
+  useEffect(() => {
+    if (!result || !focusSavedBarAfterRun.current) return;
+    focusSavedBarAfterRun.current = false;
+    const frame = window.requestAnimationFrame(() => {
+      verdictAnchorRef.current?.querySelector<SVGGElement>("[data-bar][data-selected='true']")?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [result]);
+
   // A bar click after submission: the notice under the bars is brought into view (never focused, so keyboard focus
   // stays on the bars). The run button's path scrolls to the verdict anchor, which holds the bars and the notice.
   useEffect(() => {
@@ -606,7 +655,8 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   }, [replacedBy, result]);
 
   const bars = result && overviewItems.length > 0 ? familyBarRows(outcome, overviewItems, selectedKey, result) : null;
-  const identity = outcome === "production" && bars ? forwardShareIdentity(overviewItems) : null;
+  const identity = !bars ? null : outcome === "production" ? forwardShareIdentity(overviewItems) : outcome === "network" ? degreeIdentity(overviewItems) : null;
+  const defaultLabel = lessonFor(outcome, defaultKey, baselineOptions.find((option) => option.default)?.label).shortMetric;
   const latinGap = /^[A-Za-z]/.test(lesson.shortMetric) ? " " : "";
 
   return (
@@ -632,7 +682,8 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
                   : groups ? `计算${runName}（用全部 ${groups.sample.rows.toLocaleString("zh-CN")} 条记录）` : `计算${runName}`}
         </button>
         {/* Mounted before it has text, so screen readers announce the change. */}
-        <span className={running ? "muted reg-inline-status" : "sr-only"} role="status" aria-live="polite">{running ? "正在计算…" : ""}</span>
+        <span className={running ? "muted reg-inline-status" : "sr-only"} role="status" aria-live="polite">{running ? "正在计算…" : savedAnnouncement}</span>
+        {interrupted && !running && <p className="reg-boundary reg-interrupted-note" role="status">{INTERRUPTED_RUN_NOTE}</p>}
         {/* Before a replacement; afterwards the notice sits under the bars, where the click happened. */}
         {!running && savedRun && state.materialLocked && (!replacedBy || !bars) && (
           replacedBy
@@ -665,7 +716,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
                 scale={levelScale}
                 unit={display.unit ?? lesson.unit}
                 title={`加税前后：两组${latinGap}${lesson.shortMetric}的平均变化`}
-                estimate={gap == null ? null : { gap, label: `回归估计的差距 ${shown > 0 ? "+" : ""}${shown.toFixed(digits)} ${countUnit(kind)}`, uncertain }}
+                estimate={gap == null ? null : { gap, label: `回归估计的差距 ${shown > 0 ? "+" : ""}${groupedFixed(shown, digits)} ${countUnit(kind)}`, uncertain }}
               />
               {gap != null && groups.mean_exposure_taxed != null && <p className="muted reg-gap-caption">{gapCaption(groups.mean_exposure_taxed)}</p>}
             </div>
@@ -688,10 +739,21 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
                 <DivergingBarChart
                   rows={bars.rows}
                   unitTitle={bars.unitTitle}
-                  title={`本类 ${bars.rows.length} 个 Y · 点一条，换成它并保存`}
+                  title={familyBarsTitle(bars.rows.length)}
                   onSelect={(key) => { if (key !== selectedKey) void run(key, false); }}
                   disabled={running}
                 >
+                  {/* A bar click saves its Y for the report: when that is not the step's default, say so and offer the way back. */}
+                  {selectedKey !== defaultKey && (
+                    <p className="reg-saved-chip" role="note">
+                      <span>当前保存：{lesson.shortMetric}（不是本步默认）</span>
+                      <span aria-hidden="true"> · </span>
+                      <button type="button" className="reg-saved-chip-reset" aria-disabled={running || undefined}
+                        onClick={() => { if (running) return; focusSavedBarAfterRun.current = true; void run(defaultKey, false); }}>
+                        恢复默认（{defaultLabel}）
+                      </button>
+                    </p>
+                  )}
                   {identity && <p className="muted reg-identity-note">{identity}</p>}
                   {/* Next to the bar that was clicked, so the student sees it without scrolling up. */}
                   {replacedBy && state.materialLocked && (

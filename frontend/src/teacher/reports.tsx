@@ -35,10 +35,10 @@ export function reportRowAction(report: Pick<TeacherReport, "state" | "display_n
   return { visible: "评阅报告", accessible: `评阅报告：${report.display_name}` };
 }
 
-const GRADE_RUBRIC = [
+export const GRADE_RUBRIC = [
   ["概念与衔接 · 25", "能讲清数据、指标、图表、回归到报告的关系，术语准确。"],
   ["证据使用 · 25", "引用实际保存的比较、估计值和 95% 区间，数字与报告一致。"],
-  ["识别与边界 · 25", "区分描述和因果；说明冲击是模拟的、对照组少、可能有外溢和同期冲击。"],
+  ["识别与边界 · 25", "区分描述和因果；说明冲击是模拟的、对照组的大小与可比性、可能有外溢和同期冲击。"],
   ["表达与可复核性 · 25", "研究问题明确，结论、证据与局限一一对应，老师能沿报告记录核对。"],
 ] as const;
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from "react";
 import { cardStyle, useTip } from "../shared";
 import { niceDomain } from "../nice-ticks";
 import { svgTextWidth } from "./charts";
@@ -371,8 +371,17 @@ export function DivergingBarChart({
                 "aria-label": spoken(row),
                 onClick: () => select(row),
                 onKeyDown: (event: KeyboardEvent<SVGGElement>) => onKey(event, index, row),
-                onFocus: () => setFocused(row.key),
-                onBlur: () => setFocused((current) => (current === row.key ? null : current)),
+                // Keyboard focus shows the hover tooltip (its value and 95% interval), under the focused row.
+                onFocus: (event: FocusEvent<SVGGElement>) => {
+                  setFocused(row.key);
+                  const box = event.currentTarget.getBoundingClientRect();
+                  // useTip positions by the pointer only (clientX/clientY); the row stands in for it.
+                  show({ clientX: box.left + box.width * 0.55, clientY: box.bottom - 6 } as Parameters<typeof show>[0], barTip(row, interactive));
+                },
+                onBlur: () => {
+                  setFocused((current) => (current === row.key ? null : current));
+                  hide();
+                },
               } : {})}
               style={{ cursor: interactive ? (disabled ? "progress" : row.selected ? "default" : "pointer") : undefined, outline: "none" }}
               onMouseEnter={(event) => show(event, barTip(row, interactive))}

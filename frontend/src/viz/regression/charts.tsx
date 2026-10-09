@@ -34,6 +34,19 @@ export function spreadLabels(items: { key: string; at: number; size: number }[],
   return Object.fromEntries(sorted.map((item, index) => [item.key, centres[index]]));
 }
 
+/**
+ * The centre nearest `at` for a label of height `size` that overlaps none of the fixed labels (centres `taken`,
+ * height `takenSize`) and stays inside [top, bottom]; `at` itself when it is free.
+ */
+export function freeSlot(at: number, size: number, taken: number[], takenSize: number, top: number, bottom: number): number {
+  const half = size / 2, clearance = (size + takenSize) / 2 + 2;
+  const inside = (centre: number) => Math.min(Math.max(centre, top + half), bottom - half);
+  const free = (centre: number) => taken.every((other) => Math.abs(centre - other) >= clearance - 1e-9);
+  const candidates = [at, ...taken.flatMap((other) => [other - clearance, other + clearance])].map(inside);
+  const open = candidates.filter(free).sort((a, b) => Math.abs(a - at) - Math.abs(b - at));
+  return open[0] ?? inside(at);
+}
+
 export function GroupChangeChart({
   years, policyYear, taxed, untaxed, scale = 1, unit, title, estimate,
 }: {
@@ -67,14 +80,17 @@ export function GroupChangeChart({
     .map((point, index) => `${index ? "L" : "M"}${x(point.year)},${y(point.change * scale)}`).join(" ");
   const policyX = (x(policyYear - 1) + x(policyYear)) / 2;
   const lastTaxed = taxed.at(-1)?.change ?? 0, lastUntaxed = untaxed.at(-1)?.change ?? 0;
-  // The two group names and the two-line estimate share the right margin. When the lines end close together
-  // (a weak Y) they would print on top of each other, so their centres are pushed apart, keeping their order.
+  // The two group names and the two-line estimate share the right margin. The group names stay at their line
+  // ends (pushed apart only from each other when the lines end close together); the estimate then takes the free
+  // place nearest its bracket, so a bracket longer than the gap between the lines never pushes a name away.
   const estimateY = estimate && estimateEnd != null ? (y(lastUntaxed * scale) + y(estimateEnd * scale)) / 2 : null;
-  const slots = spreadLabels([
+  const groupSlots = spreadLabels([
     { key: "taxed", at: y(lastTaxed * scale) + (lastTaxed < lastUntaxed ? 8 : -8), size: 14 },
     { key: "untaxed", at: y(lastUntaxed * scale) + (lastTaxed < lastUntaxed ? -8 : 8), size: 14 },
-    ...(estimateY == null ? [] : [{ key: "estimate", at: estimateY, size: estimate?.uncertain ? 42 : 28 }]),
   ], padT, height - 4);
+  const slots: Record<string, number> = estimateY == null
+    ? groupSlots
+    : { ...groupSlots, estimate: freeSlot(estimateY, estimate?.uncertain ? 42 : 28, [groupSlots.taxed, groupSlots.untaxed], 14, padT, height - 4) };
   const label = (series: { year: number; change: number }[], text: string, color: string, key: string) => {
     const last = series.at(-1);
     return last && <text x={x(last.year) + 8} y={slots[key]} dominantBaseline="middle" fontSize={11.5} fontWeight={700} fill={color}>{text}</text>;

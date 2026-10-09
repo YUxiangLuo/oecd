@@ -7,6 +7,9 @@ export type EvidenceState = "negative" | "positive" | "insufficient" | "suppress
 /** The interval named with its meaning, where a result first mentions it (not "where the estimate may fall"). */
 export const INTERVAL_FIRST_MENTION = "95% 区间（真实系数的合理取值范围）";
 
+/** What a standard deviation of Y is, said once where a size in standard deviations first appears. */
+export const SD_DEFINITION = "标准差即 Y 的典型差距";
+
 /** How a gap in Y is said: lengths are 长/短, everything else 高/低. */
 export function differenceWords(kind: DepvarKind): { higher: string; lower: string } {
   return kind === "length" ? { higher: "长", lower: "短" } : { higher: "高", lower: "低" };
@@ -44,6 +47,8 @@ interface RegressionVerdict {
   title: string;
   effectLabel: string;
   effect: string;
+  /** The effect without the standard-deviation definition, for tables that say it once (step 15). */
+  effectBrief: string;
   interval: string;
   /** The interval in the step's own unit only (no standard-deviation conversion), for the headline. */
   intervalShort: string;
@@ -212,7 +217,7 @@ function naturalScale(
   outcome: RegressionOutcome,
   coefficient: CoefStat,
   response: RegressionResponse,
-): { effect: string; interval: string; intervalShort: string } {
+): { effect: string; effectBrief: string; interval: string; intervalShort: string } {
   const effect = coefficient.coef * 0.01;
   const hasCi = hasValidInterval(coefficient);
   const ciLow = (coefficient.ci_low ?? 0) * 0.01;
@@ -221,39 +226,29 @@ function naturalScale(
   if (kind === "share") {
     const digits = shareDigits(effect * 100);
     const interval = hasCi ? `[${signed(ciLow * 100, digits)}, ${signed(ciHigh * 100, digits)}] 个百分点` : "—";
-    return { effect: `${signed(effect * 100, digits)} 个百分点`, interval, intervalShort: interval };
+    const text = `${signed(effect * 100, digits)} 个百分点`;
+    return { effect: text, effectBrief: text, interval, intervalShort: interval };
   }
-  if (kind === "network") {
-    const sd = response.result.depvar_std;
-    const validSd = typeof sd === "number" && Number.isFinite(sd) && sd > 0;
-    const standardized = validSd ? effect / sd : null;
-    const sdBounds: [number, number] | null = validSd && hasCi ? [ciLow / sd, ciHigh / sd] : null;
-    // Point and interval share their digits: 3 below 0.1, more when the interval's ends would print alike.
-    const sdDigits = standardizedDigits(standardized, sdBounds);
-    const standardizedInterval = sdBounds ? `；约 [${signed(sdBounds[0], sdDigits)}, ${signed(sdBounds[1], sdDigits)}] 个标准差` : "";
-    // The estimate and both interval ends in the same decimals.
-    const digits = networkIntervalDigits(effect, hasCi ? [ciLow, ciHigh] : null);
-    const intervalShort = hasCi ? `[${signed(ciLow, digits)}, ${signed(ciHigh, digits)}] ${countUnit("network")}` : "—";
-    return {
-      // A standard deviation is the typical gap in Y between country×industry records.
-      // Unsigned, as in the report ("幅度约 0.047 个标准差"): the number before it carries the sign.
-      effect: `${signed(effect, digits)} 个中心性原始单位${standardized == null ? "" : `（幅度约 ${signed(standardized, sdDigits).replace(/^[+−-]/, "")} 个标准差，标准差即 Y 的典型差距）`}`,
-      interval: hasCi ? `${intervalShort}${standardizedInterval}` : "—",
-      intervalShort,
-    };
-  }
-  const mean = response.result.depvar_mean;
-  // A position index is a ratio around 1; its change is read in its own units, not "relative to the sample mean".
-  const relative = kind === "length" && typeof mean === "number" && Number.isFinite(mean) && Math.abs(mean) > 1e-12
-    ? (effect / Math.abs(mean)) * 100 : null;
-  const unit = KIND_UNITS[kind];
-  const digits = kind === "position" ? 4 : 3;
-  const interval = hasCi ? `[${signed(ciLow, digits)}, ${signed(ciHigh, digits)}] 个${unit}` : "—";
+  // Lengths, the position index and centrality: the value in its own unit, with its size in standard deviations
+  // (the unit both bar charts of steps 13 and 14 use), as the report states it.
+  const sd = response.result.depvar_std;
+  const validSd = typeof sd === "number" && Number.isFinite(sd) && sd > 0;
+  const standardized = validSd ? effect / sd : null;
+  const sdBounds: [number, number] | null = validSd && hasCi ? [ciLow / sd, ciHigh / sd] : null;
+  // Point and interval share their digits: 3 below 0.1, more when the interval's ends would print alike.
+  const sdDigits = standardizedDigits(standardized, sdBounds);
+  const standardizedInterval = sdBounds ? `；约 [${signed(sdBounds[0], sdDigits)}, ${signed(sdBounds[1], sdDigits)}] 个标准差` : "";
+  // The estimate and both interval ends in the same decimals.
+  const digits = kind === "network" ? networkIntervalDigits(effect, hasCi ? [ciLow, ciHigh] : null) : kind === "position" ? 4 : 3;
+  const intervalShort = hasCi ? `[${signed(ciLow, digits)}, ${signed(ciHigh, digits)}] ${countUnit(kind)}` : "—";
+  // Unsigned, as in the report ("幅度约 0.047 个标准差"): the number before it carries the sign.
+  const size = standardized == null ? "" : `幅度约 ${signed(standardized, sdDigits).replace(/^[+−-]/, "")} 个标准差`;
   return {
-    // The size against the mean is unsigned, as in the report: the number before it carries the sign.
-    effect: `${signed(effect, digits)} 个${unit}${relative == null ? "" : `（幅度约为样本均值的 ${signed(relative, 2).replace(/^[+−-]/, "")}%）`}`,
-    interval,
-    intervalShort: interval,
+    // A standard deviation is the typical gap in Y between country×industry records; said once, in the headline.
+    effect: `${signed(effect, digits)} ${countUnit(kind)}${size ? `（${size}，${SD_DEFINITION}）` : ""}`,
+    effectBrief: `${signed(effect, digits)} ${countUnit(kind)}${size ? `（${size}）` : ""}`,
+    interval: hasCi ? `${intervalShort}${standardizedInterval}` : "—",
+    intervalShort,
   };
 }
 
@@ -277,6 +272,7 @@ export function buildRegressionVerdict(
       state: globalInferenceIsSuppressed(response.result.status, support) ? "suppressed" : "insufficient",
       title: "没算出估计值",
       effect: "—",
+      effectBrief: "—",
       interval: "—",
       intervalShort: "—",
       evidence: "这次没有算出 X 的估计值；结果仍会保存，请在报告里写明原因，不要据此判断方向。",
@@ -296,6 +292,7 @@ export function buildRegressionVerdict(
         : response.result.status === "insufficient" ? "方向不确定：这次的数据不够判断方向"
           : "方向不确定：结果状态没有记录完整",
       effect: scaled.effect,
+      effectBrief: scaled.effectBrief,
       interval: "—",
       intervalShort: "—",
       evidence: `${diagnostic}这次只显示估计值、不显示 95% 区间，不能据此判断上升或下降。`,
@@ -314,6 +311,7 @@ export function buildRegressionVerdict(
     title: state === "negative" ? "方向明确：X 越高，Y 越低"
       : state === "positive" ? "方向明确：X 越高，Y 越高" : "方向不确定",
     effect: scaled.effect,
+    effectBrief: scaled.effectBrief,
     interval: scaled.interval,
     intervalShort: scaled.intervalShort,
     evidence: !validInterval

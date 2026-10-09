@@ -145,11 +145,17 @@ export function summarizeReportGate(blocked: ReportGateItem[]) {
   };
 }
 
-export function GateCard({ blocked, onNavigateStep, flash = 0 }: {
+/** "生成" before the first submission; "更新" once a submitted report exists (it is updated, not generated). */
+export function reportGateVerb(report: Pick<ClassroomReport, "state"> | null | undefined): "生成" | "更新" {
+  return report && report.state !== "draft" ? "更新" : "生成";
+}
+
+export function GateCard({ blocked, onNavigateStep, flash = 0, verb = "生成" }: {
   blocked: ReportGateItem[];
   onNavigateStep: (step: number) => void;
   /** Bumped when a blocked generate button sends the student here: the panel briefly highlights. */
   flash?: number;
+  verb?: "生成" | "更新";
 }) {
   const overview = summarizeReportGate(blocked);
   const next = overview.next;
@@ -161,7 +167,7 @@ export function GateCard({ blocked, onNavigateStep, flash = 0 }: {
       <div className="report-gate-head">
         <span className="report-gate-badge" aria-hidden="true">!</span>
         <div className="report-gate-title">
-          <h3 id="report-gate-title" tabIndex={-1}>还不能生成报告</h3>
+          <h3 id="report-gate-title" tabIndex={-1}>还不能{verb}报告</h3>
           <span>{overview.summary}</span>
         </div>
         {next.step > 0 && (
@@ -350,6 +356,36 @@ export function reportConflictMessage(seen: ClassroomReport | null, latest: Clas
   return null;
 }
 
+/** The server's report differs from the one this page shows (another tab regenerated it, or the teacher graded it). */
+export function reportStatusChanged(seen: ClassroomReport | null, latest: ClassroomReport): boolean {
+  return !seen || seen.updated_at !== latest.updated_at || seen.state !== latest.state
+    || seen.graded_at !== latest.graded_at || seen.score !== latest.score;
+}
+
+/** Said instead of exporting a graded version the server no longer has (it was regenerated or regraded elsewhere). */
+export function gradedExportRefusal(latest: ClassroomReport | null): string {
+  return latest?.state === "graded"
+    ? "老师刚刚重新评阅了这份报告，页面已显示最新评分；请核对后再导出。"
+    : "这份报告已在别处重新生成，原评分和评语已清除，不能再导出已评阅版本；页面已显示最新状态。";
+}
+
+/** Space kept above an element scrolled to the top of the course scroller, so nothing sits under its upper edge. */
+const REVEAL_OFFSET = 16;
+
+/** Bring an element to the top of the course scroller with a little room above it (see content-scroll.ts). */
+export function revealWithOffset(target: HTMLElement | null, offset = REVEAL_OFFSET): void {
+  if (!target) return;
+  const reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const behavior: ScrollBehavior = reduced ? "auto" : "smooth";
+  const scroller = target.closest<HTMLElement>(".content");
+  if (!scroller) {
+    target.scrollIntoView?.({ behavior, block: "start" });
+    return;
+  }
+  const top = scroller.scrollTop + target.getBoundingClientRect().top - scroller.getBoundingClientRect().top - offset;
+  scroller.scrollTo?.({ top: Math.max(0, top), left: 0, behavior });
+}
+
 export function reportWaitLabel(
   sessionStatus: SessionStatus,
   sessionUnsynced: boolean,
@@ -430,7 +466,14 @@ export function ReportLab({
   const [printing, setPrinting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outro, setOutro] = useState<ClassroomReport | null>(null);
+  // The button that opened the receipt (查看提交回执与实验总结); null when it opened by itself after a submit.
+  const outroOpener = useRef<HTMLElement | null>(null);
   const statusCardRef = useRef<HTMLElement>(null);
+  // Why a regeneration was refused (409), shown inside the 旧文字 notice when that notice is what the page shows.
+  const [conflictReason, setConflictReason] = useState<string | null>(null);
+  const answersNoticeRef = useRef<HTMLDivElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const revealConflict = useRef<"notice" | "error" | null>(null);
   // After "只生成草稿（不提交）" the page continues at the draft preview (scrolled to and focused), once the
   // parent has rendered the new report; a session restore does not move the page.
   const previewRef = useRef<HTMLDivElement>(null);
@@ -530,6 +573,53 @@ export function ReportLab({
   readyRef.current = sessionStatus === "ready";
   const flushRef = useRef(onFlushSession);
   flushRef.current = onFlushSession;
+  const reportRef = useRef(report);
+  reportRef.current = report;
+  const reportChangedRef = useRef(onReportChanged);
+  reportChangedRef.current = onReportChanged;
+
+  /**
+   * Read the server's report (a cheap GET of the session) and show it when it differs from this page's: another
+   * tab may have regenerated it (clearing the grade) or the teacher may have graded it. Never applies the session
+   * itself, so unsaved edits here stay. Resolves with the server's report, or undefined when the request failed.
+   */
+  const refreshReport = async (): Promise<ClassroomReport | null | undefined> => {
+    const latest = await api.classroom.session().catch(() => null);
+    if (!latest) return undefined;
+    // A generate or submit started meanwhile owns the report; its own response is newer than this read.
+    if (latest.report && !operationRef.current && reportStatusChanged(reportRef.current, latest.report)) {
+      reportChangedRef.current({ report: latest.report, completion: latest.completion, report_gate: latest.report_gate, material_gate: latest.material_gate });
+    }
+    return latest.report;
+  };
+  const refreshReportRef = useRef(refreshReport);
+  refreshReportRef.current = refreshReport;
+  // A tab left open on step 15 catches up when the student comes back to it.
+  useEffect(() => {
+    let inFlight = false;
+    const onReturn = () => {
+      if (document.visibilityState === "hidden" || inFlight || operationRef.current) return;
+      inFlight = true;
+      void refreshReportRef.current().finally(() => { inFlight = false; });
+    };
+    window.addEventListener("focus", onReturn);
+    document.addEventListener("visibilitychange", onReturn);
+    return () => {
+      window.removeEventListener("focus", onReturn);
+      document.removeEventListener("visibilitychange", onReturn);
+    };
+  }, []);
+
+  // A refused regeneration: its reason is brought into view, clear of the scroller's upper edge.
+  useEffect(() => {
+    const target = revealConflict.current;
+    if (!target) return;
+    revealConflict.current = null;
+    const frame = window.requestAnimationFrame(() => {
+      revealWithOffset(target === "notice" ? answersNoticeRef.current : errorRef.current);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [conflictReason, error, serverAnswers]);
 
   const waitUntilReady = async () => {
     if (readyRef.current) return;
@@ -561,6 +651,7 @@ export function ReportLab({
     }
     setGenerating(true);
     setError(null);
+    setConflictReason(null);
     setBlocked([]);
     const previousState = report?.state;
     let generated = false;
@@ -589,6 +680,7 @@ export function ReportLab({
       }
       if (finalReport.state !== "draft") {
         clearToasts();
+        outroOpener.current = null;
         setOutro(finalReport);
       }
       else {
@@ -608,8 +700,13 @@ export function ReportLab({
         if (latest?.report) onReportChanged({ report: latest.report, completion: latest.completion, report_gate: latest.report_gate, material_gate: latest.material_gate });
         // The server's record may also hold newer answers (written in that other tab): the preview now shows them,
         // so the fields here must not keep the old text unnoticed.
-        setServerAnswers(latest ? newerServerAnswers(reflection, readStep<ReportReflectionState>(latest.session, 15)) : null);
-        setError(reportConflictMessage(report, latest?.report ?? null) ?? userFacingRequestError(cause, "报告生成失败"));
+        const answers = latest ? newerServerAnswers(reflection, readStep<ReportReflectionState>(latest.session, 15)) : null;
+        setServerAnswers(answers);
+        const reason = reportConflictMessage(report, latest?.report ?? null) ?? userFacingRequestError(cause, "报告生成失败");
+        // The reason goes where the page shows the change: inside the 旧文字 notice when it appears, else in the
+        // error box; either is scrolled into view with room above it.
+        if (answers) setConflictReason(reason); else setError(reason);
+        revealConflict.current = answers ? "notice" : "error";
       } else setError(userFacingRequestError(cause, generated ? "报告已生成为草稿，但提交给老师失败，请重试提交" : "报告生成失败"));
     } finally {
       setGenerating(false);
@@ -630,6 +727,7 @@ export function ReportLab({
       onReportChanged(response);
       if (response.report.state !== "draft") {
         clearToasts();
+        outroOpener.current = null;
         setOutro(response.report);
       }
       else showToast("报告仍为草稿，请核对后重试提交");
@@ -659,6 +757,16 @@ export function ReportLab({
       window.removeEventListener("afterprint", restoreTitle);
     };
     try {
+      // A graded PDF carries the grade: check the server still has it (another tab may have regenerated the
+      // report, which clears it). When the check itself fails, the version shown is exported.
+      if (report.state === "graded") {
+        const latest = await refreshReport();
+        if (latest !== undefined && (latest?.state !== "graded" || latest.graded_at !== report.graded_at || latest.updated_at !== report.updated_at)) {
+          setError(gradedExportRefusal(latest));
+          revealConflict.current = "error";
+          return;
+        }
+      }
       await preloadReportRenderer();
       await new Promise<void>((resolve) => globalThis.requestAnimationFrame(() => resolve()));
       document.title = printTitle;
@@ -685,7 +793,7 @@ export function ReportLab({
           <li><b>3 · 提交给老师</b><span>{report && report.state !== "draft" && reportOutdated ? "报告需更新：之后的修改还没交给老师，请点“更新报告并提交给老师”" : report?.state === "pending" ? "已提交，等待评阅" : report?.state === "graded" ? <a href="#report-status-card" onClick={(event) => { event.preventDefault(); statusCardRef.current?.scrollIntoView?.({ block: "center" }); statusCardRef.current?.focus({ preventScroll: true }); }}>{report.feedback?.trim() ? "已评阅，查看分数与评语" : "已评阅，查看分数"}</a> : report ? "已有草稿，尚未提交" : "生成报告不等于提交"}</span></li>
         </ol>
       </section>
-      {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} flash={gateFlash} />}
+      {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} flash={gateFlash} verb={reportGateVerb(report)} />}
       <details className="report-reference"><summary>查看已保存的四项回归结果</summary>
         <p className="muted">四个 Y 的单位不同，条长都换算成标准差；条末先写各自单位的值。</p>
         <RegressionSummaryBars getStep={getStep} />
@@ -703,7 +811,9 @@ export function ReportLab({
         </div>
         <div className="report-reflection-fields" ref={reflectionRoot}>
           {answersOutdated && (
-            <div className="report-version-notice outdated report-answers-outdated" role="status">
+            <div ref={answersNoticeRef} className="report-version-notice outdated report-answers-outdated" role="status">
+              {/* Why the regeneration was refused: here, where the page scrolls to, not below the fold. */}
+              {conflictReason && <p className="report-conflict-reason" role="alert">{conflictReason}</p>}
               <b>这三段是本页的旧文字</b>
               <p>你在别处（另一个标签页或设备）改过这三段：服务器上保存的是较新的文字，报告也按服务器上的记录生成。点“载入服务器版本”，让这里的文字与服务器一致。</p>
               <button type="button" className="secondary" disabled={busy} onClick={() => {
@@ -746,7 +856,8 @@ export function ReportLab({
                       setPasteCut(field.key);
                       return;
                     }
-                    if (pasteCut === field.key) setPasteCut(null);
+                    // The cut warning belongs to the paste that caused it: the next edit of any field clears it.
+                    if (pasteCut) setPasteCut(null);
                     state.save({ [field.key]: event.target.value });
                   }}
                 />
@@ -794,7 +905,7 @@ export function ReportLab({
               {reportGenerateButtonLabel(report, generating, sessionStatus, sessionUnsynced, sessionSyncing, state.syncError, Boolean(state.syncConflict))}
             </button>
           )}
-          {report && report.state !== "draft" && <button type="button" className="secondary" disabled={busy} onClick={() => setOutro(report)}>查看提交回执与实验总结</button>}
+          {report && report.state !== "draft" && <button type="button" className="secondary" disabled={busy} onClick={(event) => { outroOpener.current = event.currentTarget; setOutro(report); }}>查看提交回执与实验总结</button>}
           {report && (
             <button type="button" className="secondary" disabled={busy || !exportable} onClick={() => { void printReport(); }}>
               {printing ? "正在准备 PDF…" : reportOutdated && report.state === "graded" ? "导出已评阅版本 PDF" : "导出 PDF"}
@@ -807,13 +918,13 @@ export function ReportLab({
             </button>
           )}
         </div>
-        {gated && <p id="report-gated-reason" className="report-gated-reason" role="note">还有 {gatedCount} 项没完成，现在还不能生成报告；请先按上方“还不能生成报告”的清单补齐。</p>}
+        {gated && <p id="report-gated-reason" className="report-gated-reason" role="note">还有 {gatedCount} 项没完成，现在还不能{reportGateVerb(report)}报告；请先按上方“还不能{reportGateVerb(report)}报告”的清单补齐。</p>}
       </section>
 
-      {error && <div className="error-box" role="alert">{error}</div>}
+      {error && <div ref={errorRef} className="error-box report-error" role="alert">{error}</div>}
 
       {report ? (
-        <div className="report-body" ref={previewRef} tabIndex={-1} aria-label="报告正文"><ReportPrintGrade report={report} /><ReportMarkdown markdown={report.markdown} /></div>
+        <div className="report-body" ref={previewRef} tabIndex={-1} role="region" aria-label="报告正文"><ReportPrintGrade report={report} /><ReportMarkdown markdown={report.markdown} /></div>
       ) : (
         <p className="muted">{gated ? "补齐上方清单中的缺项后，可以先只生成草稿看看，再提交。" : "可以先只生成草稿看看，再提交。"}区间包含 0、或者没算出估计值的结果，也要写进报告。</p>
       )}
@@ -829,7 +940,20 @@ export function ReportLab({
       )}
       {outro && <ReportOutro report={outro} reportOutdated={reportOutdated} exportDisabled={busy} onClose={() => {
         setOutro(null);
-        requestAnimationFrame(() => document.querySelector<HTMLElement>(".report-body")?.focus());
+        const opener = outroOpener.current;
+        outroOpener.current = null;
+        requestAnimationFrame(() => {
+          // Opened from 查看提交回执与实验总结: back to that button (the dialog restores it; this keeps it there).
+          if (opener?.isConnected) {
+            opener.focus();
+            return;
+          }
+          // Opened by itself after a submit (its button is gone): the status card at the top of the report area,
+          // not the report body, whose top can be far above the window.
+          const card = statusCardRef.current;
+          revealWithOffset(card);
+          card?.focus({ preventScroll: true });
+        });
       }} onExport={() => { setOutro(null); void printReport(); }} />}
     </div>
   );
