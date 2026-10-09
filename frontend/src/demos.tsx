@@ -1412,7 +1412,7 @@ export function NetworkCentralityDemo() {
             <table className="data-table net-demo-edge-table">
               <caption>节点 {sel} 的全部直接入边与出边；演示网络每条边权重均为 1</caption>
               <thead>
-                <tr><th scope="col">方向</th><th scope="col">相邻节点</th><th scope="col">有向边</th><th scope="col">演示权重</th></tr>
+                <tr><th scope="col">方向</th><th scope="col">相邻节点</th><th scope="col">有向边</th></tr>
               </thead>
               <tbody>
                 {selectedEdges.map((edge) => (
@@ -1420,7 +1420,6 @@ export function NetworkCentralityDemo() {
                     <td>{edge.direction}</td>
                     <th scope="row">{edge.neighbor}</th>
                     <td>{edge.from} → {edge.to}</td>
-                    <td>1</td>
                   </tr>
                 ))}
               </tbody>

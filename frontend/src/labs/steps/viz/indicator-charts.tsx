@@ -989,7 +989,9 @@ export function LengthPositionTrajectory({
           </g>
         ))}
         <line x1={x(lo)} y1={y(lo)} x2={x(axis.hi)} y2={y(axis.hi)} stroke="#8a6415" strokeDasharray="6 4" />
-        <text x={650} y={y(axis.hi) + 18} textAnchor="end" fontSize={11}>等长线（前向 = 后向）</text>
+        {/* The label ends left of where the dashed line crosses its baseline (the line runs up to the right), so the
+            closing bracket never touches the line. */}
+        <text x={Math.min(650, x(axis.hi) - 18 * (x(axis.hi) - x(lo)) / Math.max(1, y(lo) - y(axis.hi)) - 6)} y={y(axis.hi) + 18} textAnchor="end" fontSize={11}>等长线（前向 = 后向）</text>
         <text x={390} y={642} textAnchor="middle" fontSize={12}>后向 GVC 段长度</text>
         <text x={66} y={320} textAnchor="middle" fontSize={12} transform="rotate(-90 66 320)">前向 GVC 段长度</text>
         {/* Country A is drawn last (SVG paints in document order), so the comparison trails never hide it. */}
