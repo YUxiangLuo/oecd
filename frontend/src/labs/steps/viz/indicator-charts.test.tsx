@@ -281,15 +281,22 @@ describe("trend cards name the industry when the scope is one industry (round 21
 
   test("a reference squashed onto 0 gets a note; a readable one does not (step 9 CHN·C26 加权总度)", () => {
     const years = [2016, 2020];
-    const rows: Row[] = years.flatMap((year) => [
-      { country: "CHN", year, m: 2_000_000 + (year - 2016) * 100_000 },
-      ...["USA", "DEU", "JPN", "KOR", "MEX"].map((country, index) => ({ country, year, m: 1000 * (index + 1) })),
-    ]);
-    const view = render(
-      <IndicatorTrendChart rows={rows} countries={["CHN", "USA"]} years={years} metric="m" label="加权总度" unit="百万美元"
-        distribution={countryDistribution(rows, "m", years)} mode="context" sameIndustry industry="C26" />,
-    );
+    // As in the data: CHN about 2.5 million, the same industry's 75th percentile about 1% of the axis (2016–2020
+    // ratios 0.86–0.99%). Scaled up threefold the band reaches 3% of the axis and is drawn readably: no note.
+    const chart = (scale: number) => {
+      const rows: Row[] = years.flatMap((year) => [
+        { country: "CHN", year, m: 2_400_000 + (year - 2016) * 30_000 },
+        ...Array.from({ length: 19 }, (_, index) => ({ country: `E${index}`, year, m: scale * (500 + index * 2100) })),
+      ]);
+      return render(
+        <IndicatorTrendChart rows={rows} countries={["CHN", "E18"]} years={years} metric="m" label="加权总度" unit="百万美元"
+          distribution={countryDistribution(rows, "m", years)} mode="context" sameIndustry industry="C26" />,
+      );
+    };
+    const view = chart(1);
     expect(view.getByRole("note").textContent).toContain("同行业全球中位数与中间 50% 远小于所选国家，图中贴近 0");
+    cleanup();
+    expect(chart(3).container.querySelector("[data-reference-flat]")).toBeNull();
     cleanup();
     const shares = render(
       <IndicatorTrendChart rows={trendRows} countries={["CHN", "USA"]} years={[2018, 2019, 2020]} metric="FVA_share" label="外国增加值项占比"
