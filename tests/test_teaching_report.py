@@ -67,8 +67,9 @@ def test_report_small_effects_match_card_precision(outcome, coef, low, high, eff
             -1.92,
             -1.76,
             0.58,
-            "-0.018 个长度单位（幅度约 0.032 个标准差）",
-            "[-0.019, -0.018] 个长度单位（约 [-0.033, -0.030] 个标准差）",
+            # At 3 decimals the upper end would read as the estimate ("[-0.019, -0.018]"): one more decimal.
+            "-0.0184 个长度单位（幅度约 0.032 个标准差）",
+            "[-0.0192, -0.0176] 个长度单位（约 [-0.033, -0.030] 个标准差）",
         ),
         (
             "position",

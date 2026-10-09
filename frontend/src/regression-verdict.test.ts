@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
-  barFigures, barUnitFor, buildRegressionVerdict, chartDisplayScale, networkIntervalDigits, REGRESSION_STATUS_LABELS,
+  barFigures, barUnitFor, buildRegressionVerdict, chartDisplayScale, distinctDigits, estimateDigits, networkIntervalDigits,
+  REGRESSION_STATUS_LABELS,
   regressionStatusLabel, standardizedEffect,
 } from "./regression-verdict";
 import type { CoefStat, RegressionOutcome, RegressionResponse, TreatmentSupport } from "./types";
@@ -207,5 +208,19 @@ describe("bars repeat the headline's numbers", () => {
     const suppressed = barFigures(estimate(-0.5, -0.6, -0.4, 0.1, true), "share", "points");
     expect([suppressed.low, suppressed.high, suppressed.uncertain, suppressed.intervalLabel]).toEqual([null, null, true, "—"]);
     expect(barFigures(estimate(-0.5, null, null), "length", "sd").uncertain).toBe(true);
+  });
+});
+
+describe("an interval end never reads as the estimate", () => {
+  test("one more decimal for the estimate and both ends, in the headline, the interval and the bar", () => {
+    // Step 13: -0.0184 with [-0.0192, -0.0176] read "-0.018" with "[-0.019, -0.018]" at 3 decimals.
+    expect(distinctDigits(3, -0.018414, [-0.0192, -0.0176])).toBe(4);
+    expect(distinctDigits(3, -0.0184, [-0.025, -0.012])).toBe(3);
+    expect(estimateDigits("share", -0.5493, [-0.5711, -0.5274])).toBe(2);
+    const verdict = buildRegressionVerdict("length", response("length", coefficient(-1.8414, -1.92, -1.76)));
+    expect(verdict.effect.startsWith("-0.0184 个长度单位")).toBe(true);
+    expect(verdict.intervalShort).toBe("[-0.0192, -0.0176] 个长度单位");
+    const bar = barFigures({ coef: -1.8414, ci_low: -1.92, ci_high: -1.76, depvar_std: 0.58, suppressed: false }, "length", "sd");
+    expect(bar.valueLabel).toMatch(/^-0\.0184（/);
   });
 });

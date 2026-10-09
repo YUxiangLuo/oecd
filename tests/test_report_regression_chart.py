@@ -257,3 +257,19 @@ def test_uncertain_and_suppressed_bars_and_a_missing_overview():
         "-0.018 个长度单位（没有标准差）",
     ]
     assert summary["note"].endswith("步骤 11 · 贸易流、步骤 14 · 网络：还没计算。")
+
+
+def test_interval_end_never_reads_as_the_estimate():
+    """Step 13: -0.0184 with [-0.0192, -0.0176] read "-0.018" with "[-0.019, -0.018]"; one more decimal, as on the page."""
+    from gvcsim.report_common import _association, distinct_digits
+
+    assert distinct_digits(3, -0.018414, (-0.0192, -0.0176)) == 4
+    assert distinct_digits(3, -0.0184, (-0.025, -0.012)) == 3
+    length = _design_info(RegressionDesign("length", teaching=True))
+    coefficient = {"name": X_COLUMN, "coef": -1.8414, "ci_low": -1.92, "ci_high": -1.76}
+    result = {"status": "ok", "support": {"status": "ok"}, "depvar_std": 0.58, "coefs": [coefficient]}
+    _, effect, interval = _natural_effect("length", length, result, coefficient)
+    assert effect.startswith("-0.0184 个长度单位") and interval.startswith("[-0.0192, -0.0176] 个长度单位")
+    assert "约短 0.0184 个长度单位" in _association("length", length, coefficient, negative=True)
+    (bar,) = json.loads(family_chart(13, "length", length, result, coefficient, None)[1])["items"]
+    assert bar["text"].startswith("-0.0184（")
