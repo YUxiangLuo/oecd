@@ -109,17 +109,25 @@ export const DECOMP: Record<number, DecompCfg> = {
       { key: "PLv_RT", label: "传统贸易加权贡献", short: "传统贸易", color: COMPONENT_COLORS.traditional, desc: "传统贸易这一段的长度 × 它的增加值份额，就是这一段对总长度的贡献。", weightKey: "2_VA_RT" },
       { key: "PLv_GVC", label: "GVC 加权贡献", short: "GVC", color: COMPONENT_COLORS.gvc, desc: "GVC 这一段的长度 × 它的增加值份额，就是这一段对总长度的贡献；段长度和贡献不是同一个数。", weightKey: "3_VA_GVC" },
     ],
-    note: (r) => {
-      const segment = (lengthKey: string, weightKey: string) => {
-        const length = finiteNumber(r[lengthKey]);
-        if (length != null) return length.toFixed(3);
-        return finiteNumber(r[weightKey]) === 0 ? "—（无此类活动）" : "—";
-      };
-      return `前向各段长度：纯国内 ${segment("PLv_D", "1_VA_D")}、传统贸易 ${segment("PLv_RT", "2_VA_RT")}、GVC ${segment("PLv_GVC", "3_VA_GVC")}` +
-        `（上表是这些长度乘以增加值份额后的贡献）。`;
-    },
+    note: (r) => `${forwardSegmentLengths(r)}（上表是这些长度乘以增加值份额后的贡献）。`,
   },
 };
+
+const FORWARD_SEGMENTS = [["PLv_D", "1_VA_D", "纯国内"], ["PLv_RT", "2_VA_RT", "传统贸易"], ["PLv_GVC", "3_VA_GVC", "GVC"]] as const;
+
+/** Step 4: some forward segment has a length, even where SVA ≤ 0 leaves the share-weighted split undefined. */
+export const hasForwardSegmentLength = (r: Row) => FORWARD_SEGMENTS.some(([lengthKey]) => finiteNumber(r[lengthKey]) != null);
+
+/** Step 4: "前向各段长度：纯国内 …、传统贸易 …、GVC …". */
+export function forwardSegmentLengths(r: Row): string {
+  const keys = FORWARD_SEGMENTS;
+  const segment = (lengthKey: string, weightKey: string) => {
+    const length = finiteNumber(r[lengthKey]);
+    if (length != null) return length.toFixed(3);
+    return finiteNumber(r[weightKey]) === 0 ? "—（无此类活动）" : "—";
+  };
+  return `前向各段长度：${keys.map(([lengthKey, weightKey, name]) => `${name} ${segment(lengthKey, weightKey)}`).join("、")}`;
+}
 
 /** A negative part keeps its own colour (so parts stay distinguishable) striped with the negative red. */
 export function negativeFill(color: string): string {
@@ -773,6 +781,10 @@ export function DecompositionDemo({
             unavailable
             negativeNote={cfg.negativeNote}
           />
+          {/* The segment lengths come straight from the input-output relations and need no share (ITA·C19 2020). */}
+          {step === 6 && hasForwardSegmentLength(row) && (
+            <div className="decomp-note">{forwardSegmentLengths(row)}（段长度不需要份额，仍可读）。</div>
+          )}
           {step === 6 && <MiniBackwardBar row={row} />}
         </div>
       );

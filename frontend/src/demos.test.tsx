@@ -204,6 +204,8 @@ describe("indicator calculation disclosure", () => {
       expect(box).toContain("前向总生产长度 PLv = 1.643 仍有定义");
       expect(box).toContain("“—”表示这一项无法计算（不是缺少数据）");
       expect(box).not.toContain("表示没有数据");
+      // Round 27: the segment lengths are defined without shares, so they are still listed (ITA·C19 2020).
+      expect(view.container.textContent).toContain("前向各段长度：纯国内 1.061、传统贸易 1.061、GVC 3.324（段长度不需要份额，仍可读）。");
     } finally {
       countryRequest.mockRestore();
       industryRequest.mockRestore();
