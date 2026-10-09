@@ -935,6 +935,10 @@ test("closing the receipt shown after a submit focuses the status card, in view,
     await settle();
     expect(document.activeElement?.id).toBe("report-status-card");
     expect(revealed.at(-1)?.id).toBe("report-status-card");
+    // A padded card, so the focus ring outlines a deliberate box rather than a bare line of text.
+    expect(document.activeElement?.className).toBe("submit-card submit-card-plain");
+    // The 研究问题 box is tall enough for its two-line placeholder.
+    expect(screen.getByRole("textbox", { name: "研究问题" }).getAttribute("rows")).toBe("3");
     // The report body is a named region (its aria-label needs a role).
     expect(screen.getByRole("region", { name: "报告正文" }).className).toBe("report-body");
   } finally { generate.mockRestore(); submit.mockRestore(); scrolled.mockRestore(); }

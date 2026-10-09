@@ -841,7 +841,8 @@ export function ReportLab({
                   aria-describedby={`report-hint-${field.key} ${countId}${pasteCut === field.key ? ` report-paste-${field.key}` : ""}`}
                   aria-invalid={attemptedIncomplete && short ? true : undefined}
                   value={value}
-                  rows={field.key === "research_question" ? 2 : 4}
+                  // Tall enough for the two-line placeholder (a starter sentence and “（输入后自动保存）”).
+                  rows={field.key === "research_question" ? 3 : 4}
                   placeholder={`${field.starter}\n（输入后自动保存）`}
                   data-report-reflection-incomplete={length < field.min ? "true" : undefined}
                   disabled={busy}
@@ -881,7 +882,9 @@ export function ReportLab({
           <p>生成时间：{fmtTime(report.generated_at)}。实验记录自动保存不会更新报告。{reportOutdatedAdvice(report.state)}</p>
         </div>
       )}
-      {report && <section className="submit-card" id="report-status-card" ref={statusCardRef} tabIndex={-1} aria-label="报告状态"><ReportStatus report={report} /></section>}
+      {/* A plain status line gets its own padded card, so focus (after the receipt closes) outlines a deliberate box;
+          a graded report shows its score card instead. */}
+      {report && <section className={report.state === "graded" ? "submit-card" : "submit-card submit-card-plain"} id="report-status-card" ref={statusCardRef} tabIndex={-1} aria-label="报告状态"><ReportStatus report={report} /></section>}
       <section className="report-submit-panel" aria-label="提交报告">
         <h3>{report && report.state !== "draft" ? (reportOutdated ? "报告需更新后重新提交" : "报告已交给老师") : "核对完毕后，完成提交"}</h3>
         <p>提交前会先保存文字并检查材料；导出 PDF 仅供个人留存，不能代替提交。</p>
