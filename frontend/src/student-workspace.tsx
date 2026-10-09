@@ -28,6 +28,7 @@ import { SyncProblemBanner, SyncProblemContext, type SyncProblem } from "./sync-
 import { ToastHost } from "./toast";
 import type { AuthUser, Meta, StepsResponse, StepStateApi } from "./types";
 import type { SessionApi } from "./use-session";
+import { defaultPartner } from "./labs/steps/viz/indicator-model";
 
 export function stepMainContentId(step: number): string {
   return `step-${step}-main-content`;
@@ -85,20 +86,33 @@ interface StudentWorkspaceProps {
 }
 
 /** Loaded student course shell. Data loading and all state ownership stay in App. */
-/** Country A stays first: steps 3–5 compare a pair (A, B); steps 6–9 take up to five economies. */
+/**
+ * The comparison a step opens with before it saves its own, carried from the latest earlier step that has one.
+ * Steps 2–5 record one country (records saved before that may hold two): steps 3–5 carry that country.
+ * Steps 6–9 compare country A with up to four others: they carry an earlier step 6–9 list as it is, and from a
+ * steps 2–5 record take its country as A, with the default comparison country B unless a B was saved there.
+ */
 export function carriedComparisonFor(
   step: number,
   current: readonly string[],
   savedComparison: (prior: number) => unknown,
+  countries: readonly string[] = [],
 ): string[] {
-  if (step < 3 || step > 9 || current.length >= 2) return [];
+  const singleCountry = step <= 5;
+  if (step < 3 || step > 9 || current.length >= (singleCountry ? 1 : 2)) return [];
   for (let prior = step - 1; prior >= 2; prior -= 1) {
     const candidates = savedComparison(prior);
-    if (Array.isArray(candidates) && candidates.length >= 2) {
-      const unique = candidates.filter((code, index): code is string =>
-        typeof code === "string" && candidates.indexOf(code) === index);
-      if (unique.length >= 2) return unique.slice(0, step <= 5 ? 2 : 5);
+    if (!Array.isArray(candidates)) continue;
+    const unique = candidates.filter((code, index): code is string =>
+      typeof code === "string" && code !== "" && code !== "ROW" && candidates.indexOf(code) === index);
+    if (prior <= 5) {
+      if (unique.length === 0) continue;
+      if (singleCountry) return unique.slice(0, 1);
+      if (unique.length >= 2) return unique.slice(0, 2);
+      const partner = countries.length ? defaultPartner(countries.filter((code) => code !== "ROW"), unique[0]) : "";
+      return partner ? [unique[0], partner] : [unique[0]];
     }
+    if (unique.length >= 2) return unique.slice(0, 5);
   }
   return [];
 }
@@ -158,12 +172,12 @@ export function StudentWorkspace({
     ? reportMaterialStatus(session.reportGate, session.unsynced || session.syncing, Boolean(session.syncError))
     : materialStatusForStep(step.n, session.materialGate, session.unsynced || session.syncing, Boolean(session.syncError));
   const currentComparison = session.getStep<{ compared?: string[] }>(step.n)?.compared ?? [];
-  // Steps 3–9 record their comparison as soon as they open, so a step visited for the first time starts
-  // from the comparison used in the latest earlier step instead of the default CHN/USA. Once the step saves
-  // its own comparison, that one is used.
+  // Steps 3–9 record their country (steps 3–5) or comparison (steps 6–9) as soon as they open, so a step
+  // visited for the first time starts from the country used in the latest earlier step instead of the default
+  // CHN (and USA). Once the step saves its own, that one is used.
   const carriedComparison = carriedComparisonFor(step.n, currentComparison,
-    (prior) => session.getStep<{ compared?: string[] }>(prior)?.compared);
-  const labState: typeof stepState = carriedComparison.length >= 2
+    (prior) => session.getStep<{ compared?: string[] }>(prior)?.compared, meta?.countries ?? []);
+  const labState: typeof stepState = carriedComparison.length >= 1
     ? {
       ...stepState,
       data: {
