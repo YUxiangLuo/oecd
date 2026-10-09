@@ -56,6 +56,6 @@ test("coverage follows actual ROW membership and available route stages", () => 
     expect(economyLabel()).toBe("经济体 + 世界其他地区");
     fireEvent.click(view.getByRole("button", { name: "介绍页 3" }));
     expect(view.getByRole("button", { name: "2. 指标计算" }).getAttribute("aria-pressed")).toBe("true");
-    expect(view.getByText(/了解指标怎样由投入产出表算出/).textContent).toBeTruthy();
+    expect(view.getByText("了解指标怎样由投入产出表算出，并拆解一个国家的读数。")).toBeTruthy();
   } finally { cleanup(); request.mockRestore(); }
 });
