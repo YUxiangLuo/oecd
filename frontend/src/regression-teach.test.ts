@@ -143,7 +143,7 @@ describe("student-first regression reading", () => {
       .querySelectorAll("td")[3].textContent).toMatch(/^\[-0\.0192, -0\.0176\] 个长度单位/);
     expect(effect("14")).toBe("-40.11 个中心性原始单位（幅度约 0.047 个标准差）");
     expect(html).not.toContain("样本均值");
-    expect(html.match(/标准差即 Y 的典型差距/g)).toHaveLength(1);
+    expect(html.match(/标准差即 Y 在国家×行业之间的典型差距/g)).toHaveLength(1);
   });
 
 });

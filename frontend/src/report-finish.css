@@ -21,6 +21,8 @@
 .report-outro .intro-title { font-size: 40px; letter-spacing: 1px; margin: 18px 0; }
 .outro-receipt { display: grid; gap: 10px; padding: 20px; margin: 22px 0; border: 1px solid #625a96; border-radius: 12px; background: #ffffff08; }
 .outro-receipt b { color: #90e0bd; font-size: 18px; }
+/* The light comment box keeps its own label style, not the receipt's large green status line. */
+.outro-receipt .report-feedback b { color: inherit; font-size: inherit; }
 .outro-receipt span, .outro-receipt small { color: #c5cee5; }
 .outro-receipt p { margin: 0; white-space: pre-wrap; }
 .outro-receipt-caveat { display: grid; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid #625a96; }

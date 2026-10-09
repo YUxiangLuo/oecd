@@ -2442,11 +2442,11 @@ def test_technical_appendix_states_the_chosen_y_unit_not_the_family_unit():
         "result": {"status": "ok", "coefs": []},
     }
     lines = _run_sections([run])
-    assert "- 单位：无量纲（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（标准差即 Y 的典型差距）" in lines
+    assert "- 单位：无量纲（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（标准差即 Y 在国家×行业之间的典型差距）" in lines
     assert "- 结果指标 Y：GVC 位置指数" in lines
     default = {**run, "design": {"depvar_label": "前向生产长度", "equation": "Y = βX + FE"}}
     assert (
-        "- 单位：长度单位（1 个长度单位约等于平均多经过 1 个生产环节）；另附标准差换算（标准差即 Y 的典型差距）"
+        "- 单位：长度单位（1 个长度单位约等于平均多经过 1 个生产环节）；另附标准差换算（标准差即 Y 在国家×行业之间的典型差距）"
         in _run_sections([default])
     )
 

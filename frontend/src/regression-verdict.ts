@@ -8,7 +8,7 @@ export type EvidenceState = "negative" | "positive" | "insufficient" | "suppress
 export const INTERVAL_FIRST_MENTION = "95% 区间（真实系数的合理取值范围）";
 
 /** What a standard deviation of Y is, said once where a size in standard deviations first appears. */
-export const SD_DEFINITION = "标准差即 Y 的典型差距";
+export const SD_DEFINITION = "标准差即 Y 在国家×行业之间的典型差距";
 
 /** How a gap in Y is said: lengths are 长/短, everything else 高/低. */
 export function differenceWords(kind: DepvarKind): { higher: string; lower: string } {

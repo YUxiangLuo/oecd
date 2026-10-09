@@ -32,6 +32,7 @@ export function ReportOutro({ report, onClose, onExport, exportDisabled = false,
         </div>}
         <b>{report.state === "graded" ? `已评阅 · ${report.score ?? "—"} 分` : reportOutdated ? "已提交的版本 · 等待教师评阅" : "提交成功 · 等待教师评阅"}</b>
         <span>提交时间：{report.submitted_at ? report.submitted_at.slice(0, 16).replace("T", " ") : "—"}</span>
+        {report.state === "graded" && <span>评阅时间：{report.graded_at ? report.graded_at.slice(0, 16).replace("T", " ") : "—"}</span>}
         {report.state === "graded" && report.feedback?.trim() && <div className="report-feedback" tabIndex={0} role="region" aria-label="教师评语"><b>教师评语：</b>{report.feedback}</div>}
         {!reportOutdated && <small>{report.state === "graded" ? "报告与评阅已保存在服务器上，可随时回到步骤 15 查看。" : "报告已保存到服务器。你可以离开页面，之后回到步骤 15 查看报告与老师的评阅。"}</small>}
       </section>

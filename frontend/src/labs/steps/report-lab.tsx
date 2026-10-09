@@ -909,7 +909,7 @@ export function ReportLab({
         {/* Once the current version is with the teacher, the pre-submit line no longer applies; only the PDF caveat does. */}
         <p>{report && report.state !== "draft" && !reportOutdated ? "导出 PDF 仅供个人留存，不能代替提交。" : "提交前会先保存文字并检查材料；导出 PDF 仅供个人留存，不能代替提交。"}</p>
         {/* Same amber callout as the re-run warning on steps 11–14: this action clears the teacher's grade. */}
-        {report?.state === "graded" && <p className="reg-rerun-warning" role="note"><b>注意</b>再次生成并提交（“更新报告并提交给老师”或“重新生成并提交”）会替换已评阅报告，并清除原评分和评语。</p>}
+        {report?.state === "graded" && <p className="reg-rerun-warning" role="note"><b>注意</b>{reportOutdated ? "“更新报告并提交给老师”" : "“重新生成并提交”"}会替换已评阅报告，并清除原评分和评语。</p>}
         {/* One action group per state: the primary action first, never two buttons doing the same thing. */}
         <div className="report-actions">
           {(!report || reportOutdated) && <button type="button" className="primary" disabled={busy} aria-disabled={gated || undefined} aria-describedby={gated ? "report-gated-reason" : undefined} onClick={() => generateOrShowGate(true)}>

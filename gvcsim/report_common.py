@@ -21,9 +21,9 @@ _STEP_OUTCOMES = {
 # Keyed by the saved Y's kind, not its family: step 13 can use the GVC position index instead of a length.
 _KIND_DIMENSIONS = {
     "share": "份额（×100 = 百分点）",
-    "length": "长度单位（1 个长度单位约等于平均多经过 1 个生产环节）；另附标准差换算（标准差即 Y 的典型差距）",
-    "position": "无量纲（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（标准差即 Y 的典型差距）",
-    "network": "中心性原始单位（按真实网络指标的排名校准生成，不是步骤 5、9 的百万美元）；另附标准差换算（标准差即 Y 的典型差距）",
+    "length": "长度单位（1 个长度单位约等于平均多经过 1 个生产环节）；另附标准差换算（标准差即 Y 在国家×行业之间的典型差距）",
+    "position": "无量纲（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（标准差即 Y 在国家×行业之间的典型差距）",
+    "network": "中心性原始单位（按真实网络指标的排名校准生成，不是步骤 5、9 的百万美元）；另附标准差换算（标准差即 Y 在国家×行业之间的典型差距）",
 }
 _STUDENT_METRIC_LABELS = {
     **{key: value["label"] for key, value in cast(dict[str, dict[str, Any]], INDICATOR_SCHEMA["fields"]).items()},

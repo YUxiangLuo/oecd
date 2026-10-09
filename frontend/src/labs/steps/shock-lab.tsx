@@ -372,7 +372,7 @@ export function ShockLab({ meta, step: _step, state }: {
         })()}
         <h4 className="teaching-subhead">{overview.taxed_countries} 个被加税国家的 X（从高到低）</h4>
         <p className="teaching-one-line">
-          每条是一个国家 {overview.year} 年各行业的平均 X。回归样本：{overview.countries.length} 国的 {overview.entities.toLocaleString("zh-CN")} 个国家×行业{sampleRows ? ` × ${years.length} 年 = ${sampleRows.toLocaleString("zh-CN")} 条记录` : ""}。
+          每条是一个国家 {overview.year} 年各行业的平均 X。回归样本：{overview.countries.length} 国的 {overview.entities.toLocaleString("zh-CN")} 个国家×行业{sampleRows ? ` × ${years.length} 年 = ${sampleRows.toLocaleString("zh-CN")} 条记录` : ""}{overview.entities < overview.countries.length * meta.sectors.length ? `（${overview.countries.length} 国 × ${meta.sectors.length} 个行业中，首年缺少必要数据的组合不进入样本，所以一国的行业数可能少于 ${meta.sectors.length}）` : ""}。
         </p>
         <CountryExposureChart data={overview} />
       </>}

@@ -1,6 +1,7 @@
 import { useRef, useState, type KeyboardEvent } from "react";
 import { percentagePoints } from "../../format";
 import type { TeachingCountriesResponse } from "../../types";
+import { useMeasuredWidth } from "../../table-aids";
 import { useHoverTip, type TipLine } from "../hover";
 import { niceDomain } from "../nice-ticks";
 import { countryLabel } from "../shared";
@@ -107,7 +108,10 @@ export function CountryExposureChart({ data }: { data: TeachingCountriesResponse
   const order = [...taxed, ...untaxed];
   const rows = Math.max(taxed.length, 1);
 
-  const width = 600, labelW = 110, valueRoom = 44, rowH = 15, barH = 10, padT = 6, axisH = 34;
+  // Drawn at the card's width (600–860 units at 1:1), so the bars use a wide card at the same text size.
+  const [measure, measured] = useMeasuredWidth<HTMLDivElement>();
+  const width = measured > 0 ? Math.round(Math.min(860, Math.max(600, measured))) : 600;
+  const labelW = 110, valueRoom = 44, rowH = 15, barH = 10, padT = 6, axisH = 34;
   const barW = width - labelW - valueRoom;
   const height = padT + rows * rowH + axisH;
   const { hi, ticks } = niceDomain(0, Math.max(...taxed.map((row) => row.mean_exposure * 100), 1), 4);
@@ -202,11 +206,13 @@ export function CountryExposureChart({ data }: { data: TeachingCountriesResponse
         <span><i className="line" style={{ background: UNTAXED }} />未被加税（{untaxed.length} 国，X = 0，列在图下）</span>
       </div>
       {taxed.length > 0 && (
+        <div ref={measure}>
         <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={summary} style={{ display: "block", width: "100%", maxWidth: width, height: "auto" }}>
           {axis}
           {bars}
           <text x={labelW + barW / 2} y={height - 4} textAnchor="middle" fontSize={10.5} fill="#5f6677">{axisTitle}</text>
         </svg>
+        </div>
       )}
       {untaxed.length > 0 && (
         <div className="country-exposure-untaxed" role="group" aria-label={`${untaxed.length} 国未被加税，X = 0`}>

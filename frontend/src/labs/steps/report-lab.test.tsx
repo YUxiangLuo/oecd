@@ -730,6 +730,17 @@ test("receipt distinguishes busy export from outdated content and preserves pend
   rerender(<ReportOutro {...props} report={report("graded")} />);
   expect(screen.queryByText(/查看报告与老师的评阅/)).toBeNull();
   expect(screen.getByText("报告与评阅已保存在服务器上，可随时回到步骤 15 查看。")).toBeTruthy();
+  // The receipt names when it was graded, as the step 15 card does.
+  expect(screen.getByText(/^评阅时间：/)).toBeTruthy();
+});
+
+test("the graded warning names only the button on screen", () => {
+  const current = render(<ReportLab {...finishProps} report={report("graded")} />);
+  expect(current.container.querySelector(".reg-rerun-warning")?.textContent).toBe("注意“重新生成并提交”会替换已评阅报告，并清除原评分和评语。");
+  current.unmount();
+  const outdated = render(<ReportLab {...finishProps} report={report("graded")} sessionUpdatedAt="2026-08-14T00:00:00Z" />);
+  expect(outdated.container.querySelector(".reg-rerun-warning")?.textContent).toBe("注意“更新报告并提交给老师”会替换已评阅报告，并清除原评分和评语。");
+  outdated.unmount();
 });
 
 test("the submit panel drops the pre-submit line once the current version is with the teacher", () => {

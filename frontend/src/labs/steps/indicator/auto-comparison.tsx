@@ -126,7 +126,7 @@ export function AutoMaterialStatus({ state, schema, metric, current, record, loa
           {loadFailed && onRetryLoad && <button type="button" className="secondary" onClick={(event) => { const button = event.currentTarget; onRetryLoad(); keepFocusNear(button); }}>重试</button>}
         </span>}
       {state.materialLocked
-        ? <small>{MATERIAL_LOCKED_NOTE}{rechosen && current ? `当前选择就是已记录的材料。${MATERIAL_RECHOSEN_NEXT}` : ""}{record && <button type="button" className="secondary" onClick={() => { setRechosen(true); record(); }}>{MATERIAL_LOCKED_ACTION.replace("图表", "选择")}</button>}</small>
+        ? <small>{MATERIAL_LOCKED_NOTE}{rechosen && current ? `当前选择就是已记录的材料。${MATERIAL_RECHOSEN_NEXT}` : ""}{/* What the recorded value is still needs saying after submission (step 5: not the table's numbers). */}{note ? `${note}` : ""}{record && <button type="button" className="secondary" onClick={() => { setRechosen(true); record(); }}>{MATERIAL_LOCKED_ACTION.replace("图表", "选择")}</button>}</small>
         : <small>{lead ?? `记录${where}`}{cjkSpace(lead ? "记录的是同一年的" : "同一年的", countryScope(metric ? fieldLabel(metric, schema) : "本步指标"))}，换国家或年份后自动更新，无需另外保存。{note ? ` ${note}` : ""}</small>}
     </div>
   );
