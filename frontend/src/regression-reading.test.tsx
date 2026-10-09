@@ -117,6 +117,14 @@ describe("fixed teaching regression reading", () => {
     expect(checked.container.querySelector(".reg-example-effect")!.textContent)
       .toContain("SVK 斯洛伐克·C26 的 X 为 0.22444 个百分点，按估计与 X 相关的差异约为 +9.16 个中心性原始单位");
     expect(exampleXText({ x: 0.0932 })).toBe("9.32");
+    cleanup();
+    // Goods only (v8): a service industry's X is 0 in every country, and the line says why and what to pick instead.
+    const services = render(<RegressionResultCard outcome="trade" response={response()} examples={[
+      { label: "CAN 加拿大·O", x: 0, tau: 0, w: 0.4, service: true },
+    ]} />);
+    expect(services.container.querySelector(".reg-example-effect")!.textContent).toContain(
+      "CAN 加拿大·O 是服务业，不在加税范围内（τ = 0）。这个例子的 X = 0，按估计没有与 X 相关的差异。如需看到不为 0 的换算，请回到步骤 10 换一个货物行业（服务业不加税），如加拿大的汽车行业。",
+    );
     // An uncertain direction is flagged; suppressed inference and missing examples show no conversion.
     Object.assign(data.result.coefs[0], { ci_low: -1, ci_high: 0.2 });
     const uncertain = render(<RegressionResultCard outcome="trade" response={data} examples={[{ label: "例子", x: 0.05 }]} />);

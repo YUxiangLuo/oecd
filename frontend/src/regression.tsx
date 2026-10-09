@@ -49,7 +49,7 @@ import { DivergingBarChart, type DivergingBarRow } from "./viz/regression/diverg
 import { NEGATIVE, POSITIVE, UNCERTAIN } from "./viz/regression/palette";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
-export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v7";
+export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v8";
 
 /** Reveal a freshly calculated verdict inside the course's scroll container (see content-scroll.ts). */
 export const scrollRegressionVerdict = scrollIntoCourseContent;
@@ -125,6 +125,8 @@ export interface RegressionExample {
   w?: number;
   /** The country that imposes the tariff (the USA): X = 0 by definition, and it is not in the regression sample. */
   imposer?: boolean;
+  /** A service industry: the tariff falls on goods only (ICIO A–C), so τ and X are 0 in every country. */
+  service?: boolean;
 }
 
 /** Defined with the other number formats (regression-verdict.ts); re-exported where it was first used. */
@@ -247,12 +249,16 @@ export function RegressionResultCard({ outcome, response, examples = [], example
                 // direction is said once, after the last conversion.
                 return <>{example.label} 的 X 为 {exampleXText(example)} 个百分点，按估计与 X 相关的差异{tiny ? "" : "约为 "}<b>{tiny ? effect : `${lower ? "-" : "+"}${effect}`}</b>{directional ? `（Y 偏${lower ? words.lower : words.higher}）` : ""}{verdict.state === "insufficient" && example === lastConverted ? "，但区间包含 0，差异的高低方向并不确定" : ""}</>;
               })()
+              : example.service
+                ? <>{example.label} 是服务业，不在加税范围内（τ = 0）{zeroNote}</>
               : (example.tau ?? 0) > 0
                 ? <>{example.label} 被加税但首年不向美国出口（w = 0）{zeroNote}</>
                 : <>{example.label} 未被加税{zeroNote}</>;
             return <span key={example.label}>{index ? "；" : ""}{text}</span>;
           })}。
-            {noConversion && `${examples.length === 1 ? "这个例子的 X = 0" : "两个例子的 X 都是 0"}，按估计没有与 X 相关的差异。如需看到不为 0 的换算，请回到步骤 10 ${unexposedTaxed
+            {noConversion && `${examples.length === 1 ? "这个例子的 X = 0" : "两个例子的 X 都是 0"}，按估计没有与 X 相关的差异。如需看到不为 0 的换算，请回到步骤 10 ${examples.some((example) => example.service)
+              ? "换一个货物行业（服务业不加税），如加拿大的汽车行业"
+              : unexposedTaxed
               ? "换一个向美国出口的被加税国家或行业（如加拿大的汽车行业）"
               : examples.length === 1 ? "换成被加税的国家（如加拿大），或再选一个被加税的对照国家" : "选一个被加税的国家（如加拿大）"}。`}</li>;
         })()}
@@ -602,7 +608,10 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
       // Word joiners keep "·" with the country, so a line never starts with "·C29".
       const label = `${countryLabel(country)}\u2060·\u2060${sectorLabel(example.industry)}`;
       if (country === TARIFF_IMPOSER) return [{ label, x: 0, imposer: true }];
-      return row ? [{ label, x: row.teaching_tariff_exposure, tau: row.teaching_tariff_rate_tau, w: row.teaching_export_share_w }] : [];
+      return row ? [{
+        label, x: row.teaching_tariff_exposure, tau: row.teaching_tariff_rate_tau, w: row.teaching_export_share_w,
+        service: !/^[ABC]/.test(example.industry),
+      }] : [];
     })
     : [];
 

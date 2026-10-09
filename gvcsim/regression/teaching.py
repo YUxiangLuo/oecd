@@ -25,7 +25,10 @@ import pandas as pd
 # trade surplus with the market (USA) was at least TAXED_SURPLUS_MIN in the first year, computed from the ICIO
 # bilateral flows (goods = ICIO sectors A, B and C), so "who is taxed" follows the logic of the 2018 tariffs and can
 # be checked against the data. The rate stays one flat 25% from the third year.
-VERSION = "step10-tariff-teaching-v7"
+# v8 (2026-10-10): the tariff falls on goods only. In a taxed country τ is 25% for its goods industries (ICIO
+# sectors A, B and C) and 0 for its service industries, so a service industry's X is 0 whatever its exports to the
+# market; the taxed list, w and the noise draws are unchanged from v7.
+VERSION = "step10-tariff-teaching-v8"
 # Seeds the noise draws only (policy assignment is a data rule since v7); changing it would redraw every Y.
 RANDOMIZATION_VERSION = "step10-tariff-teaching-v1"
 X_COLUMN = "teaching_tariff_exposure"
@@ -36,7 +39,11 @@ TARIFF_PATH = (0.0, 0.0, 0.25, 0.25, 0.25)
 # First-year goods trade surplus with the market, in ICIO units (million USD), from which a country is taxed.
 TAXED_SURPLUS_MIN = 1000.0
 SURPLUS_COLUMN = "teaching_market_goods_surplus"
-TAXED_RULE = {"basis": "first-year goods trade surplus with the market (ICIO sectors A-C)", "min_million_usd": TAXED_SURPLUS_MIN}
+TAXED_RULE = {
+    "basis": "first-year goods trade surplus with the market (ICIO sectors A-C)",
+    "min_million_usd": TAXED_SURPLUS_MIN,
+    "scope": "goods industries (ICIO sectors A-C)",
+}
 DISCLAIMER = "课程关税实验数据集：X 与四个 Y 按课程数据契约生成，不是 OECD 发布结果。"
 # What students and readers see (step 10, the step 11–14 result card and the report); DISCLAIMER above is
 # the release contract value and stays unchanged. The frontend keeps the same sentence in regression-lessons.ts.
@@ -406,10 +413,11 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
     )
     out = out.sort_values(["country", "industry", "year"]).reset_index(drop=True)
     entities = out.entity_id.astype(str)
-    # Taxed = a first-year goods surplus with the market of at least TAXED_SURPLUS_MIN (a data rule, not a draw).
+    # Taxed = a first-year goods surplus with the market of at least TAXED_SURPLUS_MIN (a data rule, not a draw);
+    # the tariff falls on the taxed countries' goods industries only (services keep τ = 0).
     surplus = market_goods_surplus(exposure, years[0])
     out[SURPLUS_COLUMN] = out.country.map(surplus).fillna(0.0).astype(float)
-    exposed = out[SURPLUS_COLUMN].ge(TAXED_SURPLUS_MIN)
+    exposed = out[SURPLUS_COLUMN].ge(TAXED_SURPLUS_MIN) & _is_goods_sector(out.industry)
     out["teaching_tariff_rate_tau"] = out.year.map(dict(zip(years, TARIFF_PATH, strict=True))) * exposed
     out[X_COLUMN] = out.teaching_export_share_w * out.teaching_tariff_rate_tau
     out["teaching_treated"] = out[X_COLUMN].gt(0).astype(int)
@@ -508,25 +516,40 @@ def model_snapshot(outcome: str, baseline_key: str | None = None) -> dict:
     }
 
 
+def _taxed_countries(panel: pd.DataFrame) -> pd.Series:
+    """Per row, whether its country is on the taxed list. The data rule decides, not τ: since v8 a taxed country's
+    services have τ = 0, so a country whose sampled industries are all services is still taxed. A panel without the
+    surplus column (before v7) falls back to the country's highest τ."""
+    if SURPLUS_COLUMN in panel.columns:
+        return panel[SURPLUS_COLUMN].ge(TAXED_SURPLUS_MIN)
+    return panel.groupby("country")["teaching_tariff_rate_tau"].transform("max").gt(0)
+
+
 def country_exposure_overview(panel: pd.DataFrame) -> dict:
     """Every sample country's tariff exposure in the last year: what step 10 shows before any single example.
 
-    ``mean_exposure`` averages X over the country's industries in the sample (untaxed countries are 0);
-    ``exposed_industries`` counts the industries with X > 0 (a taxed country's industry with w = 0 has X = 0).
+    The tariff falls on goods (v8), so ``mean_exposure`` and ``max_exposure`` are over the country's goods
+    industries in the sample (``goods_industries``; one flat τ, so mean X = mean w × τ; untaxed countries are 0);
+    ``industries`` counts all its industries in the sample, services included (their X is always 0);
+    ``exposed_industries`` counts the industries with X > 0 (a taxed goods industry with w = 0 has X = 0).
     The imposing market is not in the sample and is reported separately.
     """
     years = sorted(int(year) for year in panel["year"].unique())
     last = years[-1]
     rows = panel.loc[panel["year"].eq(last)]
-    taxed = panel.groupby("country")["teaching_tariff_rate_tau"].max().gt(0)
+    taxed = _taxed_countries(panel).groupby(panel["country"]).max()
+    goods = rows.loc[_is_goods_sector(rows["industry"])].groupby("country")[X_COLUMN]
+    goods_values = {str(country): values for country, values in goods}
+    empty = pd.Series(dtype=float)
     grouped = rows.groupby("country")[X_COLUMN]
     countries = [
         {
             "country": str(country),
             "taxed": bool(taxed.get(country, False)),
-            "mean_exposure": float(values.mean()),
-            "max_exposure": float(values.max()),
+            "mean_exposure": float(goods_values.get(str(country), empty).mean()) if str(country) in goods_values else 0.0,
+            "max_exposure": float(goods_values.get(str(country), empty).max()) if str(country) in goods_values else 0.0,
             "industries": int(values.size),
+            "goods_industries": int(goods_values.get(str(country), empty).size),
             "exposed_industries": int(values.gt(0).sum()),
             "market_goods_surplus": (
                 float(rows.loc[rows.country.eq(country), SURPLUS_COLUMN].iloc[0]) if SURPLUS_COLUMN in rows else None
@@ -567,7 +590,7 @@ def group_trends(panel: pd.DataFrame) -> dict:
         raise ValueError("关税面板没有加税年份")
     policy_year = policy_years[0]
     pre_years = [year for year in years if year < policy_year]
-    taxed_country = panel.groupby("country")["teaching_tariff_rate_tau"].transform("max").gt(0)
+    taxed_country = _taxed_countries(panel)
     group = np.where(taxed_country, "taxed", "untaxed")
 
     def trend_of(column: str) -> dict[str, list[dict[str, float | int]]]:

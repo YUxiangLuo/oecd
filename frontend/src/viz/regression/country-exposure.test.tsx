@@ -12,7 +12,7 @@ const RULE = { basis: "first-year goods trade surplus with the market (ICIO sect
 const SURPLUS: Record<string, number> = { CAN: 248900, CRI: 1500, COL: 4321, PER: 2000, LUX: 1000, AUT: -1234, CHN: 950 };
 
 const countriesFixture: TeachingCountriesResponse = {
-  version: "step10-tariff-teaching-v7", year: 2020, market: "USA", tariff_rate: 0.25, policy_year: 2018,
+  version: "step10-tariff-teaching-v8", year: 2020, market: "USA", tariff_rate: 0.25, policy_year: 2018,
   taxed_countries: 5, untaxed_countries: 3, entities: 350,
   countries: [
     row("CAN", 0.143), row("CRI", 0.0782, true, 42, 43), row("COL", 0.0727), row("PER", 0.057), row("LUX", 0.0051, true, 40, 40),
@@ -22,7 +22,12 @@ const countriesFixture: TeachingCountriesResponse = {
 
 test("the industry note counts taxed industries and says when some have X = 0", () => {
   expect(countryIndustryNote(row("CAN", 0.143))).toBe("44/44 个行业被加税");
-  expect(countryIndustryNote(row("CRI", 0.0782, true, 42, 43))).toBe("43/43 个行业被加税（42 个 X > 0，其余对美无出口：w = 0）");
+  expect(countryIndustryNote(row("CRI", 0.0782, true, 42, 43))).toBe("43/43 个行业被加税（1 个货物行业对美无出口：w = 0）");
+  // Goods only (v8): a taxed country's services are counted but not taxed.
+  expect(countryIndustryNote({ ...row("DEU", 0.08, true, 33, 44), goods_industries: 34 })).toBe("34/44 个行业被加税（10 个服务业不加税，1 个货物行业对美无出口：w = 0）");
+  expect(countryIndustryLines({ ...row("DEU", 0.08, true, 33, 44), goods_industries: 34 })).toEqual([
+    ["被加税行业", "34 个（样本内共 44 个）"], ["服务业", "10 个，不加税"], ["其中 X > 0", "33 个"], ["其余 1 个", "对美无出口：w = 0"],
+  ]);
   expect(countryIndustryNote(row("MEX", 0, false, 0, 43))).toBe("0/43 个行业被加税");
 });
 
@@ -31,7 +36,7 @@ test("taxed bars are sorted, orange and scaled; untaxed countries form one group
     render(<CountryExposureChart data={countriesFixture} />);
     const svg = screen.getByRole("img");
     expect(svg.getAttribute("aria-label")).toBe(
-      "5 个被加税国家的关税暴露 X（2020 年各行业平均，个百分点），从高到低：最高 CAN 加拿大 14.30，最低 LUX 卢森堡 0.51；另有 3 国未被加税，X = 0",
+      "5 个被加税国家的关税暴露 X（2020 年各货物行业平均，个百分点），从高到低：最高 CAN 加拿大 14.30，最低 LUX 卢森堡 0.51；另有 3 国未被加税，X = 0",
     );
     const bars = [...svg.querySelectorAll("g.country-exposure-bar")];
     expect(bars.map((bar) => bar.getAttribute("data-country"))).toEqual(["CAN", "CRI", "COL", "PER", "LUX"]);
@@ -116,7 +121,7 @@ test("hover and keyboard focus show the country, X and the industry count; arrow
     fireEvent.keyDown(document.activeElement!, { key: "Home" });
     expect(document.activeElement?.getAttribute("data-country")).toBe("CAN");
     expect(document.activeElement?.getAttribute("aria-label")).toBe(
-      "CAN 加拿大：2020 年各行业平均 X = 14.30 个百分点，44/44 个行业被加税；方向键切换国家",
+      "CAN 加拿大：2020 年各货物行业平均 X = 14.30 个百分点，44/44 个行业被加税；方向键切换国家",
     );
   } finally {
     cleanup();
@@ -171,7 +176,7 @@ test("with the taxed rule, every country's readout gives its goods balance with 
     act(() => aut.focus());
     fireEvent.focus(aut);
     expect(tip()).toContain("2016 年对美货物逆差12.3 亿美元");
-    expect(aut.getAttribute("aria-label")).toBe("AUT 奥地利：2020 年各行业平均 X = 0 个百分点，0/44 个行业被加税，2016 年对美货物逆差 12.3 亿美元；方向键切换国家");
+    expect(aut.getAttribute("aria-label")).toBe("AUT 奥地利：2020 年各货物行业平均 X = 0 个百分点，0/44 个行业被加税，2016 年对美货物逆差 12.3 亿美元；方向键切换国家");
     // An untaxed surplus below the threshold.
     expect(document.querySelector('[data-country="CHN"]')!.getAttribute("aria-label")).toContain("2016 年对美货物顺差 9.5 亿美元");
     // A country the server sent no balance for says nothing about it.

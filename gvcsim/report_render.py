@@ -202,7 +202,18 @@ def _scenario_line(scenario: dict[str, Any] | None) -> str | None:
     )
     # A space between 对 and a number ("对 2016 年"), none before 首年.
     space = " " if who[:1].isdigit() else ""
+    # Teaching data v8 taxes goods only (the rule carries a scope); an older release taxed every industry.
+    if rule.get("scope"):
+        return (
+            f"- 情景：美国{since}对{space}{who}的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 "
+            f"{_rate(float(rate) * 100)}% 关税，服务业不加税；其余 {untaxed} 国未被加税。"
+        )
     return f"- 情景：美国{since}对{space}{who}加征 {_rate(float(rate) * 100)}% 关税，其余 {untaxed} 国未被加税。"
+
+
+def _is_service(industry: object) -> bool:
+    """A service industry: the teaching tariff falls on goods only (ICIO sectors A, B and C; v8)."""
+    return str(industry)[:1] not in ("A", "B", "C")
 
 
 def _experiment_sections(session: dict[str, Any], scenario: dict[str, Any] | None = None) -> list[str]:
@@ -415,7 +426,13 @@ def _experiment_sections(session: dict[str, Any], scenario: dict[str, Any] | Non
                     # hand; the tariff rate as set.
                     f"- w = {worked[0]}%；"
                     f"τ = {_rate(float(teaching_observation['teaching_tariff_rate_tau']) * 100)}%；"
-                    f"X = w × τ = {worked[1]} 个百分点",
+                    f"X = w × τ = {worked[1]} 个百分点"
+                    + (
+                        "（服务业不在加税范围内，τ = 0）"
+                        if _is_service(teaching_observation.get("industry"))
+                        and float(teaching_observation["teaching_tariff_rate_tau"]) == 0
+                        else ""
+                    ),
                 )
             )
         lines.append("")
@@ -592,6 +609,8 @@ def _example_conversion(
                 else ""
             )
             text = f"{label} 的 X 为 {_example_x(item, x, tau)} 个百分点，按估计与 X 相关的差异{amount}{reading}"
+        elif tau == 0 and _is_service(item.get("industry")):
+            text = f"{label} 是服务业，不在加税范围内（τ = 0），X = 0，按估计没有与 X 相关的差异"
         elif tau > 0:
             text = f"{label} 被加税但首年不向美国出口（w = 0），X = 0，按估计没有与 X 相关的差异"
         else:

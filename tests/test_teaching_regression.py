@@ -8,7 +8,7 @@ from gvcsim.regression.teaching import BETAS, X_COLUMN, Y_COLUMNS, build_teachin
 def _source(countries=("AAA", "BBB", "CCC", "DDD")) -> pd.DataFrame:
     rows = []
     for country in countries:
-        for industry_index, industry in enumerate(("s1", "s2", "s3"), 1):
+        for industry_index, industry in enumerate(("C1", "C2", "S3"), 1):
             for year in range(2016, 2021):
                 rows.append(
                     {
@@ -32,7 +32,7 @@ def _source(countries=("AAA", "BBB", "CCC", "DDD")) -> pd.DataFrame:
 def _exposure(source):
     frame = source[["country", "industry", "year"]].rename(columns={"industry": "sector"}).copy()
     frame["imposer"] = "USA"
-    frame["export_exposure"] = frame.sector.map({"s1": 0.4, "s2": 0.1, "s3": 0.8})
+    frame["export_exposure"] = frame.sector.map({"C1": 0.4, "C2": 0.1, "S3": 0.8})
     frame.loc[frame.year.gt(2016), "export_exposure"] = 0.02
     frame["bilateral_exports"] = 0.0
     return pd.concat([frame, _goods_flows(sorted(source.country.unique()))], ignore_index=True)
@@ -65,10 +65,14 @@ def test_teaching_panel_is_separate_reproducible_and_has_transparent_tariff_path
     assert set(first.teaching_tariff_rate_tau.unique()) == {0.0, 0.25}
     post = first.loc[first.year.ge(2018)]
     assert post.groupby("entity_id")[X_COLUMN].nunique().eq(1).all()
-    assert post.groupby("country").teaching_tariff_rate_tau.nunique().eq(1).all()
+    # One rate per country on its goods industries (C1, C2); services (S3) are never taxed (v8).
+    goods = post.loc[post.industry.str[0].isin(["A", "B", "C"])]
+    assert goods.groupby("country").teaching_tariff_rate_tau.nunique().eq(1).all()
+    assert set(goods.teaching_tariff_rate_tau) == {0.0, 0.25}
+    assert post.loc[post.industry.eq("S3"), ["teaching_tariff_rate_tau", X_COLUMN]].eq(0).all().all()
     assert first.groupby("entity_id")[X_COLUMN].max().eq(0).any()
-    assert first.loc[first.industry.eq("s1"), "teaching_export_share_w"].eq(0.4).all()
-    assert first.loc[first.industry.eq("s3"), "teaching_export_share_w"].eq(0.8).all()
+    assert first.loc[first.industry.eq("C1"), "teaching_export_share_w"].eq(0.4).all()
+    assert first.loc[first.industry.eq("S3"), "teaching_export_share_w"].eq(0.8).all()
     np.testing.assert_allclose(first[X_COLUMN], first.teaching_export_share_w * first.teaching_tariff_rate_tau)
 
 
@@ -115,7 +119,7 @@ def test_v2_preserves_randomization_and_halves_noise_without_changing_effects():
         atol=1e-9,
     )
     snapshot = model_snapshot("trade")
-    assert snapshot["version"] == "step10-tariff-teaching-v7"
+    assert snapshot["version"] == "step10-tariff-teaching-v8"
     assert snapshot["randomization_version"] == "step10-tariff-teaching-v1"
     assert snapshot["tariff_path"] == [0, 0, 0.25, 0.25, 0.25]
     assert teaching.SEED == 20260913
@@ -123,9 +127,9 @@ def test_v2_preserves_randomization_and_halves_noise_without_changing_effects():
 
 def test_invalid_baselines_are_excluded_not_clipped_and_years_are_checked():
     source = _source()
-    source.loc[source.entity_id.eq("AAA_s1") & source.year.eq(2016), "FVA_share"] = -0.01
+    source.loc[source.entity_id.eq("AAA_C1") & source.year.eq(2016), "FVA_share"] = -0.01
     result = build_teaching_panel(source, _exposure(source))
-    assert "AAA_s1" not in set(result.entity_id)
+    assert "AAA_C1" not in set(result.entity_id)
     for outcome in ("trade", "production"):
         assert result[Y_COLUMNS[outcome]].between(0, 1).all()
     assert result[Y_COLUMNS["length"]].gt(0).all()
@@ -211,8 +215,8 @@ def test_step10_filters_before_limiting_and_reads_the_regression_artifact(monkey
     assert response["total"] == 3
     assert len(response["rows"]) == 1
     row = response["rows"][0]
-    assert (row["country"], row["industry"], row["year"]) == ("DDD", "s1", 2020)
-    expected = panel.loc[panel.country.eq("DDD") & panel.industry.eq("s1") & panel.year.eq(2020), X_COLUMN].iloc[0]
+    assert (row["country"], row["industry"], row["year"]) == ("DDD", "C1", 2020)
+    expected = panel.loc[panel.country.eq("DDD") & panel.industry.eq("C1") & panel.year.eq(2020), X_COLUMN].iloc[0]
     assert row[X_COLUMN] == expected
     with pytest.raises(HTTPException) as error:
         asyncio.run(regression_routes.teaching_panel(country="DDD", year=2021, limit=1))
@@ -226,10 +230,10 @@ def test_step10_series_returns_two_countries_all_years_and_teaching_outcomes(mon
     panel = build_teaching_panel(_source(), _exposure(_source()))
     monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: panel)
 
-    response = asyncio.run(regression_routes.teaching_panel(countries="AAA,DDD", industry="s1", limit=200))
+    response = asyncio.run(regression_routes.teaching_panel(countries="AAA,DDD", industry="C1", limit=200))
 
     assert response["total"] == 10
-    assert {(row["country"], row["industry"]) for row in response["rows"]} == {("AAA", "s1"), ("DDD", "s1")}
+    assert {(row["country"], row["industry"]) for row in response["rows"]} == {("AAA", "C1"), ("DDD", "C1")}
     assert {row["year"] for row in response["rows"]} == {2016, 2017, 2018, 2019, 2020}
     assert all(set(Y_COLUMNS.values()).issubset(row) for row in response["rows"])
 
@@ -243,7 +247,7 @@ def test_sample_flow_reconciles_exclusions_and_overlapping_missing_values(has_tr
     frame = pd.DataFrame(
         {
             "country": ["ROW", "A", "B", "C", "D", "E"],
-            "entity_id": ["ROW_s1", "A_s1", "B_s1", "C_s1", "D_s1", "E_s1"],
+            "entity_id": ["ROW_C1", "A_C1", "B_C1", "C_C1", "D_C1", "E_C1"],
             "year": [2020] * 6,
             design.depvar: [np.nan, np.nan, np.nan, 0.4, 0.5, 0.6],
             design.shock_col: [np.nan, np.nan, 0.2, np.nan, 0.3, 0.4],
@@ -351,7 +355,7 @@ def test_group_trends_report_the_mean_exposure_of_taxed_units():
 def _full_source(countries=("AAA", "BBB", "CCC", "DDD")) -> pd.DataFrame:
     """The minimal source panel plus every column an alternative baseline is calibrated from."""
     frame = _source(countries)
-    index = frame.industry.map({"s1": 1, "s2": 2, "s3": 3})
+    index = frame.industry.map({"C1": 1, "C2": 2, "S3": 3})
     frame["DVAex"] = frame.gross_exports * (0.5 + index / 20)
     frame["FDC"] = frame.gross_exports * (0.02 + index / 100)
     frame["SVA"] = 100 + index
@@ -395,7 +399,7 @@ def test_alternative_baselines_add_their_own_y_without_changing_the_family_defau
     snapshot = model_snapshot("trade", "DVAex_share")
     assert snapshot["baseline"] == "DVAex_share"
     assert snapshot["beta"] == 0.55 and snapshot["y_column"] == "teaching_y_trade_DVAex_share"
-    assert snapshot["baseline_kind"] == "share" and snapshot["version"] == "step10-tariff-teaching-v7"
+    assert snapshot["baseline_kind"] == "share" and snapshot["version"] == "step10-tariff-teaching-v8"
     assert model_snapshot("trade")["baseline"] == "FVA_share"
     with pytest.raises(ValueError):
         model_snapshot("trade", "PLy_GVC")  # a length baseline is not in the trade family
@@ -406,15 +410,15 @@ def test_alternative_baselines_add_their_own_y_without_changing_the_family_defau
 
 def test_out_of_domain_alternative_source_leaves_only_that_y_missing_for_that_unit():
     full = _full_source()
-    full.loc[full.entity_id.eq("AAA_s1"), "closnesscentrality"] = -1.0
-    full.loc[full.entity_id.eq("BBB_s2"), "DVAex"] = np.nan
+    full.loc[full.entity_id.eq("AAA_C1"), "closnesscentrality"] = -1.0
+    full.loc[full.entity_id.eq("BBB_C2"), "DVAex"] = np.nan
     panel = build_teaching_panel(full, _exposure(full))
     assert panel.entity_id.nunique() == 12
     closeness = "teaching_y_network_closnesscentrality"
-    assert panel.loc[panel.entity_id.eq("AAA_s1"), closeness].isna().all()
-    assert panel.loc[panel.entity_id.ne("AAA_s1"), closeness].notna().all()
-    assert panel.loc[panel.entity_id.eq("BBB_s2"), "teaching_y_trade_DVAex_share"].isna().all()
-    assert panel.loc[panel.entity_id.ne("BBB_s2"), "teaching_y_trade_DVAex_share"].notna().all()
+    assert panel.loc[panel.entity_id.eq("AAA_C1"), closeness].isna().all()
+    assert panel.loc[panel.entity_id.ne("AAA_C1"), closeness].notna().all()
+    assert panel.loc[panel.entity_id.eq("BBB_C2"), "teaching_y_trade_DVAex_share"].isna().all()
+    assert panel.loc[panel.entity_id.ne("BBB_C2"), "teaching_y_trade_DVAex_share"].notna().all()
     assert panel[list(Y_COLUMNS.values())].notna().all().all()
 
 
@@ -490,7 +494,13 @@ def test_country_exposure_overview_lists_every_sample_country_taxed_or_not():
     last = panel.loc[panel.year.eq(overview["year"])]
     for item in countries:
         rows = last.loc[last.country.eq(item["country"]), X_COLUMN]
-        assert item["mean_exposure"] == pytest.approx(float(rows.mean()))
+        # The mean is over the goods industries (C1, C2): services (S3) are never taxed, so mean X = mean w × τ.
+        goods = last.loc[last.country.eq(item["country"]) & last.industry.ne("S3")]
+        assert item["mean_exposure"] == pytest.approx(float(goods[X_COLUMN].mean()))
+        assert item["mean_exposure"] == pytest.approx(
+            float(goods.teaching_export_share_w.mean()) * (0.25 if item["taxed"] else 0.0)
+        )
+        assert (item["industries"], item["goods_industries"]) == (len(rows), len(goods))
         assert item["exposed_industries"] == int(rows.gt(0).sum())
         assert item["taxed"] == bool(taxed[item["country"]])
         if not item["taxed"]:

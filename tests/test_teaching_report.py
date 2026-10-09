@@ -2699,7 +2699,8 @@ def test_report_step_ten_states_the_scenario_and_who_is_taxed(tmp_path, monkeypa
     since = f"从 {overview['policy_year']} 年起" if overview["policy_year"] else ""
     assert (
         f"- 情景：美国{since}对 {rule_year} 年对美货物贸易顺差达到或超过 10 亿美元的 "
-        f"{overview['taxed_countries']} 国加征 25% 关税，其余 {overview['untaxed_countries']} 国未被加税。"
+        f"{overview['taxed_countries']} 国的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 25% 关税，服务业不加税；"
+        f"其余 {overview['untaxed_countries']} 国未被加税。"
     ) in step_ten
     # The scenario comes before the example, as at the top of step 10.
     assert step_ten.index("- 情景：") < step_ten.index("- 两国趋势示例：")
@@ -2716,6 +2717,9 @@ def test_report_step_ten_states_the_scenario_and_who_is_taxed(tmp_path, monkeypa
             assert f"；{label} 的 X 为 " in line
         elif row["teaching_tariff_rate_tau"] > 0:
             assert line.endswith(f"；{label} 被加税但首年不向美国出口（w = 0），X = 0，按估计没有与 X 相关的差异。")
+        elif industry[:1] not in ("A", "B", "C"):
+            # The fixture's industry "s1" is not an ICIO goods code: a service under v8, never taxed.
+            assert line.endswith(f"；{label} 是服务业，不在加税范围内（τ = 0），X = 0，按估计没有与 X 相关的差异。")
         else:
             assert line.endswith(f"；{label} 未被加税，X = 0，按估计没有与 X 相关的差异。")
 
@@ -2751,6 +2755,18 @@ def test_report_scenario_line_and_two_example_conversion_read_like_step_ten():
         "- 情景：美国从 2018 年起对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 44 国加征 25% 关税，其余 32 国未被加税。"
     )
     assert _scenario_line(None) is None
+    # Goods only (v8): the rule carries its scope and the line says services are not taxed.
+    goods = {**scenario, "taxed_rule": {**scenario["taxed_rule"], "scope": "goods industries (ICIO sectors A-C)"}}
+    assert _scenario_line(goods) == (
+        "- 情景：美国从 2018 年起对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 44 国的货物（农业、采矿业和制造业，"
+        "ICIO 行业 A–C）加征 25% 关税，服务业不加税；其余 32 国未被加税。"
+    )
+    service = {"country": "CAN", "industry": "O", X_COLUMN: 0.0, "teaching_tariff_rate_tau": 0.0}
+    service_line = _example_conversion("trade", {}, {"coef": -0.55}, True, [service])
+    assert service_line == (
+        f"- **按步骤 10 的例子换算**：{country_label('CAN')} · {_sector('O')} 是服务业，不在加税范围内（τ = 0），X = 0，"
+        "按估计没有与 X 相关的差异。"
+    )
     taxed = {"country": "CAN", "industry": "C29", X_COLUMN: 0.2325, "teaching_tariff_rate_tau": 0.25}
     untaxed = {"country": "CRI", "industry": "C29", X_COLUMN: 0.0, "teaching_tariff_rate_tau": 0.0}
     line = _example_conversion("trade", {}, {"coef": -0.55}, True, [taxed, untaxed])

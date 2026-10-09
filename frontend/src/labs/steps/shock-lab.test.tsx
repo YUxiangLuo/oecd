@@ -14,13 +14,15 @@ const step: Step = {
 };
 
 const countryRow = (country: string, mean: number, industries = 44, surplus = mean > 0 ? 5000 : -800) => ({
-  country, taxed: mean > 0, mean_exposure: mean, max_exposure: mean * 2, industries, exposed_industries: mean > 0 ? industries : 0,
+  // Goods only (v8): 10 of the industries are services, never taxed.
+  country, taxed: mean > 0, mean_exposure: mean, max_exposure: mean * 2, industries, goods_industries: industries - 10,
+  exposed_industries: mean > 0 ? industries - 10 : 0,
   market_goods_surplus: surplus,
 });
 /** The whole-sample overview step 10 leads with; the real counts come from the release (the API), not the page. */
 const countriesOverview: TeachingCountriesResponse = {
-  version: "step10-tariff-teaching-v7", year: 2020, market: "USA", tariff_rate: 0.25, policy_year: 2018,
-  taxed_rule: { basis: "first-year goods trade surplus with the market (ICIO sectors A-C)", min_million_usd: 1000, year: 2016 },
+  version: "step10-tariff-teaching-v8", year: 2020, market: "USA", tariff_rate: 0.25, policy_year: 2018,
+  taxed_rule: { basis: "first-year goods trade surplus with the market (ICIO sectors A-C)", min_million_usd: 1000, year: 2016, scope: "goods industries (ICIO sectors A-C)" },
   taxed_countries: 3, untaxed_countries: 2, entities: 210,
   countries: [countryRow("CAN", 0.143), countryRow("CRI", 0.0782), countryRow("BRN", 0.0142), countryRow("AUT", 0), countryRow("MEX", 0, 43)],
 };
@@ -409,7 +411,7 @@ test("card 1 tells the US tariff: one policy line, three tiles, what X is with C
   expect(card.querySelector("h3")!.textContent).toBe("美国对哪些国家加征关税？");
   // One policy sentence: the year, the imposer, the data rule, the counts and the rate, all from the response.
   expect(card.querySelector(".teaching-scenario")!.textContent).toBe(
-    "2018 年起，USA 美国对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 3 个国家加征 25% 关税，其余 2 个国家未被加税。名单按这条规则由 ICIO 数据确定；美国是加税方，不在回归样本中。",
+    "2018 年起，USA 美国对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 3 个国家的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 25% 关税，服务业不加税；其余 2 个国家未被加税。名单按这条规则由 ICIO 数据确定；美国是加税方，不在回归样本中。",
   );
   // Three tiles: taxed, untaxed and the rate (the imposer is in the sentence, not a tile).
   const tiles = [...card.querySelectorAll(".teaching-tiles li")].map((tile) => tile.textContent);
@@ -417,12 +419,12 @@ test("card 1 tells the US tariff: one policy line, three tiles, what X is with C
   expect(card.querySelector(".teaching-tiles li.imposer")).toBeNull();
   // Then X, with CAN's industry mean worked through, and the chart under its own heading.
   expect([...card.querySelectorAll("h4")].map((h) => h.textContent)).toEqual([
-    "关税暴露 X：加税对一个国家×行业的冲击有多大", "3 个被加税国家的 X（从高到低）",
+    "关税暴露 X：一个国家×行业的出口有多少面对美国的新关税", "3 个被加税国家的 X（从高到低）",
   ]);
   const lines = [...card.querySelectorAll(".teaching-one-line")].map((line) => line.textContent);
-  expect(lines[0]).toBe("X = 首年对美出口份额 w × 加征税率 τ。对美出口份额越高，加税的冲击越大；未被加税的国家 τ = 0，所以 X = 0。");
+  expect(lines[0]).toBe("X = 首年对美出口份额 w × 加征税率 τ。w 是这个国家×行业 2016 年对美国的出口占它出口总额的比例，固定用加税前的这一年，加税后出口结构的变化不会反过来改变 X。对美出口份额越高，X 越大；未被加税的国家和所有服务业 τ = 0，所以 X = 0。");
   // The sample sentence: countries, country×industry units and records (rows from teaching-groups).
-  expect(lines[1]).toBe("每条是一个国家 2020 年各行业的平均 X。回归样本：5 国的 210 个国家×行业 × 5 年 = 10 条记录。");
+  expect(lines[1]).toBe("每条是一个国家 2020 年各货物行业的平均 X（服务业不加税，X = 0，不计入）。回归样本（货物和服务业都在内）：5 国的 210 个国家×行业 × 5 年 = 10 条记录。");
   expect(lines[2]).toContain("步骤 11–14 用每个国家×行业的 X 对照四类指标 Y");
   expect(card.querySelectorAll(CAN_CARD)).toHaveLength(1);
   expect(card.querySelectorAll(".teaching-x-card")).toHaveLength(1);
@@ -463,7 +465,7 @@ test("card 1's chart and CAN 算例 stay the same whatever example is chosen: un
   const canCard = () => document.querySelector(CAN_CARD)!.textContent!;
   const shown = canCard();
   expect(shown).toBe(
-    "算例：X = w × τCAN 加拿大 · 2020 年 · 44 个行业平均： X = 57.20% × 25% = 14.30 个百分点（即下图中 CAN 加拿大 的那一条）w = 首年（2016 年）对美出口份额，之后各年不变；同一国家各行业的 τ 相同，所以平均 X = 平均 w × τ。",
+    "算例：X = w × τCAN 加拿大 · 2020 年 · 34 个货物行业平均： X = 57.20% × 25% = 14.30 个百分点（即下图中 CAN 加拿大 的那一条）w = 首年（2016 年）对美出口份额，之后各年不变；同一国家各货物行业的 τ 相同，所以平均 X = 平均 w × τ（服务业不加税，不计入这个平均）。",
   );
   const chart = () => document.querySelector(".country-exposure")!.innerHTML;
   const shownChart = chart();
@@ -582,7 +584,7 @@ test("two countries not in the sample: plural wording in the one note under the 
   render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["CHN", "MEX"], teaching_industry: "O", teaching_example_chosen: true })} />);
   await waitFor(() => expect(document.querySelector(".reg-boundary[role=status]")).not.toBeNull());
   expect(document.querySelector(".reg-boundary[role=status]")!.textContent).toBe(
-    "CHN 中国、MEX 墨西哥 · O 公共管理与国防 不在回归样本里：这两个国家的这个行业在首年（2016 年）都缺少必要数据，回归没有用到它们。请换国家或行业。",
+    "CHN 中国、MEX 墨西哥 · O 公共管理与国防 不在回归样本里：这两个国家的这个行业在首年（2016 年）指标无法计算（例如没有出口或没有增加值），回归没有用到它们。请换国家或行业。",
   );
   expect(document.querySelectorAll(".reg-boundary")).toHaveLength(1);
   expect(document.querySelector(".teaching-x-reason")).toBeNull();
@@ -677,7 +679,7 @@ test("ISR · D outside the sample while ISR · S is recorded: one note, and the 
   await waitFor(() => expect(document.body.textContent).toContain("已记录的例子 · 五年趋势"));
   const notes = document.querySelectorAll(".reg-boundary");
   expect(notes).toHaveLength(1);
-  expect(notes[0].textContent).toMatch(/^ISR 以色列 · D .* 不在回归样本里：这个国家的这个行业在首年（2016 年）缺少必要数据，回归没有用到它。请换一个国家或行业。下面仍显示已记录的例子 ISR 以色列 · S /);
+  expect(notes[0].textContent).toMatch(/^ISR 以色列 · D .* 不在回归样本里：这个国家的这个行业在首年（2016 年）指标无法计算（例如没有出口或没有增加值），回归没有用到它。请换一个国家或行业。下面仍显示已记录的例子 ISR 以色列 · S /);
   const [isr] = summaryLines();
   expect(isr).toStartWith("ISR 以色列 · S");
   expect(isr).toContain("被加税：2020 年 X = w × τ = 20.00% × 25% = 5.00 个百分点");
@@ -762,6 +764,25 @@ test("after the report is submitted, an unconfirmed step 10 selection is kept as
   expect((screen.getByRole("combobox", { name: "对照国家（可选）" }) as HTMLSelectElement).value).toBe("CRI");
   await waitFor(() => expect(document.querySelector(".teaching-example-record")!.textContent).toContain("对比 MEX 墨西哥"));
   expect(save).not.toHaveBeenCalled();
+  groups.mockRestore();
+  series.mockRestore();
+  cleanup();
+});
+
+test("goods only: a taxed country's service industry reads as not taxed, with a hint to pick a goods industry", async () => {
+  const meta: Meta = { years: tenYears, countries: ["AUT", "CAN", "USA"], sectors: ["C29", "O"] };
+  const groups = tenGroups();
+  // CAN is on the taxed list, but O (public administration) is a service: τ stays 0, as for untaxed AUT.
+  const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.5, false)));
+  render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["CAN", "AUT"], teaching_industry: "O" })} />);
+  await waitFor(() => expect(document.querySelectorAll(".teaching-example-summary li")).toHaveLength(2));
+  const items = [...document.querySelectorAll(".teaching-example-summary li")].map((item) => item.textContent);
+  expect(items[0]).toContain("被加税国家，但服务业不加税：2020 年 X = w × τ = 50.00% × 0% = 0 个百分点");
+  expect(items[1]).toContain("未被加税：");
+  expect(document.querySelector(".teaching-example-hint")!.textContent).toBe(
+    "服务业不在加税范围内（美国只对货物行业 A–C 加税），所以任何国家这个行业的 X 都是 0；换一个货物行业（如 C29 汽车及零部件）才能看到加税带来的暴露。",
+  );
+  expect(document.body.textContent).toContain("服务业不加税：两国这个行业的 X 都为 0，没有差距");
   groups.mockRestore();
   series.mockRestore();
   cleanup();

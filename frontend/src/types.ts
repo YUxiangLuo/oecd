@@ -273,15 +273,19 @@ export interface TeachingCountriesResponse {
   untaxed_countries: number;
   /** The data rule that picks the taxed countries: a goods trade surplus with the market of at least
    * `min_million_usd` (million USD) in `year`. Servers before teaching data v7 omit it. */
-  taxed_rule?: { basis?: string; min_million_usd: number; year?: number } | null;
+  taxed_rule?: { basis?: string; min_million_usd: number; year?: number; scope?: string } | null;
   entities: number;
   /** Sorted from the highest mean exposure down; X is a fraction (0.23 = 23 percentage points). */
   countries: {
     country: string;
     taxed: boolean;
+    /** Mean and max X over the country's goods industries in the sample (the tariff falls on goods, v8). */
     mean_exposure: number;
     max_exposure: number;
+    /** All the country's industries in the sample, services included (their X is always 0). */
     industries: number;
+    /** Its goods industries (ICIO A–C) in the sample; absent before v8. */
+    goods_industries?: number;
     exposed_industries: number;
     /** Goods trade balance with the market in the rule's year, million USD (negative = deficit); absent before v7. */
     market_goods_surplus?: number | null;
