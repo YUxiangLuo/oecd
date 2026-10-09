@@ -46,6 +46,9 @@ function BootFailure({ title, message, note, primary, secondary }: {
   );
 }
 
+/** Tabs of the same browser tell each other about a logout (see logout in AppContent). */
+const LOGOUT_CHANNEL = "gvcsim-auth";
+
 export default function App() {
   // Outside every branch, so login, failure pages and both workspaces get it alike.
   return <><NarrowWindowNotice /><AppContent /></>;
@@ -142,7 +145,14 @@ function AppContent() {
     window.location.reload();
   }, []);
 
-  const logout = useCallback(() => {
+  // Logging out also logs out this account's other tabs in the same browser (a shared lab computer), each
+  // saving its own edits first; a tab logged out that way says why on the login form.
+  const logout = useCallback((fromOtherTab = false) => {
+    if (!fromOtherTab && user && typeof BroadcastChannel !== "undefined") {
+      const channel = new BroadcastChannel(LOGOUT_CHANNEL);
+      channel.postMessage({ type: "logout", username: user.username });
+      channel.close();
+    }
     let kept = false;
     void session.syncNow().catch(() => {
       // The next login in this tab puts the edits back.
@@ -153,7 +163,7 @@ function AppContent() {
       dropStepFromHistory(window.history, window.location.href);
       sessionStorage.setItem(LOGGED_OUT_HERE_KEY, "1");
       if (navigator.onLine) {
-        reloadLoggedOut();
+        reloadLoggedOut(fromOtherTab ? "已在另一个标签页退出登录。" : undefined);
         return;
       }
       // Offline a reload lands on the browser's own error page; show the login form in place instead.
@@ -166,6 +176,15 @@ function AppContent() {
       setUser(null);
     });
   }, [reloadLoggedOut, session, user]);
+
+  useEffect(() => {
+    if (!user || typeof BroadcastChannel === "undefined") return;
+    const channel = new BroadcastChannel(LOGOUT_CHANNEL);
+    channel.onmessage = (event: MessageEvent<{ type?: string; username?: string }>) => {
+      if (event.data?.type === "logout" && event.data.username === user.username) logout(true);
+    };
+    return () => channel.close();
+  }, [logout, user]);
 
   useEffect(() => {
     if (authAttempt > 0) setAuthCheckError(null);
@@ -341,7 +360,7 @@ function AppContent() {
         onRequestPasswordChange={() => setShowPasswordChange(true)}
         onClosePasswordChange={() => setShowPasswordChange(false)}
         onPasswordChanged={passwordChanged}
-        onLogout={logout}
+        onLogout={() => logout()}
       />
     );
   }
@@ -352,7 +371,7 @@ function AppContent() {
       message={fatal}
       note={`登录信息已保留。网络恢复后会自动重试，也可以点下方按钮再试。${bootAttempt > 0 ? `已重试 ${bootAttempt} 次。` : ""}`}
       primary={{ label: "重试加载", onClick: retryCourse }}
-      secondary={{ label: "退出登录", onClick: logout }}
+      secondary={{ label: "退出登录", onClick: () => logout() }}
     />
   );
   if (!stepsData || !metaReady || session.status === "loading") return <AppBootSkeleton />;
@@ -364,7 +383,7 @@ function AppContent() {
       message={session.syncError ?? "读取实验记录失败：暂时无法连接服务器"}
       note={`你的实验记录保存在服务器上，没有丢失。读取成功后才能继续；网络恢复后会自动重新读取。${session.loadAttempts > 0 ? `已重试 ${session.loadAttempts} 次。` : ""}`}
       primary={{ label: "重试读取", onClick: () => { recoverFocus.current = true; session.retryLoad(); } }}
-      secondary={{ label: "退出登录", onClick: logout }}
+      secondary={{ label: "退出登录", onClick: () => logout() }}
     />
   );
 
@@ -390,7 +409,7 @@ function AppContent() {
       onRequestPasswordChange={() => setShowPasswordChange(true)}
       onClosePasswordChange={() => setShowPasswordChange(false)}
       onPasswordChanged={passwordChanged}
-      onLogout={logout}
+      onLogout={() => logout()}
     />
   );
 }

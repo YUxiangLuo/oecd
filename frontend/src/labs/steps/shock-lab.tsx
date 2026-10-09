@@ -62,8 +62,8 @@ export function stepTenGapNote(taxed: boolean[], exposed: boolean[] = taxed, imp
   // A taxed country with no exports to the US (w = 0) has X = 0 like an untaxed one.
   if (exposed[0] !== exposed[1]) {
     return taxed[exposed.indexOf(false)]
-      ? "两国的差距就是加税那年起的 X：另一国虽被加税，但不向美国出口（w = 0），X 始终为 0"
-      : "两国的差距就是加税那年起的 X：未被加税国家始终为 0";
+      ? "两国差距的大小就是有暴露那一国加税那年起的 X：另一国虽被加税，但不向美国出口（w = 0），X 始终为 0"
+      : "两国差距的大小就是被加税国家加税那年起的 X：未被加税国家始终为 0";
   }
   if (!exposed[0]) {
     return taxed.some(Boolean)

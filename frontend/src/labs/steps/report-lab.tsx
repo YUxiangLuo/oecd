@@ -535,6 +535,9 @@ export function ReportLab({
   const writtenCount = REFLECTION_FIELDS.filter((field) => reflectionLength(String(reflection[field.key] ?? "")) >= field.min).length;
   // A paste beyond the limit is cut by the browser; say so instead of losing the end silently.
   const [pasteCut, setPasteCut] = useState<{ key: string; wide: boolean } | null>(null);
+  // A new report was generated from the text as it stands: the earlier paste's cut warning no longer applies.
+  const generatedAt = report?.generated_at;
+  useEffect(() => { setPasteCut(null); }, [generatedAt]);
   // A shortened insertion re-renders the field with a value the browser did not type, which puts the caret at
   // the end; put it back right after the kept part of the insertion.
   const caretAfterCut = useRef<{ key: string; value: string; caret: number } | null>(null);

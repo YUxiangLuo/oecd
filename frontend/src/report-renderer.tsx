@@ -962,7 +962,8 @@ function ReportLink({ node: _node, href, children, ...props }: ComponentPropsWit
       {...(external && text === href ? { "data-bare-url": "" } : {})}
       {...props}
     >
-      {children}
+      {/* The printed report underlines this span only, not the address it adds after the link. */}
+      <span className="report-link-text">{children}</span>
     </a>
   );
 }

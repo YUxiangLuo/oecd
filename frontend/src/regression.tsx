@@ -593,7 +593,8 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
   const examples: RegressionExample[] = exampleQuery.status === "success" && exampleQuery.data
     ? exampleCountries.flatMap((country): RegressionExample[] => {
       const row = exampleQuery.data!.rows.find((item) => item.country === country && item.year === lastYear);
-      const label = `${countryLabel(country)}·${sectorLabel(example.industry)}`;
+      // Word joiners keep "·" with the country, so a line never starts with "·C29".
+      const label = `${countryLabel(country)}\u2060·\u2060${sectorLabel(example.industry)}`;
       if (country === TARIFF_IMPOSER) return [{ label, x: 0, imposer: true }];
       return row ? [{ label, x: row.teaching_tariff_exposure, tau: row.teaching_tariff_rate_tau, w: row.teaching_export_share_w }] : [];
     })

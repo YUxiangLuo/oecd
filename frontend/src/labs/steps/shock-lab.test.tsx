@@ -195,9 +195,11 @@ test("step 10 can follow a single taxed country and records it alone", async () 
 
 
 test("the step 10 gap note matches whether the two countries were taxed", () => {
-  expect(stepTenGapNote([true, false])).toContain("就是加税那年起的 X");
+  expect(stepTenGapNote([true, false])).toContain("两国差距的大小就是被加税国家加税那年起的 X");
   expect(stepTenGapNote([true, true])).toContain("差距来自对美出口份额 w 的不同");
   expect(stepTenGapNote([false, false])).toContain("没有差距");
+  // The untaxed country as the example (gap negative) reads the same: the size of the gap, not its sign.
+  expect(stepTenGapNote([false, true])).toBe(stepTenGapNote([true, false]));
   expect(stepTenGapNote([true])).toBeUndefined();
 });
 
