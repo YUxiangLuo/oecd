@@ -21,9 +21,9 @@ const SEPARATOR_PATTERNS: Record<RosterSeparator, RegExp> = {
 };
 
 /**
- * The column separator of a pasted roster, decided once for the whole text: tab (copied from Excel), then
+ * The column separator of a pasted roster, decided for the whole text first: tab (copied from Excel), then
  * comma (CSV, half- or full-width), then two or more spaces, then a single space when every line is exactly
- * two words. Null otherwise.
+ * two words. Null otherwise. `parseRoster` asks again for a single line the shared separator does not split.
  */
 export function detectRosterSeparator(lines: readonly string[]): RosterSeparator | null {
   const trimmed = lines.map(stripInvisibleEdges);
@@ -44,6 +44,14 @@ function isRosterHeader(line: string) {
 function unquote(cell: string) {
   const value = stripInvisibleEdges(cell);
   return value.length >= 2 && value.startsWith("\"") && value.endsWith("\"") ? value.slice(1, -1) : value;
+}
+
+/** One line's cells; empty cells after the name (Excel copied one column too many) are dropped. */
+function splitRosterLine(line: string, separator: RosterSeparator | null) {
+  const cells = (separator ? stripInvisibleEdges(line).split(SEPARATOR_PATTERNS[separator]) : [line]).map(unquote);
+  while (cells.length > 2 && !cells[cells.length - 1]) cells.pop();
+  if (cells.length === 2 && !normalizeLabel(cells[1])) cells.pop();
+  return cells;
 }
 
 export const ROSTER_COLUMNS_MISSING = "没有识别出学号、姓名两列。请从 Excel 直接复制这两列，或每行写成“学号,姓名”。";
@@ -72,10 +80,16 @@ export function parseRoster(text: string) {
   let columnErrors = 0;
   const accounts: { username: string; display_name: string }[] = [];
   for (const { line, number } of rows) {
-    const cells = (separator ? stripInvisibleEdges(line).split(SEPARATOR_PATTERNS[separator]) : [line]).map(unquote);
-    // Empty cells after the name (Excel copied one column too many) are not an error.
-    while (cells.length > 2 && !cells[cells.length - 1]) cells.pop();
-    if (cells.length === 2 && !normalizeLabel(cells[1])) cells.pop();
+    let cells = splitRosterLine(line, separator);
+    // A roster pasted from several sources mixes separators (line 1 copied from Excel with a tab, line 2 typed
+    // with spaces): a line the shared separator does not split in two is read on its own.
+    if (cells.length !== 2) {
+      const own = detectRosterSeparator([line]);
+      if (own && own !== separator) {
+        const retried = splitRosterLine(line, own);
+        if (retried.length === 2) cells = retried;
+      }
+    }
     const [first, second] = swapped ? [cells[1], cells[0]] : [cells[0], cells[1]];
     const username = stripInvisibleEdges(first ?? "");
     const display_name = normalizeLabel(second ?? "");

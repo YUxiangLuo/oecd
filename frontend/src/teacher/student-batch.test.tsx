@@ -155,6 +155,16 @@ test("detects tab, comma, full-width comma and space separators", () => {
   expect(parseRoster("0012\t张三\t\n0013\t李 四\t")).toEqual(expected);
 });
 
+test("each line falls back to its own separator when the shared one does not split it", () => {
+  // Line 1 copied from Excel (tab), line 2 typed by hand (space).
+  expect(parseRoster("0012\t张三\n0013 李四")).toEqual([
+    { username: "0012", display_name: "张三" }, { username: "0013", display_name: "李四" },
+  ]);
+  expect(parseRoster("学号,姓名\n0012,张三\n0013\t李 四\n0014  王五")).toEqual([
+    { username: "0012", display_name: "张三" }, { username: "0013", display_name: "李 四" }, { username: "0014", display_name: "王五" },
+  ]);
+});
+
 test("any line naming 学号 and 姓名 is a header, and 姓名 first swaps the columns", () => {
   expect(parseRoster("班级名单 学号 姓名\n0012\t张三")).toEqual([{ username: "0012", display_name: "张三" }]);
   expect(parseRoster("姓名,学号\n张三,0012")).toEqual([{ username: "0012", display_name: "张三" }]);
@@ -163,7 +173,8 @@ test("any line naming 学号 and 姓名 is a header, and 姓名 first swaps the 
 
 test("one message when every line lacks its two columns, line numbers otherwise", () => {
   expect(() => parseRoster("学号 姓名\n0012 张 三\n0013 李 四\n0014 王 五")).toThrow(new Error(ROSTER_COLUMNS_MISSING));
-  expect(() => parseRoster("0012\t张三\n0013 李四")).toThrow(new Error("第 2 行：需要学号和姓名两列"));
+  // A line still unreadable on its own (three single-spaced words) is named by its number.
+  expect(() => parseRoster("0012\t张三\n0013 Li Si")).toThrow(new Error("第 2 行：需要学号和姓名两列"));
   expect(() => parseRoster(`0012\t${"名".repeat(61)}`)).toThrow(new Error("第 1 行：姓名不能超过 60 字"));
 });
 
