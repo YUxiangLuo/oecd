@@ -511,6 +511,19 @@ test("A = USA: the card says why it uses CAN, and the chart marks the recorded e
   cleanup();
 });
 
+test("while the example loads, the CAN card says so rather than switching silently", async () => {
+  const meta: Meta = { years: tenYears, countries: ["CAN", "CRI", "USA"], sectors: ["C29"] };
+  const groups = tenGroups();
+  const series = spyOn(api, "teachingSeries").mockImplementation(() => new Promise(() => {}));
+  render(<ShockLab meta={meta} step={step} state={tenState(undefined)} />);
+  await waitFor(() => expect(document.querySelector(".teaching-x-reason")?.textContent).toBe(
+    "你的例子的关税数据还在读取，所以这里用 CAN 加拿大 各行业的平均算。",
+  ));
+  groups.mockRestore();
+  series.mockRestore();
+  cleanup();
+});
+
 test("before anything is recorded, a marked country with no bar is named in the legend", () => {
   try {
     render(<CountryExposureChart data={countriesOverview} highlight={["USA", "CRI"]} />);

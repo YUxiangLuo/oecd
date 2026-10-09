@@ -275,6 +275,7 @@ export function ShockLab({ meta, step: _step, state }: {
       ? [`你的例子 ${names(untaxedRows.map((row) => row.country))} ${untaxedRows.length > 1 ? "都" : ""}未被加税，X 一直是 0`]
       : []),
     ...(query.status === "error" ? ["你的例子的关税数据没有读到"] : []),
+    ...(query.status === "loading" ? ["你的例子的关税数据还在读取"] : []),
   ];
   // The worked row is country B when A has no exposure (untaxed, taxed with w = 0, or the imposer): say so.
   const firstRow = lastRows.find((row) => row.country === first);
