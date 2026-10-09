@@ -301,6 +301,8 @@ export interface TeachingEstimate {
   status: string | null;
   suppress_inference: boolean;
   depvar_std: number | null;
+  /** SD of Y after removing each country×industry's level and each year's common change: the 个标准差 scale. */
+  depvar_within_std?: number | null;
   depvar_mean: number | null;
   n_obs: number | null;
 }
@@ -704,6 +706,8 @@ export interface RegressionResponse {
     r2_within: number | null;
     depvar_mean: number | null;
     depvar_std: number | null;
+    /** SD of Y after removing each country×industry's level and each year's common change: the 个标准差 scale. */
+    depvar_within_std?: number | null;
     diagnostics: {
       study_contract?: string;
       diagnostic_only?: boolean;

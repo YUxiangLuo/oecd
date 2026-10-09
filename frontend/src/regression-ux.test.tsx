@@ -47,7 +47,7 @@ const groups: TeachingGroupsResponse = {
 };
 const estimate = (key: string, label: string, coef: number, low: number, high: number, extra: Partial<TeachingEstimate> = {}): TeachingEstimate => ({
   key, label, kind: "share", default: false, coef, ci_low: low, ci_high: high, p: 0.001, status: "ok",
-  suppress_inference: false, depvar_std: 0.1, depvar_mean: 0.3, n_obs: 16000, ...extra,
+  suppress_inference: false, depvar_std: 0.1, depvar_within_std: 0.1, depvar_mean: 0.3, n_obs: 16000, ...extra,
 });
 const overview: TeachingOverviewResponse = {
   version: "v", disclaimer: "",
@@ -70,7 +70,7 @@ const savedRun = (baseline: string, label: string, coef = 0.5, low = 0.4, high =
   },
   result: {
     depvar: `teaching_y_trade_${baseline}`, n_obs: 100, n_entities: 20, n_times: 5, n_clusters: 10, r2_within: 0.2,
-    depvar_mean: 0.3, depvar_std: 0.1, diagnostics: { study_contract: "economics-v2" }, notes: [], status: "ok", status_reasons: [],
+    depvar_mean: 0.3, depvar_std: 0.1, depvar_within_std: 0.1, diagnostics: { study_contract: "economics-v2" }, notes: [], status: "ok", status_reasons: [],
     coefs: [{ name: "teaching_tariff_exposure", coef, se: 0.05, t: 10, p: 0.001, stars: "***", ci_low: low, ci_high: high }],
     support: { treated_clusters: 10, untreated_clusters: 0, treated_entities: 20, untreated_entities: 0, total_entities: 20, reversal_entities: [], reversal_share: 0, absorbing: true, status: "ok", reasons: [], min_treated_clusters: 5, max_reversal_share: 0, suppress_inference: false },
   },
@@ -429,10 +429,18 @@ describe("simple regression workbench", () => {
     expect(forwardShareIdentity(items.slice(0, 3))).toBeNull();
   });
 
+  test("个标准差 uses the within SD (after removing each unit's level and the year effect), not the pooled SD", () => {
+    // Pooled 0.58 vs within 0.038 (the release's step 13 default): the size is 0.0184 ÷ 0.038, about 0.48.
+    const { rows } = familyBarRows("length", [
+      estimate("PLv_GVC", "前向 GVC 段长度", -1.8414, -1.92, -1.76, { kind: "length", default: true, depvar_std: 0.58, depvar_within_std: 0.0383 }),
+    ], "PLv_GVC");
+    expect(rows[0].valueLabel).toBe("-0.0184（-0.48 个标准差）");
+  });
+
   test("steps 13 and 14 bars are in 个标准差 with the native value and unit; network labels drop their step 5 detail", () => {
     const length = familyBarRows("length", [
-      estimate("PLv_GVC", "前向 GVC 段长度", -1.8143, -1.9, -1.7, { kind: "length", default: true, depvar_std: 0.4 }),
-      estimate("GVCPs", "GVC 位置指数", -0.0768, -0.09, -0.06, { kind: "position", depvar_std: 0.05 }),
+      estimate("PLv_GVC", "前向 GVC 段长度", -1.8143, -1.9, -1.7, { kind: "length", default: true, depvar_within_std: 0.4 }),
+      estimate("GVCPs", "GVC 位置指数", -0.0768, -0.09, -0.06, { kind: "position", depvar_within_std: 0.05 }),
     ], "PLv_GVC");
     expect(length.unitTitle).toBe("X 每高 1 个百分点，Y 平均相差（个标准差）");
     expect(length.rows.map((row) => [row.sublabel, row.valueLabel])).toEqual([
@@ -441,8 +449,8 @@ describe("simple regression workbench", () => {
       ["无量纲", "-0.0008（-0.015 个标准差）"],
     ]);
     const network = familyBarRows("network", [
-      estimate("weighted_degree", "加权总度（入+出）", -4010.70, -4109.84, -3911.56, { kind: "network", default: true, depvar_std: 856 }),
-      estimate("betweenesscentrality", "网络介数（全正边二值）", -6011.39, -6400, -5600, { kind: "network", depvar_std: 1300, status: "insufficient", suppress_inference: true }),
+      estimate("weighted_degree", "加权总度（入+出）", -4010.70, -4109.84, -3911.56, { kind: "network", default: true, depvar_within_std: 856 }),
+      estimate("betweenesscentrality", "网络介数（全正边二值）", -6011.39, -6400, -5600, { kind: "network", depvar_within_std: 1300, status: "insufficient", suppress_inference: true }),
     ], "weighted_degree");
     expect(network.rows.map((row) => [row.label, row.valueLabel, row.uncertain])).toEqual([
       ["加权总度", "-40.11（-0.047 个标准差）", false],
@@ -456,9 +464,9 @@ describe("simple regression workbench", () => {
     // A shared count per chart printed step 12's -0.3949 as "-0.395" beside the headline's "-0.39"; now every bar reads
     // as its step's headline, even where one chart mixes decimals ("-0.0184", "-0.015", "-0.0006").
     const length = familyBarRows("length", [
-      estimate("PLv_GVC", "前向 GVC 段长度", -1.8414, -1.92, -1.76, { kind: "length", default: true, depvar_std: 0.58 }),
-      estimate("PLy_GVC", "后向 GVC 段长度", -1.5231, -1.62, -1.43, { kind: "length", depvar_std: 0.58 }),
-      estimate("GVCPs", "GVC 位置指数", -0.0612, -0.08, -0.04, { kind: "position", depvar_std: 0.17 }),
+      estimate("PLv_GVC", "前向 GVC 段长度", -1.8414, -1.92, -1.76, { kind: "length", default: true, depvar_within_std: 0.58 }),
+      estimate("PLy_GVC", "后向 GVC 段长度", -1.5231, -1.62, -1.43, { kind: "length", depvar_within_std: 0.58 }),
+      estimate("GVCPs", "GVC 位置指数", -0.0612, -0.08, -0.04, { kind: "position", depvar_within_std: 0.17 }),
     ], "PLv_GVC");
     expect(length.rows.map((row) => row.valueLabel)).toEqual([
       "-0.0184（-0.032 个标准差）", "-0.015（-0.026 个标准差）", "-0.0006（-0.004 个标准差）",
@@ -475,9 +483,9 @@ describe("simple regression workbench", () => {
     expect(production.rows[0].intervalLabel).toBe("[-0.42, -0.38] 个百分点");
     // Step 14: the degrees keep two decimals; closeness, too small for them, keeps two significant digits.
     const network = familyBarRows("network", [
-      estimate("weighted_degree", "加权总度（入+出）", -4080.37, -4158.54, -4002.2, { kind: "network", default: true, depvar_std: 856 }),
-      estimate("betweenesscentrality", "网络介数（全正边二值）", -6011.39, -6400, -5600, { kind: "network", depvar_std: 1300 }),
-      estimate("closnesscentrality", "接近中心性", -0.4884, -0.5045, -0.4722, { kind: "network", depvar_std: 0.11 }),
+      estimate("weighted_degree", "加权总度（入+出）", -4080.37, -4158.54, -4002.2, { kind: "network", default: true, depvar_within_std: 856 }),
+      estimate("betweenesscentrality", "网络介数（全正边二值）", -6011.39, -6400, -5600, { kind: "network", depvar_within_std: 1300 }),
+      estimate("closnesscentrality", "接近中心性", -0.4884, -0.5045, -0.4722, { kind: "network", depvar_within_std: 0.11 }),
     ], "weighted_degree");
     expect(network.rows.map((row) => row.valueLabel.split("（")[0])).toEqual(["-40.80", "-60.11", "-0.0049"]);
   });

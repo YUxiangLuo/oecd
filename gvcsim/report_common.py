@@ -21,9 +21,9 @@ _STEP_OUTCOMES = {
 # Keyed by the saved Y's kind, not its family: step 13 can use the GVC position index instead of a length.
 _KIND_DIMENSIONS = {
     "share": "份额（×100 = 百分点）",
-    "length": "长度单位（1 个长度单位约等于平均多经过 1 个生产环节）；另附标准差换算（标准差即 Y 在国家×行业之间的典型差距）",
-    "position": "无量纲（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（标准差即 Y 在国家×行业之间的典型差距）",
-    "network": "中心性原始单位（按真实网络指标的排名校准生成，不是步骤 5、9 的百万美元）；另附标准差换算（标准差即 Y 在国家×行业之间的典型差距）",
+    "length": "长度单位（1 个长度单位约等于平均多经过 1 个生产环节）；另附标准差换算（标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏）",
+    "position": "无量纲（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏）",
+    "network": "中心性原始单位（按真实网络指标的排名校准生成，不是步骤 5、9 的百万美元）；另附标准差换算（标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏）",
 }
 _STUDENT_METRIC_LABELS = {
     **{key: value["label"] for key, value in cast(dict[str, dict[str, Any]], INDICATOR_SCHEMA["fields"]).items()},
@@ -392,7 +392,8 @@ def _natural_effect(
         # deviations of Y as on the page ("-0.018 个长度单位（幅度约 0.031 个标准差）"); the sd size is unsigned,
         # the number before it carries the sign.
         # The position index has no unit ("无量纲"): its amounts are bare numbers, as on the page.
-        sd = result.get("depvar_std")
+        # The within SD (two-way demeaned Y), the variation the model uses, as on the page.
+        sd = result.get("depvar_within_std")
         positive_sd = float(sd) if isinstance(sd, (int, float)) and math.isfinite(sd) and float(sd) > 0 else None
         sd_bounds = (ci[0] * increment / positive_sd, ci[1] * increment / positive_sd) if ci and positive_sd else None
         sd_point = effect / positive_sd if positive_sd is not None else None

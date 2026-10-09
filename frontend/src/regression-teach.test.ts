@@ -24,7 +24,7 @@ function response(outcome: RegressionOutcome, coef: CoefStat): RegressionRespons
     },
     result: {
       depvar: "y", coefs: [coef], n_obs: 10, n_entities: 2, n_times: 5, n_clusters: 2, r2_within: 0.1,
-      depvar_mean: 1, depvar_std: 2, diagnostics: {}, notes: [],
+      depvar_mean: 1, depvar_std: 2, depvar_within_std: 2, diagnostics: {}, notes: [],
       status: "ok", status_reasons: [], support: null,
     },
     benchmark: {
@@ -126,10 +126,10 @@ describe("student-first regression reading", () => {
   test("steps 13 and 14 state their size the same way, in standard deviations, defined once", () => {
     const length = response("length", coefficient(-1.8414, -1.92, -1.76));
     length.design.depvar_kind = "length";
-    length.result.depvar_std = 0.58;
+    length.result.depvar_within_std = 0.58;
     const network = response("network", coefficient(-4010.7, -4109.84, -3911.56));
     network.design.depvar_kind = "network";
-    network.result.depvar_std = 856;
+    network.result.depvar_within_std = 856;
     const html = renderToStaticMarkup(createElement(RegressionEvidenceMatrix, {
       getStep: (step: number) => step === 13 ? { run: { design: length.design, result: length.result } }
         : step === 14 ? { run: { design: network.design, result: network.result } } : undefined,
@@ -143,7 +143,7 @@ describe("student-first regression reading", () => {
       .querySelectorAll("td")[3].textContent).toMatch(/^\[-0\.0192, -0\.0176\] 个长度单位/);
     expect(effect("14")).toBe("-40.11 个中心性原始单位（幅度约 0.047 个标准差）");
     expect(html).not.toContain("样本均值");
-    expect(html.match(/标准差即 Y 在国家×行业之间的典型差距/g)).toHaveLength(1);
+    expect(html.match(/标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏/g)).toHaveLength(1);
   });
 
 });
@@ -154,12 +154,12 @@ describe("RegressionSummaryBars", () => {
     trade.design.baseline = "DVAex_share";
     trade.design.baseline_label = "国内增加值出口占比";
     trade.design.depvar_kind = "share";
-    trade.result.depvar_std = 0.1;
+    trade.result.depvar_within_std = 0.1;
     const length = response("length", coefficient(-0.4, -0.5, -0.3));
     length.design.baseline = "GVCPs";
     length.design.baseline_label = "GVC 位置指数";
     length.design.depvar_kind = "position";
-    length.result.depvar_std = 0.2;
+    length.result.depvar_within_std = 0.2;
     const getStep = (step: number) => step === 11 ? { run: { design: trade.design, result: trade.result } }
       : step === 13 ? { run: { design: length.design, result: length.result } } : undefined;
     const { rows, missing } = regressionSummaryRows(getStep);

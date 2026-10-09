@@ -175,7 +175,9 @@ def within_ols(model: PreparedModel, prepared=None) -> RegressionResult:
     r2_within = float(1 - residual @ residual / total_ss)
     depvar_mean = float(model.data[model.depvar].mean())
     depvar_std = float(model.data[model.depvar].std())
-    require_finite("回归汇总统计量", r2_within, depvar_mean, depvar_std)
+    # y is already two-way demeaned: its SD is the within variation the slope is estimated from.
+    depvar_within_std = math.sqrt(total_ss / (len(y) - 1)) if len(y) > 1 else float("nan")
+    require_finite("回归汇总统计量", r2_within, depvar_mean, depvar_std, depvar_within_std)
     return RegressionResult(
         model.depvar,
         coefs,
@@ -192,4 +194,5 @@ def within_ols(model: PreparedModel, prepared=None) -> RegressionResult:
         support=support.to_dict() if support else None,
         sample_flow=model.sample_flow,
         binscatter=binned_scatter(X[:, 0], y, float(beta[0])) if names and names[0] in model.policy_xcols else None,
+        depvar_within_std=depvar_within_std,
     )

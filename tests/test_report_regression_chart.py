@@ -78,6 +78,9 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
         for key in ("coef", "ci_low", "ci_high"):
             assert row[key] == pytest.approx(coefficient[key], rel=1e-12, abs=1e-15)
         assert row["depvar_std"] == pytest.approx(result["depvar_std"], rel=1e-12)
+        assert row["depvar_within_std"] == pytest.approx(result["depvar_within_std"], rel=1e-12)
+        # The 个标准差 scale is the within SD (two-way demeaned Y), smaller than the pooled SD across units.
+        assert 0 < result["depvar_within_std"] < result["depvar_std"]
 
         section = sections[step]
         (chart,) = [json.loads(block) for block in CHART.findall(section)]
@@ -106,9 +109,9 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
                 f"[{_signed(coefficient['ci_low'], 2)}, " in table or f"[{_signed(coefficient['ci_low'], 3)}, " in table
             )
         else:
-            # Mixed units: standard deviations, SD = (β × 0.01) / depvar_std, with the native value first.
+            # Mixed units: standard deviations, SD = (β × 0.01) / depvar_within_std, with the native value first.
             assert chart["x_label"].endswith("（个标准差）")
-            std = result["depvar_std"]
+            std = result["depvar_within_std"]
             point = coefficient["coef"] * 0.01 / std
             bounds = (coefficient["ci_low"] * 0.01 / std, coefficient["ci_high"] * 0.01 / std)
             assert bar["value"] == pytest.approx(point, rel=1e-3)
@@ -131,7 +134,7 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
         for item, course in zip(chart["items"], overview["outcomes"][outcome]):
             if item.get("saved"):
                 continue
-            scale = 1.0 if course["kind"] == "share" else 0.01 / course["depvar_std"]
+            scale = 1.0 if course["kind"] == "share" else 0.01 / course["depvar_within_std"]
             assert item["value"] == pytest.approx(course["coef"] * scale, rel=1e-3)
         assert "其余 Y 由课程用同一份数据、同一模型计算，对所有学生相同" in section
         if outcome == "production":
@@ -154,7 +157,7 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
         )
         if outcome in ("length", "network"):
             assert (
-                "条长都换算成标准差（标准差即 Y 在国家×行业之间的典型差距），这样单位或量级差异较大的 Y 也能并列比较"
+                "条长都换算成标准差（标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏），这样单位或量级差异较大的 Y 也能并列比较"
                 in section
             )
             assert "放在一起比" not in section
@@ -178,7 +181,7 @@ def test_summary_chart_has_one_standardized_bar_per_saved_run(panel, overview):
     # The position index (step 13's saved Y here) is a ratio: its amount is a bare number.
     units = {"trade": " 个百分点", "production": " 个百分点", "length": "", "network": " 个中心性原始单位"}
     for item, run in zip(chart["items"], runs):
-        coefficient, std = run["result"]["coefs"][0], run["result"]["depvar_std"]
+        coefficient, std = run["result"]["coefs"][0], run["result"]["depvar_within_std"]
         point = coefficient["coef"] * 0.01 / std
         bounds = (coefficient["ci_low"] * 0.01 / std, coefficient["ci_high"] * 0.01 / std)
         assert item["value"] == pytest.approx(point, rel=1e-3)
@@ -196,7 +199,7 @@ def test_summary_chart_has_one_standardized_bar_per_saved_run(panel, overview):
 def test_uncertain_and_suppressed_bars_and_a_missing_overview():
     design = _design_info(RegressionDesign("production", teaching=True, baseline="3b_FGY_GVC_C_share"))
     coefficient = {"name": X_COLUMN, "coef": 0.007501, "ci_low": -0.0112, "ci_high": 0.0262}
-    result = {"status": "ok", "support": {"status": "ok"}, "depvar_std": 0.058, "coefs": [coefficient]}
+    result = {"status": "ok", "support": {"status": "ok"}, "depvar_within_std": 0.058, "coefs": [coefficient]}
     rows = [
         {
             "key": item.key,
@@ -207,7 +210,7 @@ def test_uncertain_and_suppressed_bars_and_a_missing_overview():
             "ci_high": -0.2,
             "status": "ok",
             "suppress_inference": False,
-            "depvar_std": 0.05,
+            "depvar_within_std": 0.05,
         }
         for item in BASELINES["production"]
     ]
@@ -240,19 +243,19 @@ def test_uncertain_and_suppressed_bars_and_a_missing_overview():
     assert not any("其余 Y" in line for line in alone)
     length = _design_info(RegressionDesign("length", teaching=True))
     length_coefficient = {"name": X_COLUMN, "coef": -1.8143, "ci_low": -1.9155, "ci_high": -1.7132}
-    length_result = {"status": "ok", "support": {"status": "ok"}, "depvar_std": 0.5819, "coefs": [length_coefficient]}
+    length_result = {"status": "ok", "support": {"status": "ok"}, "depvar_within_std": 0.5819, "coefs": [length_coefficient]}
     (bar,) = json.loads(family_chart(13, "length", length, length_result, length_coefficient, None)[1])["items"]
     assert bar["text"] == "-0.018（-0.031 个标准差）"
     assert bar["sub"] == "长度单位"
     # Without a recorded SD the bar is 0 and says so, after the native value (the page's "（没有标准差）").
     (bare,) = json.loads(
-        family_chart(13, "length", length, {**length_result, "depvar_std": None}, length_coefficient, None)[1]
+        family_chart(13, "length", length, {**length_result, "depvar_within_std": None}, length_coefficient, None)[1]
     )["items"]
     assert (bare["value"], bare["text"]) == (0.0, "-0.018（没有标准差）")
     summary = json.loads(
         summary_chart(
             {
-                13: {"outcome": "length", "design": length, "result": {**length_result, "depvar_std": None}},
+                13: {"outcome": "length", "design": length, "result": {**length_result, "depvar_within_std": None}},
                 12: {"outcome": "production", "design": design, "result": result},
             }
         )[1]
@@ -273,7 +276,7 @@ def test_interval_end_never_reads_as_the_estimate():
     assert distinct_digits(3, -0.0184, (-0.025, -0.012)) == 3
     length = _design_info(RegressionDesign("length", teaching=True))
     coefficient = {"name": X_COLUMN, "coef": -1.8414, "ci_low": -1.92, "ci_high": -1.76}
-    result = {"status": "ok", "support": {"status": "ok"}, "depvar_std": 0.58, "coefs": [coefficient]}
+    result = {"status": "ok", "support": {"status": "ok"}, "depvar_within_std": 0.58, "coefs": [coefficient]}
     _, effect, interval = _natural_effect("length", length, result, coefficient)
     assert effect.startswith("-0.0184 个长度单位") and interval.startswith("[-0.0192, -0.0176] 个长度单位")
     assert "约短 0.0184 个长度单位" in _association("length", length, coefficient, negative=True)
@@ -292,7 +295,7 @@ def _row(key: str, kind: str, coef: float, low: float, high: float, std: float) 
         "ci_high": high,
         "status": "ok",
         "suppress_inference": False,
-        "depvar_std": std,
+        "depvar_within_std": std,
     }
 
 
@@ -307,7 +310,7 @@ def test_each_bar_keeps_its_headline_digits_as_on_the_page():
         result = {
             "status": "ok",
             "support": {"status": "ok"},
-            "depvar_std": saved["depvar_std"],
+            "depvar_within_std": saved["depvar_within_std"],
             "coefs": [coefficient],
         }
         chart = json.loads(family_chart(step, outcome, design, result, coefficient, {"outcomes": {outcome: rows}})[1])

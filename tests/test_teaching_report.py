@@ -89,7 +89,7 @@ def test_report_step13_sizes_are_in_standard_deviations_like_step_14(kind, coef,
     _, rendered_effect, rendered_interval = teaching_report._natural_effect(
         "length",
         {"method": "twfe_intensity", "depvar_kind": kind},
-        {"status": "ok", "depvar_mean": 3.95, "depvar_std": std},
+        {"status": "ok", "depvar_mean": 3.95, "depvar_within_std": std},
         {"name": "teaching_tariff_exposure", "coef": coef, "ci_low": low, "ci_high": high},
     )
     assert rendered_effect == effect
@@ -111,7 +111,7 @@ def test_report_tiny_nonzero_numbers_and_standardized_effect_preserve_sign():
     _, effect, _ = teaching_report._natural_effect(
         "network",
         {"method": "twfe_intensity"},
-        {"status": "ok", "depvar_std": 2000},
+        {"status": "ok", "depvar_within_std": 2000},
         {"name": "tariff_shock", "coef": -690.746, "ci_low": -15099, "ci_high": 13718},
     )
     # The standard-deviation size is unsigned (the leading estimate carries the sign) but never rounds to 0.
@@ -122,7 +122,7 @@ def test_report_network_interval_in_standard_deviations_never_shows_equal_ends()
     _, effect, interval = teaching_report._natural_effect(
         "network",
         {"method": "twfe_intensity"},
-        {"status": "ok", "depvar_std": 856},
+        {"status": "ok", "depvar_within_std": 856},
         {"name": "teaching_tariff_exposure", "coef": -4010.70, "ci_low": -4109.84, "ci_high": -3911.56},
     )
     assert interval.endswith("（约 [-0.048, -0.046] 个标准差）")
@@ -617,7 +617,7 @@ def _ok_run(outcome: str, **design):
     payload.update(design)
     # Every run records Y's standard deviation (the step 13–15 bars are in standard deviations).
     depvar_std = {"trade": 0.09, "production": 0.05, "length": 0.58, "network": 853.0}.get(outcome, 1.0)
-    result = {"status": "ok", "n_obs": 4, "depvar_std": depvar_std, "coefs": [{"name": X_COLUMN, "coef": 0.0}]}
+    result = {"status": "ok", "n_obs": 4, "depvar_within_std": depvar_std, "coefs": [{"name": X_COLUMN, "coef": 0.0}]}
     return _sign_run({"design": payload, "result": result})
 
 
@@ -2331,7 +2331,7 @@ def _course_overview(**coefs: float) -> dict:
                     "ci_high": coefs.get(item.key, defaults[item.kind]) + abs(coefs.get(item.key, defaults[item.kind])) / 10,
                     "status": "ok",
                     "suppress_inference": False,
-                    "depvar_std": stds[item.kind],
+                    "depvar_within_std": stds[item.kind],
                 }
                 for index, item in enumerate(items)
             ]
@@ -2391,7 +2391,7 @@ def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(
     run["design"]["baseline"] = "GVCPs"
     run["result"]["coefs"][0]["coef"] = -0.4
     run["result"]["coefs"][0]["se"] = 0.01  # two clusters: a wide t(1) interval would otherwise cross 0
-    run["result"]["depvar_std"] = 0.17
+    run["result"]["depvar_within_std"] = 0.17
     _sign_run(run)
     from gvcsim import report_build
 
@@ -2442,11 +2442,11 @@ def test_technical_appendix_states_the_chosen_y_unit_not_the_family_unit():
         "result": {"status": "ok", "coefs": []},
     }
     lines = _run_sections([run])
-    assert "- 单位：无量纲（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（标准差即 Y 在国家×行业之间的典型差距）" in lines
+    assert "- 单位：无量纲（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏）" in lines
     assert "- 结果指标 Y：GVC 位置指数" in lines
     default = {**run, "design": {"depvar_label": "前向生产长度", "equation": "Y = βX + FE"}}
     assert (
-        "- 单位：长度单位（1 个长度单位约等于平均多经过 1 个生产环节）；另附标准差换算（标准差即 Y 在国家×行业之间的典型差距）"
+        "- 单位：长度单位（1 个长度单位约等于平均多经过 1 个生产环节）；另附标准差换算（标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏）"
         in _run_sections([default])
     )
 
@@ -2568,7 +2568,7 @@ def test_report_network_standardized_size_uses_three_decimals_below_point_one():
     _, effect, interval = teaching_report._natural_effect(
         "network",
         {"method": "twfe_intensity"},
-        {"status": "ok", "depvar_std": 1000},
+        {"status": "ok", "depvar_within_std": 1000},
         {"name": "teaching_tariff_exposure", "coef": -4590, "ci_low": -4800, "ci_high": -4300},
     )
     # Two decimals would read "幅度约 0.05" next to "约 [-0.05, -0.04]": the point on its interval's edge.
@@ -2577,7 +2577,7 @@ def test_report_network_standardized_size_uses_three_decimals_below_point_one():
     _, large, large_interval = teaching_report._natural_effect(
         "network",
         {"method": "twfe_intensity"},
-        {"status": "ok", "depvar_std": 100},
+        {"status": "ok", "depvar_within_std": 100},
         {"name": "teaching_tariff_exposure", "coef": -4590, "ci_low": -6000, "ci_high": -3000},
     )
     assert large.endswith("（幅度约 0.46 个标准差）") and large_interval.endswith("（约 [-0.60, -0.30] 个标准差）")
@@ -2594,7 +2594,7 @@ def _network_reading(coef: float, low: float, high: float, std: float) -> tuple[
     _, effect, interval = teaching_report._natural_effect(
         "network",
         {"method": "twfe_intensity"},
-        {"status": "ok", "depvar_std": std},
+        {"status": "ok", "depvar_within_std": std},
         {"name": X_COLUMN, "coef": coef, "ci_low": low, "ci_high": high},
     )
     return effect, interval
@@ -2779,7 +2779,7 @@ def test_report_appendix_groups_thousands_like_the_page_detail_table():
 
     result = {
         "status": "ok",
-        "depvar_std": 850,
+        "depvar_within_std": 850,
         "coefs": [
             {"name": X_COLUMN, "coef": -4080.37226, "se": 39.88, "p": 0.00001, "ci_low": -4158.542, "ci_high": -4002.2026}
         ],

@@ -70,7 +70,7 @@ export function regressionSummaryRows(getStep?: (step: number) => SiblingStepDat
     const suppressed = globalInferenceIsSuppressed(run.result.status, run.result.support);
     const figures = barFigures({
       coef: coefficient?.coef ?? null, ci_low: coefficient?.ci_low ?? null, ci_high: coefficient?.ci_high ?? null,
-      depvar_std: run.result.depvar_std ?? null, suppressed,
+      depvar_std: run.result.depvar_within_std ?? null, suppressed,
     }, depvarKind(family.outcome, run.design), "sd", true);
     rows.push({
       key: family.outcome,

@@ -8,7 +8,7 @@ export type EvidenceState = "negative" | "positive" | "insufficient" | "suppress
 export const INTERVAL_FIRST_MENTION = "95% 区间（真实系数的合理取值范围）";
 
 /** What a standard deviation of Y is, said once where a size in standard deviations first appears. */
-export const SD_DEFINITION = "标准差即 Y 在国家×行业之间的典型差距";
+export const SD_DEFINITION = "标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏";
 
 /** How a gap in Y is said: lengths are 长/短, everything else 高/低. */
 export function differenceWords(kind: DepvarKind): { higher: string; lower: string } {
@@ -193,6 +193,8 @@ export interface BarEstimate {
   ci_high: number | null;
   /** The global suppression rule (globalInferenceIsSuppressed): no interval is read or drawn. */
   suppressed: boolean;
+  /** The 个标准差 scale: the within SD of Y (after removing each country×industry's level and each year's common
+   * change), the variation the two-way model is estimated from — not the pooled SD across units. */
   depvar_std: number | null;
 }
 
@@ -311,7 +313,7 @@ function naturalScale(
   }
   // Lengths, the position index and centrality: the value in its own unit, with its size in standard deviations
   // (the unit both bar charts of steps 13 and 14 use), as the report states it.
-  const sd = response.result.depvar_std;
+  const sd = response.result.depvar_within_std ?? null;
   const validSd = typeof sd === "number" && Number.isFinite(sd) && sd > 0;
   const standardized = validSd ? effect / sd : null;
   const sdBounds: [number, number] | null = validSd && hasCi ? [ciLow / sd, ciHigh / sd] : null;

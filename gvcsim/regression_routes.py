@@ -274,6 +274,7 @@ def _estimate_overview(panel: Any) -> dict:
                     "status": info.get("status"),
                     "suppress_inference": bool(support.get("suppress_inference")),
                     "depvar_std": info.get("depvar_std"),
+                    "depvar_within_std": info.get("depvar_within_std"),
                     "depvar_mean": info.get("depvar_mean"),
                     "n_obs": info.get("n_obs"),
                 }

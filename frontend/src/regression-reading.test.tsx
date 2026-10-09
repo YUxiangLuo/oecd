@@ -10,7 +10,7 @@ afterEach(cleanup);
 function response(): RegressionResponse {
   return {
     design: { outcome: "trade", depvar: "y", depvar_label: "Y", granularity: "country_industry", shock_type: "tariff", shock_col: "teaching_tariff_exposure", treated_col: "", method: "twfe_intensity", control_mode: "none", interaction: false, price_mode: "nominal", scenario: "clean", weight_mode: "fixed_pretreatment", scenario_label: "教学", sample_filter: "排除 ROW", exclude_row: true, controls: [], control_labels: {}, equation: "Y = beta X + entity FE + year FE", equation_parts: [], panel_file: "teaching.csv", entity: "entity_id", cluster: "country" },
-    result: { depvar: "y", coefs: [{ name: "teaching_tariff_exposure", coef: 2, se: .5, t: 4, p: .001, stars: "***", ci_low: 1, ci_high: 3 }], n_obs: 100, n_entities: 20, n_times: 5, n_clusters: 10, r2_within: .2, depvar_mean: .3, depvar_std: .1, diagnostics: {}, notes: [], status: "ok", status_reasons: [], support: { treated_clusters: 10, untreated_clusters: 0, treated_entities: 20, untreated_entities: 0, total_entities: 20, reversal_entities: [], reversal_share: 0, absorbing: true, status: "ok", reasons: [], min_treated_clusters: 5, max_reversal_share: 0, suppress_inference: false } },
+    result: { depvar: "y", coefs: [{ name: "teaching_tariff_exposure", coef: 2, se: .5, t: 4, p: .001, stars: "***", ci_low: 1, ci_high: 3 }], n_obs: 100, n_entities: 20, n_times: 5, n_clusters: 10, r2_within: .2, depvar_mean: .3, depvar_std: .1, depvar_within_std: .1, diagnostics: {}, notes: [], status: "ok", status_reasons: [], support: { treated_clusters: 10, untreated_clusters: 0, treated_entities: 20, untreated_entities: 0, total_entities: 20, reversal_entities: [], reversal_share: 0, absorbing: true, status: "ok", reasons: [], min_treated_clusters: 5, max_reversal_share: 0, suppress_inference: false } },
     benchmark: { backend: "test", policy_coefs: [], max_abs_coef_diff: 0, max_abs_se_diff: 0, coef_check_passed: true, se_check_mode: "test", notes: [] },
     model_snapshot: { version: TEACHING_MODEL_VERSION, x_columns: ["teaching_tariff_exposure"], y_column: "y", entity: "entity_id", time: "year", fixed_effects: ["entity", "year"], controls: [], interactions: [], seed: 1, beta: 2, tariff_path: [], disclaimer: "教学" },
     variable_catalog: [], disclaimer: "教学",
@@ -46,7 +46,7 @@ describe("fixed teaching regression reading", () => {
     const network = response();
     network.design.depvar_kind = "network";
     Object.assign(network.result.coefs[0], { coef: -4080, ci_low: -4180, ci_high: -3980 });
-    network.result.depvar_std = 850;
+    network.result.depvar_within_std = 850;
     const dom = new DOMParser().parseFromString(renderToStaticMarkup(<RegressionResultCard outcome="network" response={network} />), "text/html");
     expect(dom.querySelector(".reg-unit-note")?.textContent).toBe("中心性原始单位：本步的 Y 是课程按真实网络指标的排名校准生成的数值，不是步骤 5、9 的百万美元，不能和那两步的数值直接比较。");
     expect(renderToStaticMarkup(<RegressionResultCard outcome="trade" response={response()} />)).not.toContain("reg-unit-note");
@@ -185,14 +185,14 @@ describe("fixed teaching regression reading", () => {
     data.design.depvar_kind = "length";
     Object.assign(data.result.coefs[0], { coef: -1.8186, ci_low: -1.9, ci_high: -1.7 });
     data.result.depvar_mean = 3.95;
-    data.result.depvar_std = 0.58;
+    data.result.depvar_within_std = 0.58;
     const { container } = render(<RegressionResultCard outcome="length" response={data} />);
     expect(container.querySelector(".reg-headline-main")?.textContent)
-      .toContain("前向 GVC 段长度平均短 0.018 个长度单位（幅度约 0.031 个标准差，标准差即 Y 在国家×行业之间的典型差距）");
+      .toContain("前向 GVC 段长度平均短 0.018 个长度单位（幅度约 0.031 个标准差，标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏）");
     expect(container.querySelector(".reg-interval-words")?.textContent).toContain("[-0.019, -0.017] 个长度单位；约 [-0.033, -0.029] 个标准差");
     expect(container.textContent).not.toContain("样本均值");
     // The definition is said once on the card.
-    expect(container.textContent?.match(/标准差即 Y 在国家×行业之间的典型差距/g)).toHaveLength(1);
+    expect(container.textContent?.match(/标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏/g)).toHaveLength(1);
   });
 
   test("the position index reads in standard deviations too", () => {
@@ -201,10 +201,10 @@ describe("fixed teaching regression reading", () => {
     data.design.depvar_kind = "position";
     data.design.baseline = "GVCPs";
     Object.assign(data.result.coefs[0], { coef: -0.21, ci_low: -0.30, ci_high: -0.12 });
-    data.result.depvar_std = 0.17;
+    data.result.depvar_within_std = 0.17;
     const { container } = render(<RegressionResultCard outcome="length" response={data} />);
     expect(container.querySelector(".reg-headline-main")?.textContent)
-      .toContain("平均低 0.0021（幅度约 0.012 个标准差，标准差即 Y 在国家×行业之间的典型差距）");
+      .toContain("平均低 0.0021（幅度约 0.012 个标准差，标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏）");
     // A ratio: no unit after its amounts, "无量纲" where a unit is named (as step 7 and the report say).
     expect(container.querySelector(".reg-interval-words")?.textContent).toContain("[-0.0030, -0.0012]；约 [");
     expect(container.textContent).not.toContain("位置指数单位");
@@ -244,7 +244,7 @@ describe("fixed teaching regression reading", () => {
     data.design.outcome = "length";
     data.design.depvar_kind = "length";
     Object.assign(data.result.coefs[0], { coef: -1.8414, ci_low: -1.92, ci_high: -1.76 });
-    data.result.depvar_std = 0.58;
+    data.result.depvar_within_std = 0.58;
     const card = render(<RegressionResultCard outcome="length" response={data} />);
     expect(card.container.querySelector(".reg-headline-main")?.textContent).toContain("0.0184 个长度单位");
     cleanup();
@@ -263,7 +263,7 @@ test("step 14's raw coefficients group thousands, as the report's appendix", () 
   data.design.outcome = "network";
   data.design.depvar_kind = "network";
   Object.assign(data.result.coefs[0], { coef: -4080.37226, ci_low: -4158.542, ci_high: -4002.2026, se: 39.88, t: -102.3 });
-  data.result.depvar_std = 850;
+  data.result.depvar_within_std = 850;
   const table = render(<RegressionCoefficientTable response={data} />);
   const cells = [...table.container.querySelectorAll("tbody td")].map((cell) => cell.textContent);
   expect(cells.slice(1, 6)).toEqual(["-40.80 个中心性原始单位", "-4,080.3723", "[-4,158.5420, -4,002.2026]", "39.8800", "-102.30"]);

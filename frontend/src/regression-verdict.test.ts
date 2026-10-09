@@ -22,7 +22,7 @@ function response(outcome: RegressionOutcome, coef: CoefStat, support: Treatment
     },
     result: {
       depvar: "y", coefs: [coef], n_obs: 10, n_entities: 2, n_times: 5, n_clusters: 2,
-      r2_within: 0.1, depvar_mean: 2, depvar_std: 2, diagnostics: {}, notes: [],
+      r2_within: 0.1, depvar_mean: 2, depvar_std: 2, depvar_within_std: 2, diagnostics: {}, notes: [],
       status: support?.status ?? "ok", status_reasons: support?.reasons ?? [], support,
     },
     benchmark: {
@@ -109,7 +109,7 @@ test("every regression status has safe display copy", () => {
 describe("network size in standard deviations (same digits as the report)", () => {
   const network = (coef: number, low: number, high: number, sd: number) => {
     const data = response("network", coefficient(coef, low, high));
-    data.result.depvar_std = sd;
+    data.result.depvar_within_std = sd;
     return buildRegressionVerdict("network", data);
   };
 
@@ -197,7 +197,7 @@ describe("bars repeat the headline's numbers", () => {
     expect(bar.intervalLabel).toBe("[-0.048, -0.046] 个标准差");
     expect(bar.value).toBeCloseTo(-0.04685, 5);
     const data = response("network", coefficient(-4010.70, -4109.84, -3911.56));
-    data.result.depvar_std = 856;
+    data.result.depvar_within_std = 856;
     expect(buildRegressionVerdict("network", data).effect).toMatch(/^-40\.11 个中心性原始单位（幅度约 0\.047 个标准差/);
     // Step 15 mixes units, so the native value names its unit.
     expect(barFigures(estimate(-0.5493, -0.5711, -0.5274, 0.05), "share", "sd", true).valueLabel).toBe("-0.55 个百分点（-0.110 个标准差）");

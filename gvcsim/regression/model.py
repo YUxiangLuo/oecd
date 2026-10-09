@@ -49,6 +49,9 @@ class RegressionResult:
     sample_flow: dict | None = None
     # Binned scatter of the within-transformed Y against X (steps 11–14 result chart); None when not computed.
     binscatter: dict | None = None
+    # The SD of Y after removing each entity's level and each year's common change (the variation the two-way
+    # model uses): the scale of every "个标准差" conversion. depvar_std stays the pooled SD, a descriptive only.
+    depvar_within_std: float | None = None
 
     def to_dict(self) -> dict:
         return {**self.__dict__, "coefs": [{**c.__dict__, "stars": c.stars} for c in self.coefs]}

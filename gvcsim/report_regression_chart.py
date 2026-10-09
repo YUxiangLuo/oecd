@@ -5,7 +5,7 @@ default first), from the course's fixed estimates of every Y (``_estimate_overvi
 from the saved run itself and marked 已保存, so the chart, the page and the step's table print the same numbers.
 Summary (frontend ``regressionSummaryRows``): one bar per step's saved run, all in standard deviations.
 Numbers and labels follow frontend ``barFigures``: shares in 个百分点 when every Y of the family is a share,
-otherwise 个标准差 = (β × 0.01) / depvar_std with the native value first ("-40.11（-0.047 个标准差）").
+otherwise 个标准差 = (β × 0.01) / depvar_within_std (the SD of the two-way-demeaned Y) with the native value first ("-40.11（-0.047 个标准差）").
 """
 
 from __future__ import annotations
@@ -159,7 +159,7 @@ def family_chart(
         "kind": _depvar_kind(outcome, design),
         "coef": coefficient.get("coef"),
         "ci": _saved_interval(result, coefficient),
-        "depvar_std": result.get("depvar_std"),
+        "depvar_std": result.get("depvar_within_std"),
     }
     entries: list[dict[str, Any]] = []
     for row in rows:
@@ -173,7 +173,7 @@ def family_chart(
                 "kind": str(row.get("kind") or "length"),
                 "coef": row.get("coef"),
                 "ci": _overview_interval(row),
-                "depvar_std": row.get("depvar_std"),
+                "depvar_std": row.get("depvar_within_std"),
             }
         )
     if not any(entry["saved"] for entry in entries):
@@ -212,7 +212,7 @@ def family_chart(
     }
     if standardized:
         chart["note"] = (
-            "条长都换算成标准差（标准差即 Y 在国家×行业之间的典型差距），这样单位或量级差异较大的 Y 也能并列比较；"
+            "条长都换算成标准差（标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏），这样单位或量级差异较大的 Y 也能并列比较；"
             "条旁先写原始单位的数值，括号里是标准差。"
         )
     lines = _chart_block(chart)
@@ -237,7 +237,7 @@ def family_chart(
 
 def summary_chart(qualified: dict[int, dict[str, Any]]) -> list[str]:
     """The step 15 summary: each step's saved run as one bar in standard deviations, SD = (β × 0.01) / that
-    run's depvar_std, with the native value and unit first."""
+    run's depvar_within_std (the SD of the two-way-demeaned Y), with the native value and unit first."""
     items: list[dict[str, Any]] = []
     missing: list[str] = []
     for step in sorted(_FAMILIES):
@@ -252,14 +252,14 @@ def summary_chart(qualified: dict[int, dict[str, Any]]) -> list[str]:
             _depvar_kind(run["outcome"], design),
             coefficient.get("coef"),
             _saved_interval(result, coefficient),
-            result.get("depvar_std"),
+            result.get("depvar_within_std"),
             standardized=True,
             with_unit=True,
         )
         items.append({"label": _y_label(run["outcome"], design), "sub": family, **bar})
     if not items:
         return []
-    note = "标准差即 Y 在国家×行业之间的典型差距；条形旁先写各步原始单位的数值（和上表相同），括号里是个标准差。"
+    note = "标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏；条形旁先写各步原始单位的数值（和上表相同），括号里是个标准差。"
     chart: dict[str, Any] = {
         "version": 1,
         "type": "diverging-bar",

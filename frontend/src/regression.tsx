@@ -397,7 +397,7 @@ const kindOf = (kind: string, outcome: RegressionOutcome): DepvarKind =>
 /** An overview row as a bar estimate: suppressed by the same rule as a run (status and support agree by construction). */
 function overviewEstimate(item: TeachingEstimate): BarEstimate {
   return {
-    coef: item.coef, ci_low: item.ci_low, ci_high: item.ci_high, depvar_std: item.depvar_std,
+    coef: item.coef, ci_low: item.ci_low, ci_high: item.ci_high, depvar_std: item.depvar_within_std ?? null,
     suppressed: globalInferenceIsSuppressed(item.status, { status: item.status as RegressionStatus, suppress_inference: item.suppress_inference }),
   };
 }
@@ -408,7 +408,7 @@ export function runEstimate(response: Pick<RegressionResponse, "design" | "resul
   const coefficient = response.result.coefs.find((item) => expected.includes(item.name)) ?? null;
   return {
     coef: coefficient?.coef ?? null, ci_low: coefficient?.ci_low ?? null, ci_high: coefficient?.ci_high ?? null,
-    depvar_std: response.result.depvar_std ?? null,
+    depvar_std: response.result.depvar_within_std ?? null,
     suppressed: globalInferenceIsSuppressed(response.result.status, response.result.support),
   };
 }
