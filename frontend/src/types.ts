@@ -261,6 +261,14 @@ export interface TeachingPanelResponse {
 
 export interface TeachingGroupPoint { year: number; change: number }
 
+/** Each group's mean change of a Y: `taxed` pools both waves; `first`/`second` are the waves (teaching data v10). */
+export interface TeachingGroupSeries {
+  taxed: TeachingGroupPoint[];
+  untaxed: TeachingGroupPoint[];
+  first?: TeachingGroupPoint[];
+  second?: TeachingGroupPoint[];
+}
+
 /** Taxed vs untaxed mean change of each simulated Y, relative to each group's pre-policy mean. */
 /** Step 10: every sample country's exposure X in the last year (the imposing market is not in the sample). */
 export interface TeachingCountriesResponse {
@@ -273,7 +281,14 @@ export interface TeachingCountriesResponse {
   untaxed_countries: number;
   /** The data rule that picks the taxed countries: a goods trade surplus with the market of at least
    * `min_million_usd` (million USD) in `year`. Servers before teaching data v7 omit it. */
-  taxed_rule?: { basis?: string; min_million_usd: number; year?: number; scope?: string } | null;
+  taxed_rule?: {
+    basis?: string; min_million_usd: number; year?: number; scope?: string; rate?: number;
+    /** Teaching data v10: the tariff starts in waves, by the size of the goods surplus. */
+    waves?: { wave: number; min_million_usd: number; start_year_offset: number }[];
+  } | null;
+  /** Teaching data v10: the start year of each wave present (the first is `policy_year`). */
+  policy_years?: number[];
+  waves?: { wave: number; start_year: number; min_million_usd: number; countries: number }[];
   entities: number;
   /** Sorted from the highest mean exposure down; X is a fraction (0.23 = 23 percentage points). */
   countries: {
@@ -289,6 +304,9 @@ export interface TeachingCountriesResponse {
     exposed_industries: number;
     /** Goods trade balance with the market in the rule's year, million USD (negative = deficit); absent before v7. */
     market_goods_surplus?: number | null;
+    /** Teaching data v10: 0 untaxed, 1 first wave, 2 second wave; and the year its tariff starts. */
+    wave?: number;
+    start_year?: number | null;
   }[];
 }
 
@@ -322,6 +340,8 @@ export interface TeachingGroupsResponse {
   version: string;
   years: number[];
   policy_year: number;
+  /** Teaching data v10: the start year of each tariff wave. */
+  policy_years?: number[];
   sample: {
     rows: number;
     entities: number;
@@ -329,16 +349,18 @@ export interface TeachingGroupsResponse {
     industries: number;
     taxed_countries: number;
     untaxed_countries: number;
+    first_wave_countries?: number;
+    second_wave_countries?: number;
   };
   /** Industries with at least one unit in the teaching panel (older servers omit it). */
   industries?: string[];
   /** Mean X of taxed-country units in the policy years (a proportion); β × it is the implied group gap. */
   mean_exposure_taxed?: number;
-  outcomes: Record<RegressionOutcome, { taxed: TeachingGroupPoint[]; untaxed: TeachingGroupPoint[] }>;
+  outcomes: Record<RegressionOutcome, TeachingGroupSeries>;
   /** Same-family Y choices per step (the default first); older servers omit it. */
   baselines?: Record<RegressionOutcome, TeachingBaselineOption[]>;
   /** Group trends of every baseline's Y, keyed by outcome then baseline key. */
-  series?: Record<RegressionOutcome, Record<string, { taxed: TeachingGroupPoint[]; untaxed: TeachingGroupPoint[] }>>;
+  series?: Record<RegressionOutcome, Record<string, TeachingGroupSeries>>;
 }
 
 export interface TeachingBaselineOption {
@@ -670,6 +692,8 @@ export interface RegressionDesignInfo {
   control_labels: Record<string, string>;
   equation: string;
   equation_parts: EquationPart[];
+  /** The model: X lags, controls (with lags) and fixed effects (teaching data v10; absent on older runs). */
+  spec?: ModelSpec | null;
   panel_file: string;
   entity: string;
   cluster: string;
@@ -726,6 +750,17 @@ export interface RegressionResponse {
     sample_flow?: RegressionSampleFlow | null;
     /** Binned scatter of the within-transformed Y against X; absent on older saved runs. */
     binscatter?: { bins: { x: number; y: number; n: number }[]; slope: number; transform: string } | null;
+    /** The X terms' summed coefficient (X + L1.X in the course model, teaching data v10): the step's headline. */
+    cumulative?: CoefStat | null;
+    /** The constant of a model without fixed effects. */
+    constant?: CoefStat | null;
+    /** Regressors left out: absorbed by a fixed effect, duplicating another, or all zero. */
+    omitted?: { name: string; reason: string; by: string | null }[];
+    r2?: number | null;
+    r2_adj?: number | null;
+    f_stat?: number | null;
+    f_df?: number[] | null;
+    f_p?: number | null;
   };
   benchmark: {
     backend: string;
@@ -840,4 +875,11 @@ export interface TeacherReport extends ClassroomReport {
   display_name: string;
   student_no: string;
   enrollments: ClassEnrollment[];
+}
+
+/** A regression model: which X terms (lags of X), which controls at which lag, which fixed effects. */
+export interface ModelSpec {
+  x_lags: number[];
+  controls: { name: string; lag: number }[];
+  fixed_effects: string[];
 }

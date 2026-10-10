@@ -19,10 +19,11 @@ import {
   withCountUnit,
   depvarKind,
   globalInferenceIsSuppressed,
+  headlineCoefficient,
   networkDigits,
   signed,
-  signedEffect,
   shownPerPoint,
+  termCoefficient,
   type BarEstimate,
 } from "./regression-verdict";
 import { workedNumbers } from "./labs/steps/shock-lab";
@@ -38,6 +39,7 @@ import type {
   Step,
   StepStateApi,
   TeachingEstimate,
+  TeachingGroupSeries,
   TeachingGroupsResponse,
   TeachingOverviewResponse,
   TeachingPanelResponse,
@@ -45,12 +47,14 @@ import type {
 import { TARIFF_IMPOSER, teachingExample, type TeachingExampleSelection } from "./teaching-example";
 import { userFacingRequestError } from "./user-facing-error";
 import { countryLabel, GroupChangeChart, sectorLabel } from "./viz";
+import type { GroupLine } from "./viz/regression/charts";
+import { TAXED, TAXED_LATER, UNTAXED } from "./viz/regression/palette";
 import { DivergingBarChart, type DivergingBarRow } from "./viz/regression/diverging-bars";
 import { ConfirmModal } from "./teacher/ui";
 import { NEGATIVE, POSITIVE, UNCERTAIN } from "./viz/regression/palette";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
-export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v8";
+export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v10";
 
 /** Reveal a freshly calculated verdict inside the course's scroll container (see content-scroll.ts). */
 export const scrollRegressionVerdict = scrollIntoCourseContent;
@@ -67,7 +71,7 @@ function DesignMeta({ design }: { design: RegressionDesignInfo }) {
     <div className="design-meta">
       {/* Same name as the Y list and the report ("加权总度"); the schema label's "（入+出）" is a step 5 detail. */}
       <span>结果指标 Y：{displayBaselineLabel(design.depvar_label)}</span>
-      <span>解释变量：关税暴露 X</span>
+      <span>解释变量：{explanatoryText(design)}</span>
       <span>数据：关税数据（国家×行业×年份）</span>
       <span>观察单位：{ENTITY_LABEL[design.entity] ?? design.entity}</span>
       <span>95% 区间按{ENTITY_LABEL[design.cluster] ?? design.cluster}计算（按{ENTITY_LABEL[design.cluster] ?? design.cluster}聚类）</span>
@@ -78,11 +82,39 @@ function DesignMeta({ design }: { design: RegressionDesignInfo }) {
   );
 }
 
-/** Column names in the saved equation shown as symbols: "teaching_y_trade_ijt" reads "Y_ijt". */
+/** Short names of the controls in the equation ("γ₁·汇率_it"). */
+const CONTROL_SYMBOLS: Record<string, string> = {
+  teaching_exchange_rate_change: "汇率",
+  log_gdp_proxy: "GDP",
+  export_intensity: "开放度",
+  manufacturing_va_share: "制造业占比",
+};
+
+/**
+ * Column names in the saved equation shown as symbols: "teaching_y_trade_ijt" reads "Y_ijt", "β₂·…_lag1_ijt" reads
+ * "β₂·L1.X_ijt", "γ₁·teaching_exchange_rate_change_it" reads "γ₁·汇率_it".
+ */
 export function equationSymbol(part: { text: string; term?: string }): string {
   if (part.term === "dependent") return part.text.replace(/^.*_(\w+)$/, "Y_$1");
-  if (part.term === "policy") return part.text.replace(/^β·.*_(\w+)$/, "β·X_$1");
+  if (part.term === "policy") {
+    const match = /^(β\S*)·teaching_tariff_exposure(?:_lag(\d))?_(\w+)$/.exec(part.text);
+    if (match) return `${match[1]}·${match[2] ? `L${match[2]}.X` : "X"}_${match[3]}`;
+    return part.text.replace(/^(β\S*)·.*_(\w+)$/, "$1·X_$2");
+  }
+  if (part.term === "control") {
+    // The unit index is the last "_it" (a control's own name has underscores too).
+    const match = /^(γ\S*)·(.+?)(?:__lag(\d))?_(it|ijt)$/.exec(part.text);
+    if (match) return `${match[1]}·${match[3] ? `L${match[3]}.` : ""}${CONTROL_SYMBOLS[match[2]] ?? match[2]}_${match[4]}`;
+  }
   return part.text;
+}
+
+/** "关税暴露 X、上一年的 X（L1.X）；控制变量：汇率变动" from the saved model; "关税暴露 X" for a single-X model. */
+export function explanatoryText(design: Pick<RegressionDesignInfo, "spec" | "control_labels">): string {
+  const lags = design.spec?.x_lags ?? [0];
+  const xs = lags.map((lag) => (lag === 0 ? "关税暴露 X" : lag === 1 ? "上一年的 X（L1.X）" : `${lag} 年前的 X（L${lag}.X）`));
+  const controls = Object.values(design.control_labels ?? {});
+  return `${xs.join("、")}${controls.length ? `；控制变量：${controls.join("、")}` : ""}`;
 }
 
 /** "α_ij" with its index as a subscript. */
@@ -105,7 +137,12 @@ function DesignEquation({ design }: { design: RegressionDesignInfo }) {
       {/* The five terms, always visible (a hover-only gloss went unnoticed). */}
       <ul className="model-eq-terms" aria-label="公式里各项的意思">
         <li><b>Y</b>：结果指标，本步是{yLabel}；i = 国家，j = 行业，t = 年份。</li>
-        <li><b>β·X</b>：X 是关税暴露（首年对美出口份额 w × 加征税率 τ）；β 就是要算的估计值：扣掉下面的 α 和 λ 之后，X 每高 1 个百分点，Y 平均相差多少。</li>
+        {(design.spec?.x_lags ?? [0]).includes(1)
+          ? <li><b>β₁·X 与 β₂·L1.X</b>：X 是当年的关税暴露（首年对美出口份额 w × 加征税率 τ），L1.X 是上一年的 X（加税前为 0）。关税的影响可能分两年显现，β₁ 是当年的关联，β₂ 是次年再出现的关联，两者之和是累计关联，即本步的主结果。</li>
+          : <li><b>β·X</b>：X 是关税暴露（首年对美出口份额 w × 加征税率 τ）；β 就是要算的估计值：扣掉下面的 α 和 λ 之后，X 每高 1 个百分点，Y 平均相差多少。</li>}
+        {Object.keys(design.control_labels ?? {}).length > 0 && (
+          <li><b>γ·控制变量</b>：{Object.values(design.control_labels ?? {}).join("、")}。它与加税同时变化、又与 Y 有关，放进模型是为了不把它的作用算到关税头上。</li>
+        )}
         <li><b>α</b>：每个国家×行业自己的平均水平，先扣掉。</li>
         <li><b>λ</b>：每一年所有国家×行业共同的变化，先扣掉。</li>
         <li><b>ε</b>：剩下的随机波动。</li>
@@ -203,9 +240,12 @@ export function RegressionResultCard({ outcome, response, examples = [], example
   // parenthetical sizes are unsigned already, as in the report). With an interval that includes 0 (or none
   // shown) the sign is not settled, so the signed estimate is given without 高/低.
   const unsignedEffect = verdict.effect.replace(/^[+−-]/, "");
+  // The course model has X and L1.X: the headline is their sum, the relation over the tariff's year and the next.
+  const twoYears = Boolean(response.result.cumulative);
   const plainResult = directional
-    ? `平均${verdict.state === "negative" ? words.lower : words.higher} ${unsignedEffect}`
-    : `平均相差 ${verdict.effect}，但高低方向不确定`;
+    ? `${twoYears ? "两年累计" : ""}平均${verdict.state === "negative" ? words.lower : words.higher} ${unsignedEffect}`
+    : `${twoYears ? "两年累计" : ""}平均相差 ${verdict.effect}，但高低方向不确定`;
+  const split = twoYears ? lagSplit(outcome, response) : null;
   // "外国增加值项占比平均低", but "GVC 位置指数 平均…" keeps a space after a Latin name.
   const metricGap = /[A-Za-z]$/.test(lesson.shortMetric) ? " " : "";
   const badgeColor = BADGE_COLORS[verdict.state];
@@ -226,6 +266,7 @@ export function RegressionResultCard({ outcome, response, examples = [], example
           <span className="reg-interval-words">{verdict.evidence}</span>
         </p>
       )}
+      {verdict.coefficient && split && <p className="reg-lag-split">{split}</p>}
       <ul className="reg-result-points">
         {!suppressed && verdict.coefficient && examples.length > 0 && (() => {
           // Only an example with X > 0 has a conversion, and only that conversion carries the interval's open
@@ -249,7 +290,7 @@ export function RegressionResultCard({ outcome, response, examples = [], example
                 // "与 X 相关的差异约为 -12.83 个百分点（Y 偏低）"; below the shown precision it reads "不到 0.01 个百分点".
                 // With an interval that includes 0 the sign is not settled, so 偏低/偏高 is left out and the open
                 // direction is said once, after the last conversion.
-                return <>{example.label} 的 X 为 {exampleXText(example)} 个百分点，按估计与 X 相关的差异{tiny ? "" : "约为 "}<b>{tiny ? effect : `${lower ? "-" : "+"}${effect}`}</b>{directional ? `（Y 偏${lower ? words.lower : words.higher}）` : ""}{verdict.state === "insufficient" && example === lastConverted ? "，但区间包含 0，差异的高低方向并不确定" : ""}</>;
+                return <>{example.label} 的 X 为 {exampleXText(example)} 个百分点，按估计{twoYears ? "两年累计" : ""}与 X 相关的差异{tiny ? "" : "约为 "}<b>{tiny ? effect : `${lower ? "-" : "+"}${effect}`}</b>{directional ? `（Y 偏${lower ? words.lower : words.higher}）` : ""}{verdict.state === "insufficient" && example === lastConverted ? "，但区间包含 0，差异的高低方向并不确定" : ""}</>;
               })()
               : example.service
                 ? <>{example.label} 是服务业，不在加税范围内（τ = 0）{zeroNote}</>
@@ -282,7 +323,26 @@ export function RegressionResultCard({ outcome, response, examples = [], example
 const fixed4 = (value: number) => groupedFixed(value, 4);
 
 /** Column names in the coefficient table, as the page names them (the code stays in the report appendix). */
-const COEFFICIENT_NAMES: Record<string, string> = { teaching_tariff_exposure: "关税暴露 X" };
+const COEFFICIENT_NAMES: Record<string, string> = {
+  teaching_tariff_exposure: "关税暴露 X（当年）",
+  teaching_tariff_exposure_lag1: "关税暴露 L1.X（上一年）",
+  teaching_tariff_exposure_lag2: "关税暴露 L2.X（两年前）",
+  teaching_exchange_rate_change: "汇率变动（控制变量）",
+  cumulative: "X 各项合计（累计关联）",
+};
+
+/**
+ * "其中当年 -0.33、次年再 -0.22 个百分点": the headline split over the tariff's year (X) and the next (L1.X), in the
+ * headline's units; null when the run has no L1.X.
+ */
+export function lagSplit(outcome: RegressionOutcome, response: Pick<RegressionResponse, "design" | "result">): string | null {
+  const current = termCoefficient(response, "teaching_tariff_exposure");
+  const previous = termCoefficient(response, "teaching_tariff_exposure_lag1");
+  if (!current || !previous) return null;
+  const now = teachingEffect(outcome, current.coef, response.design);
+  const next = teachingEffect(outcome, previous.coef, response.design);
+  return `其中当年 ${now}，次年再 ${next}（模型同时放入当年的 X 和上一年的 X，两项之和是累计关联）。`;
+}
 
 /**
  * The raw coefficients, with their scale said in the header: X is stored as a share (0.01 = 1 percentage
@@ -292,6 +352,7 @@ const COEFFICIENT_NAMES: Record<string, string> = { teaching_tariff_exposure: "�
 export function RegressionCoefficientTable({ response }: { response: RegressionResponse }) {
   const outcome = response.design.outcome;
   const display = chartDisplayScale(outcome, response.design);
+  const headline = headlineCoefficient(response);
   return (
     <ScrollableRegion className="table-wrap" label="完整回归系数表，可横向滚动">
       {/* Headers wrap and cells are narrower (workbench.css), so step 14's long numbers fit without clipping p 值. */}
@@ -305,7 +366,7 @@ export function RegressionCoefficientTable({ response }: { response: RegressionR
           <th>t 值</th>
           <th>p 值</th>
         </tr></thead>
-        <tbody>{response.result.coefs.map((coef) => {
+        <tbody>{[...response.result.coefs, ...(response.result.cumulative ? [response.result.cumulative] : [])].map((coef) => {
           const globallySuppressed = globalInferenceIsSuppressed(
             response.result.status, response.result.support,
           );
@@ -317,7 +378,8 @@ export function RegressionCoefficientTable({ response }: { response: RegressionR
             <tr key={coef.name}>
               <td>{COEFFICIENT_NAMES[coef.name] ?? coef.name}</td>
               {/* The headline's digits: with the interval it shows (none when suppressed), as the report's appendix. */}
-              <td>{coef.name === response.design.shock_col
+              {/* The headline's reading (the cumulative relation, or X itself in a single-X model) on its own row only. */}
+              <td>{coef === headline
                 ? teachingEffect(outcome, coef.coef, response.design, ciLow != null && ciHigh != null ? [ciLow, ciHigh] : null)
                 : "—"}</td>
               <td>{fixed4(coef.coef)}</td>
@@ -418,8 +480,8 @@ function overviewEstimate(item: TeachingEstimate): BarEstimate {
 
 /** A run's estimate of its X as a bar estimate (the saved or just computed run of the selected Y). */
 export function runEstimate(response: Pick<RegressionResponse, "design" | "result" | "model_snapshot">): BarEstimate {
-  const expected = response.model_snapshot?.x_columns ?? [response.design.shock_col];
-  const coefficient = response.result.coefs.find((item) => expected.includes(item.name)) ?? null;
+  // The headline: the cumulative relation of X and L1.X (teaching data v10), as the overview's bars.
+  const coefficient = headlineCoefficient(response);
   return {
     coef: coefficient?.coef ?? null, ci_low: coefficient?.ci_low ?? null, ci_high: coefficient?.ci_high ?? null,
     depvar_std: response.result.depvar_within_std ?? null,
@@ -490,25 +552,43 @@ export function stepMaterialChanged(
   return saved.size !== reported.size || [...saved].some((item) => !reported.has(item));
 }
 
-/**
- * The bracket's label on the 加税前后 chart, in the headline's digits for the Y's kind (estimateDigits): every network
- * Y reads "-147.12" and "-73.80" alike (by size they read "-147" and "-73.8"), grouped from 1,000.
- */
-export function gapLabel(kind: DepvarKind, shown: number): string {
-  return `回归估计的差距 ${withCountUnit(signedEffect(shown, kind), kind)}`;
+/** The 加税前后 chart's lines: the two tariff waves and the untaxed countries; a server before v10 sends one taxed group. */
+export function groupLines(series: TeachingGroupSeries): GroupLine[] {
+  if (series.first?.length || series.second?.length) {
+    return [
+      { key: "first", label: "第一批被加税", color: TAXED, points: series.first ?? [] },
+      { key: "second", label: "第二批被加税", color: TAXED_LATER, points: series.second ?? [], dashed: true },
+      { key: "untaxed", label: "未被加税", color: UNTAXED, points: series.untaxed },
+    ].filter((line) => line.points.length > 0);
+  }
+  return [
+    { key: "taxed", label: "被加税国家组", color: TAXED, points: series.taxed },
+    { key: "untaxed", label: "未被加税国家组", color: UNTAXED, points: series.untaxed },
+  ];
 }
 
+/** "2018 年第一批加税", "2019 年第二批加税"; a single start year reads "2018 年起加税". */
+export function waveMarkers(years: readonly number[]): { year: number; label: string }[] {
+  const names = ["第一批", "第二批", "第三批"];
+  return years.length > 1
+    ? years.map((year, index) => ({ year, label: `${year} 年${names[index] ?? `第 ${index + 1} 批`}加税` }))
+    : years.map((year) => ({ year, label: `${year} 年起加税` }));
+}
+
+/**
+ * Under the 加税前后 chart (teaching data v10): the raw gaps mix the tariff with the exchange-rate change of the same
+ * years, which the regression separates; said without telling which way, so the student still finds it in the
+ * workbench.
+ */
+export const GROUP_CHART_CAPTION = "图上各组的变化不全是关税造成的：同一时期还有其他变化（如汇率），回归在扣掉它们之后估计关税暴露 X 的关联，所以条形图的数字不必等于图上两条线的距离。";
+
 /** Under the 加税前后 chart: the premise the regression rests on, and how little the chart can show of it. */
-export function parallelTrendsNote(years: readonly number[], policyYear: number | null | undefined): string {
+export function parallelTrendsNote(years: readonly number[], policyYear: number | null | undefined, groups = 2): string {
   const before = policyYear == null ? [] : years.filter((year) => year < policyYear);
   const count = ["", "一", "两", "三", "四", "五"][before.length] ?? String(before.length);
   const pre = before.length ? `加税前只有 ${before.join("、")} ${count}年可看` : "加税前的年份很少";
-  return `这张图也用来看回归的前提：如果没有关税，两组的走势应大致平行。${pre}，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，这一前提由设计保证。`;
-}
-
-/** The line under the 加税前后 chart: what its dashed bracket is (β × the taxed group's mean X), as an association. */
-export function gapCaption(meanExposureTaxed: number): string {
-  return `虚线标出的差距 = 估计值 × 被加税组平均 X（${percentagePoints(meanExposureTaxed)} 个百分点；被加税国家的服务业不加税，X = 0，也计入这个平均），即按回归估计，加税后被加税组与未被加税组平均相差多少；它与两条线的实际距离接近但不必相同（回归按每个国家×行业自己的 X 计算，并扣掉各自的平均水平）。`;
+  const who = groups > 2 ? "各组" : "两组";
+  return `这张图也用来看回归的前提：如果没有关税，${who}的走势应大致平行。${pre}，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，这一前提由设计保证。`;
 }
 
 /** Step 14: weighted degree is in-degree + out-degree in every row (the report says the same under its chart). */
@@ -831,29 +911,20 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
           // display.scale converts β to "per 1 percentage point of X"; the chart shows Y levels, which need ×100
           // for shares (percentage points) and ×1 for lengths and centrality.
           const levelScale = display.scale * 100;
-          const coefficient = result ? runEstimate(result) : null;
-          const gap = coefficient?.coef != null && groups.mean_exposure_taxed != null && !coefficient.suppressed
-            ? coefficient.coef * groups.mean_exposure_taxed : null;
-          // The label is the headline's rounded estimate × the caption's rounded mean X, so it checks by hand.
-          const shown = gap == null || groups.mean_exposure_taxed == null ? 0
-            : shownPerPoint(outcome, { coef: coefficient!.coef!, ci_low: coefficient!.ci_low, ci_high: coefficient!.ci_high }, { depvar_kind: kind })
-              * Number(percentagePoints(groups.mean_exposure_taxed));
-          // The weak Y's interval includes 0: the gap's sign is not settled, as the verdict says.
-          const uncertain = coefficient?.ci_low != null && coefficient.ci_high != null && coefficient.ci_low <= 0 && coefficient.ci_high >= 0;
+          const lines = groupLines(series);
+          const markers = waveMarkers(groups.policy_years ?? [groups.policy_year]);
           return (
             <div className="reg-group-figure">
               <GroupChangeChart
                 years={groups.years}
-                policyYear={groups.policy_year}
-                taxed={series.taxed}
-                untaxed={series.untaxed}
+                markers={markers}
+                lines={lines}
                 scale={levelScale}
                 unit={display.unit ?? lesson.unit}
-                title={`加税前后：两组${latinGap}${lesson.shortMetric}的平均变化`}
-                estimate={gap == null ? null : { gap, label: gapLabel(kind, shown), uncertain }}
+                title={`加税前后：各组${latinGap}${lesson.shortMetric}的平均变化`}
               />
-              {gap != null && groups.mean_exposure_taxed != null && <p className="muted reg-gap-caption">{gapCaption(groups.mean_exposure_taxed)}</p>}
-              <p className="muted reg-parallel-note">{parallelTrendsNote(groups.years, groups.policy_year)}</p>
+              {lines.length > 2 && <p className="muted reg-gap-caption">{GROUP_CHART_CAPTION}</p>}
+              <p className="muted reg-parallel-note">{parallelTrendsNote(groups.years, groups.policy_year, lines.length)}</p>
             </div>
           );
         })()}

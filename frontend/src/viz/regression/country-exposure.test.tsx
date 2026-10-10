@@ -272,3 +272,13 @@ test("keyboard focus in the lower half puts the readout above the item, clear of
     cleanup();
   }
 });
+
+
+test("teaching data v10: a taxed country's readout says its wave and when its tariff starts", () => {
+  const row = {
+    country: "CAN", taxed: true, mean_exposure: 0.2, max_exposure: 0.4, industries: 44, goods_industries: 34,
+    exposed_industries: 34, market_goods_surplus: 47400, wave: 1, start_year: 2018,
+  };
+  expect(countryTipLines(row, 2020)).toContainEqual(["加税", "第一批，2018 年起"]);
+  expect(countryTipLines({ ...row, taxed: false, wave: 0, start_year: null }, 2020).some(([label]) => label === "加税")).toBe(false);
+});

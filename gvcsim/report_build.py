@@ -148,9 +148,21 @@ def _teaching_scenario(session: dict[str, Any]) -> tuple[dict[str, Any] | None, 
         return None, recorded
     scenario = {
         key: overview.get(key)
-        for key in ("market", "policy_year", "tariff_rate", "taxed_rule", "taxed_countries", "untaxed_countries")
+        for key in (
+            "market",
+            "policy_year",
+            "tariff_rate",
+            "taxed_rule",
+            "taxed_countries",
+            "untaxed_countries",
+            "waves",
+        )
     }
     scenario["taxed"] = {str(item["country"]): bool(item["taxed"]) for item in overview.get("countries", [])}
+    # Teaching data v10: when each taxed country's tariff starts (two waves).
+    scenario["start_year"] = {
+        str(item["country"]): item.get("start_year") for item in overview.get("countries", []) if item.get("start_year")
+    }
     compared = step_ten.get("compared")
     if observation is None or not isinstance(compared, list) or len(compared) != 2:
         return scenario, recorded

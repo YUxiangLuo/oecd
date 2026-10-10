@@ -101,7 +101,25 @@ describe("student-first regression reading", () => {
     expect(html).toContain("-0.020 个百分点");
     expect(html).not.toContain("</b><span>百分点</span>");
     // The column names the association, as the step pages do.
-    expect(html).toContain("<th>X 每高 1 个百分点，Y 平均相差</th>");
+    expect(html).toContain("<th>X 每高 1 个百分点，Y 两年累计平均相差</th><th>其中当年 / 次年</th>");
+  });
+
+  test("a saved run of the course model shows its cumulative relation and its split over the two years", () => {
+    // Teaching data v10: X and L1.X; the headline is their sum.
+    const run = response("trade", coefficient(-0.33, -0.35, -0.31));
+    run.result.coefs = [
+      { ...run.result.coefs[0] },
+      { ...run.result.coefs[0], name: "teaching_tariff_exposure_lag1", coef: -0.22, ci_low: -0.24, ci_high: -0.2 },
+    ];
+    run.result.cumulative = { ...run.result.coefs[0], name: "cumulative", coef: -0.55, ci_low: -0.57, ci_high: -0.53 };
+    const html = renderToStaticMarkup(createElement(RegressionEvidenceMatrix, {
+      getStep: (step: number) => step === 11 ? { run: { design: run.design, result: run.result } } : undefined,
+    }));
+    const dom = new DOMParser().parseFromString(html, "text/html");
+    const cells = [...[...dom.querySelectorAll("tbody tr")][0].querySelectorAll("td")].map((cell) => cell.textContent);
+    expect(cells[2]).toBe("-0.55 个百分点");
+    expect(cells[3]).toBe("-0.33 个百分点 / -0.22 个百分点");
+    expect(cells[4]).toBe("[-0.57, -0.53] 个百分点");
   });
 
   test("a weak Y whose interval includes 0 reads 方向不确定 with its signed estimate and interval", () => {
@@ -119,7 +137,9 @@ describe("student-first regression reading", () => {
     expect(cells[0]).toContain("后向复杂 GVC 生产份额");
     expect(cells[1]).toBe("方向不确定");
     expect(cells[2]).toBe("+0.30 个百分点");
-    expect(cells[3]).toBe("[-1.20, +1.80] 个百分点");
+    // A single-X run has no year split.
+    expect(cells[3]).toBe("—");
+    expect(cells[4]).toBe("[-1.20, +1.80] 个百分点");
     expect(html).not.toMatch(/方向明确|平均高|平均低/);
   });
 
@@ -140,7 +160,7 @@ describe("student-first regression reading", () => {
     // At 3 decimals the interval's upper end would read as the estimate ("-0.018" in "[-0.019, -0.018]"): one more.
     expect(effect("13")).toBe("-0.0184 个长度单位（幅度约 0.032 个标准差）");
     expect([...dom.querySelectorAll("tbody tr")].find((item) => item.querySelector("th")?.textContent === "13")!
-      .querySelectorAll("td")[3].textContent).toMatch(/^\[-0\.0192, -0\.0176\] 个长度单位/);
+      .querySelectorAll("td")[4].textContent).toMatch(/^\[-0\.0192, -0\.0176\] 个长度单位/);
     expect(effect("14")).toBe("-40.11 个中心性原始单位（幅度约 0.047 个标准差）");
     expect(html).not.toContain("样本均值");
     expect(html.match(/标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏/g)).toHaveLength(1);

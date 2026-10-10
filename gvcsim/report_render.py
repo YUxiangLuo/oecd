@@ -174,7 +174,14 @@ def _tax_status(country: str, scenario: dict[str, Any] | None) -> str | None:
     if country == MARKET:
         return "加征关税的一方"
     taxed = (scenario or {}).get("taxed", {}).get(country)
-    return None if taxed is None else "被加税" if taxed else "未被加税"
+    if taxed is None:
+        return None
+    if not taxed:
+        return "未被加税"
+    # Teaching data v10 taxes in two waves: say when this country's tariff starts.
+    start = (scenario or {}).get("start_year", {}).get(country)
+    waves = [wave for wave in (scenario or {}).get("waves") or [] if isinstance(wave, dict) and wave.get("countries")]
+    return f"被加税，{start} 年起" if len(waves) > 1 and isinstance(start, int) else "被加税"
 
 
 def _with_tax_status(country: str, scenario: dict[str, Any] | None) -> str:
@@ -202,6 +209,22 @@ def _scenario_line(scenario: dict[str, Any] | None) -> str | None:
     )
     # A space between 对 and a number ("对 2016 年"), none before 首年.
     space = " " if who[:1].isdigit() else ""
+    # Teaching data v10: two waves, the first for the largest surpluses (the page says the same on step 10).
+    waves = [wave for wave in scenario.get("waves") or [] if isinstance(wave, dict) and wave.get("countries")]
+    if rule.get("scope") and len(waves) > 1:
+        parts = "，".join(
+            (
+                f"对美货物顺差 ≥ {_yi_usd(float(wave['min_million_usd']))}的 {wave['countries']} 国"
+                if index == 0
+                else f"其余 {wave['countries']} 国"
+            )
+            + f" {wave['start_year']} 年起"
+            for index, wave in enumerate(waves)
+        )
+        return (
+            f"- 情景：美国分两批对{space}{who}的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 "
+            f"{_rate(float(rate) * 100)}% 关税：{parts}；服务业不加税；其余 {untaxed} 国未被加税。"
+        )
     # Teaching data v8 taxes goods only (the rule carries a scope); an older release taxed every industry.
     if rule.get("scope"):
         return (

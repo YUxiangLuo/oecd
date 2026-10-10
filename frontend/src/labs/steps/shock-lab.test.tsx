@@ -400,6 +400,35 @@ test("an exact zero X reads 0 next to a tiny one, not 0.00", async () => {
   cleanup();
 });
 
+test("teaching data v10: the policy line and the rate tile name the two waves, with each wave's start", async () => {
+  const waveOf = { CAN: 1, CRI: 2, BRN: 2 } as Record<string, number>;
+  countriesSpy.mockResolvedValue({
+    ...countriesOverview,
+    version: "step10-tariff-teaching-v10",
+    policy_years: [2018, 2019],
+    waves: [
+      { wave: 1, start_year: 2018, min_million_usd: 10000, countries: 1 },
+      { wave: 2, start_year: 2019, min_million_usd: 1000, countries: 2 },
+    ],
+    countries: countriesOverview.countries.map((row) => ({
+      ...row, wave: waveOf[row.country] ?? 0, start_year: { 1: 2018, 2: 2019 }[waveOf[row.country] ?? 0] ?? null,
+    })),
+  });
+  const meta: Meta = { years: tenYears, countries: ["CAN", "MEX", "USA"], sectors: ["C29"] };
+  tenGroups();
+  tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.5, country === "CAN")));
+  render(<ShockLab meta={meta} step={step} state={tenState(undefined)} />);
+  await waitFor(() => expect(document.querySelector(".teaching-tiles")).not.toBeNull());
+  expect(document.querySelector(".teaching-scenario")!.textContent).toBe(
+    "USA 美国分两批对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 3 个国家的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 25% 关税："
+      + "对美货物顺差 ≥ 100 亿美元的 1 个 2018 年起，其余 2 个 2019 年起；服务业不加税；其余 2 个国家未被加税。"
+      + "名单和批次都按这条规则由 ICIO 数据确定；美国是加税方，不在回归样本中。",
+  );
+  expect([...document.querySelectorAll(".teaching-tiles li")].at(-1)!.textContent).toBe("25%第一批 1 国 2018 年起、第二批 2 国 2019 年起的税率（此前为 0）");
+  expect(document.querySelector(".teaching-example-lead")!.textContent).toContain("看 X 从加税那年（第一批 2018 年、第二批 2019 年）起怎样从 0 上升");
+  cleanup();
+});
+
 test("card 1 tells the US tariff: one policy line, three tiles, what X is with CAN's worked mean, then one unmarked chart", async () => {
   const meta: Meta = { years: tenYears, countries: ["CAN", "MEX", "USA"], sectors: ["C29"] };
   const groups = tenGroups();

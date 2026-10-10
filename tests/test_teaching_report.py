@@ -2863,6 +2863,28 @@ def test_report_scenario_line_and_two_example_conversion_read_like_step_ten():
         "- 情景：美国从 2018 年起对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 44 国的货物（农业、采矿业和制造业，"
         "ICIO 行业 A–C）加征 25% 关税，服务业不加税；其余 32 国未被加税。"
     )
+    # Two waves (v10): the line names both, largest surpluses first, as step 10 does; each taxed country's start year.
+    waves = {
+        **goods,
+        "taxed_countries": 37,
+        "untaxed_countries": 38,
+        "waves": [
+            {"wave": 1, "start_year": 2018, "min_million_usd": 10000.0, "countries": 14},
+            {"wave": 2, "start_year": 2019, "min_million_usd": 1000.0, "countries": 23},
+        ],
+        "taxed": {"CAN": True, "MEX": True, "CRI": False},
+        "start_year": {"CAN": 2018, "MEX": 2019},
+    }
+    assert _scenario_line(waves) == (
+        "- 情景：美国分两批对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 37 国的货物（农业、采矿业和制造业，"
+        "ICIO 行业 A–C）加征 25% 关税：对美货物顺差 ≥ 100 亿美元的 14 国 2018 年起，其余 23 国 2019 年起；"
+        "服务业不加税；其余 38 国未被加税。"
+    )
+    assert _with_tax_status("MEX", waves) == f"{country_label('MEX')}（被加税，2019 年起）"
+    assert _with_tax_status("CRI", waves) == f"{country_label('CRI')}（未被加税）"
+    # One wave with countries (a small fixture) keeps the single-start sentence.
+    one = {**waves, "waves": [{**waves["waves"][0], "countries": 0}, waves["waves"][1]]}
+    assert _scenario_line(one) == _scenario_line(goods | {"taxed_countries": 37, "untaxed_countries": 38})
     service = {"country": "CAN", "industry": "O", X_COLUMN: 0.0, "teaching_tariff_rate_tau": 0.0}
     service_line = _example_conversion("trade", {}, {"coef": -0.55}, True, [service])
     assert service_line == (

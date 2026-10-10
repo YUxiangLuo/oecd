@@ -4,8 +4,8 @@ import { useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api";
 import {
-  degreeIdentity, exampleEffect, parallelTrendsNote, familyBarRows, forwardShareIdentity, gapLabel, groupedFixed, INTERRUPTED_RUN_NOTE, networkDigits, RegressionRequestError,
-  RegressionRunLab, scrollRegressionVerdict, stepMaterialChanged, TEACHING_MODEL_VERSION,
+  degreeIdentity, exampleEffect, parallelTrendsNote, familyBarRows, forwardShareIdentity, GROUP_CHART_CAPTION, groupedFixed, groupLines, INTERRUPTED_RUN_NOTE, lagSplit, waveMarkers, networkDigits, RegressionRequestError,
+  equationSymbol, RegressionResultCard, RegressionRunLab, scrollRegressionVerdict, stepMaterialChanged, TEACHING_MODEL_VERSION,
 } from "./regression";
 import type {
   RegressionOutcome, Step, StepStateApi, TeachingEstimate, TeachingGroupsResponse, TeachingOverviewResponse, TeachingPanelResponse,
@@ -24,15 +24,22 @@ const state: StepStateApi = {
   data: undefined, save: () => {}, complete: false, syncing: false, syncError: null, syncNow: () => {},
 };
 const meta = { countries: ["CAN", "MEX", "USA"], sectors: ["C29"] };
-const series = (taxed: number) => [2016, 2017, 2018, 2019, 2020].map((year, index) => ({ year, change: index < 2 ? 0 : taxed }));
+const series = (taxed: number, from = 2) => [2016, 2017, 2018, 2019, 2020].map((year, index) => ({ year, change: index < from ? 0 : taxed }));
+// Teaching data v10: two waves (2018, 2019) and the untaxed; `taxed` pools the waves.
+const waves = (taxed: number, untaxed: number) => ({
+  taxed: series(taxed), first: series(taxed), second: series(taxed / 2, 3), untaxed: series(untaxed),
+});
 const groups: TeachingGroupsResponse = {
-  version: "v", years: [2016, 2017, 2018, 2019, 2020], policy_year: 2018, mean_exposure_taxed: 0.03,
-  sample: { rows: 16220, entities: 3244, countries: 76, industries: 44, taxed_countries: 44, untaxed_countries: 32 },
+  version: "v", years: [2016, 2017, 2018, 2019, 2020], policy_year: 2018, policy_years: [2018, 2019], mean_exposure_taxed: 0.03,
+  sample: {
+    rows: 16000, entities: 3200, countries: 75, industries: 44, taxed_countries: 37, untaxed_countries: 38,
+    first_wave_countries: 14, second_wave_countries: 23,
+  },
   outcomes: {
-    trade: { taxed: series(-0.004), untaxed: series(0.003) },
-    production: { taxed: series(-0.003), untaxed: series(0.002) },
-    length: { taxed: series(-0.01), untaxed: series(0.01) },
-    network: { taxed: series(-40), untaxed: series(30) },
+    trade: waves(-0.004, 0.003),
+    production: waves(-0.003, 0.002),
+    length: waves(-0.01, 0.01),
+    network: waves(-40, 30),
   },
   baselines: {
     trade: [
@@ -42,7 +49,7 @@ const groups: TeachingGroupsResponse = {
     production: [], length: [], network: [],
   },
   series: {
-    trade: { FVA_share: { taxed: series(-0.004), untaxed: series(0.003) }, DVAex_share: { taxed: series(0.004), untaxed: series(-0.003) } },
+    trade: { FVA_share: waves(-0.004, 0.003), DVAex_share: waves(0.004, -0.003) },
     production: {}, length: {}, network: {},
   },
 };
@@ -122,11 +129,12 @@ describe("simple regression workbench", () => {
   test("shows the taxed vs untaxed comparison before the run and names the full sample on the button", async () => {
     const overviewCall = mockApis();
     render(<RegressionRunLab step={step} meta={meta} state={state} />);
-    const figure = await screen.findByRole("img", { name: /加税前后：两组外国增加值项占比的平均变化/ });
-    expect(figure.getAttribute("aria-label")).toContain("2018 年起加税");
-    expect(figure.textContent).toContain("被加税国家组");
-    expect(figure.textContent).toContain("未被加税国家组");
-    await waitFor(() => expect(screen.getByRole("button", { name: "计算贸易流回归（用全部 16,220 条记录）" })).toBeTruthy());
+    const figure = await screen.findByRole("img", { name: /加税前后：各组外国增加值项占比的平均变化/ });
+    expect(figure.getAttribute("aria-label")).toContain("2018 年第一批加税，2019 年第二批加税");
+    expect(figure.textContent).toContain("第一批被加税");
+    expect(figure.textContent).toContain("第二批被加税");
+    expect(figure.textContent).toContain("未被加税");
+    await waitFor(() => expect(screen.getByRole("button", { name: "计算贸易流回归（用全部 16,000 条记录）" })).toBeTruthy());
     expect(api.teachingSeries).toHaveBeenCalledWith(["CAN", "MEX"], "C29");
     // No bars and no reading cards before the run; the generated-data note is said already.
     expect(overviewCall).not.toHaveBeenCalled();
@@ -157,14 +165,14 @@ describe("simple regression workbench", () => {
     expect(screen.getByRole("group", { name: /X 每高 1 个百分点，Y 平均相差（个百分点）/ })).toBeTruthy();
     // Model and numbers are folded away.
     // (The 加税前后 chart's per-year table is folded under the chart.)
-    expect([...document.querySelectorAll("details > summary")].map((node) => node.textContent)).toEqual(["两组逐年读数", "模型设定", "详细数字（可选）"]);
+    expect([...document.querySelectorAll("details > summary")].map((node) => node.textContent)).toEqual(["各组逐年读数", "模型设定", "详细数字（可选）"]);
     fireEvent.click(screen.getByRole("button", { name: DVA_BAR }));
     await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高 0.56 个百分点"));
     expect(run.mock.calls[1][2]).toBe("DVAex_share");
     expect((saves[1].run as { design: { baseline: string } }).design.baseline).toBe("DVAex_share");
     expect(screen.getByRole("button", { pressed: true }).getAttribute("aria-label")).toBe(`${DVA_BAR}，已保存`);
     // The trend chart and the question follow the saved Y.
-    expect(screen.getByRole("img", { name: /加税前后：两组国内增加值出口占比的平均变化/ })).toBeTruthy();
+    expect(screen.getByRole("img", { name: /加税前后：各组国内增加值出口占比的平均变化/ })).toBeTruthy();
     expect(screen.getByRole("heading", { name: /国内增加值出口占比（Y）/ })).toBeTruthy();
     // Clicking the saved bar again does not run.
     fireEvent.click(screen.getByRole("button", { pressed: true }));
@@ -368,28 +376,33 @@ describe("simple regression workbench", () => {
     expect(stepMaterialChanged(12, { run: FVA() } as never, reported)).toBe(true);
   });
 
-  test("the 加税前后 chart says what its dashed gap is, and the gap reads with a space", async () => {
+  test("the 加税前后 chart draws the two waves and the untaxed, marks both tariff years and has no estimate bracket", async () => {
     mockApis();
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
-    await waitFor(() => expect(document.querySelector("[data-estimate-label]")).not.toBeNull());
-    // -0.5493 × 0.03 × 100 = -1.65 points.
-    expect(document.querySelector("[data-estimate-label]")?.textContent).toBe("回归估计的差距 -1.65 个百分点");
-    expect(document.querySelector(".reg-gap-caption")?.textContent)
-      .toBe("虚线标出的差距 = 估计值 × 被加税组平均 X（3.00 个百分点；被加税国家的服务业不加税，X = 0，也计入这个平均），即按回归估计，加税后被加税组与未被加税组平均相差多少；"
-        + "它与两条线的实际距离接近但不必相同（回归按每个国家×行业自己的 X 计算，并扣掉各自的平均水平）。");
-    // Under the chart, in its figure; association words only.
-    expect(document.querySelector(".reg-group-figure .reg-gap-caption")).not.toBeNull();
-    expect(document.querySelector(".reg-gap-caption")?.textContent).not.toMatch(/导致|影响|应拉开/);
+    await screen.findByRole("img", { name: /加税前后/ });
+    expect([...document.querySelectorAll("[data-line]")].map((node) => node.getAttribute("data-line"))).toEqual(["first", "second", "untaxed"]);
+    expect([...document.querySelectorAll("[data-marker] text")].map((node) => node.textContent)).toEqual(["2018 年第一批加税", "2019 年第二批加税"]);
+    // The raw gaps mix the tariff with what else changed: no bracket claims the regression's gap on the chart.
+    expect(document.querySelector("[data-estimate-label]")).toBeNull();
+    expect(document.querySelector(".reg-group-figure .reg-gap-caption")?.textContent).toBe(GROUP_CHART_CAPTION);
+    expect(GROUP_CHART_CAPTION).not.toMatch(/高估|低估|汇率.*(高|低)/);
   });
 
-  test("no gap, no caption: before the run the chart has neither", async () => {
+  test("before the run the chart and its caption are there too, with the premise for every group", async () => {
     mockApis();
     render(<RegressionRunLab step={step} meta={meta} state={state} />);
     await screen.findByRole("img", { name: /加税前后/ });
-    expect(document.querySelector("[data-estimate-label]")).toBeNull();
-    expect(document.querySelector(".reg-gap-caption")).toBeNull();
-    // The premise is said with or without a run.
-    expect(document.querySelector(".reg-parallel-note")?.textContent).toContain("如果没有关税，两组的走势应大致平行");
+    expect(document.querySelector(".reg-gap-caption")?.textContent).toBe(GROUP_CHART_CAPTION);
+    expect(document.querySelector(".reg-parallel-note")?.textContent).toContain("如果没有关税，各组的走势应大致平行");
+  });
+
+  test("a server before v10 still gets its two lines and one marker", () => {
+    const lines = groupLines({ taxed: series(-1), untaxed: series(1) });
+    expect(lines.map((line) => line.label)).toEqual(["被加税国家组", "未被加税国家组"]);
+    expect(waveMarkers([2018])).toEqual([{ year: 2018, label: "2018 年起加税" }]);
+    expect(waveMarkers([2018, 2019]).map((marker) => marker.label)).toEqual(["2018 年第一批加税", "2019 年第二批加税"]);
+    // The second wave is drawn dashed, so the two waves never differ by colour alone.
+    expect(groupLines(waves(-1, 1)).find((line) => line.key === "second")?.dashed).toBe(true);
   });
 
   test("the saved bar's tooltip says it is saved; the others say what a click does", async () => {
@@ -562,14 +575,25 @@ describe("simple regression workbench", () => {
     expect(groupedFixed(-0.0004, 2)).toBe("0.00");
   });
 
-  test("the 加税前后 bracket uses the headline's digits for every network Y", () => {
-    // Weighted degree read "-147" and weighted out-degree "-73.8": decimals by size.
-    expect(gapLabel("network", -147.1234)).toBe("回归估计的差距 -147.12 个中心性原始单位");
-    expect(gapLabel("network", -73.8)).toBe("回归估计的差距 -73.80 个中心性原始单位");
-    expect(gapLabel("network", -1147.1234)).toBe("回归估计的差距 -1,147.12 个中心性原始单位");
-    expect(gapLabel("network", -0.00491)).toBe("回归估计的差距 -0.0049 个中心性原始单位");
-    expect(gapLabel("share", -1.6512)).toBe("回归估计的差距 -1.65 个百分点");
-    expect(gapLabel("length", 0.0164)).toBe("回归估计的差距 +0.0164 个长度单位");
+  test("the course model's headline is the cumulative relation, split into the tariff's year and the next", () => {
+    const run = FVA();
+    const twoYear = {
+      ...run,
+      result: {
+        ...run.result,
+        coefs: [
+          { ...run.result.coefs[0], coef: -0.33, ci_low: -0.35, ci_high: -0.31 },
+          { ...run.result.coefs[0], name: "teaching_tariff_exposure_lag1", coef: -0.22, ci_low: -0.24, ci_high: -0.2 },
+          { ...run.result.coefs[0], name: "teaching_exchange_rate_change", coef: -0.005, ci_low: -0.006, ci_high: -0.004 },
+        ],
+        cumulative: { ...run.result.coefs[0], name: "cumulative", coef: -0.55, ci_low: -0.57, ci_high: -0.53 },
+      },
+    };
+    expect(lagSplit("trade", twoYear as never)).toBe("其中当年 -0.33 个百分点，次年再 -0.22 个百分点（模型同时放入当年的 X 和上一年的 X，两项之和是累计关联）。");
+    expect(lagSplit("trade", run as never)).toBeNull();
+    render(<RegressionResultCard outcome="trade" response={{ ...twoYear, benchmark } as never} />);
+    expect(screen.getByRole("heading", { level: 3 }).textContent).toContain("两年累计平均低 0.55 个百分点");
+    expect(document.querySelector(".reg-lag-split")?.textContent).toContain("其中当年 -0.33 个百分点");
   });
 
   test("step 14 says weighted degree is in + out once all three are in the family", () => {
@@ -656,4 +680,14 @@ describe("saving another Y from the bars", () => {
     render(<RegressionRunLab step={step} meta={meta} state={state} />);
     expect(screen.queryByText(INTERRUPTED_RUN_NOTE)).toBeNull();
   });
+});
+
+test("the model's equation reads its lagged X and its controls as symbols, not column names", () => {
+  expect(equationSymbol({ text: "teaching_y_trade_ijt", term: "dependent" })).toBe("Y_ijt");
+  expect(equationSymbol({ text: "β₁·teaching_tariff_exposure_ijt", term: "policy" })).toBe("β₁·X_ijt");
+  expect(equationSymbol({ text: "β₂·teaching_tariff_exposure_lag1_ijt", term: "policy" })).toBe("β₂·L1.X_ijt");
+  expect(equationSymbol({ text: "γ₁·teaching_exchange_rate_change_it", term: "control" })).toBe("γ₁·汇率_it");
+  expect(equationSymbol({ text: "γ₂·log_gdp_proxy__lag1_it", term: "control" })).toBe("γ₂·L1.GDP_it");
+  // The single-X model's wording is unchanged.
+  expect(equationSymbol({ text: "β·teaching_tariff_exposure_ijt", term: "policy" })).toBe("β·X_ijt");
 });

@@ -88,9 +88,13 @@ export function countryTipLines(row: CountryRow, year: number, rule?: TeachingCo
     ["", countryLabel(row.country)],
     [`${year} 年货物行业平均 X`, `${points(row.mean_exposure)} 个百分点`, row.taxed ? TAXED : UNTAXED],
     ...countryIndustryLines(row),
+    // Teaching data v10 taxes in two waves: when this country's tariff starts.
+    ...(row.taxed && row.wave && row.start_year ? [["加税", `${WAVE_NAMES[row.wave] ?? `第 ${row.wave} 批`}，${row.start_year} 年起`] as TipLine] : []),
     ...(balance ? [balance as TipLine] : []),
   ];
 }
+
+const WAVE_NAMES: Record<number, string> = { 1: "第一批", 2: "第二批" };
 
 /** About how tall the readout is (a 12px padding, about 19px a line), to place it above a focused item. */
 export function focusTipHeight(lines: readonly TipLine[]): number {

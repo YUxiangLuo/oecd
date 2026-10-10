@@ -4,7 +4,16 @@ import {
   lessonFor,
   REGRESSION_FAMILIES,
 } from "./regression-lessons";
-import { BAR_UNIT_TITLES, barFigures, buildRegressionVerdict, depvarKind, globalInferenceIsSuppressed, SD_DEFINITION } from "./regression-verdict";
+import {
+  BAR_UNIT_TITLES,
+  barFigures,
+  buildRegressionVerdict,
+  depvarKind,
+  globalInferenceIsSuppressed,
+  SD_DEFINITION,
+  teachingEffect,
+  termCoefficient,
+} from "./regression-verdict";
 import type { RegressionOutcome, RegressionResponse } from "./types";
 import { DivergingBarChart, type DivergingBarRow } from "./viz/regression/diverging-bars";
 
@@ -45,6 +54,16 @@ function familyRun(outcome: RegressionOutcome, getStep?: (step: number) => Sibli
   return data?.qualified_run ?? data?.run;
 }
 
+/** "-0.33 个百分点 / -0.22 个百分点": the saved run's X and L1.X, in the headline's units ("—" without L1.X). */
+export function lagParts(outcome: RegressionOutcome, saved: SavedRegression | undefined): string {
+  if (!saved?.design || !saved.result) return "—";
+  const response = { result: saved.result };
+  const current = termCoefficient(response, "teaching_tariff_exposure");
+  const previous = termCoefficient(response, "teaching_tariff_exposure_lag1");
+  if (!current || !previous) return "—";
+  return `${teachingEffect(outcome, current.coef, saved.design)} / ${teachingEffect(outcome, previous.coef, saved.design)}`;
+}
+
 export function familyVerdict(
   outcome: RegressionOutcome,
   getStep?: (step: number) => SiblingStepData | undefined,
@@ -66,7 +85,8 @@ export function regressionSummaryRows(getStep?: (step: number) => SiblingStepDat
       missing.push(`步骤 ${family.step} · ${family.family}`);
       continue;
     }
-    const coefficient = run.result.coefs[0] ?? null;
+    // The step's headline: the cumulative relation of X and L1.X (teaching data v10), else its X coefficient.
+    const coefficient = run.result.cumulative ?? run.result.coefs[0] ?? null;
     const suppressed = globalInferenceIsSuppressed(run.result.status, run.result.support);
     const figures = barFigures({
       coef: coefficient?.coef ?? null, ci_low: coefficient?.ci_low ?? null, ci_high: coefficient?.ci_high ?? null,
@@ -111,7 +131,7 @@ export function RegressionEvidenceMatrix({
       <div className="table-wrap" role="region" aria-label="四步结果汇总表，可横向滚动" tabIndex={0}>
         <table className="data-table reg-evidence-table">
           <thead>
-            <tr><th>步骤</th><th>指标类型</th><th>方向</th><th>X 每高 1 个百分点，Y 平均相差</th><th>95% 区间</th><th>解释限制</th></tr>
+            <tr><th>步骤</th><th>指标类型</th><th>方向</th><th>X 每高 1 个百分点，Y 两年累计平均相差</th><th>其中当年 / 次年</th><th>95% 区间</th><th>解释限制</th></tr>
           </thead>
           <tbody>
             {REGRESSION_FAMILIES.map((item) => {
@@ -124,6 +144,7 @@ export function RegressionEvidenceMatrix({
                   <td><b>{item.family}</b><span>{lesson.shortMetric}</span></td>
                   <td>{verdict ? (verdict.coefficient ? familyDirectionLabel(verdict.state) : "没算出估计值") : "还没计算"}</td>
                   <td><b>{verdict?.effectBrief ?? "—"}</b></td>
+                  <td>{lagParts(item.outcome, familyRun(item.outcome, getStep))}</td>
                   <td>{verdict?.interval ?? "—"}</td>
                   <td>{lesson.dontClaim}</td>
                 </tr>

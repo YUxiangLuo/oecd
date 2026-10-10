@@ -235,7 +235,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
           </ul>
           {openCards.shock && (
             <div className="intro-card-body" id={shockPanelId}>
-              <p>关税暴露 X 等于首年对美出口份额 w 乘以加征税率 τ；未被加税国家的 X 始终为 0。步骤 11–14 用同一个 X 对四个结果指标 Y 做回归。</p>
+              <p>关税暴露 X 等于首年对美出口份额 w 乘以加征税率 τ；美国分两批加税（2018、2019 年起），未被加税国家的 X 始终为 0。步骤 11–14 用同一个 X 对四个结果指标 Y 做回归。</p>
             </div>
           )}
         </div>

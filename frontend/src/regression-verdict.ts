@@ -348,12 +348,28 @@ function naturalScale(
   };
 }
 
+/**
+ * A run's headline estimate: the X terms' cumulative relation when the model has it (teaching data v10: X and L1.X,
+ * so the relation over the tariff's year and the next), else the single X coefficient.
+ */
+export function headlineCoefficient(
+  response: Pick<RegressionResponse, "design" | "result" | "model_snapshot">,
+): CoefStat | null {
+  if (response.result.cumulative) return response.result.cumulative;
+  const expected = response.model_snapshot?.x_columns ?? [response.design.shock_col];
+  return response.result.coefs.find((item) => expected.includes(item.name)) ?? null;
+}
+
+/** The coefficient of one term (X, L1.X, a control), or null when the model does not have it. */
+export function termCoefficient(response: Pick<RegressionResponse, "result">, name: string): CoefStat | null {
+  return response.result.coefs.find((item) => item.name === name) ?? null;
+}
+
 export function buildRegressionVerdict(
   outcome: RegressionOutcome,
   response: RegressionResponse,
 ): RegressionVerdict {
-  const expected = response.model_snapshot?.x_columns ?? [response.design.shock_col];
-  const coefficient = response.result.coefs.find((item) => expected.includes(item.name)) ?? null;
+  const coefficient = headlineCoefficient(response);
   const support = response.result.support;
   const reasons = [...new Set([
     ...(response.result.status_reasons ?? []), ...(support?.reasons ?? []),
