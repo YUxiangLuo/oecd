@@ -6,12 +6,26 @@ import pytest
 from scipy import stats
 
 from scripts import seed_full_journey as journey
+from gvcsim.regression.design import RegressionDesign
+from gvcsim.regression_routes import _design_info
 from gvcsim.report_gate import _table_comparison_complete, check_material_gate
-from gvcsim.regression.teaching import X_COLUMN, model_snapshot, variable_catalog
+from gvcsim.regression.teaching import EXCHANGE_RATE_COLUMN, X_COLUMN, X_LAG_COLUMNS, model_snapshot, variable_catalog
 
 
 def _result(status):
     stopped = status in {"insufficient", "invalid_design"}
+
+    def estimate(name, coef, se=0.025):
+        return {
+            "name": name,
+            "coef": coef,
+            "se": se,
+            "t": coef / se,
+            "p": None if stopped else float(2 * stats.t.sf(abs(coef / se), 3)),
+            "ci_low": None if stopped else float(coef - stats.t.ppf(0.975, 3) * se),
+            "ci_high": None if stopped else float(coef + stats.t.ppf(0.975, 3) * se),
+        }
+
     return {
         "status": status,
         "n_obs": 20,
@@ -26,17 +40,13 @@ def _result(status):
         "diagnostics": {
             "study_contract": "economics-v2",
         },
+        # The course model (data v10): X, L1.X and the exchange rate; the X terms' sum is the headline.
         "coefs": [
-            {
-                "name": X_COLUMN,
-                "coef": 0.1,
-                "se": 0.025,
-                "t": 4.0,
-                "p": None if stopped else float(2 * stats.t.sf(4, 3)),
-                "ci_low": None if stopped else float(0.1 - stats.t.ppf(0.975, 3) * 0.025),
-                "ci_high": None if stopped else float(0.1 + stats.t.ppf(0.975, 3) * 0.025),
-            }
+            estimate(X_COLUMN, 0.06),
+            estimate(X_LAG_COLUMNS[1], 0.04),
+            estimate(EXCHANGE_RATE_COLUMN, 0.01),
         ],
+        "cumulative": estimate("cumulative", 0.1),
     }
 
 
@@ -85,15 +95,8 @@ def api(monkeypatch):
         if path == "/api/regression/run":
             outcome = kwargs["payload"]["outcome"]
             return {
-                "design": {
-                    "outcome": outcome,
-                    "granularity": "country_industry",
-                    "shock_type": "tariff",
-                    "method": "twfe_intensity",
-                    "control_mode": "none",
-                    "interaction": False,
-                    "scenario": "clean",
-                },
+                # The design exactly as the run endpoint describes the course default model.
+                "design": _design_info(RegressionDesign(outcome, teaching=True)),
                 "result": deepcopy(state["results"].get(outcome, _result("ok"))),
                 "model_snapshot": model_snapshot(outcome),
                 "variable_catalog": variable_catalog(outcome),

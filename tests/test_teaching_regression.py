@@ -2,7 +2,22 @@ import pandas as pd
 import numpy as np
 import pytest
 
-from gvcsim.regression.teaching import BETAS, X_COLUMN, Y_COLUMNS, build_teaching_panel, model_snapshot
+from gvcsim.regression.spec import ModelSpec
+from gvcsim.regression.teaching import (
+    BETAS,
+    EXCHANGE_RATE_COLUMN,
+    VERSION,
+    WAVE_COLUMN,
+    X_COLUMN,
+    X_LAG_COLUMNS,
+    Y_COLUMNS,
+    build_teaching_panel,
+    model_snapshot,
+)
+
+# The single-X model with unit and year effects (the course model before data v10): tests about the sample flow and
+# the binned scatter use it, since they are about one regressor.
+SINGLE_X = ModelSpec((0,), (), ("country_industry", "year"))
 
 
 def _source(countries=("AAA", "BBB", "CCC", "DDD")) -> pd.DataFrame:
@@ -38,17 +53,33 @@ def _exposure(source):
     return pd.concat([frame, _goods_flows(sorted(source.country.unique()))], ignore_index=True)
 
 
-def _goods_flows(countries, surplus=lambda index: 1500.0 if index % 2 == 0 else -500.0):
-    """Goods flows with the USA (sector C10T12, not in the source panel): every other country has a surplus of
-    1,500 (taxed under the ≥ 1,000 rule), the rest a deficit (untaxed)."""
+def _goods_flows(countries, surplus=lambda index: (15000.0, 1500.0, -500.0)[index % 3]):
+    """Goods flows with the USA (sector C10T12, not in the source panel), in turn a surplus of 15,000 (first wave,
+    ≥ 10,000), of 1,500 (second wave, ≥ 1,000) and a deficit (untaxed)."""
     rows = []
     for index, country in enumerate(countries):
         balance = surplus(index)
         to_us, from_us = 2000.0, 2000.0 - balance
-        rows.append({"country": country, "sector": "C10T12", "imposer": "USA", "year": 2016,
-                     "export_exposure": 0.5, "bilateral_exports": to_us})
-        rows.append({"country": "USA", "sector": "C10T12", "imposer": country, "year": 2016,
-                     "export_exposure": 0.1, "bilateral_exports": from_us})
+        rows.append(
+            {
+                "country": country,
+                "sector": "C10T12",
+                "imposer": "USA",
+                "year": 2016,
+                "export_exposure": 0.5,
+                "bilateral_exports": to_us,
+            }
+        )
+        rows.append(
+            {
+                "country": "USA",
+                "sector": "C10T12",
+                "imposer": country,
+                "year": 2016,
+                "export_exposure": 0.1,
+                "bilateral_exports": from_us,
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -63,13 +94,22 @@ def test_teaching_panel_is_separate_reproducible_and_has_transparent_tariff_path
     assert set(Y_COLUMNS.values()).isdisjoint(source.columns)
     assert first.loc[first.year.isin([2016, 2017]), X_COLUMN].eq(0).all()
     assert set(first.teaching_tariff_rate_tau.unique()) == {0.0, 0.25}
+    # Two waves (v10): the first from 2018, the second from 2019; X is flat once a unit's wave has started.
+    start = first[WAVE_COLUMN].map({1: 2018, 2: 2019})
+    for wave, year in ((1, 2018), (2, 2019)):
+        rows = first.loc[first[WAVE_COLUMN].eq(wave) & first.industry.ne("S3")]
+        assert rows.loc[rows.year.lt(year), X_COLUMN].eq(0).all()
+        assert rows.loc[rows.year.ge(year)].groupby("entity_id")[X_COLUMN].nunique().eq(1).all()
     post = first.loc[first.year.ge(2018)]
-    assert post.groupby("entity_id")[X_COLUMN].nunique().eq(1).all()
-    # One rate per country on its goods industries (C1, C2); services (S3) are never taxed (v8).
-    goods = post.loc[post.industry.str[0].isin(["A", "B", "C"])]
+    # One rate per country on its goods industries (C1, C2) in the last year; services (S3) are never taxed (v8).
+    goods = first.loc[first.year.eq(2020) & first.industry.str[0].isin(["A", "B", "C"])]
     assert goods.groupby("country").teaching_tariff_rate_tau.nunique().eq(1).all()
     assert set(goods.teaching_tariff_rate_tau) == {0.0, 0.25}
     assert post.loc[post.industry.eq("S3"), ["teaching_tariff_rate_tau", X_COLUMN]].eq(0).all().all()
+    # Lags of X are the schedule's earlier rates times w: exact zeros before a unit's wave starts.
+    for lag, column in X_LAG_COLUMNS.items():
+        taxed = first.industry.ne("S3") & start.notna() & (first.year - lag).ge(start)
+        np.testing.assert_array_equal(first[column], first.teaching_export_share_w * 0.25 * taxed)
     assert first.groupby("entity_id")[X_COLUMN].max().eq(0).any()
     assert first.loc[first.industry.eq("C1"), "teaching_export_share_w"].eq(0.4).all()
     assert first.loc[first.industry.eq("S3"), "teaching_export_share_w"].eq(0.8).all()
@@ -103,13 +143,23 @@ def test_v2_preserves_randomization_and_halves_noise_without_changing_effects():
             noise = draw(f"{row.entity_id}|{row.year}", outcome) + draw(
                 f"{row.country}|{row.year}", f"cluster-{outcome}"
             )
+            # v10: 60% of the relation in the tariff's year, 40% the next; the exchange rate moves Y by
+            # −0.0095 × β per point (the tariff's direction).
+            effect = 0.6 * getattr(row, X_LAG_COLUMNS[0]) + 0.4 * getattr(row, X_LAG_COLUMNS[1])
             expected.append(
                 low
                 + span * baseline[row.entity_id]
-                + beta * row.teaching_tariff_exposure
+                + beta * effect
+                - 0.0095 * beta * getattr(row, EXCHANGE_RATE_COLUMN)
                 + scale * (noise + (row.year - 2018) * 0.2)
             )
         np.testing.assert_allclose(panel[Y_COLUMNS[outcome]], expected, rtol=1e-12, atol=1e-12)
+    # The exchange-rate change: uniform country × year noise with SD 1 point, minus 6 points for the first wave
+    # from 2018.
+    for row in panel.drop_duplicates(["country", "year"]).itertuples():
+        shift = -6.0 if getattr(row, WAVE_COLUMN) == 1 and row.year >= 2018 else 0.0
+        expected_rate = draw(f"{row.country}|{row.year}", "exchange-rate") * 3**0.5 + shift
+        assert getattr(row, EXCHANGE_RATE_COLUMN) == pytest.approx(expected_rate, abs=1e-12)
     # v6: the network family's fixed Y is weighted in-degree + out-degree, row by row.
     np.testing.assert_allclose(
         panel[Y_COLUMNS["network"]],
@@ -119,9 +169,11 @@ def test_v2_preserves_randomization_and_halves_noise_without_changing_effects():
         atol=1e-9,
     )
     snapshot = model_snapshot("trade")
-    assert snapshot["version"] == "step10-tariff-teaching-v8"
+    assert snapshot["version"] == "step10-tariff-teaching-v10"
     assert snapshot["randomization_version"] == "step10-tariff-teaching-v1"
-    assert snapshot["tariff_path"] == [0, 0, 0.25, 0.25, 0.25]
+    assert snapshot["tariff_rate"] == 0.25 and snapshot["lag_shares"] == [0.6, 0.4]
+    assert [wave["start_year_offset"] for wave in snapshot["taxed_rule"]["waves"]] == [2, 3]
+    assert snapshot["exchange_rate"]["first_wave_depreciation"] == -6.0
     assert teaching.SEED == 20260913
 
 
@@ -151,8 +203,8 @@ def test_prespecified_seed_family_recovers_relations_without_selecting_significa
                 panel, RegressionDesign(outcome, method="twfe_intensity", teaching=True)
             )
             assert benchmark["benchmark_passed"]
-            coefficient = next(coef for coef in result.coefs if coef.name == X_COLUMN)
-            estimates[outcome].append(coefficient.coef)
+            # The course model's headline: the cumulative relation of X and L1.X.
+            estimates[outcome].append(result.cumulative.coef)
     # Independent acceptance bounds around the declared experimental mechanisms.
     for outcome, expected, tolerance in (
         ("trade", -0.55, 0.08),
@@ -178,22 +230,34 @@ def test_benchmark_binds_exposure_bytes_and_generator_parameters(tmp_path):
     assert snapshot["randomization_version"] == "step10-tariff-teaching-v1"
     assert snapshot["beta"] == -0.55
     assert snapshot["calibration"] == (0.25, 0.30, 0.006)
+    assert first["model"] == {
+        "x_lags": [0, 1],
+        "controls": [{"name": EXCHANGE_RATE_COLUMN, "lag": 0}],
+        "fixed_effects": ["country_industry", "year"],
+    }
+    trade = first["summary"]["trade:FVA_share"]
+    assert trade["cumulative"]["target"] == -0.55
+    assert trade["x"]["target"] == pytest.approx(-0.33) and trade["lag1"]["target"] == pytest.approx(-0.22)
+    assert "trade:FVA_share" in first["independent_benchmark_checks"]
+    # Halving w halves X and its lag: with the same noise draws, every X-term error doubles exactly.
     exposure["export_exposure"] *= 0.5
     exposure.to_csv(path, index=False)
     second = evaluate(tmp_path, range(1000, 1001))
     assert first["source_panel_sha256"] == second["source_panel_sha256"]
     assert first["source_exposure"]["sha256"] != second["source_exposure"]["sha256"]
-    assert second["summary"]["flat_half_noise"]["trade"]["rmse"] == pytest.approx(
-        2 * first["summary"]["flat_half_noise"]["trade"]["rmse"]
+    assert second["summary"]["trade:FVA_share"]["cumulative"]["rmse"] == pytest.approx(
+        2 * first["summary"]["trade:FVA_share"]["cumulative"]["rmse"]
     )
 
 
 def test_snapshot_publishes_actual_columns_and_prespecified_parameters():
     snapshot = model_snapshot("network")
-    assert snapshot["x_columns"] == [X_COLUMN]
+    assert snapshot["x_columns"] == [X_COLUMN, X_LAG_COLUMNS[1]]
     assert snapshot["y_column"] == Y_COLUMNS["network"]
     assert snapshot["beta"] == BETAS["network"]
-    assert snapshot["controls"] == snapshot["interactions"] == []
+    assert snapshot["controls"] == [EXCHANGE_RATE_COLUMN] and snapshot["interactions"] == []
+    assert snapshot["fixed_effects"] == ["entity_id", "year"]
+    assert model_snapshot("network", spec=SINGLE_X)["x_columns"] == [X_COLUMN]
     assert "课程" in snapshot["disclaimer"] and "模拟" not in snapshot["disclaimer"]
 
 
@@ -243,7 +307,7 @@ def test_sample_flow_reconciles_exclusions_and_overlapping_missing_values(has_tr
     from gvcsim.regression.design import RegressionDesign
     from gvcsim.regression.model import prepare_design_model
 
-    design = RegressionDesign("trade", teaching=True)
+    design = RegressionDesign("trade", teaching=True, spec=SINGLE_X)
     frame = pd.DataFrame(
         {
             "country": ["ROW", "A", "B", "C", "D", "E"],
@@ -288,8 +352,9 @@ def test_group_trends_compare_taxed_and_untaxed_changes_against_their_own_pre_po
 
     panel = build_teaching_panel(_source(("AAA", "BBB", "CCC", "DDD", "EEE", "FFF")), _exposure(_source()))
     result = group_trends(panel)
-    taxed = panel.groupby("country").teaching_tariff_rate_tau.max().gt(0)
-    assert result["policy_year"] == 2018
+    wave = panel.groupby("country")[WAVE_COLUMN].max()
+    taxed = wave.gt(0)
+    assert result["policy_year"] == 2018 and result["policy_years"] == [2018, 2019]
     assert result["years"] == [2016, 2017, 2018, 2019, 2020]
     assert result["sample"] == {
         "rows": len(panel),
@@ -298,10 +363,18 @@ def test_group_trends_compare_taxed_and_untaxed_changes_against_their_own_pre_po
         "industries": 3,
         "taxed_countries": int(taxed.sum()),
         "untaxed_countries": int((~taxed).sum()),
+        "first_wave_countries": int(wave.eq(1).sum()),
+        "second_wave_countries": int(wave.eq(2).sum()),
     }
     assert result["industries"] == sorted(panel.industry.unique())
+    groups = (
+        ("first", wave[wave.eq(1)].index),
+        ("second", wave[wave.eq(2)].index),
+        ("untaxed", wave[wave.eq(0)].index),
+        ("taxed", taxed[taxed].index),
+    )
     for outcome, column in Y_COLUMNS.items():
-        for name, members in (("taxed", taxed[taxed].index), ("untaxed", taxed[~taxed].index)):
+        for name, members in groups:
             series = result["outcomes"][outcome][name]
             if not len(members):
                 assert series == []
@@ -324,7 +397,9 @@ def test_run_returns_a_binned_scatter_whose_bins_follow_the_estimate():
 
     source = _source(tuple(f"C{i:02}" for i in range(30)))
     panel = build_teaching_panel(source, _exposure(source), seed=29)
-    result, _benchmark = run_design_with_benchmark(panel, RegressionDesign("trade", teaching=True))
+    # The course model has three regressors: no single-regressor picture to draw.
+    assert run_design_with_benchmark(panel, RegressionDesign("trade", teaching=True))[0].binscatter is None
+    result, _benchmark = run_design_with_benchmark(panel, RegressionDesign("trade", teaching=True, spec=SINGLE_X))
     binscatter = result.binscatter
     assert binscatter is not None
     assert binscatter["transform"] == "twoway_demeaned"
@@ -358,6 +433,10 @@ def _full_source(countries=("AAA", "BBB", "CCC", "DDD")) -> pd.DataFrame:
     index = frame.industry.map({"C1": 1, "C2": 2, "S3": 3})
     frame["DVAex"] = frame.gross_exports * (0.5 + index / 20)
     frame["FDC"] = frame.gross_exports * (0.02 + index / 100)
+    # The other parts of gross exports (v10: they make the domestic-VA export share 1 − FVA share − their share).
+    frame["DVArt"] = frame.gross_exports * (0.01 + index / 200)
+    frame["DDC"] = frame.gross_exports * 0.02
+    frame["taxsub"] = frame.gross_exports * 0.01
     frame["SVA"] = 100 + index
     frame["3_VA_GVC_share"] = 0.2 + index / 100
     frame["3a_VA_GVC_S"] = 10 + index
@@ -399,19 +478,24 @@ def test_alternative_baselines_add_their_own_y_without_changing_the_family_defau
     snapshot = model_snapshot("trade", "DVAex_share")
     assert snapshot["baseline"] == "DVAex_share"
     assert snapshot["beta"] == 0.55 and snapshot["y_column"] == "teaching_y_trade_DVAex_share"
-    assert snapshot["baseline_kind"] == "share" and snapshot["version"] == "step10-tariff-teaching-v8"
+    assert snapshot["baseline_kind"] == "share" and snapshot["version"] == VERSION
     assert model_snapshot("trade")["baseline"] == "FVA_share"
     with pytest.raises(ValueError):
         model_snapshot("trade", "PLy_GVC")  # a length baseline is not in the trade family
     catalog = variable_catalog("length", "GVCPs")
-    assert catalog[1]["baseline"] == "GVCPs" and "位置" in catalog[1]["unit"]
-    assert variable_catalog("length")[1]["baseline"] == "PLv_GVC"
+    assert catalog[-1]["baseline"] == "GVCPs" and "位置" in catalog[-1]["unit"]
+    assert variable_catalog("length")[-1]["baseline"] == "PLv_GVC"
+    # v10: the domestic-VA export share is 1 − FVA share − the other parts' share, so the two stay below 1.
+    share = panel[Y_COLUMNS["trade"]] + panel["teaching_y_trade_DVAex_share"]
+    np.testing.assert_allclose(share, 1 - panel["teaching_y_trade_trade_rest_share"], atol=1e-12)
+    assert share.lt(1).all()
 
 
 def test_out_of_domain_alternative_source_leaves_only_that_y_missing_for_that_unit():
     full = _full_source()
     full.loc[full.entity_id.eq("AAA_C1"), "closnesscentrality"] = -1.0
-    full.loc[full.entity_id.eq("BBB_C2"), "DVAex"] = np.nan
+    # The domestic-VA export share follows the other parts' share (v10), so a unit without them has no such Y.
+    full.loc[full.entity_id.eq("BBB_C2"), "DVArt"] = np.nan
     panel = build_teaching_panel(full, _exposure(full))
     assert panel.entity_id.nunique() == 12
     closeness = "teaching_y_network_closnesscentrality"
@@ -464,11 +548,10 @@ def test_design_with_an_alternative_baseline_runs_and_recovers_its_own_relation(
     assert "teaching_y_production_1_VA_D_share_ijt" in design.equation()
     result, benchmark = run_design_with_benchmark(panel, design)
     assert benchmark["benchmark_passed"]
-    coefficient = result.coefs[0]
+    coefficient = result.cumulative
     assert coefficient.ci_low is not None and coefficient.ci_low > 0  # the implied relation is positive
     # v6: 纯国内 = 1 − 简单 GVC − 复杂 GVC − 传统贸易, so its relation is −(−0.30 − 0.40 − 0.30) = 1.0.
     assert abs(coefficient.coef - 1.00) < 0.1
-    assert result.binscatter is not None and result.binscatter["slope"] == coefficient.coef
     # The default design is untouched and a cross-family or observed-panel choice is refused.
     assert RegressionDesign("production", teaching=True).baseline == "3b_VA_GVC_C_share"
     with pytest.raises(ValueError):
@@ -527,7 +610,7 @@ def test_estimate_overview_matches_a_single_run_for_every_baseline():
         for item in items:
             # The bar for each Y is the same estimate the run endpoint saves for that Y.
             result, _ = run_design_with_benchmark(panel, RegressionDesign(outcome, teaching=True, baseline=item["key"]))
-            coef = result.to_dict()["coefs"][0]
+            coef = result.to_dict()["cumulative"]
             assert item["coef"] == pytest.approx(coef["coef"])
             assert item["ci_low"] == pytest.approx(coef["ci_low"]) and item["ci_high"] == pytest.approx(coef["ci_high"])
 
@@ -539,19 +622,93 @@ def test_taxed_countries_are_those_with_a_first_year_goods_surplus_with_the_mark
     source = _source(countries)
     exposure = _exposure(source)
     # Services flows (sector not A–C) and later years do not count towards the goods surplus.
-    exposure = pd.concat([exposure, pd.DataFrame([
-        {"country": "BBB", "sector": "G", "imposer": "USA", "year": 2016, "export_exposure": 0.1, "bilateral_exports": 9e9},
-        {"country": "BBB", "sector": "C10T12", "imposer": "USA", "year": 2017, "export_exposure": 0.1, "bilateral_exports": 9e9},
-    ])], ignore_index=True)
+    exposure = pd.concat(
+        [
+            exposure,
+            pd.DataFrame(
+                [
+                    {
+                        "country": "BBB",
+                        "sector": "G",
+                        "imposer": "USA",
+                        "year": 2016,
+                        "export_exposure": 0.1,
+                        "bilateral_exports": 9e9,
+                    },
+                    {
+                        "country": "BBB",
+                        "sector": "C10T12",
+                        "imposer": "USA",
+                        "year": 2017,
+                        "export_exposure": 0.1,
+                        "bilateral_exports": 9e9,
+                    },
+                ]
+            ),
+        ],
+        ignore_index=True,
+    )
     surplus = market_goods_surplus(exposure, 2016)
-    assert surplus.to_dict() == {"AAA": 1500.0, "BBB": -500.0, "CCC": 1500.0, "DDD": -500.0}
+    assert surplus.to_dict() == {"AAA": 15000.0, "BBB": 1500.0, "CCC": -500.0, "DDD": 15000.0}
     panel = build_teaching_panel(source, exposure)
     taxed = panel.groupby("country").teaching_tariff_rate_tau.max().gt(0)
     assert taxed.to_dict() == {country: surplus[country] >= TAXED_SURPLUS_MIN for country in countries}
     assert panel.groupby("country")[SURPLUS_COLUMN].first().to_dict() == surplus.to_dict()
+    # Waves by the size of the surplus: ≥ 10,000 first (from 2018), ≥ 1,000 second (from 2019).
+    assert panel.groupby("country")[WAVE_COLUMN].first().to_dict() == {"AAA": 1, "BBB": 2, "CCC": 0, "DDD": 1}
 
 
 def test_teaching_panel_refuses_exposure_without_bilateral_flows():
     source = _source()
     with pytest.raises(ValueError, match="双边出口额"):
         build_teaching_panel(source, _exposure(source).drop(columns="bilateral_exports"))
+
+
+def test_hidden_identity_parts_are_neither_offered_nor_runnable():
+    from gvcsim.regression.design import RegressionDesign
+    from gvcsim.regression.teaching import baseline_options, selectable_baselines
+
+    assert [item.key for item in selectable_baselines("trade")] == ["FVA_share", "DVAex_share"]
+    assert [option["key"] for option in baseline_options("trade")] == ["FVA_share", "DVAex_share"]
+    with pytest.raises(ValueError):
+        RegressionDesign("trade", teaching=True, baseline="trade_rest_share")
+
+
+def test_build_check_reports_out_of_domain_values_and_trade_shares_above_gross_exports():
+    from gvcsim.regression.teaching import generated_problems
+
+    full = _full_source()
+    panel = build_teaching_panel(full, _exposure(full))
+    assert generated_problems(panel) == []
+    broken = panel.copy()
+    broken.loc[0, Y_COLUMNS["network"]] = -1.0
+    broken.loc[1, "teaching_y_trade_DVAex_share"] = 0.99
+    problems = generated_problems(broken)
+    assert any(Y_COLUMNS["network"] in problem for problem in problems)
+    assert any("超过 1" in problem for problem in problems)
+
+
+def test_country_overview_reports_each_country_wave_and_start_year():
+    from gvcsim.regression.teaching import country_exposure_overview
+
+    source = _source(tuple(f"C{i:02}" for i in range(9)))
+    overview = country_exposure_overview(build_teaching_panel(source, _exposure(source)))
+    assert overview["policy_years"] == [2018, 2019]
+    assert [(wave["wave"], wave["start_year"], wave["countries"]) for wave in overview["waves"]] == [
+        (1, 2018, 3),
+        (2, 2019, 3),
+    ]
+    for item in overview["countries"]:
+        expected = {0: None, 1: 2018, 2: 2019}[item["wave"]]
+        assert item["start_year"] == expected and item["taxed"] == (item["wave"] > 0)
+
+
+def test_a_signed_other_parts_share_is_ranked_not_dropped():
+    """taxsub is a signed account: a unit whose other-parts share is negative still gets a domestic-VA export share."""
+    full = _full_source()
+    full.loc[full.entity_id.eq("AAA_C1"), "taxsub"] = -full.loc[full.entity_id.eq("AAA_C1"), "gross_exports"]
+    panel = build_teaching_panel(full, _exposure(full))
+    rows = panel.loc[panel.entity_id.eq("AAA_C1")]
+    assert rows[["teaching_y_trade_DVAex_share", "teaching_y_trade_trade_rest_share"]].notna().all().all()
+    # The generated part keeps its share domain (it is a rank, not the signed source value).
+    assert panel["teaching_y_trade_trade_rest_share"].between(0, 1).all()

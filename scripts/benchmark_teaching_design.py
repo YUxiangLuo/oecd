@@ -1,8 +1,12 @@
-"""Compare prespecified teaching designs using paired seeds, never seed selection.
+"""Evaluate the deployed teaching design on paired seeds, never by seed selection.
 
-Run from the repository root with PYTHONPATH=. and --output <json>.
-The balanced-panel NumPy CR1 calculation is checked against both production
-TWFE and PanelOLS on the first evaluation seed for every candidate.
+For every Y a page may choose, each seed regenerates the panel with the production generator and fits the course
+default model (X + L1.X + exchange rate, unit and year effects, country-clustered CR1): the cumulative relation and
+each term's estimate are compared with the preset values (β split 60/40 over X and L1.X; the exchange rate's slope
+γ = factor × β). Run from the repository root with PYTHONPATH=. and --output <json>.
+
+The balanced-panel NumPy calculation is checked against the production estimator and its library benchmark on the
+first seed for every Y. Earlier tariff-design candidates (v2–v7) are recorded in benchmarks/teaching_design_v*.json.
 """
 
 import argparse
@@ -16,34 +20,74 @@ import pandas as pd
 from scipy import stats
 
 from gvcsim.regression import teaching
-from gvcsim.regression.design import OUTCOME_DEPVARS, RegressionDesign
+from gvcsim.regression.design import RegressionDesign
 from gvcsim.regression.panel import run_design_with_benchmark
+from gvcsim.regression.spec import DEFAULT_SPEC
+
+TERMS = ("cumulative", "x", "lag1", "exchange_rate")
 
 
-# name -> (flat tariff rate from the third year, noise multiplier); "legacy" keeps the v1 rate schedule.
-CANDIDATES = {
-    "legacy": (None, 1.0),
-    "flat_10pct": (0.10, 1.0),
-    "flat_half_noise": (0.10, 0.5),
-    "flat_quarter_noise": (0.10, 0.25),
-    "flat_25pct_half_noise": (0.25, 0.5),
-}
-LEGACY_NOISE = np.array([0.012, 0.010, 0.060, 120.0])
+def _targets(beta: float) -> dict[str, float]:
+    return {
+        "cumulative": beta,
+        "x": teaching.LAG_SHARES[0] * beta,
+        "lag1": teaching.LAG_SHARES[1] * beta,
+        "exchange_rate": teaching.EXCHANGE_RATE_GAMMA_FACTOR * beta,
+    }
 
 
-def evaluate_baselines(root: Path, seeds: range) -> dict:
-    """Paired-seed evaluation of the deployed design for every baseline of every family.
+def _fit(frame: pd.DataFrame, column: str) -> tuple[dict[str, float], dict[str, float], int]:
+    """The default model on a balanced panel: two-way demeaning, OLS and CR1 with the fixed-effect rank counted."""
+    entities = frame.entity_id.nunique()
+    periods = frame.year.nunique()
+    n = len(frame)
+    codes, countries = pd.factorize(frame.country)
+    groups = len(countries)
+    regressors = [teaching.X_LAG_COLUMNS[0], teaching.X_LAG_COLUMNS[1], teaching.EXCHANGE_RATE_COLUMN]
+    cube = frame[[column, *regressors]].to_numpy(float).reshape(entities, periods, -1)
+    within = (
+        cube
+        - cube.mean(axis=1, keepdims=True)
+        - cube.mean(axis=0, keepdims=True)
+        + cube.mean(axis=(0, 1), keepdims=True)
+    ).reshape(n, -1)
+    y, X = within[:, 0], within[:, 1:]
+    bread = np.linalg.inv(X.T @ X)
+    beta = bread @ X.T @ y
+    residual = y - X @ beta
+    scores = np.zeros((groups, X.shape[1]))
+    np.add.at(scores, codes, X * residual[:, None])
+    rank = entities + periods - 1
+    correction = groups / (groups - 1) * (n - 1) / (n - X.shape[1] - rank)
+    covariance = correction * bread @ (scores.T @ scores) @ bread
+    weights = np.array([1.0, 1.0, 0.0])
+    estimates = {
+        "cumulative": float(weights @ beta),
+        "x": float(beta[0]),
+        "lag1": float(beta[1]),
+        "exchange_rate": float(beta[2]),
+    }
+    ses = {
+        "cumulative": float(np.sqrt(weights @ covariance @ weights)),
+        "x": float(np.sqrt(covariance[0, 0])),
+        "lag1": float(np.sqrt(covariance[1, 1])),
+        "exchange_rate": float(np.sqrt(covariance[2, 2])),
+    }
+    return estimates, ses, groups
 
-    Each simulated Y is regenerated with the production generator per seed and estimated with the
-    same within transformation and country-clustered CR1 as the candidates above; units whose
-    alternative source is out of domain are dropped as whole entities so the panel stays balanced.
-    """
-    source = pd.read_csv(root / "panel_industry.csv")
+
+def evaluate(root: Path, seeds: range) -> dict:
+    # Parse and fingerprint the same bytes, including the independently supplied exposure weights and flows.
+    source_bytes = (root / "panel_industry.csv").read_bytes()
+    source = pd.read_csv(BytesIO(source_bytes))
     years = sorted(source.year.unique())
-    exposure = pd.read_csv(root / f"export_exposure_{years[0]}.csv")
-    pairs = [(outcome, item) for outcome, items in teaching.BASELINES.items() for item in items]
+    exposure_path = f"export_exposure_{years[0]}.csv"
+    exposure_bytes = (root / exposure_path).read_bytes()
+    exposure = pd.read_csv(BytesIO(exposure_bytes))
+    pairs = [(outcome, item) for outcome in teaching.OUTCOMES for item in teaching.selectable_baselines(outcome)]
     records: dict[str, list[dict]] = {f"{outcome}:{item.key}": [] for outcome, item in pairs}
     sizes: dict[str, int] = {}
+    benchmark_checks: list[str] = []
     for seed in seeds:
         panel = teaching.build_teaching_panel(source, exposure, seed=seed)
         for outcome, item in pairs:
@@ -54,193 +98,73 @@ def evaluate_baselines(root: Path, seeds: range) -> dict:
                 continue
             complete = panel.groupby("entity_id")[column].transform(lambda values: values.notna().all())
             frame = panel.loc[complete].sort_values(["entity_id", "year"])
-            entities = frame.entity_id.nunique()
-            assert len(frame) == entities * 5
-            sizes[name] = entities
-            codes, countries = pd.factorize(frame.country)
-            groups = len(countries)
-            cube_x = frame[teaching.X_COLUMN].to_numpy().reshape(entities, 5)
-            cube_y = frame[column].to_numpy().reshape(entities, 5)
-
-            def within(cube):
-                return (
-                    cube - cube.mean(axis=1, keepdims=True) - cube.mean(axis=0, keepdims=True) + cube.mean()
-                ).ravel()
-
-            xw, yw = within(cube_x), within(cube_y)
-            xx = xw @ xw
-            estimate = xw @ yw / xx
-            residual = yw - xw * estimate
-            scores = np.zeros(groups)
-            np.add.at(scores, codes, xw * residual)
-            correction = groups / (groups - 1) * (len(frame) - 1) / (len(frame) - entities - 5)
-            se = np.sqrt(correction * (scores**2).sum()) / xx
+            assert len(frame) == frame.entity_id.nunique() * len(years)
+            sizes[name] = int(frame.entity_id.nunique())
+            estimates, ses, groups = _fit(frame, column)
             critical = stats.t.ppf(0.975, groups - 1)
+            targets = _targets(item.beta)
             records[name].append(
                 {
-                    "estimate": float(estimate),
-                    "se": float(se),
-                    "covered": bool(abs(estimate - item.beta) <= critical * se),
-                    "significant": bool(abs(estimate) > critical * se),
-                    "null_rejected": bool(abs(estimate - item.beta) > critical * se),
+                    term: {
+                        "estimate": estimates[term],
+                        "se": ses[term],
+                        "covered": bool(abs(estimates[term] - targets[term]) <= critical * ses[term]),
+                        "significant": bool(abs(estimates[term]) > critical * ses[term]),
+                    }
+                    for term in TERMS
                 }
             )
             if seed == seeds.start:
                 design = RegressionDesign(outcome, teaching=True, baseline=item.key)
                 result, reference = run_design_with_benchmark(frame, design)
                 assert reference["benchmark_passed"]
+                assert result.cumulative is not None
                 np.testing.assert_allclose(
-                    [result.coefs[0].coef, result.coefs[0].se], [estimate, se], rtol=1e-8, atol=1e-9
+                    [result.cumulative.coef, result.cumulative.se],
+                    [estimates["cumulative"], ses["cumulative"]],
+                    rtol=1e-8,
+                    atol=1e-9,
                 )
+                benchmark_checks.append(name)
         if (seed - seeds.start + 1) % 25 == 0:
-            print(f"Baselines: evaluated {seed - seeds.start + 1}/{len(seeds)} paired seeds", flush=True)
+            print(f"Evaluated {seed - seeds.start + 1}/{len(seeds)} paired seeds", flush=True)
     summary = {}
     for name, rows in records.items():
         if not rows:
             continue
         outcome, key = name.split(":", 1)
         beta = teaching.baseline(outcome, key).beta
-        estimates = np.array([row["estimate"] for row in rows])
-        summary[name] = {
-            "beta": beta,
-            "entities": sizes[name],
-            "mean_bias": float((estimates - beta).mean()),
-            "rmse": float(np.sqrt(((estimates - beta) ** 2).mean())),
-            "coverage_95": float(np.mean([row["covered"] for row in rows])),
-            "power": float(np.mean([row["significant"] for row in rows])),
-            "null_false_positive_rate": float(np.mean([row["null_rejected"] for row in rows])),
-        }
-    return summary
-
-
-def evaluate(root: Path, seeds: range) -> dict:
-    # Parse and fingerprint the same bytes, including the independently supplied
-    # exposure weights. A panel hash alone cannot identify this experiment.
-    source_bytes = (root / "panel_industry.csv").read_bytes()
-    source = pd.read_csv(BytesIO(source_bytes))
-    years = sorted(source.year.unique())
-    exposure_path = f"export_exposure_{years[0]}.csv"
-    exposure_bytes = (root / exposure_path).read_bytes()
-    exposure = pd.read_csv(BytesIO(exposure_bytes))
-    # The tariff-design candidates re-simulate each drawn default Y; a default computed from other Ys (v6: the
-    # network family's in + out degree) has no draw of its own and is covered by the per-baseline evaluation.
-    outcomes = [name for name in teaching.Y_COLUMNS if teaching.default_baseline(name).combine is None]
-    ys = [teaching.Y_COLUMNS[name] for name in outcomes]
-    legacy_noise = np.array([LEGACY_NOISE[list(teaching.Y_COLUMNS).index(name)] for name in outcomes])
-    beta = np.array([teaching.BETAS[name] for name in outcomes])
-    records = {name: [] for name in CANDIDATES}
-    domain_failures = dict.fromkeys(CANDIDATES, 0)
-    benchmark_checks = []
-    for seed in seeds:
-        panel = teaching.build_teaching_panel(source, exposure, seed=seed)
-        sizes = panel.groupby("entity_id").size()
-        assert sizes.eq(5).all() and panel.groupby("entity_id").year.nunique().eq(5).all()
-        n, entities = len(panel), len(sizes)
-        codes, countries = pd.factorize(panel.country)
-        groups = len(countries)
-        baseline = np.column_stack(
-            [
-                np.repeat(
-                    teaching.CALIBRATION[name][0]
-                    + teaching.CALIBRATION[name][1]
-                    * panel.loc[panel.year.eq(years[0]), OUTCOME_DEPVARS[name][0]].rank(pct=True).to_numpy(),
-                    5,
-                )
-                for name in outcomes
-            ]
-        )
-        # Recover identical unit-noise draws, regardless of the deployed design.
-        noise = panel[ys].to_numpy() - baseline - panel[teaching.X_COLUMN].to_numpy()[:, None] * beta
-        noise /= np.array([teaching.CALIBRATION[name][2] for name in outcomes])
-        treated = panel.country.map(lambda value: teaching._unit_number(value, "policy") < 0.60).to_numpy()
-        legacy_rate = panel.industry.map(lambda value: 0.06 if teaching._unit_number(value, "rate") < 0.5 else 0.18)
-        legacy_path = panel.year.map(dict(zip(years, (0, 0, 0.65, 1, 0.55), strict=True)))
-        weights = panel.teaching_export_share_w.to_numpy()
-
-        def within(values):
-            cube = values.reshape(entities, 5, -1)
-            return (
-                cube
-                - cube.mean(axis=1, keepdims=True)
-                - cube.mean(axis=0, keepdims=True)
-                + cube.mean(axis=(0, 1), keepdims=True)
-            ).reshape(n, -1)
-
-        for name, (rate, multiplier) in CANDIDATES.items():
-            tau = (
-                legacy_rate.to_numpy() * legacy_path.to_numpy()
-                if rate is None
-                else rate * panel.year.ge(years[2]).to_numpy()
-            ) * treated
-            x = weights * tau
-            y = baseline + x[:, None] * beta + noise * legacy_noise * multiplier
-            domain_failures[name] += int(np.any((y[:, :2] < 0) | (y[:, :2] > 1)) or np.any(y[:, 2:] <= 0))
-            xw, yw = within(x).ravel(), within(y)
-            xx = xw @ xw
-            estimate = xw @ yw / xx
-            residual = yw - xw[:, None] * estimate
-            scores = np.zeros((groups, len(outcomes)))
-            np.add.at(scores, codes, xw[:, None] * residual)
-            correction = groups / (groups - 1) * (n - 1) / (n - entities - 5)
-            se = np.sqrt(correction * (scores**2).sum(axis=0)) / xx
-            critical = stats.t.ppf(0.975, groups - 1)
-            records[name].append(
-                {
-                    "estimate": estimate.tolist(),
-                    "se": se.tolist(),
-                    "covered": (np.abs(estimate - beta) <= critical * se).tolist(),
-                    "significant": (np.abs(estimate) > critical * se).tolist(),
-                    "null_rejected": (np.abs(estimate - beta) > critical * se).tolist(),
-                }
-            )
-            if seed == seeds.start:
-                candidate = panel.copy()
-                candidate[teaching.X_COLUMN] = x
-                candidate["teaching_tariff_rate_tau"] = tau
-                candidate["teaching_treated"] = (x > 0).astype(int)
-                candidate[ys] = y
-                for index, outcome in enumerate(outcomes):
-                    result, reference = run_design_with_benchmark(candidate, RegressionDesign(outcome, teaching=True))
-                    assert reference["benchmark_passed"]
-                    np.testing.assert_allclose(
-                        [result.coefs[0].coef, result.coefs[0].se], [estimate[index], se[index]], rtol=1e-8, atol=1e-9
-                    )
-                benchmark_checks.append(name)
-        if (seed - seeds.start + 1) % 25 == 0:
-            print(f"Evaluated {seed - seeds.start + 1}/{len(seeds)} paired seeds", flush=True)
-    summary = {}
-    for name, rows in records.items():
-        estimates = np.array([row["estimate"] for row in rows])
-        summary[name] = {
-            outcome: {
-                "mean_bias": float((estimates[:, index] - beta[index]).mean()),
-                "rmse": float(np.sqrt(((estimates[:, index] - beta[index]) ** 2).mean())),
-                "coverage_95": float(np.mean([row["covered"][index] for row in rows])),
-                "power": float(np.mean([row["significant"][index] for row in rows])),
-                "null_false_positive_rate": float(np.mean([row["null_rejected"][index] for row in rows])),
+        targets = _targets(beta)
+        summary[name] = {"beta": beta, "entities": sizes[name]}
+        for term in TERMS:
+            estimates = np.array([row[term]["estimate"] for row in rows])
+            summary[name][term] = {
+                "target": targets[term],
+                "mean_bias": float((estimates - targets[term]).mean()),
+                "rmse": float(np.sqrt(((estimates - targets[term]) ** 2).mean())),
+                "coverage_95": float(np.mean([row[term]["covered"] for row in rows])),
+                # With a zero target (the weak Y) this is the false-positive rate.
+                "significant_share": float(np.mean([row[term]["significant"] for row in rows])),
             }
-            for index, outcome in enumerate(outcomes)
-        }
     return {
         "seeds": list(seeds),
         "release_seed_unchanged": teaching.SEED,
+        "version": teaching.VERSION,
+        "model": DEFAULT_SPEC.to_dict(),
         "source_panel_sha256": hashlib.sha256(source_bytes).hexdigest(),
         "source_exposure": {"path": exposure_path, "sha256": hashlib.sha256(exposure_bytes).hexdigest()},
-        "generator_snapshots": {name: teaching.model_snapshot(name) for name in outcomes},
-        "legacy_noise_scales": dict(zip(outcomes, legacy_noise.tolist(), strict=True)),
+        "generator_snapshots": {name: teaching.model_snapshot(name) for name in teaching.OUTCOMES},
         "implementation_sha256": {
             "benchmark": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "generator": hashlib.sha256(Path(teaching.__file__).read_bytes()).hexdigest(),
         },
-        "candidates": {
-            name: {"tariff_rate": rate, "noise_multiplier": multiplier}
-            for name, (rate, multiplier) in CANDIDATES.items()
-        },
         "summary": summary,
-        "baselines": evaluate_baselines(root, seeds),
-        "domain_failures": domain_failures,
         "independent_benchmark_checks": benchmark_checks,
-        "notes": "Paired noise draws; fixed beta; country-clustered CR1 and t(G-1). Null uses the same residuals with beta=0. Coverage is empirical, not a guarantee.",
+        "notes": (
+            "Paired noise draws; fixed preset relations; the course default model with country-clustered CR1 and "
+            "t(G-1). Coverage is empirical, not a guarantee; significant_share of a zero target is its false-positive "
+            "rate."
+        ),
     }
 
 

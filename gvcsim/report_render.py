@@ -794,7 +794,9 @@ def _technical_estimate_tables(
         "|---|---:|---:|---:|---:|---:|---:|",
     ]
     primary = _primary_coefficient(design, result)
-    for coefficient in result.get("coefs", []):
+    cumulative = result.get("cumulative")
+    rows = [*result.get("coefs", []), *([cumulative] if isinstance(cumulative, dict) else [])]
+    for coefficient in rows:
         if not isinstance(coefficient, dict):
             continue
         interval, p_value = _reported_inference_cells(
@@ -813,7 +815,9 @@ def _technical_estimate_tables(
         )
         t = coefficient.get("t")
         # Shown where the interval is (as the page shows t only when inference is allowed).
-        t_value = f"{t:,.2f}" if isinstance(t, (int, float)) and math.isfinite(t) and interval not in ("—", "不显示") else "—"
+        t_value = (
+            f"{t:,.2f}" if isinstance(t, (int, float)) and math.isfinite(t) and interval not in ("—", "不显示") else "—"
+        )
         lines.append(
             f"| {_coefficient_label(coefficient.get('name', '—'), design)} | {per_point} | "
             f"{_fixed4(coefficient.get('coef'))} | {interval} | {_fixed4(coefficient.get('se'))} | {t_value} | {p_value} |"

@@ -170,7 +170,10 @@ class RegressionDesign:
 
     @property
     def control_mode_label(self) -> str:
-        return CONTROL_MODE_LABELS[self.control_mode]
+        """ "不加控制变量", or the controls by name ("控制：汇率变动")."""
+        if not self.controls:
+            return CONTROL_MODE_LABELS[CONTROL_MODE_NONE]
+        return "控制：" + "、".join(self.control_labels.values())
 
     @property
     def interaction(self) -> bool:

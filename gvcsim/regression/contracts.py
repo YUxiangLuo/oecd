@@ -55,6 +55,8 @@ class RegressionDesignResponse(StrictContract):
     entity: str
     cluster: str
     weight_mode: str
+    # The model: X lags, controls and fixed effects (gvcsim.regression.spec.ModelSpec.to_dict()).
+    spec: dict[str, Any] | None = None
 
 
 class RegressionPreflightCheck(StrictContract):

@@ -14,7 +14,7 @@ import json
 import math
 from typing import Any, TypeGuard
 
-from gvcsim.regression.teaching import BASELINES
+from gvcsim.regression.teaching import selectable_baselines
 from gvcsim.report_common import (
     UNIT_NAMES,
     _depvar_kind,
@@ -181,7 +181,7 @@ def family_chart(
         entries.append(saved_entry)
     # The page's rule, by family (so a chart without the overview keeps the page's unit): 个百分点 only when every Y
     # of the family is a share; otherwise 个标准差 (lengths with the position index; centralities of any size).
-    kinds = [item.kind for item in BASELINES.get(outcome, ())] or [entry["kind"] for entry in entries]
+    kinds = [item.kind for item in selectable_baselines(outcome)] or [entry["kind"] for entry in entries]
     standardized = not all(kind == "share" for kind in kinds)
     # Each bar keeps its own headline's digits (step 12: "-0.39" beside "+0.006"), so a number never reads one way in
     # the chart and another in the text.

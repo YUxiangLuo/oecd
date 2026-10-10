@@ -24,6 +24,19 @@ def test_frontend_and_backend_use_the_same_session_version():
     assert f'export const SESSION_VERSION = "{SESSION_VERSION}";' in frontend_types
 
 
+def _estimate(name: str, coef: float, se: float = 0.1) -> dict:
+    critical = stats.t.ppf(0.975, 3)
+    return {
+        "name": name,
+        "coef": coef,
+        "se": se,
+        "t": coef / se,
+        "p": float(2 * stats.t.sf(abs(coef / se), 3)),
+        "ci_low": float(coef - critical * se),
+        "ci_high": float(coef + critical * se),
+    }
+
+
 def test_put_session_returns_the_exact_normalized_snapshot_saved(monkeypatch):
     outcome = "production"
     run = {
@@ -36,17 +49,13 @@ def test_put_session_returns_the_exact_normalized_snapshot_saved(monkeypatch):
             "n_clusters": 4,
             "support": {"status": "ok", "suppress_inference": False, "reasons": []},
             "diagnostics": {"study_contract": "economics-v2"},
+            # The course model (data v10): X, L1.X and the exchange rate; the X terms' sum is the headline.
             "coefs": [
-                {
-                    "name": "teaching_tariff_exposure",
-                    "coef": -0.5,
-                    "se": 0.1,
-                    "t": -5.0,
-                    "p": float(2 * stats.t.sf(5, 3)),
-                    "ci_low": float(-0.5 - stats.t.ppf(0.975, 3) * 0.1),
-                    "ci_high": float(-0.5 + stats.t.ppf(0.975, 3) * 0.1),
-                }
+                _estimate("teaching_tariff_exposure", -0.3),
+                _estimate("teaching_tariff_exposure_lag1", -0.2),
+                _estimate("teaching_exchange_rate_change", 0.05),
             ],
+            "cumulative": _estimate("cumulative", -0.5),
         },
         "model_snapshot": json.loads(json.dumps(model_snapshot(outcome))),
         "variable_catalog": variable_catalog(outcome),

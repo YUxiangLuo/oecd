@@ -1055,6 +1055,8 @@ def test_regression_runtime_boundary_maps_to_controlled_route_400(teaching_db, m
                 "year": 2018 + year,
                 "teaching_y_trade": 0.1 * entity + 0.03 * year,
                 "teaching_tariff_exposure": 0.02 * entity * year + 0.01 * (entity % 2),
+                "teaching_tariff_exposure_lag1": 0.02 * entity * max(year - 1, 0) + 0.01 * (entity % 2) * (year > 0),
+                "teaching_exchange_rate_change": 0.5 * ((entity + year) % 3) - 1.0,
                 "teaching_treated": int(year > 0 and entity % 2),
             }
             for entity in range(6)
@@ -1136,4 +1138,5 @@ def test_regression_design_and_run_accept_only_a_same_family_baseline(teaching_d
     body = run.json()
     assert body["design"]["baseline"] == "DVAex_share"
     assert body["model_snapshot"]["baseline"] == "DVAex_share" and body["model_snapshot"]["beta"] == 0.55
-    assert body["variable_catalog"][1]["name"] == "teaching_y_trade_DVAex_share"
+    assert body["variable_catalog"][-1]["name"] == "teaching_y_trade_DVAex_share"
+    assert body["variable_catalog"][-1]["role"] == "Y"

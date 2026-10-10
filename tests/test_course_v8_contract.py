@@ -17,8 +17,23 @@ from gvcsim.steps import STEPS
 def _run(outcome: str, *, version: str = VERSION, coefficient: str = X_COLUMN) -> dict:
     snapshot = json.loads(json.dumps(model_snapshot(outcome)))
     snapshot["version"] = version
+    design = RegressionDesign(outcome, teaching=True)
+    critical = stats.t.ppf(0.975, 3)
+
+    def estimate(name: str, coef: float, se: float = 0.2) -> dict:
+        return {
+            "name": name,
+            "coef": coef,
+            "se": se,
+            "t": coef / se,
+            "p": float(2 * stats.t.sf(abs(coef / se), 3)),
+            "ci_low": float(coef - critical * se),
+            "ci_high": float(coef + critical * se),
+        }
+
+    names = [coefficient, *design.regressors[1:], *design.controls]
     return {
-        "design": _design_info(RegressionDesign(outcome, teaching=True)),
+        "design": _design_info(design),
         "result": {
             "status": "ok",
             "n_obs": 20,
@@ -27,17 +42,8 @@ def _run(outcome: str, *, version: str = VERSION, coefficient: str = X_COLUMN) -
             "n_clusters": 4,
             "support": {"status": "ok", "suppress_inference": False, "reasons": []},
             "diagnostics": {"study_contract": "economics-v2"},
-            "coefs": [
-                {
-                    "name": coefficient,
-                    "coef": 1.0,
-                    "se": 0.2,
-                    "t": 5.0,
-                    "p": float(2 * stats.t.sf(5, 3)),
-                    "ci_low": float(1 - stats.t.ppf(0.975, 3) * 0.2),
-                    "ci_high": float(1 + stats.t.ppf(0.975, 3) * 0.2),
-                }
-            ],
+            "coefs": [estimate(name, coef) for name, coef in zip(names, (0.6, 0.4, 0.1), strict=True)],
+            "cumulative": estimate("cumulative", 1.0, 0.2),
         },
         "model_snapshot": snapshot,
         "variable_catalog": variable_catalog(outcome),

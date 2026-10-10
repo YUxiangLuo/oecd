@@ -19,7 +19,7 @@ from gvcsim.file_identity import FileState, file_state, open_text, verified_sour
 # v16: network_edges holds every positive bilateral flow (step 9 sums it; a top-120 cut reversed rankings).
 # v15: publishes a source-bound, independently simulated tariff teaching panel.
 # v13 panels may persist false zero-valued observations from cancellation noise.
-ARTIFACT_CONTRACT_VERSION = 16
+ARTIFACT_CONTRACT_VERSION = 17
 ARTIFACT_MANIFEST_ALGORITHM = "sha256"
 ARTIFACT_MANIFEST_NAME = "artifact_manifest"
 METADATA_DIGEST_NAME = "metadata_sha256"
@@ -614,14 +614,7 @@ def validate_release(processed_dir: Path | None = None, *, verify_integrity: boo
         {"path": f"export_exposure_{year}.csv", "sha256": _sha256(root / f"export_exposure_{year}.csv")}
         for year in metadata["years"]
     ]
-    expected_parameters = {
-        "market": teaching.MARKET,
-        "tariff_path": list(teaching.TARIFF_PATH),
-        "taxed_rule": teaching.TAXED_RULE,
-        "betas": teaching.BETAS,
-        "calibration": {name: list(values) for name, values in teaching.CALIBRATION.items()},
-        "baselines": teaching.baseline_parameters(),
-    }
+    expected_parameters = teaching.simulation_parameters()
     expected_snapshots = {name: teaching.model_snapshot(name) for name in teaching.BETAS}
     expected_baseline_snapshots = teaching.baseline_snapshots(teaching.model_snapshot)
     for snapshot in expected_baseline_snapshots.values():

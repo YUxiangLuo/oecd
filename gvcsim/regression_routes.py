@@ -109,6 +109,7 @@ def _design_info(design: RegressionDesign, weight_mode: str = shocks.EXPOSURE_MO
         "entity": design.entity,
         "cluster": design.cluster,
         "weight_mode": weight_mode,
+        "spec": design.spec.to_dict() if design.spec else None,
     }
 
 
@@ -258,7 +259,8 @@ def _estimate_overview(panel: Any) -> dict:
             design = RegressionDesign(outcome, teaching=True, baseline=baseline.key)
             result, _ = run_design_with_benchmark(panel, design)
             info = result.to_dict()
-            coef = (info.get("coefs") or [{}])[0]
+            # The headline of a run is the X terms' cumulative relation (the course model has X and L1.X).
+            coef = info.get("cumulative") or (info.get("coefs") or [{}])[0]
             raw_support = info.get("support")
             support = raw_support if isinstance(raw_support, dict) else {}
             items.append(

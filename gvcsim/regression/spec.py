@@ -10,14 +10,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from gvcsim.regression.teaching import X_COLUMN
-
-X_LAGS = (0, 1, 2)
-CONTROL_LAGS = (0, 1)
 # The X columns the teaching panel carries, by lag. Lags of X come from the tariff schedule (before the first tariff
 # year τ is 0, so they are exact zeros, not missing); the generator writes them, the estimator only selects them.
-X_LAG_COLUMNS = {0: X_COLUMN, 1: f"{X_COLUMN}_lag1", 2: f"{X_COLUMN}_lag2"}
-EXCHANGE_RATE_COLUMN = "teaching_exchange_rate_change"
+from gvcsim.regression.teaching import EXCHANGE_RATE_COLUMN, X_LAG_COLUMNS
+
+X_LAGS = tuple(X_LAG_COLUMNS)
+CONTROL_LAGS = (0, 1)
 
 
 @dataclass(frozen=True)
@@ -177,6 +175,6 @@ def _subscript(number: int) -> str:
     return str(number).translate(str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉"))
 
 
-# The model of steps 11–14 until teaching data v10 lands: X only, unit and year effects. Teaching data v10 makes
-# the course default X + L1.X + the exchange rate (see docs/regression-refactor-20261010.md).
-DEFAULT_SPEC = ModelSpec((0,), (), ("country_industry", "year"))
+# The course default of steps 11–14 for teaching data v10: the tariff's relation shows over two years and the
+# exchange rate confounds it, so the correct model has X, L1.X and the exchange rate with unit and year effects.
+DEFAULT_SPEC = ModelSpec((0, 1), ((EXCHANGE_RATE_COLUMN, 0),), ("country_industry", "year"))

@@ -301,23 +301,36 @@ def _setting_value(key: str, value: Any) -> str:
 
 
 def _model_summary(design: dict[str, Any]) -> str:
-    """The saved model in plain words: "双向固定效应（TWFE） · 国家×行业 · 不加控制变量"."""
+    """The saved model in plain words: "双向固定效应（TWFE） · 国家×行业 · 控制：汇率变动"."""
+
+    def value(key: str) -> str:
+        # A model with controls names them (the design's own label), not the generic mode.
+        if key == "control_mode" and design.get(key) != "none" and isinstance(design.get("control_mode_label"), str):
+            return _safe(design["control_mode_label"])
+        return _setting_value(key, design.get(key))
+
     return " · ".join(
-        _setting_value(key, design.get(key))
-        for key in ("method", "granularity", "control_mode")
-        if design.get(key) not in (None, "")
+        value(key) for key in ("method", "granularity", "control_mode") if design.get(key) not in (None, "")
     )
 
 
 def _coefficient_label(name: Any, design: dict[str, Any]) -> str:
+    from gvcsim.regression.spec import CONTROL_LAGS, CONTROLS, X_LAG_COLUMNS, control_column, control_term_label
+
     raw = str(name)
-    if raw == X_COLUMN:
-        # The page's name for X (steps 10–14 and their coefficient tables).
-        return "关税暴露 X"
-    return _safe(raw)
+    # The page's names for X and its lags (steps 10–14 and their coefficient tables), the controls and the sum.
+    labels = {column: "关税暴露 " + ("X" if lag == 0 else f"L{lag}.X") for lag, column in X_LAG_COLUMNS.items()}
+    labels |= {control_column(key, lag): control_term_label(key, lag) for key in CONTROLS for lag in CONTROL_LAGS}
+    labels["cumulative"] = "X 各项合计（累计效应）"
+    return labels.get(raw, _safe(raw))
 
 
 def _primary_coefficient(design: dict[str, Any], result: dict[str, Any]) -> dict[str, Any] | None:
+    """The step's headline estimate: the X terms' cumulative relation (the course model has X and L1.X), or, for a
+    result without it, the single X coefficient."""
+    cumulative = result.get("cumulative")
+    if isinstance(cumulative, dict) and isinstance(cumulative.get("coef"), (int, float)):
+        return cumulative
     candidates = [
         item for item in _list_values(result.get("coefs")) if isinstance(item, dict) and item.get("name") == X_COLUMN
     ]

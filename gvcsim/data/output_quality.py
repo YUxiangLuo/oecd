@@ -21,7 +21,7 @@ from gvcsim.indicators.core import IcioArrays
 from gvcsim.indicators.production import PRODUCTION_COLUMNS
 from gvcsim.indicators.tradeflow import TRADE_COLUMNS
 
-OUTPUT_QC_CONTRACT_VERSION = 5
+OUTPUT_QC_CONTRACT_VERSION = 6
 OUTPUT_QC_ABS_TOLERANCE = 1e-8
 OUTPUT_QC_REL_TOLERANCE = 1e-8
 OUTPUT_QC_DENOMINATOR_FLOOR = 1e-12
@@ -114,7 +114,7 @@ OUTPUT_CHECK_SPECS = (
     OutputCheckSpec(
         "teaching_panel_contract",
         "mathematical",
-        "Teaching panel has unique country-industry-year keys, five continuous years, finite teaching fields, bounded outcomes, and X=w*tariff with two zero pre-policy years.",
+        "Teaching panel has unique country-industry-year keys, five continuous years, finite teaching fields, bounded outcomes, X=w*tariff with two zero pre-policy years, lags of X equal to w*tariff of earlier years (zero before the panel), and tariff waves 0/1/2.",
     ),
 )
 OUTPUT_QC_EXPECTED_CHECKS = tuple(spec.name for spec in OUTPUT_CHECK_SPECS)
@@ -772,7 +772,13 @@ def _panel_share_economic_domains(frames: dict[str, pd.DataFrame], year: int) ->
 
 
 def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict:
-    from gvcsim.regression.teaching import X_COLUMN, Y_COLUMNS
+    from gvcsim.regression.teaching import (
+        EXCHANGE_RATE_COLUMN,
+        WAVE_COLUMN,
+        X_COLUMN,
+        X_LAG_COLUMNS,
+        Y_COLUMNS,
+    )
 
     frame = frames["panel_teaching"]
     required = {
@@ -783,7 +789,9 @@ def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict
         "teaching_export_share_w",
         "teaching_tariff_rate_tau",
         "teaching_treated",
-        X_COLUMN,
+        WAVE_COLUMN,
+        EXCHANGE_RATE_COLUMN,
+        *X_LAG_COLUMNS.values(),
         *Y_COLUMNS.values(),
     }
     missing = _missing(frame, required)
@@ -810,6 +818,16 @@ def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict
     violations += int((tau < 0).sum())
     violations += int((~_close(x, w * tau)).sum())
     violations += int((~numeric["teaching_treated"].isin([0, 1])).sum())
+    violations += int((~numeric[WAVE_COLUMN].isin([0, 1, 2])).sum())
+    # A lag of X is the same unit's w × τ k years earlier; before the panel's first year τ is 0.
+    tau_by_key = pd.Series(tau.to_numpy(), index=pd.MultiIndex.from_arrays([frame["entity_id"].astype(str), years]))
+    for lag, column in X_LAG_COLUMNS.items():
+        if lag == 0:
+            continue
+        keys = pd.MultiIndex.from_arrays([frame["entity_id"].astype(str), years - lag])
+        earlier = pd.Series(tau_by_key.reindex(keys).to_numpy(), index=frame.index)
+        earlier = earlier.where(years - lag >= unique_years[0], 0.0) if unique_years else earlier
+        violations += int((~_close(numeric[column], w * earlier)).sum())
     if len(unique_years) >= 2:
         violations += int((x.loc[years.isin(unique_years[:2])].abs() > OUTPUT_QC_ABS_TOLERANCE).sum())
     violations += int((~numeric[Y_COLUMNS["trade"]].between(0, 1)).sum())

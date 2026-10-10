@@ -47,18 +47,15 @@ from gvcsim.indicators import length, network, production, tradeflow
 from gvcsim.indicators.core import build_arrays
 from gvcsim.regression.teaching import (
     BETAS as TEACHING_BETAS,
-    CALIBRATION as TEACHING_CALIBRATION,
     DISCLAIMER as TEACHING_DISCLAIMER,
-    MARKET as TEACHING_MARKET,
     SEED as TEACHING_SEED,
-    TARIFF_PATH as TEACHING_TARIFF_PATH,
-    TAXED_RULE as TEACHING_TAXED_RULE,
     WEAK_Y as TEACHING_WEAK_Y,
     BASELINES as TEACHING_BASELINES,
     VERSION as TEACHING_VERSION,
-    baseline_parameters as teaching_baseline_parameters,
     baseline_snapshots as teaching_baseline_snapshots,
     build_teaching_panel,
+    generated_problems as teaching_generated_problems,
+    simulation_parameters as teaching_simulation_parameters,
     model_snapshot,
     variable_catalog,
     y_column as teaching_y_column,
@@ -178,7 +175,10 @@ def compute_year(year: int, verbose: bool = True) -> None:
 
 
 def _check_weak_teaching_y(teaching: pd.DataFrame) -> None:
-    """Step 12 teaches an interval that includes 0 with the no-relation Y; a release where it does not is refused."""
+    """Step 12 teaches an interval that includes 0 with the no-relation Y; a release where it does not is refused.
+
+    The course default model has X and L1.X, so it is their cumulative relation whose interval must include 0. Its
+    noise is a draw like any other: when it lands outside, re-pick the draw (WEAK_Y_DRAW), as v7 did."""
     from gvcsim.regression.design import RegressionDesign
     from gvcsim.regression.panel import run_design_with_benchmark
 
@@ -192,7 +192,7 @@ def _check_weak_teaching_y(teaching: pd.DataFrame) -> None:
     info = result.to_dict()
     if info.get("status") not in ("ok", "warning"):
         return
-    coef = info["coefs"][0]
+    coef = info.get("cumulative") or info["coefs"][0]
     low, high = coef.get("ci_low"), coef.get("ci_high")
     if low is None or high is None or not (low <= 0 <= high):
         raise ValueError(f"教学弱效应 Y（{key}）的 95% 区间不含 0：[{low}, {high}]；请调整 WEAK_Y_DRAW 后重建")
@@ -293,6 +293,9 @@ def build_panel(
         ignore_index=True,
     )
     teaching = build_teaching_panel(sector, exposure, seed=TEACHING_SEED)
+    problems = teaching_generated_problems(teaching)
+    if problems:
+        raise ValueError("教学数据生成值越界：" + "；".join(problems) + "；请调整 BASELINES 的校准后重建")
     _check_weak_teaching_y(teaching)
     # A release carries every same-family baseline; a missing one means the ICIO panel lost a column.
     missing_baselines = [
@@ -408,14 +411,7 @@ def finalize_release(staging: Path, selected_years: list[int], *, release_id: st
                 "simulation_contract": {
                     "version": TEACHING_VERSION,
                     "seed": TEACHING_SEED,
-                    "parameters": {
-                        "market": TEACHING_MARKET,
-                        "tariff_path": list(TEACHING_TARIFF_PATH),
-                        "taxed_rule": TEACHING_TAXED_RULE,
-                        "betas": TEACHING_BETAS,
-                        "calibration": TEACHING_CALIBRATION,
-                        "baselines": teaching_baseline_parameters(),
-                    },
+                    "parameters": teaching_simulation_parameters(),
                     "model_snapshots": {name: model_snapshot(name) for name in TEACHING_BETAS},
                     "variable_catalogs": {name: variable_catalog(name) for name in TEACHING_BETAS},
                     "baseline_model_snapshots": teaching_baseline_snapshots(model_snapshot),

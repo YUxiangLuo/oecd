@@ -7,7 +7,7 @@ import math
 import pytest
 
 from gvcsim.regression.design import RegressionDesign
-from gvcsim.regression.teaching import X_COLUMN, model_snapshot, variable_catalog
+from gvcsim.regression.teaching import EXCHANGE_RATE_COLUMN, X_COLUMN, X_LAG_COLUMNS, model_snapshot, variable_catalog
 from gvcsim.regression_routes import _design_info
 from gvcsim.report_saved_run import _parse_saved_run
 
@@ -16,6 +16,19 @@ def saved_run(outcome="trade"):
     # With G=2, t(1) is Cauchy: derive p and the 97.5% quantile
     # independently of scipy and the production estimator.
     critical = math.tan(math.pi * (0.975 - 0.5))
+
+    def estimate(name, coef, se):
+        t = coef / se
+        return {
+            "name": name,
+            "coef": coef,
+            "se": se,
+            "t": t,
+            "p": 1 - 2 * math.atan(abs(t)) / math.pi,
+            "ci_low": coef - critical * se,
+            "ci_high": coef + critical * se,
+        }
+
     return {
         "design": _design_info(RegressionDesign(outcome, teaching=True)),
         "model_snapshot": model_snapshot(outcome),
@@ -28,17 +41,13 @@ def saved_run(outcome="trade"):
             "n_entities": 3,
             "n_times": 4,
             "n_clusters": 2,
+            # The course model (data v10): X, L1.X and the exchange rate; the headline is the X terms' sum.
             "coefs": [
-                {
-                    "name": X_COLUMN,
-                    "coef": -2.0,
-                    "se": 0.5,
-                    "t": -4.0,
-                    "p": 1 - 2 * math.atan(4) / math.pi,
-                    "ci_low": -2 - critical * 0.5,
-                    "ci_high": -2 + critical * 0.5,
-                }
+                estimate(X_COLUMN, -1.25, 0.5),
+                estimate(X_LAG_COLUMNS[1], -0.75, 0.5),
+                estimate(EXCHANGE_RATE_COLUMN, 0.25, 0.5),
             ],
+            "cumulative": estimate("cumulative", -2.0, 0.5),
         },
     }
 
@@ -111,7 +120,24 @@ def test_complete_stopped_diagnosis_remains_reportable(status):
             "reasons": ["支持不足"],
         },
     )
-    run["result"]["coefs"][0].update(p=None, ci_low=None, ci_high=None)
+    for coefficient in [*run["result"]["coefs"], run["result"]["cumulative"]]:
+        coefficient.update(p=None, ci_low=None, ci_high=None)
     assert _parse_saved_run(deepcopy(run), "trade") is not None
     run["result"]["n_entities"] = -4
+    assert _parse_saved_run(run, "trade") is None
+
+
+@pytest.mark.parametrize("key,value", [("coef", -1.5), ("t", -2.0), ("p", 0.5), ("ci_low", None)])
+def test_rejects_a_cumulative_estimate_that_is_not_the_x_terms_sum_or_is_inconsistent(key, value):
+    run = saved_run()
+    run["result"]["cumulative"][key] = value
+    assert _parse_saved_run(run, "trade") is None
+
+
+def test_rejects_a_result_without_the_course_models_terms():
+    run = saved_run()
+    run["result"]["coefs"] = run["result"]["coefs"][:1]
+    assert _parse_saved_run(run, "trade") is None
+    run = saved_run()
+    del run["result"]["cumulative"]
     assert _parse_saved_run(run, "trade") is None
