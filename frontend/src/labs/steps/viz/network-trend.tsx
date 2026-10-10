@@ -4,7 +4,7 @@ import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { IndicatorSchema, Meta } from "../../../types";
 import { countryLabel, joinCountries, sectorLabel } from "../../../viz";
-import { HEAT_EVIDENCE_METRIC, PATH_UNDEFINED_LABEL, PATH_UNDEFINED_NOTE, pathMetricUndefined } from "../../../viz/views/network-heat";
+import { HEAT_EVIDENCE_METRIC, PATH_UNDEFINED_LABEL, pathMetricUndefined } from "../../../viz/views/network-heat";
 import { AsyncStateMessage, useAsync } from "../../shared";
 import { currentReleaseId, LensNav, Year2020Note, type NetworkBrowse, type Row, type VizObservation } from "./scaffold";
 import { IndicatorTrendChart, indicatorNumber } from "./indicator-charts";
@@ -180,23 +180,6 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   // blocked note names them instead of saying "有的年份".
   const undefinedThroughout = [...new Set(undefinedPoints.map((point) => point.country))]
     .filter((country) => undefinedPoints.filter((point) => point.country === country).length === years.length);
-  // Economies with the same years share one clause: "KHM 柬埔寨、MLT 马耳他 历年的 H51 …", not "KHM 柬埔寨历年、MLT 马耳他历年".
-  // The reason is said once: an economy undefined in every year is already named by the chart (its status when
-  // nothing is drawn, its reading for country A, or the gap card of a comparison country when A has two readings),
-  // so the note under the chart covers only the others. (T 离心率 said the same reason three times.)
-  const ownReadings = points.filter((point) => point.country === selected[0] && point.value !== null).length;
-  const namedByChart = (country: string) => undefinedThroughout.includes(country)
-    && (finite.length === 0 || country === selected[0] || ownReadings >= 2);
-  const undefinedGroups = new Map<string, string[]>();
-  for (const country of new Set(undefinedPoints.map((point) => point.country))) {
-    if (namedByChart(country)) continue;
-    const at = undefinedPoints.filter((point) => point.country === country).map((point) => point.year);
-    const when = at.length === years.length ? "历年" : `${at.join("、")} 年`;
-    undefinedGroups.set(when, [...(undefinedGroups.get(when) ?? []), country]);
-  }
-  const undefinedNote = undefinedGroups.size
-    ? `${[...undefinedGroups].map(([when, codes]) => `${codes.map(countryLabel).join("、")} ${when}`).join("，")}的 ${sectorLabel(industry)}${PATH_UNDEFINED_NOTE}，${label}无法定义（不是 0，不参与排名和中位数，图上留空）。`
-    : "";
   // 流量与路径 reads 加权总度 on a log scale: an industry with no trade (0) or no reading cannot be placed. Say how
   // many and why, as step 7's 行业结构 does.
   const topologyHiddenNote = (country: string): string | null => {
@@ -401,7 +384,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       {finite.length ? <IndicatorTrendChart
         rows={(query.data ?? []).filter((row) => row.industry === industry).map((row) => ({ ...row, [metric]: networkValue(row[metric], metric) }))}
         emptyReading={(country, at) => (points.some((point) => point.country === country && point.year === at && point.undefined) ? PATH_UNDEFINED_LABEL : null)}
-        reasonFor={(country, at) => (points.some((point) => point.country === country && point.year === at && point.undefined) ? `该行业无连接，${label}无法定义（不是 0）` : null)}
+        reasonFor={(country, at) => (points.some((point) => point.country === country && point.year === at && point.undefined) ? `该行业无连接，${label}无法定义` : null)}
         countries={selected}
         years={years}
         metric={metric}
@@ -411,8 +394,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         mode="context"
         sameIndustry
         industry={industry}
-      /> : <p role="status">{undefinedPoints.length ? `所选国家的该行业${PATH_UNDEFINED_NOTE}，${label}无法定义；请更换行业、指标或国家。` : "该行业没有数据，请更换行业、指标或国家。"}</p>}
-      {undefinedNote && <p className="muted">{undefinedNote}</p>}
+      /> : <p role="status">{undefinedPoints.length ? `所选国家的该行业无连接，${label}无法定义；请更换行业、指标或国家。` : "该行业没有数据，请更换行业、指标或国家。"}</p>}
       {flatValue === 0 && <p className="muted">所选国家历年的 {sectorLabel(industry)} {label}都是 0：这是真实的 0（该行业没有这类买卖或连接），不是缺少数据。</p>}
       <details className="technical-details"><summary>查看趋势图逐年读数</summary>
         <ScrollableRegion className="table-wrap" label="行业趋势逐年读数"><table className="data-table">
@@ -434,8 +416,8 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         ? `${!recordable ? "这个视角只供探索，不记录报告材料。"
           : "当前图表暂不能记录："}${!recordable ? ""
           : flatValue !== null && query.status === "success" ? `图上${view === "trend" ? `所选国家历年的${label}` : `显示的行业的${label}`}全部${flatValue === 0 ? "为 0（真实的 0，例如没有生产或连接，不是缺少数据）" : `相同（都是 ${indicatorNumber(flatValue, unit)}）`}，没有可比较的差别，不记录为报告材料；请换一个${view === "trend" ? "行业" : "年份"}或指标。`
-          : view === "trend" ? (undefinedThroughout.length ? `${joinCountries(undefinedThroughout)}在所选年份都没有${label}读数（原因见上）；请换一个行业、指标或国家。`
-            : undefinedPoints.length ? `有的年份该行业${PATH_UNDEFINED_NOTE}，${label}无法定义；所选国家至少需要两个共同有效年份，请换一个行业、指标或国家。` : "所选国家至少需要两个共同有效年份。") : "显示的行业里，至少要有一个行业所有所选国家都有数据。"}${observations.length ? "已记录的材料保持不变。" : ""}`
+          : view === "trend" ? (undefinedThroughout.length ? `${joinCountries(undefinedThroughout)}在所选年份都没有${label}读数（该行业无连接）；请换一个行业、指标或国家。`
+            : undefinedPoints.length ? `有的年份该行业无连接，${label}无法定义；所选国家至少需要两个共同有效年份，请换一个行业、指标或国家。` : "所选国家至少需要两个共同有效年份。") : "显示的行业里，至少要有一个行业所有所选国家都有数据。"}${observations.length ? "已记录的材料保持不变。" : ""}`
         : locked
           ? `${MATERIAL_LOCKED_NOTE}${matchesSaved ? `当前图表就是已记录的材料。${rechosen ? MATERIAL_RECHOSEN_NEXT : ""}` : ""}`
         : matchesSaved

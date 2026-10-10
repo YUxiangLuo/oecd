@@ -278,7 +278,7 @@ test("a path metric undefined in every year names the economy instead of saying 
   render(<NetworkTrend meta={meta} schema={schema} initialCountry="CHN" onRecord={mock(() => {})} />);
   fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "Eccentricity" } });
   const note = await screen.findByText(/都没有离心率读数/);
-  expect(note.textContent).toContain("CHN 中国在所选年份都没有离心率读数（原因见上）");
+  expect(note.textContent).toContain("CHN 中国在所选年份都没有离心率读数（该行业无连接）");
   expect(note.textContent).not.toContain("有的年份");
   expect(note.textContent).not.toContain("至少需要两个共同有效年份");
   // The reason is said once, by the chart's reading for country A.
@@ -341,7 +341,7 @@ test("step 9 keeps the countries, view and industry of an exploration view after
   expect((screen.getByLabelText("行业") as HTMLSelectElement).value).toBe("C27");
 });
 
-test("undefined path metrics: economies with the same years share one clause", async () => {
+test("undefined path metrics: no long note under the chart; the readings mark those years 无连接，无法定义", async () => {
   // CHN and USA have no outgoing links in every year; DEU only in 2018.
   spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([{
     country, year, industry: "C26", closnesscentrality: country === "DEU" ? (year === 2018 ? 0 : 0.5) : 0,
@@ -349,11 +349,14 @@ test("undefined path metrics: economies with the same years share one clause", a
   mockReference();
   render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA", "DEU"]} onRecord={() => {}}
     initialBrowse={{ countries: ["CHN", "USA", "DEU"], view: "trend", industry: "C26", metric: "closnesscentrality", year: 2020 }} />);
-  await waitFor(() => expect(screen.getByText(/无法定义（不是 0，不参与排名和中位数，图上留空）/)).toBeTruthy());
-  const note = screen.getByText(/无法定义（不是 0，不参与排名和中位数，图上留空）/).textContent!;
-  // CHN (country A) is named by the chart's own reading; the note covers the others.
-  expect(note.startsWith("USA 美国 历年，DEU 德国 2018 年的 C26")).toBe(true);
-  expect(note).not.toContain("中国历年");
+  const table = await screen.findByRole("region", { name: "行业趋势逐年读数" });
+  await waitFor(() => expect(table.textContent).toContain("无连接，无法定义"));
+  // The undefined years are blank on the chart and labelled in the readings; no note repeats the reason.
+  expect(document.body.textContent).not.toContain("不参与排名和中位数");
+  expect(document.body.textContent).not.toContain("（不是 0");
+  const rows = [...table.querySelectorAll("tbody tr")].map((row) => [...row.querySelectorAll("td")].map((cell) => cell.textContent));
+  expect(rows.find((cells) => cells[0] === "2018")?.slice(1)).toEqual(["无连接，无法定义", "无连接，无法定义", "无连接，无法定义"]);
+  expect(rows.find((cells) => cells[0] === "2016")?.[3]).not.toBe("无连接，无法定义");
 });
 
 test("流量与路径 says which industries it leaves out and why", async () => {

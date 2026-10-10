@@ -197,7 +197,7 @@ export function HeatTableViz({
           <span key={column.key}> {schema?.fields[column.key]?.label ?? column.name}：{schema?.fields[column.key]?.desc ?? column.desc}</span>
         ))}
         <div>
-          颜色深浅表示该列可见行中的相对大小（每列单独计算）。“{PATH_UNDEFINED_LABEL}”：该行业{PATH_UNDEFINED_NOTE}，接近中心性与调和中心性没有定义（不是 0）。这张表上的操作不会改变报告材料。
+          颜色深浅表示该列可见行中的相对大小（每列单独计算）。这张表上的操作不会改变报告材料。
         </div>
       </div>
     </ScrollableRegion>

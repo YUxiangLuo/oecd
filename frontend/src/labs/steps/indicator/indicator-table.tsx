@@ -581,9 +581,6 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
               totalPages={pages}
             />
           </ScrollableRegion>
-          {displayRows.some((row) => cols.some((column) => pathMetricUndefined(column, row[column]))) && (
-            <p className="muted">“{PATH_UNDEFINED_LABEL}”：该行业{PATH_UNDEFINED_NOTE}，接近中心性、离心率与调和中心性没有定义（不是 0，与步骤 9 相同）。</p>
-          )}
       </IndicatorRequestBoundary>
       {/* Outside the loading boundary: the pager stays mounted (and keeps focus) while the next page loads. */}
       {(data || knownPages.current > 1) && <Pager page={page} pages={pages} total={data?.total} onChange={onPage} />}
