@@ -59,8 +59,13 @@ test("taxed bars are sorted, orange and scaled; untaxed countries form one group
     // The USA is the imposer: never a bar or a code (the policy line above the chart says so, not the chart).
     expect(document.querySelector('[data-country="USA"]')).toBeNull();
     expect(document.querySelector(".country-exposure-note")!.textContent).toBe("悬停或用方向键查看每个国家的 X。");
-    // All countries are listed in the collapsed table.
+    // All countries are listed in the collapsed table, which scrolls in its own box: a wave column wider than a
+    // 1024px window must not push the whole step sideways.
     expect(document.querySelectorAll(".country-exposure-table tbody tr")).toHaveLength(8);
+    const region = document.querySelector(".country-exposure-table [role=region]")!;
+    expect(region.getAttribute("aria-label")).toBe("8 国读数表，可滚动");
+    expect(region.className).toContain("table-wrap");
+    expect(region.querySelector("table")).not.toBeNull();
   } finally {
     cleanup();
   }

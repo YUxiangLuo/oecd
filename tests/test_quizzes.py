@@ -85,6 +85,13 @@ def test_steps_10_to_14_ask_about_the_v10_model_without_its_numbers():
     assert len(set(corrects)) == 3
 
 
+def test_omitted_variable_explanation_names_both_ways_a_control_can_leave_x_unchanged():
+    """A control that leaves X unchanged is unrelated to X or to Y: either one near 0 means no bias."""
+    question = next(item for item in quizzes.STEP_QUIZZES[12] if item["id"] == "s12-omitted-v10")
+    assert "与 X 几乎不相关、或对 Y 几乎没有作用" in question["explanation"]
+    assert "与 Y 的关联很弱" not in question["explanation"]
+
+
 def test_regression_quizzes_read_an_association_not_a_change_over_time():
     for step in range(10, 15):
         for question in quizzes.STEP_QUIZZES[step]:

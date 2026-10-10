@@ -3043,6 +3043,13 @@ def test_report_appendix_recomputes_the_models_marked_for_the_report(tmp_path, m
     assert "| 国家×年份 FE | 否 | 否 | 是 |" in appendix
     assert "| 国家 FE | 是 | 是 | 是 |" in appendix
     assert "| 观测值 |" in appendix and "| 组内 R² |" in appendix and "| F（自由度） |" in appendix
+    # Under the cumulative relation, each column's sum per 1 percentage point of X, as the page's table reads it.
+    per_point = next(line for line in appendix.splitlines() if line.startswith("| 合计：X 每高 1 个百分点 |"))
+    assert appendix.index("| X 各项合计（累计效应） |") < appendix.index(per_point)
+    cells = per_point.strip(" |").split(" | ")[1:]
+    assert len(cells) == 3 and all(cell.endswith(" 个百分点（两年累计）") for cell in cells)
+    default_run = regression_routes.cached_run(panel, RegressionDesign("trade", teaching=True, spec=DEFAULT_SPEC))
+    assert cells[0] == f"{default_run['result']['cumulative']['coef']:+.2f} 个百分点（两年累计）"
     assert "注：括号内为按国家聚类的标准误。\\*\\*\\* p\\<0.01" in appendix
     assert report.provenance["custom_results"] == [
         {"step": 11, "name": "去掉汇率", "outcome": "trade", "baseline": "FVA_share", "spec": no_rate.to_dict()},
@@ -3060,6 +3067,35 @@ def test_report_appendix_recomputes_the_models_marked_for_the_report(tmp_path, m
     tampered_appendix = build(tampered, "同学").markdown.split("## 附录：学生设计的模型", 1)[1].split("\n## ", 1)[0]
     assert tampered_appendix == appendix
     regression_routes.clear_result_cache()
+
+
+def test_report_appendix_reads_each_x_sum_per_percentage_point():
+    """The appendix's "合计：X 每高 1 个百分点" row (the page's ``perPointRow``): the first column's decimals for every
+    column, the years each sum covers, and an empty cell where a model could not be recomputed."""
+    from gvcsim.regression.spec import DEFAULT_SPEC, X_LAG_COLUMNS, ModelSpec
+    from gvcsim.report_workbench import _per_point_rows
+
+    design = {"outcome": "length", "depvar_kind": "length"}
+    x = {"name": X_COLUMN, "coef": -1.1, "ci_low": -1.2, "ci_high": -1.0}
+    lag = {"name": X_LAG_COLUMNS[1], "coef": -0.7234, "ci_low": -0.8, "ci_high": -0.65}
+    cumulative = {"coef": -1.8234, "ci_low": -1.8952, "ci_high": -1.7516}
+    columns = [
+        {
+            "name": "默认模型",
+            "spec": DEFAULT_SPEC,
+            "run": {"design": design, "result": {"coefs": [x, lag], "cumulative": cumulative}},
+        },
+        {
+            "name": "只看当年",
+            "spec": ModelSpec((0,), (), ("country_industry", "year")),
+            "run": {"design": design, "result": {"coefs": [{"name": X_COLUMN, "coef": -1.2}]}},
+        },
+        {"name": "算不出", "spec": ModelSpec((0, 1), (), ()), "run": "关税暴露 X 在这个设定下无法估计"},
+    ]
+    assert _per_point_rows(columns) == [
+        "| 合计：X 每高 1 个百分点 | -0.0182 个长度单位（两年累计） | -0.0120 个长度单位（仅当年） |  |"
+    ]
+    assert _per_point_rows([columns[2]]) == []
 
 
 def test_report_technical_appendix_writes_the_v10_formula():

@@ -206,6 +206,8 @@ test("the step 10 gap note matches whether the two countries were taxed", () => 
 const tenYears = [2016, 2017, 2018, 2019, 2020];
 /** The example's summary lines in the trend section, one per country: its own "X = w × τ = …". */
 const summaryLines = () => [...document.querySelectorAll(".teaching-example-summary li")].map((li) => li.textContent!);
+// The example's year table (the 75-country table under the ranking is bounded and scrolls too).
+const YEAR_TABLE_ROWS = '[aria-label="所选例子的逐年变量表"] tbody tr';
 const tenGroups = () => spyOn(api, "teachingGroups").mockResolvedValue({
   version: "step10-tariff-teaching-v5", years: tenYears, policy_year: 2018,
   sample: { rows: 10, entities: 2, countries: 2, industries: 1, taxed_countries: 1, untaxed_countries: 1 },
@@ -741,8 +743,8 @@ test("the yearly table shows w at one precision for every year of a unit (w is f
   // 0.248953 × 25% needs three decimals of w to check by hand; the zero-rate years must not drop back to two.
   const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.248953, country === "ISR")));
   render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["ISR"], teaching_industry: "C29", teaching_example_chosen: true })} />);
-  await waitFor(() => expect(document.querySelectorAll(".bounded-data-table tbody tr").length).toBe(5));
-  const wCells = [...document.querySelectorAll(".bounded-data-table tbody tr")].map((tr) => tr.children[2]?.textContent);
+  await waitFor(() => expect(document.querySelectorAll(YEAR_TABLE_ROWS).length).toBe(5));
+  const wCells = [...document.querySelectorAll(YEAR_TABLE_ROWS)].map((tr) => tr.children[2]?.textContent);
   expect(new Set(wCells).size).toBe(1);
   groups.mockRestore(); series.mockRestore();
 });
@@ -754,8 +756,8 @@ test("step 10's year-by-year table lists country A first, then B", async () => {
   // The server sends the rows in alphabetical order.
   const series = tenSeries((_countries, industry) => [...tenRows("CAN", industry, 0.93, true), ...tenRows("MEX", industry, 0.4, false)]);
   render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["MEX", "CAN"], teaching_industry: "C29", teaching_example_chosen: true })} />);
-  await waitFor(() => expect(document.querySelectorAll(".bounded-data-table tbody tr").length).toBe(10));
-  const firstCells = [...document.querySelectorAll(".bounded-data-table tbody tr")].map((tr) => tr.children[0]?.textContent);
+  await waitFor(() => expect(document.querySelectorAll(YEAR_TABLE_ROWS).length).toBe(10));
+  const firstCells = [...document.querySelectorAll(YEAR_TABLE_ROWS)].map((tr) => tr.children[0]?.textContent);
   expect(firstCells.slice(0, 5).every((name) => name === "MEX 墨西哥")).toBe(true);
   expect(firstCells.slice(5).every((name) => name === "CAN 加拿大")).toBe(true);
   groups.mockRestore();

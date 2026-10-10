@@ -13,7 +13,7 @@ test("intro uses the self-contained teaching simulation and never requests shock
     const view = open();
     fireEvent.click(view.getByRole("button", { name: "介绍页 2" }));
     fireEvent.click(view.getByRole("button", { name: /关税数据/ }));
-    expect(view.getByText(/前两年税率为 0，被加税国家后三年为 25%/)).toBeTruthy();
+    expect(view.getByText(/美国分两批加税：第一批 2018 年起、第二批 2019 年起税率为 25%，此前为 0/)).toBeTruthy();
     expect(view.getByText(/关税暴露 X 等于首年对美出口份额 w 乘以加征税率 τ/)).toBeTruthy();
     expect(view.getByRole("dialog").textContent).not.toContain("模拟");
     expect(request).not.toHaveBeenCalled();

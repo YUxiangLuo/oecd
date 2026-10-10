@@ -28,7 +28,7 @@ from gvcsim.regression.spec import (
     x_term_label,
 )
 from gvcsim.regression.teaching import selectable_baselines
-from gvcsim.report_common import _no_negative_zero, _safe
+from gvcsim.report_common import _depvar_kind, _no_negative_zero, _safe, _signed, estimate_digits, with_count_unit
 from gvcsim.report_saved_run import _STEP_OUTCOMES
 from gvcsim.steps import STEPS
 
@@ -40,6 +40,8 @@ _TERM_LABELS = {X_LAG_COLUMNS[lag]: x_term_label(lag) for lag in X_LAG_COLUMNS} 
     control_column(key, lag): control_term_label(key, lag) for key in CONTROLS for lag in (0, 1)
 }
 _OMITTED_REASONS = {"zero": "样本里全为 0", "collinear": "与其他变量完全共线"}
+# What a column's X-terms sum covers (frontend ``xSpanLabel``).
+_X_SPANS = {(0,): "仅当年", (0, 1): "两年累计", (0, 1, 2): "三年累计"}
 
 
 def reported_models(session: dict[str, Any]) -> list[dict[str, Any]]:
@@ -167,10 +169,60 @@ def _coefficient_rows(columns: list[dict[str, Any]]) -> list[str]:
     if any(isinstance(column["run"], dict) and _x_terms(column["run"]["result"]) > 1 for column in columns):
         coef_cells, se_cells = cells(lambda result: (result.get("cumulative") if _x_terms(result) > 1 else None, False))
         rows += [f"| X 各项合计（累计效应） | {coef_cells} |", f"|  | {se_cells} |"]
+    rows += _per_point_rows(columns)
     if any(isinstance(column["run"], dict) and column["run"]["result"].get("constant") for column in columns):
         coef_cells, se_cells = cells(lambda result: (result.get("constant"), False))
         rows += [f"| 常数项 | {coef_cells} |", f"|  | {se_cells} |"]
     return rows
+
+
+def _x_sum(result: dict[str, Any]) -> dict[str, Any] | None:
+    """A column's X-terms sum: the cumulative relation, or the single X term of a one-term model."""
+    if _x_terms(result) == 1:
+        return next((item for item in result.get("coefs", []) if item.get("name") in X_LAG_COLUMNS.values()), None)
+    cumulative = result.get("cumulative")
+    return cumulative if isinstance(cumulative, dict) else None
+
+
+def _per_point(
+    kind: str, result: dict[str, Any], coefficient: dict[str, Any]
+) -> tuple[float, tuple[float, float] | None]:
+    """The X-terms sum per 1 percentage point of X in the step's unit (shares in points), with its interval."""
+    scale = 1.0 if kind == "share" else 0.01
+    low, high = coefficient.get("ci_low"), coefficient.get("ci_high")
+    bounds = (
+        (float(low) * scale, float(high) * scale)
+        if not _suppressed(result) and isinstance(low, (int, float)) and isinstance(high, (int, float))
+        else None
+    )
+    return float(coefficient["coef"]) * scale, bounds
+
+
+def _per_point_rows(columns: list[dict[str, Any]]) -> list[str]:
+    """The row "合计：X 每高 1 个百分点", as on the page (frontend ``perPointRow``): each column's X-terms sum in the
+    step's unit, all at the first column's decimals so the row compares like with like, each naming its years."""
+
+    def x_sum(column: dict[str, Any]) -> dict[str, Any] | None:
+        run = column["run"]
+        total = _x_sum(run["result"]) if isinstance(run, dict) else None
+        return total if total is not None and isinstance(total.get("coef"), (int, float)) else None
+
+    first = next((column for column in columns if x_sum(column)), None)
+    if first is None:
+        return []
+    design = first["run"]["design"]
+    kind = _depvar_kind(str(design.get("outcome", "")), design)
+    digits = estimate_digits(kind, *_per_point(kind, first["run"]["result"], cast(dict[str, Any], x_sum(first))))
+    cells = []
+    for column in columns:
+        total = x_sum(column)
+        if total is None:
+            cells.append("")
+            continue
+        value, _ = _per_point(kind, column["run"]["result"], total)
+        span = _X_SPANS.get(tuple(sorted(column["spec"].x_lags)), "X 各项之和")
+        cells.append(f"{with_count_unit(_signed(value, digits), kind)}（{span}）")
+    return [f"| 合计：X 每高 1 个百分点 | {' | '.join(cells)} |"]
 
 
 def _included(spec: ModelSpec, key: str) -> bool:

@@ -1,4 +1,5 @@
 import { useRef, useState, type KeyboardEvent } from "react";
+import { ScrollableRegion } from "../../a11y";
 import { percentagePoints } from "../../format";
 import type { TeachingCountriesResponse } from "../../types";
 import { useMeasuredWidth } from "../../table-aids";
@@ -265,14 +266,16 @@ export function CountryExposureChart({ data }: { data: TeachingCountriesResponse
       <p className="country-exposure-note">悬停或用方向键查看每个国家的 X{ruleText ? " 与对美货物顺差" : ""}。</p>
       <details className="country-exposure-table">
         <summary>{data.countries.length} 国读数表</summary>
-        <table className="data-table">
-          <thead><tr><th>国家</th><th>是否被加税</th><th>{data.year} 年各货物行业平均 X（个百分点）</th><th>X &gt; 0 的行业</th>{showBalance && <th>{ruleYear(rule)}对美货物顺差（负数为逆差）</th>}</tr></thead>
-          <tbody>{data.countries.map((row) => <tr key={row.country}>
-            <td>{countryLabel(row.country)}</td><td>{row.taxed ? (waveText(row) ? `被加税（${waveText(row)}）` : "被加税") : "未被加税"}</td>
-            <td>{points(row.mean_exposure)}</td><td>{row.exposed_industries}/{row.industries}</td>
-            {showBalance && <td>{typeof row.market_goods_surplus === "number" && Number.isFinite(row.market_goods_surplus) ? yiUsd(row.market_goods_surplus) : "—"}</td>}
-          </tr>)}</tbody>
-        </table>
+        <ScrollableRegion className="table-wrap bounded-data-table" label={`${data.countries.length} 国读数表，可滚动`}>
+          <table className="data-table">
+            <thead><tr><th>国家</th><th className="text-col">是否被加税</th><th>{data.year} 年各货物行业平均 X（个百分点）</th><th>X &gt; 0 的行业</th>{showBalance && <th>{ruleYear(rule)}对美货物顺差（负数为逆差）</th>}</tr></thead>
+            <tbody>{data.countries.map((row) => <tr key={row.country}>
+              <td>{countryLabel(row.country)}</td><td className="text-col">{row.taxed ? (waveText(row) ? `被加税（${waveText(row)}）` : "被加税") : "未被加税"}</td>
+              <td>{points(row.mean_exposure)}</td><td>{row.exposed_industries}/{row.industries}</td>
+              {showBalance && <td>{typeof row.market_goods_surplus === "number" && Number.isFinite(row.market_goods_surplus) ? yiUsd(row.market_goods_surplus) : "—"}</td>}
+            </tr>)}</tbody>
+          </table>
+        </ScrollableRegion>
       </details>
       {Tip}
     </div>

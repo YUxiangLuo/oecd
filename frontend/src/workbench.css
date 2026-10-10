@@ -389,7 +389,7 @@
 /* Room above the summary, so its focus ring does not run into the note above it. */
 .country-exposure-table { margin-top: 10px; }
 .country-exposure-table > summary { cursor: pointer; color: #4b47e0; font-size: 11.5px; font-weight: 700; }
-.country-exposure-table table { margin-top: 6px; }
+.country-exposure-table > .table-wrap { margin-top: 6px; }
 /* Step 10: the three variables of steps 11–14, each with where it comes from. */
 .teaching-variables { display: grid; gap: 8px; margin: 10px 0 12px; }
 .teaching-variables > div { padding: 9px 12px; border: 1px solid #dcdff0; border-radius: 9px; background: #f8f8ff; }
