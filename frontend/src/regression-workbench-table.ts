@@ -340,11 +340,16 @@ export function comparisonCsv(
   columns: TableColumn[], options: WorkbenchOptions, depvarLabel: string, perPoint?: SummaryRow | null,
 ): string {
   const lines: string[][] = [[`因变量：${depvarLabel}`, ...columns.map((column) => column.name)]];
-  for (const row of coefficientRows(columns, options)) {
+  // As on the page: the per-point row right under the X-terms sum, before a constant.
+  const rows = coefficientRows(columns, options);
+  for (const row of [...rows.filter((item) => item.key !== "_constant"), "per_point" as const, ...rows.filter((item) => item.key === "_constant")]) {
+    if (row === "per_point") {
+      if (perPoint) lines.push([perPoint.label, ...perPoint.cells]);
+      continue;
+    }
     lines.push([row.label, ...row.cells.map((item) => (item === "omitted" ? "（省略）" : item?.coef ?? ""))]);
     lines.push(["", ...row.cells.map((item) => (item && item !== "omitted" ? item.se : ""))]);
   }
-  if (perPoint) lines.push([perPoint.label, ...perPoint.cells]);
   for (const row of summaryRows(columns, options)) lines.push([row.label, ...row.cells]);
   lines.push(["设定", ...columns.map((column) => specSummary(column.spec, options))]);
   lines.push([options.footnote]);

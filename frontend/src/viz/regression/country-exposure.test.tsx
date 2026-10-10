@@ -301,6 +301,10 @@ test("teaching data v10: the two waves have their own colour and legend entry, a
       "第一批被加税（2 国，2018 年起）", "第二批被加税（3 国，2019 年起）", "未被加税（3 国，X = 0，列在图下）",
     ]);
     expect(bars.find((bar) => bar.getAttribute("data-country") === "CRI")!.getAttribute("aria-label")).toStartWith("CRI 哥斯达黎加：第二批，2019 年起加税，2020 年各货物行业平均 X");
+    // The folded 75 国读数表 says the wave too.
+    const cells = [...document.querySelectorAll("table tbody tr")].map((tr) => [...tr.children].map((cell) => cell.textContent));
+    expect(cells.find((cells) => cells[0] === "CRI 哥斯达黎加")?.[1]).toBe("被加税（第二批，2019 年起）");
+    expect(cells.find((cells) => cells[0] === "AUT 奥地利")?.[1]).toBe("未被加税");
   } finally {
     cleanup();
   }

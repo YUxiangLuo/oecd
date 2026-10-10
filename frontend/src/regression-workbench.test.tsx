@@ -166,6 +166,20 @@ describe("tables", () => {
     expect(mixed.cells).toEqual(["-0.55 个百分点（两年累计）", "-0.55 个百分点（两年累计）", "-0.46 个百分点（仅当年）", "-0.54 个百分点（三年累计）"]);
   });
 
+  test("in the CSV the per-point row sits under the X-terms sum, before a constant, as on the page", () => {
+    const plainSpec: ModelSpec = { x_lags: [0, 1], controls: [], fixed_effects: [] };
+    const plain = response(plainSpec, { teaching_tariff_exposure: 0.1, teaching_tariff_exposure_lag1: -0.25 }, { constant: coef("_constant", 0.4) });
+    const csv = comparisonCsv([columns[0], { name: "无FE", spec: plainSpec, snapshot: snapshotOf(plain) }], options, "Y", perPointRow([columns[0], { name: "无FE", spec: plainSpec, snapshot: snapshotOf(plain) }], "trade"));
+    const labels = csv.slice(1).split("\r\n").map((line) => line.split(",")[0]);
+    expect(labels.indexOf("合计：X 每高 1 个百分点")).toBe(labels.indexOf("X 各项合计（累计效应）") + 2);
+    expect(labels.indexOf("常数项")).toBeGreaterThan(labels.indexOf("合计：X 每高 1 个百分点"));
+  });
+
+  test("a wide table scrolls inside its own region: the workbench's grid items may shrink", async () => {
+    const css = await Bun.file(new URL("./workbench.css", import.meta.url)).text();
+    expect(css).toMatch(/\.reg-custom > \* \{ min-width: 0; \}/);
+  });
+
   test("omitted terms are grouped by why", () => {
     const run = response(DEFAULT, { teaching_tariff_exposure: -0.33 }, { omitted: [
       { name: ER, reason: "absorbed", by: "国家×年份" }, { name: "log_gdp_proxy", reason: "absorbed", by: "国家×年份" },

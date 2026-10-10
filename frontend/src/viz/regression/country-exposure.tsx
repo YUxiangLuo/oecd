@@ -268,7 +268,7 @@ export function CountryExposureChart({ data }: { data: TeachingCountriesResponse
         <table className="data-table">
           <thead><tr><th>国家</th><th>是否被加税</th><th>{data.year} 年各货物行业平均 X（个百分点）</th><th>X &gt; 0 的行业</th>{showBalance && <th>{ruleYear(rule)}对美货物顺差（负数为逆差）</th>}</tr></thead>
           <tbody>{data.countries.map((row) => <tr key={row.country}>
-            <td>{countryLabel(row.country)}</td><td>{row.taxed ? "被加税" : "未被加税"}</td>
+            <td>{countryLabel(row.country)}</td><td>{row.taxed ? (waveText(row) ? `被加税（${waveText(row)}）` : "被加税") : "未被加税"}</td>
             <td>{points(row.mean_exposure)}</td><td>{row.exposed_industries}/{row.industries}</td>
             {showBalance && <td>{typeof row.market_goods_surplus === "number" && Number.isFinite(row.market_goods_surplus) ? yiUsd(row.market_goods_surplus) : "—"}</td>}
           </tr>)}</tbody>

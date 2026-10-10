@@ -554,6 +554,9 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 /* 自己设计模型（选做）, steps 11–14: the form's three groups sit side by side and stack when the step is narrow. */
 .reg-custom-details[open] > summary { margin-bottom: 10px; }
 .reg-custom { display: grid; gap: 12px; min-width: 0; }
+/* Grid items keep min-width:auto by default: a wide regression table would widen its card (and the whole content
+   area) instead of scrolling inside its own region. */
+.reg-custom > * { min-width: 0; }
 .reg-custom-y { margin: 0; }
 .reg-custom-hints { margin: 0; padding: 8px 10px 8px 26px; border-radius: 7px; background: #f4f5fb; color: #3d4556; font-size: 12px; line-height: 1.6; }
 .reg-custom-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 10px; }
