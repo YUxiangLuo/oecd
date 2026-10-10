@@ -237,17 +237,17 @@ describe("trend cards name the empty year and say why (round 12)", () => {
     const isolated = [2016, 2020].flatMap((year) => [{ country: "LUX", year, value: null }, { country: "USA", year, value: 2 }]);
     const view = render(
       <TrendSummary readings={isolated} countries={["LUX", "USA"]} years={[2016, 2020]} unit="路径长度"
-        reasonFor={(country) => (country === "LUX" ? "该行业无连接，离心率无法定义（不是 0）" : null)} />,
+        reasonFor={(country) => (country === "LUX" ? "该行业到不了其他节点，离心率无法定义（软件记为 0）" : null)} />,
     );
-    expect(view.container.textContent).toBe("LUX 卢森堡在所选年份该行业无连接，离心率无法定义（不是 0），暂不能读出期间变化。");
+    expect(view.container.textContent).toBe("LUX 卢森堡在所选年份该行业到不了其他节点，离心率无法定义（软件记为 0），暂不能读出期间变化。");
     cleanup();
     const comparison = render(
       <TrendSummary readings={isolated} countries={["USA", "LUX"]} years={[2016, 2020]} unit="路径长度"
-        reasonFor={(country) => (country === "LUX" ? "该行业无连接，离心率无法定义（不是 0）" : null)} />,
+        reasonFor={(country) => (country === "LUX" ? "该行业到不了其他节点，离心率无法定义（软件记为 0）" : null)} />,
     );
     const text = comparison.getByLabelText("趋势读数").textContent ?? "";
     expect(text).toContain("期间读数无法定义");
-    expect(text).toContain("2016、2020 年该行业无连接，离心率无法定义（不是 0），暂不比较差距");
+    expect(text).toContain("2016、2020 年该行业到不了其他节点，离心率无法定义（软件记为 0），暂不比较差距");
   });
 });
 

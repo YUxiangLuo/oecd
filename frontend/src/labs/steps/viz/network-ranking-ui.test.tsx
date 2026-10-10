@@ -25,7 +25,7 @@ test("an undefined path metric is named, and the caption covers it (round 12)", 
       onIndustry={() => {}}
     />,
   );
-  expect(html).toContain("无连接，无法定义");
+  expect(html).toContain("到不了其他节点，无法定义");
   expect(html).toContain("缺少或无法定义的数据留空，不当作 0。");
 });
 

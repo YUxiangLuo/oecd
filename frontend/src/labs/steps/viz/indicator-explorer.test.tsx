@@ -594,13 +594,13 @@ describe("readouts and update notes follow the chart on screen (round 10)", () =
       const cards = await view.findByLabelText("构成读数");
       expect(cards.textContent).toContain("为负");
       expect(cards.textContent).not.toContain("对比国家构成不完整");
-      expect(view.getByText(/构成份额无法计算，占比图里不画/)).toBeTruthy();
-      expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("为负，构成份额无法计算（不是缺少数据）");
+      expect(view.getByText(/构成份额不显示（总量为负时各分项同为负，不按常规份额解读），占比图里不画/)).toBeTruthy();
+      expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("为负，构成份额不显示（各分项同为负，不按常规份额解读；不是缺少数据）");
       // In the 金额 view the card does not send the student to the view they are already in.
       expect(cards.textContent).toContain("切到“金额”可看各分项");
       fireEvent.click(view.getByRole("button", { name: "金额" }));
       await waitFor(() => expect(view.getByLabelText("构成读数").textContent).not.toContain("切到“金额”"));
-      expect(view.getByLabelText("构成读数").textContent).toContain("无法算比重");
+      expect(view.getByLabelText("构成读数").textContent).toContain("不按常规份额解读");
     } finally { rows.mockRestore(); schema.mockRestore(); }
   });
 
@@ -765,7 +765,7 @@ test("step 7 占比 says nothing about red negative parts when the only negative
   const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
   try {
     const view = setup(ProductionVizStep);
-    await view.findByText(/构成份额无法计算，占比图里不画/);
+    await view.findByText(/构成份额不显示（总量为负时各分项同为负，不按常规份额解读），占比图里不画/);
     expect(view.container.textContent).not.toContain("负分项画成红色");
     fireEvent.click(view.getByRole("button", { name: "金额" }));
     await waitFor(() => expect(view.container.textContent).toContain("负分项画在零轴左侧"));

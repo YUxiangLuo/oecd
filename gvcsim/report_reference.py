@@ -107,15 +107,18 @@ def industry_reference(
         return []
     frame = df.loc[df["country"].astype(str) != "ROW", ["country", "industry", metric]].copy()
     # An economy whose industry neither adds value nor buys or sells intermediates has no output there (LUX·A03):
-    # its 0 is not a position, so a requested country in that case is flagged instead of ranked last.
+    # its 0 is not a position. It is left out of the median, the middle 50% and the ranks (for every metric), and
+    # a requested country in that case is flagged instead of ranked.
     no_output: set[tuple[str, str]] = set()
-    if countries and {"SVA", "weighted degree"} <= set(df.columns):
-        idle = df[
-            (pd.to_numeric(df["SVA"], errors="coerce") == 0)
+    if {"SVA", "weighted degree"} <= set(df.columns):
+        idle = df.loc[
+            (df["country"].astype(str) != "ROW")
+            & (pd.to_numeric(df["SVA"], errors="coerce") == 0)
             & (pd.to_numeric(df["weighted degree"], errors="coerce") == 0)
-            & df["country"].astype(str).isin(countries)
         ]
         no_output = set(zip(idle["country"].astype(str), idle["industry"].astype(str)))
+        pairs = list(zip(frame["country"].astype(str), frame["industry"].astype(str)))
+        frame = frame.loc[[pair not in no_output for pair in pairs]]
     if industry is not None:
         frame = frame[frame["industry"].astype(str) == industry]
     frame[metric] = pd.to_numeric(frame[metric], errors="coerce").astype(float)
@@ -123,8 +126,8 @@ def industry_reference(
     readings = frame[metric].to_numpy()
     keep = np.isfinite(readings)
     if metric in PATH_METRICS:
-        # A node that reaches no other node (no output, or no sales to other industries) gets 0 from the network
-        # pipeline, but its path metrics are undefined: left out of the median and the ranks, as on the page.
+        # A node that reaches no other node (isolated, or selling only to itself) gets 0 from the network pipeline,
+        # but its path metrics are 0/0, undefined: left out of the median and the ranks, as on the page.
         keep &= readings != 0
     frame = frame.loc[keep]
     rows = []

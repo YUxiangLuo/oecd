@@ -2860,3 +2860,11 @@ def test_report_example_conversion_groups_thousands_like_the_page():
 
     assert _example_size("network", -1382.4) == "1,382 个中心性原始单位"
     assert _example_size("network", 12.345) == "12.3 个中心性原始单位"
+
+
+def test_report_step_nine_dimensionless_network_metrics_are_not_called_a_position_index():
+    from gvcsim.report_render import _unit_kinds
+
+    closeness = [{"unit": "无量纲", "year": 2020}]
+    assert _unit_kinds(closeness, 9) == "只看连接、不看金额的网络指标"
+    assert _unit_kinds(closeness, 8) == "位置指数"

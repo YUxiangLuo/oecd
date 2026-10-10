@@ -195,7 +195,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     undefinedGroups.set(when, [...(undefinedGroups.get(when) ?? []), country]);
   }
   const undefinedNote = undefinedGroups.size
-    ? `${[...undefinedGroups].map(([when, codes]) => `${codes.map(countryLabel).join("、")} ${when}`).join("，")}的 ${sectorLabel(industry)}${PATH_UNDEFINED_NOTE}，${label}无法定义（不是 0，不参与排名和中位数，图上留空）。`
+    ? `${[...undefinedGroups].map(([when, codes]) => `${codes.map(countryLabel).join("、")} ${when}`).join("，")}的 ${sectorLabel(industry)}${PATH_UNDEFINED_NOTE}，${label}无法定义（软件记为 0，不参与排名和中位数，图上留空）。`
     : "";
   // 流量与路径 reads 加权总度 on a log scale: an industry with no trade (0) or no reading cannot be placed. Say how
   // many and why, as step 7's 行业结构 does.
@@ -206,7 +206,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     const zero = hidden.filter((row) => row["weighted degree"] === 0).map((row) => String(row.industry));
     const missing = hidden.filter((row) => row["weighted degree"] !== 0).map((row) => String(row.industry));
     const clauses = [
-      ...(zero.length ? [`${zero.join("、")} 加权总度为 0（没有买卖，无法在对数刻度上显示）`] : []),
+      ...(zero.length ? [`${zero.join("、")} 加权总度为 0（没有中间品买卖，无法在对数刻度上显示）`] : []),
       ...(missing.length ? [`${missing.join("、")} 缺少数据`] : []),
     ];
     return `另有 ${hidden.length} 个行业没有画出：${clauses.join("；")}。`;
@@ -401,7 +401,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       {finite.length ? <IndicatorTrendChart
         rows={(query.data ?? []).filter((row) => row.industry === industry).map((row) => ({ ...row, [metric]: networkValue(row[metric], metric) }))}
         emptyReading={(country, at) => (points.some((point) => point.country === country && point.year === at && point.undefined) ? PATH_UNDEFINED_LABEL : null)}
-        reasonFor={(country, at) => (points.some((point) => point.country === country && point.year === at && point.undefined) ? `该行业无连接，${label}无法定义（不是 0）` : null)}
+        reasonFor={(country, at) => (points.some((point) => point.country === country && point.year === at && point.undefined) ? `该行业到不了其他节点，${label}无法定义（软件记为 0）` : null)}
         countries={selected}
         years={years}
         metric={metric}

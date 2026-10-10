@@ -272,7 +272,7 @@ export function placeCornerLabel(
 }
 
 /** 象限散点图:两条参考线(默认中位数)把平面切成四象限,四角标注角色。
- *  步6「定位图」(外国增加值项占比×跨境生产占比)等双指标比较。 */
+ *  步6「定位图」(外国增加值项占比×前向 GVC 生产总份额)等双指标比较。 */
 /** A highlighted economy's path through the years on the scatter (phase 2 定位图 轨迹). */
 export interface ScatterTrail { id: string; label: string; color: string; points: { year: number; x: number; y: number }[] }
 

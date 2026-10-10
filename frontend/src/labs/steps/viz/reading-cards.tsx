@@ -118,7 +118,7 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
     const total = valueOf(rows, country, year, composition.total, industry);
     const prefix = comparison ? `与对比国家 ${countryLabel(country)} · ${focusLabel}` : `${scopeLabel(country, industry)} · ${year}`;
     if (total === 0) return { eyebrow: prefix, big: `${comparison ? `${countryLabel(country)} ` : ""}${totalLabel}为 0`, small: "没有可分解的总量，构成份额无定义；可换一个行业或国家" };
-    if (total !== null && total < 0) return { eyebrow: prefix, big: `${comparison ? `${countryLabel(country)} ` : ""}${totalLabel}为负`, small: `总量为负（${textNumber(total, "百万美元")} 百万美元），无法算比重${amountShown ? "" : "；切到“金额”可看各分项"}` };
+    if (total !== null && total < 0) return { eyebrow: prefix, big: `${comparison ? `${countryLabel(country)} ` : ""}${totalLabel}为负`, small: `总量为负（${textNumber(total, "百万美元")} 百万美元），各分项同为负，不按常规份额解读${amountShown ? "" : "；切到“金额”可看各分项"}` };
     return null;
   };
   if (ownShares.some((item) => item.share === null)) {

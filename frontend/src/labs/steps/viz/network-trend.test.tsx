@@ -349,8 +349,8 @@ test("undefined path metrics: economies with the same years share one clause", a
   mockReference();
   render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA", "DEU"]} onRecord={() => {}}
     initialBrowse={{ countries: ["CHN", "USA", "DEU"], view: "trend", industry: "C26", metric: "closnesscentrality", year: 2020 }} />);
-  await waitFor(() => expect(screen.getByText(/无法定义（不是 0，不参与排名和中位数，图上留空）/)).toBeTruthy());
-  const note = screen.getByText(/无法定义（不是 0，不参与排名和中位数，图上留空）/).textContent!;
+  await waitFor(() => expect(screen.getByText(/无法定义（软件记为 0，不参与排名和中位数，图上留空）/)).toBeTruthy());
+  const note = screen.getByText(/无法定义（软件记为 0，不参与排名和中位数，图上留空）/).textContent!;
   // CHN (country A) is named by the chart's own reading; the note covers the others.
   expect(note.startsWith("USA 美国 历年，DEU 德国 2018 年的 C26")).toBe(true);
   expect(note).not.toContain("中国历年");
@@ -365,7 +365,7 @@ test("流量与路径 says which industries it leaves out and why", async () => 
   mockReference();
   render(<NetworkTrend meta={{ ...meta, sectors: ["C26", "C27", "T"] }} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={() => {}} />);
   fireEvent.click(screen.getByRole("button", { name: "流量与路径" }));
-  await waitFor(() => expect(screen.getAllByText("另有 2 个行业没有画出：C27、T 加权总度为 0（没有买卖，无法在对数刻度上显示）。")).toHaveLength(2));
+  await waitFor(() => expect(screen.getAllByText("另有 2 个行业没有画出：C27、T 加权总度为 0（没有中间品买卖，无法在对数刻度上显示）。")).toHaveLength(2));
 });
 
 test("a recorded ranking does not change the trend's industry; a carried pair says where it came from", () => {

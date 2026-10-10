@@ -51,7 +51,7 @@ const METHOD: Record<MethodTopic, MethodContent> = {
       },
     ],
     formula: "总出口 = DVAex + DVArt + DDC + FVA + FDC + taxsub；外国增加值项占比 = FVA ÷ 总出口",
-    caveat: "FVA 不包括外国重复计算 FDC。分母是六项相加得到的总出口，所以这个比例和 OECD TiVA 公布的“出口中外国增加值占比”不完全相同。",
+    caveat: "FVA 不含外国重复计算 FDC，产品税减补贴也单独列为 taxsub，所以这个比例和 OECD TiVA 公布的“出口中外国增加值占比”不完全相同。分母总出口（六项之和）就等于 ICIO 记录的出口额。",
   },
   production: {
     label: "生产活动分解（WWYZ 法）",
@@ -105,7 +105,7 @@ const METHOD: Record<MethodTopic, MethodContent> = {
       },
     ],
     formula: "PLv = Σ（增加值份额 × 段长度）；GVCPs = PLv_GVC ÷ PLy_GVC",
-    caveat: "长度不是跨境次数：增加国内加工也能拉长生产链。少数行业增加值为负时，长度可能超出常规范围。",
+    caveat: "长度不是跨境次数：增加国内加工也能拉长生产链。行业增加值为负（如 ITA·C19 2020）时，行业的长度不受影响（增加值率在比值中约去）。",
   },
   network: {
     label: "全球生产网络（按 Gephi 网络软件的算法）",

@@ -415,7 +415,7 @@ export function IndicatorDataTable({
                 : column === "country" ? row.country != null ? countryLabel(String(row.country)) : "—"
                 : column === "year" ? String(row.year ?? "—")
                   // A node that reaches no other node has no distance: the pipeline stores 0, but the value is
-                  // undefined, as step 9 says ("无连接，无法定义"), not a closeness of 0.
+                  // undefined (0/0), as on step 9, not a closeness of 0.
                   : pathMetricUndefined(column, row[column])
                     ? <span data-metric-undefined="true" title={`${fieldLabel(column, schema)}：${PATH_UNDEFINED_NOTE}`}>{PATH_UNDEFINED_LABEL}</span>
                     : fmtIndicatorCell(row, column, schema);
@@ -582,7 +582,7 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
             />
           </ScrollableRegion>
           {displayRows.some((row) => cols.some((column) => pathMetricUndefined(column, row[column]))) && (
-            <p className="muted">“{PATH_UNDEFINED_LABEL}”：该行业{PATH_UNDEFINED_NOTE}，接近中心性、离心率与调和中心性没有定义（不是 0，与步骤 9 相同）。</p>
+            <p className="muted">“{PATH_UNDEFINED_LABEL}”：该行业{PATH_UNDEFINED_NOTE}，接近中心性、离心率与调和中心性无法定义（软件记为 0，不表示最远）。</p>
           )}
       </IndicatorRequestBoundary>
       {/* Outside the loading boundary: the pager stays mounted (and keeps focus) while the next page loads. */}

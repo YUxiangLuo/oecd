@@ -93,7 +93,7 @@ export const DECOMP: Record<number, DecompCfg> = {
       { key: "3a_VA_GVC_S", label: "3a_VA_GVC_S 简单 GVC 增加值", short: "简单 GVC", color: COMPONENT_COLORS.simpleGvc, desc: "增加值随中间品跨境一次后，在国外被最终使用。" },
       { key: "3b_VA_GVC_C", label: "3b_VA_GVC_C 复杂 GVC 增加值", short: "复杂 GVC", color: COMPONENT_COLORS.complexGvc, desc: "增加值至少两次跨越国境。" },
     ],
-    negativeNote: "负值表示这部分增加值为负（例如行业亏损），所以其他分项的比重之和可能超过 100%。",
+    negativeNote: "总增加值为负时，各分项同为负（例如 MLT·H51 2020），本页不显示其比重。",
     note: (_r, values, decimals) =>
       `GVC 合计（3_VA_GVC）= 简单 GVC + 复杂 GVC = ${sumText(values[2], values[3], decimals)}。` +
       `也可以反过来，从最终产品在哪国完成来拆分（后向分解，代码 FGY）：在步骤 7 的“四类生产活动”视角选“后向（按最终品）”，查看各类所占份额。`,
@@ -115,7 +115,8 @@ export const DECOMP: Record<number, DecompCfg> = {
 
 const FORWARD_SEGMENTS = [["PLv_D", "1_VA_D", "纯国内"], ["PLv_RT", "2_VA_RT", "传统贸易"], ["PLv_GVC", "3_VA_GVC", "GVC"]] as const;
 
-/** Step 4: some forward segment has a length, even where SVA ≤ 0 leaves the share-weighted split undefined. */
+/** Step 4: some forward segment has a length, even where SVA = 0 leaves the share-weighted split undefined or SVA < 0
+ * keeps it from being shown. */
 export const hasForwardSegmentLength = (r: Row) => FORWARD_SEGMENTS.some(([lengthKey]) => finiteNumber(r[lengthKey]) != null);
 
 /** Step 4: "前向各段长度：纯国内 …、传统贸易 …、GVC …". */
@@ -349,7 +350,7 @@ function disclosureRatio(numerator: number | null, denominator: number | null): 
 /** Why a share has no value: the reason the student can check against the total line above it. */
 function disclosureRatioGap(numerator: number | null, denominator: number | null): string {
   if (numerator == null || denominator == null) return "—（缺数据，无法计算）";
-  return denominator < 0 ? "—（总量为负，无法计算比重）" : "—（总量为 0，无法计算比重）";
+  return denominator < 0 ? "—（总量为负，各分项同为负，不按份额解读）" : "—（总量为 0，无法计算比重）";
 }
 
 /** `decimals`: beside a decomposition table, the panel's amount precision ({@link panelAmountDecimals}). */
@@ -372,7 +373,7 @@ export function IndicatorCalculationDisclosure({ step, row, decimals }: { step: 
           = {operands?.numerator ?? disclosureAmount(numerator)} / {operands?.denominator ?? disclosureAmount(denominator)} = <b>{operands?.percent ?? disclosureRatioGap(numerator, denominator)}</b>
         </div>
         <p>{step === 4
-          ? "FVA 不包括外国重复计算 FDC。分母是下面六项相加得到的总出口，所以这个比例和 OECD TiVA 公布的“出口中外国增加值占比”不完全相同。"
+          ? "FVA 不含外国重复计算 FDC，产品税减补贴也单独列为 taxsub，所以这个比例和 OECD TiVA 公布的“出口中外国增加值占比”不完全相同。分母总出口（下面六项之和）就等于 ICIO 记录的出口额。"
           : "复杂 GVC 只算至少跨境两次的增加值；这个份额反映生产活动的构成，不直接代表技术水平或收益。"}</p>
       </section>
     );
@@ -510,7 +511,7 @@ export function decompositionModelReason(model: DecompositionModel, weightLabel?
     return cjkJoin(weight, "为 0（没有这类活动），无法计算加权长度。");
   }
   if (model.reason === "negative-weight-denominator") {
-    return cjkJoin(weight, "小于 0，无法按份额加权平均。");
+    return cjkJoin(weight, "小于 0：各分项同为负，比值虽可算出，但负增加值的构成不按常规份额解读，本页不按份额加权分解。");
   }
   if (model.reason === "missing-fields") {
     return `分解数据不完整${model.missingFields.length ? `（缺 ${model.missingFields.join("、")}）` : ""}，暂时无法拆分。`;
@@ -529,12 +530,14 @@ export function decompositionModelReason(model: DecompositionModel, weightLabel?
     }
     return "总量为 0，无法算比重。";
   }
-  return "总量为负，无法算比重。";
+  return "总量为负：各分项同为负，比值虽可算出，但不按常规份额解读，本页不显示比重。";
 }
 
 /** A weight of 0 or below makes the weighted parts undefined, not missing: the "—" line says which. */
 export function unavailableDashNote(model: DecompositionModel): string {
-  return model.reason === "zero-weight-denominator" || model.reason === "negative-weight-denominator"
+  return model.reason === "negative-weight-denominator"
+    ? "“—”表示这一项不按份额显示（不是缺少数据），不按 0 计算。"
+    : model.reason === "zero-weight-denominator"
     ? "“—”表示这一项无法计算（不是缺少数据），不按 0 计算。"
     : "“—”表示没有数据，不按 0 计算。";
 }
@@ -543,7 +546,7 @@ export function unavailableDashNote(model: DecompositionModel): string {
  * the headline length comes straight from the input–output relations; only the weighted parts need SVA > 0. */
 export function unavailableTotalNote(model: DecompositionModel, cfg: Pick<DecompCfg, "totalLabel" | "unit" | "weightTotal">): string | null {
   if (model.reason !== "negative-weight-denominator" || model.total == null || !cfg.weightTotal) return null;
-  return `${cfg.totalLabel} = ${fmt(model.total, cfg.unit)} 仍有定义：总长度由投入产出关系直接算出，不需要份额；无法计算的只是按 ${cfg.weightTotal} 份额加权的各段贡献，因此只是无法按段分解。`;
+  return `${cfg.totalLabel} = ${fmt(model.total, cfg.unit)} 仍有定义：总长度由投入产出关系直接算出，不需要份额；${cfg.weightTotal} 为负时，本页只是不按 ${cfg.weightTotal} 份额把它分解到各段。`;
 }
 
 /** Only missing data can change later ("暂时无法拆分"); a weight of 0 or below (LUX B09: FGY = 0, no final goods) is
@@ -1423,7 +1426,7 @@ export function NetworkCentralityDemo() {
               <div className="ndp-calc">
                 {reachablePaths.length > 0
                   ? <>= {reachablePaths.length} / {distanceSum} = <b>{C.closeness[sel].toFixed(3)}</b></>
-                  : <>沿箭头无法到达任何节点，记为 <b>0</b></>}
+                  : <>沿箭头到不了任何节点：距离没有定义，接近中心性无法定义（软件记为 <b>0</b>，不表示最远）</>}
               </div>
               <p className="ndp-note">高亮的是从 {sel} 沿箭头出发的最短路线；无法到达的节点不计入分子和分母。</p>
               <ScrollableRegion
