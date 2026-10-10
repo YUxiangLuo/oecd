@@ -3036,7 +3036,7 @@ def test_report_appendix_recomputes_the_models_marked_for_the_report(tmp_path, m
     assert "99.0000" not in appendix
     # The exchange rate is absorbed by country × year effects and said so; the default column's model is summarised.
     assert (
-        "- 国家×年份\\*：X + L1.X；汇率变动；国家×行业 + 国家×年份 FE；省略：汇率变动（被国家×年份 FE 吸收）"
+        "- 国家×年份\\*：X + L1.X；汇率变动；国家×行业 + 国家×年份 FE；已省略（被国家×年份 FE 吸收：汇率变动）"
         in appendix
     )
     assert "- 默认模型：X + L1.X；汇率变动；国家×行业 + 年份 FE" in appendix

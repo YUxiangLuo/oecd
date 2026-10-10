@@ -417,7 +417,7 @@ test("teaching data v10: the policy line and the rate tile name the two waves, w
   await waitFor(() => expect(document.querySelector(".teaching-tiles")).not.toBeNull());
   expect(document.querySelector(".teaching-scenario")!.textContent).toBe(
     "USA 美国分两批对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 3 个国家的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 25% 关税："
-      + "对美货物顺差 ≥ 100 亿美元的 1 个 2018 年起，其余 2 个 2019 年起；服务业不加税；其余 2 个国家未被加税。"
+      + "对美货物顺差 ≥ 100 亿美元的 1 国 2018 年起，其余 2 国 2019 年起；服务业不加税；其余 2 个国家未被加税。"
       + "名单和批次都按这条规则由 ICIO 数据确定；美国是加税方，不在回归样本中。",
   );
   expect([...document.querySelectorAll(".teaching-tiles li")].at(-1)!.textContent).toBe("25%第一批 1 国 2018 年起、第二批 2 国 2019 年起的税率（此前为 0）");
@@ -517,8 +517,12 @@ test("the year-by-year table shows w, τ, X, last year's X and the exchange-rate
     "国家", "年份", "首年对美出口份额 w", "加征税率 τ", "关税暴露 X = w × τ", "上一年的 X（L1.X）", "汇率变动",
   ]);
   const canRows = [...document.querySelectorAll(".teaching-year-table tbody tr")].slice(0, 5).map((tr) => [...tr.children].map((cell) => cell.textContent));
-  expect(canRows[2]).toEqual(["CAN 加拿大", "2018", "50.00%", "25%", "50.00% × 25% = 12.50 个百分点", "0.00 个百分点", "-6.4 个百分点"]);
+  // A zero L1.X reads like a zero X ("0 个百分点", not "0.00").
+  expect(canRows[2]).toEqual(["CAN 加拿大", "2018", "50.00%", "25%", "50.00% × 25% = 12.50 个百分点", "0 个百分点", "-6.4 个百分点"]);
   expect(canRows[3][5]).toBe("12.50 个百分点");
+  // Neither example country is in a first wave here: the rate chart has no tariff line, and no cards of its own.
+  expect(document.querySelectorAll(".teaching-example-charts [data-mark-year]")).toHaveLength(1);
+  expect(document.querySelectorAll(".teaching-example-charts .comparison-summary")).toHaveLength(1);
   // The exchange-rate chart sits next to X's, marked at the first wave.
   expect(document.querySelectorAll(".teaching-example-charts figure, .teaching-example-charts svg").length).toBeGreaterThan(1);
   expect(document.body.textContent).toContain("汇率变动");

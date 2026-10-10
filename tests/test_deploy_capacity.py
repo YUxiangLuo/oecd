@@ -40,7 +40,7 @@ def test_environment_has_bounded_request_rates_without_removed_evidence_or_pool_
     assert "GVCSIM_TOKEN_TTL_SECONDS=2592000" in environment
     assert "GVCSIM_LOGIN_ATTEMPTS_PER_MINUTE=10" in environment
     assert "GVCSIM_LOGIN_SOURCE_ATTEMPTS_PER_MINUTE=120" in environment
-    assert "GVCSIM_REGRESSION_RUNS_PER_MINUTE=12" in environment
+    assert "GVCSIM_REGRESSION_RUNS_PER_MINUTE=20" in environment
     assert "GVCSIM_BACKUP_KEEP=90" in environment
     assert "1..10000" in environment
     assert "GVCSIM_DATA_DIR=/opt/gvcsim/shared/data" in environment

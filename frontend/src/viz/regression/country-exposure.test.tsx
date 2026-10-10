@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { TeachingCountriesResponse } from "../../types";
 import { countryIndustryLines, countryIndustryNote, CountryExposureChart, countryTipLines, goodsBalanceText, ruleYiUsd, taxedRuleText, yiUsd } from "./country-exposure";
-import { TAXED } from "./palette";
+import { TAXED, TAXED_LATER } from "./palette";
 
 const row = (country: string, mean: number, taxed = mean > 0, exposed = taxed ? 44 : 0, industries = 44) => ({
   country, taxed, mean_exposure: mean, max_exposure: mean * 2, industries, exposed_industries: exposed,
@@ -281,4 +281,27 @@ test("teaching data v10: a taxed country's readout says its wave and when its ta
   };
   expect(countryTipLines(row, 2020)).toContainEqual(["加税", "第一批，2018 年起"]);
   expect(countryTipLines({ ...row, taxed: false, wave: 0, start_year: null }, 2020).some(([label]) => label === "加税")).toBe(false);
+});
+
+test("teaching data v10: the two waves have their own colour and legend entry, and each bar's label names its wave", () => {
+  const waveOf: Record<string, [number, number]> = { CAN: [1, 2018], CRI: [2, 2019], COL: [2, 2019], PER: [2, 2019], LUX: [1, 2018] };
+  const data = {
+    ...countriesFixture,
+    countries: countriesFixture.countries.map((item) => ({
+      ...item, wave: waveOf[item.country]?.[0] ?? 0, start_year: waveOf[item.country]?.[1] ?? null,
+    })),
+  };
+  try {
+    render(<CountryExposureChart data={data} />);
+    const bars = [...document.querySelectorAll("g.country-exposure-bar")];
+    const fill = (country: string) => bars.find((bar) => bar.getAttribute("data-country") === country)!.querySelectorAll("rect")[1].getAttribute("fill");
+    expect(fill("CAN")).toBe(TAXED);
+    expect(fill("CRI")).toBe(TAXED_LATER);
+    expect([...document.querySelectorAll(".country-exposure-legend span")].map((item) => item.textContent)).toEqual([
+      "第一批被加税（2 国，2018 年起）", "第二批被加税（3 国，2019 年起）", "未被加税（3 国，X = 0，列在图下）",
+    ]);
+    expect(bars.find((bar) => bar.getAttribute("data-country") === "CRI")!.getAttribute("aria-label")).toStartWith("CRI 哥斯达黎加：第二批，2019 年起加税，2020 年各货物行业平均 X");
+  } finally {
+    cleanup();
+  }
 });

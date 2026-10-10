@@ -899,7 +899,7 @@ export interface WorkbenchOptions {
   control_lag_note: string;
   fixed_effects: { key: string; label: string; description: string; includes: string[] }[];
   no_fixed_effects_note: string;
-  limits: { saved: number; in_report: number; compared: number; name_length: number };
+  limits: { saved: number; in_report: number; compared: number; name_length: number; runs_per_minute: number };
   /** "试一试": one change at a time, each a contrast the course data were built to show. */
   tries: string[];
   hints: string[];

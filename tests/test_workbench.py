@@ -59,7 +59,7 @@ def test_options_list_every_choice_in_page_order_with_the_default_and_the_limits
     assert effects["country_industry"]["includes"] == ["country", "industry"]
     assert effects["country_year"]["includes"] == ["country", "year"]
     assert "吸收所有国家层面的控制变量" in effects["country_year"]["description"]
-    assert options["limits"] == {"saved": 6, "in_report": 3, "compared": 4, "name_length": 20}
+    assert options["limits"] == {"saved": 6, "in_report": 3, "compared": 4, "name_length": 20, "runs_per_minute": 20}
     assert len(options["hints"]) == 2 and options["footnote"].startswith("注：括号内为按国家聚类的标准误。")
 
 

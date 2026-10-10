@@ -4,7 +4,7 @@
  * next to the default model; saves it as "结果N", exports the comparison and marks up to three for the report (whose
  * appendix recomputes them from the saved model).
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ScrollableRegion } from "./a11y";
 import { groupedFixed } from "./format";
 import { api, ApiError } from "./api";
@@ -18,7 +18,8 @@ import {
   includedBy,
   nameProblem,
   nextResultName,
-  omittedLines,
+  omittedSummary,
+  perPointReading,
   perPointRow,
   sameSpec,
   samplesDiffer,
@@ -31,7 +32,6 @@ import {
   X_COLUMNS,
 } from "./regression-workbench-table";
 import { formatPValue } from "./regression-statistics";
-import { teachingEffect } from "./regression-verdict";
 import { ConfirmModal } from "./teacher/ui";
 import type {
   CoefStat,
@@ -160,15 +160,6 @@ function ModelForm({ options, spec, onChange }: {
   );
 }
 
-/** "-0.55 个百分点": a coefficient read per percentage point of X in the step's unit, at the digits the step's headline
- *  uses (its interval sets them, as on the result card and in the report). */
-export function perPointReading(outcome: RegressionOutcome, stat: CoefStat, snapshot: CustomResultSnapshot): string {
-  const bounds: [number, number] | null = !snapshot.result.suppressed && stat.ci_low != null && stat.ci_high != null
-    ? [stat.ci_low, stat.ci_high]
-    : null;
-  return teachingEffect(outcome, stat.coef, { depvar_kind: snapshot.depvar_kind }, bounds);
-}
-
 /** One column's every number: coefficient, SE, t, p and the 95% interval of each term, the sum included. */
 export function ColumnDetails({ column, options, perPoint }: {
   column: TableColumn; options: WorkbenchOptions; perPoint: (stat: CoefStat, snapshot: CustomResultSnapshot) => string;
@@ -228,6 +219,19 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState<CustomResult | null>(null);
   const [detailColumn, setDetailColumn] = useState(0);
+  // A refused calculation (429) waits out Retry-After with a visible countdown, as the step's run button does.
+  const [retryAt, setRetryAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (retryAt == null) return;
+    const timer = window.setInterval(() => {
+      const current = Date.now();
+      setNow(current);
+      if (current >= retryAt) { setRetryAt(null); setError(null); }
+    }, 500);
+    return () => window.clearInterval(timer);
+  }, [retryAt]);
+  const retryWait = retryAt == null ? 0 : Math.max(0, Math.ceil((retryAt - now) / 1000));
   const controller = useRef<AbortController | null>(null);
 
   if (optionsQuery.status === "error") {
@@ -239,14 +243,15 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const perPoint = (stat: CoefStat, snapshot: CustomResultSnapshot) => perPointReading(outcome, stat, snapshot);
   const changeSpec = (next: ModelSpec) => {
     setLocalSpec(next);
-    setError(null);
+    // A refused calculation's message stays until its wait is over (the button counts down beside it).
+    if (retryWait === 0) setError(null);
     state.saveView?.({ custom_draft: { ...draft, spec: next } });
   };
   // The computed model belongs to this Y and this form; otherwise it is kept but marked out of date.
   const current = Boolean(computed && computed.design.baseline === baseline && sameSpec(computed.design.spec!, spec, options));
   const noX = spec.x_lags.length === 0;
   const run = async () => {
-    if (running || noX) return;
+    if (running || noX || retryWait > 0) return;
     controller.current?.abort();
     const request = new AbortController();
     controller.current = request;
@@ -260,7 +265,12 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       setComputed(response);
       setSaveName(null);
     } catch (cause) {
-      if (!(cause instanceof DOMException && cause.name === "AbortError")) {
+      if (cause instanceof ApiError && cause.status === 429 && cause.retryAfter) {
+        // Not a problem with the model: the student's calculations of the minute are used up.
+        setNow(Date.now());
+        setRetryAt(Date.now() + cause.retryAfter * 1000);
+        setError(`计算太频繁：每分钟最多算 ${options.limits.runs_per_minute} 个新模型（已经算过的不计），请稍等再算。`);
+      } else if (!(cause instanceof DOMException && cause.name === "AbortError")) {
         setError(userFacingRequestError(cause, "这个模型没有算出结果"));
         if (cause instanceof ApiError && cause.status === 400) setComputed(null);
       }
@@ -316,7 +326,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   // The column the computed model is: the new one, a saved one it repeats, or the default.
   const highlighted = unsaved ? columns.length - 1 : isDefault ? 0 : duplicate ? columns.findIndex((column) => column.id === duplicate.id) : -1;
   const coefficients = coefficientRows(columns, options);
-  const pointRow = perPointRow(columns, perPoint);
+  const pointRow = perPointRow(columns, outcome);
   const summary = summaryRows(columns, options);
   const shownDetail = Math.min(detailColumn, columns.length - 1);
   const reportChanged = Boolean(state.materialLocked && reportOutdated && customReportChanged(stepNumber, saved, reportCustomResults));
@@ -332,19 +342,21 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       <ModelForm options={options} spec={spec} onChange={changeSpec} />
       <p className="reg-custom-equation" aria-live="polite">{noX ? "至少选一项关税暴露 X。" : equationPreview(spec, options)}</p>
       <div className="reg-custom-actions">
-        <button type="button" className="run-btn" aria-disabled={running || noX || undefined} onClick={() => void run()}>
-          {running ? "正在计算…" : "计算这个模型"}
+        <button type="button" className="run-btn" aria-disabled={running || noX || retryWait > 0 || undefined} onClick={() => void run()}>
+          {running ? "正在计算…" : retryWait > 0 ? `重试（${retryWait} 秒后）` : "计算这个模型"}
         </button>
         <button type="button" className="secondary" onClick={() => changeSpec(options.default_spec)}>恢复默认设定</button>
         <span className="sr-only" role="status" aria-live="polite">{running ? "正在计算…" : ""}</span>
       </div>
       {error && <div className="error-box async-error" role="alert">{error}</div>}
-      {computed && !current && <p className="reg-stale-note" role="note">设定已更改，点“计算这个模型”查看新结果。</p>}
+      {computed && !current && (computed.design.baseline !== baseline
+        ? <p className="reg-stale-note" role="note">因变量已换成“{depvarLabel}”，点“计算这个模型”在新的 Y 上计算。</p>
+        : !sameSpec(spec, options.default_spec, options) && <p className="reg-stale-note" role="note">设定已更改，点“计算这个模型”查看新结果。</p>)}
 
       <div className="reg-custom-compare">
         <div className="reg-custom-compare-head">
           <h4>回归结果表（因变量：{depvarLabel}）</h4>
-          <button type="button" className="secondary" onClick={() => download(comparisonCsv(comparedColumns, options, depvarLabel, perPointRow(comparedColumns, perPoint)), `步骤${stepNumber}-回归对比.csv`)}>
+          <button type="button" className="secondary" onClick={() => download(comparisonCsv(comparedColumns, options, depvarLabel, perPointRow(comparedColumns, outcome)), `步骤${stepNumber}-回归对比.csv`)}>
             导出 CSV
           </button>
         </div>
@@ -352,7 +364,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
           <table className="data-table reg-custom-table reg-custom-compare-table">
             <thead><tr><th>变量</th>{columns.map((column, index) => <th key={index} scope="col" className={cellClass(index)}>{column.name}</th>)}</tr></thead>
             <tbody>
-              {coefficients.map((row) => (
+              {coefficients.filter((row) => row.key !== "_constant").map((row) => (
                 <tr key={row.key}>
                   <th scope="row">{row.label}</th>
                   {row.cells.map((item, index) => (
@@ -369,6 +381,16 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
                   {pointRow.cells.map((value, index) => <td key={index} className={cellClass(index)}>{value}</td>)}
                 </tr>
               )}
+              {coefficients.filter((row) => row.key === "_constant").map((row) => (
+                <tr key={row.key}>
+                  <th scope="row">{row.label}</th>
+                  {row.cells.map((item, index) => (
+                    <td key={index} className={cellClass(index)}>
+                      {item && item !== "omitted" ? <><span>{item.coef}</span><br /><span className="muted">{item.se}</span></> : null}
+                    </td>
+                  ))}
+                </tr>
+              ))}
               {summary.map((row, index) => (
                 <tr key={row.key} className={index === 0 ? "reg-custom-summary-start" : undefined}>
                   <th scope="row">{row.label}</th>
@@ -380,8 +402,8 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         </ScrollableRegion>
         <ul className="muted reg-custom-legend">
           {columns.map((column, index) => {
-            const omitted = omittedLines(column.snapshot, options);
-            return <li key={index}><b>{column.name}</b>：{specSummary(column.spec, options)}{omitted.length ? `；已省略 ${omitted.join("、")}` : ""}{column.snapshot.result.suppressed ? `。${options.suppressed_note}` : ""}</li>;
+            const omitted = omittedSummary(column.snapshot, options);
+            return <li key={index}><b>{column.name}</b>：{specSummary(column.spec, options)}{omitted.length ? `；已省略（${omitted.join("；")}）` : ""}{column.snapshot.result.suppressed ? `。${options.suppressed_note}` : ""}</li>;
           })}
         </ul>
         {samplesDiffer(columns) && <p className="reg-boundary" role="note">{options.sample_differs_note}</p>}

@@ -364,6 +364,8 @@ export function ShockLab({ meta, step: _step, state }: {
     return value == null ? [] : [{ ...row, teaching_exchange_rate_change: value }];
   }), [rows]);
   const firstWave = waves.find((wave) => wave.wave === 1)?.start_year ?? policyYear ?? undefined;
+  // The first wave's currencies fall from its start year: marked only when an example country is in that wave.
+  const exampleInFirstWave = lastRows.some((row) => overview?.countries.find((item) => item.country === row.country)?.wave === 1);
 
   return <div className="shock-workbench">
     {/* One story, top to bottom: the US tariff, the variables of steps 11–14 on one example, then every country's X. */}
@@ -376,7 +378,7 @@ export function ShockLab({ meta, step: _step, state }: {
       {overview && <>
         <p className="teaching-scenario">
           {waves.length > 1
-            ? <>{countryLabel(overview.market)}分两批对{ruleClause ? ` ${ruleClause}的 ${overview.taxed_countries} 个国家` : ` ${overview.taxed_countries} 个国家`}{goodsOnly ? "的货物（农业、采矿业和制造业，ICIO 行业 A–C）" : ""}加征 <b>{rate(overview.tariff_rate)}</b> 关税：{waves.map((wave, index) => `${index ? "，" : ""}${index === 0 ? `对美货物顺差 ≥ ${ruleYiUsd(wave.min_million_usd)}的 ${wave.countries} 个` : `其余 ${wave.countries} 个`} ${wave.start_year} 年起`).join("")}{goodsOnly ? "；服务业不加税" : ""}；其余 {overview.untaxed_countries} 个国家未被加税。{ruleClause ? "名单和批次都按这条规则由 ICIO 数据确定；" : ""}美国是加税方，不在回归样本中。</>
+            ? <>{countryLabel(overview.market)}分两批对{ruleClause ? ` ${ruleClause}的 ${overview.taxed_countries} 个国家` : ` ${overview.taxed_countries} 个国家`}{goodsOnly ? "的货物（农业、采矿业和制造业，ICIO 行业 A–C）" : ""}加征 <b>{rate(overview.tariff_rate)}</b> 关税：{waves.map((wave, index) => `${index ? "，" : ""}${index === 0 ? `对美货物顺差 ≥ ${ruleYiUsd(wave.min_million_usd)}的 ${wave.countries} 国` : `其余 ${wave.countries} 国`} ${wave.start_year} 年起`).join("")}{goodsOnly ? "；服务业不加税" : ""}；其余 {overview.untaxed_countries} 个国家未被加税。{ruleClause ? "名单和批次都按这条规则由 ICIO 数据确定；" : ""}美国是加税方，不在回归样本中。</>
             : <>{overview.policy_year ? `${overview.policy_year} 年起，` : ""}{countryLabel(overview.market)}对{ruleClause ? ` ${ruleClause}的 ${overview.taxed_countries} 个国家` : ` ${overview.taxed_countries} 个国家的商品`}{goodsOnly ? "的货物（农业、采矿业和制造业，ICIO 行业 A–C）" : ""}加征 <b>{rate(overview.tariff_rate)}</b> 关税{goodsOnly ? "，服务业不加税；" : "，"}其余 {overview.untaxed_countries} 个国家未被加税。{ruleClause ? "名单按这条规则由 ICIO 数据确定；" : ""}美国是加税方，不在回归样本中。</>}
         </p>
         <ul className="teaching-tiles" aria-label="美国加征关税的设定">
@@ -519,8 +521,9 @@ export function ShockLab({ meta, step: _step, state }: {
               metric="teaching_exchange_rate_change"
               label="汇率变动"
               unit="个百分点"
-              markYear={firstWave ? { year: firstWave, label: `${firstWave} 年第一批加税` } : undefined}
+              markYear={firstWave && exampleInFirstWave ? { year: firstWave, label: `${firstWave} 年第一批加税` } : undefined}
               digits={1}
+              cards={false}
             />
           )}
         </div>
@@ -537,7 +540,7 @@ export function ShockLab({ meta, step: _step, state }: {
               return <tr key={`${row.country}-${row.industry}-${row.year}`}>
                 <td>{countryLabel(row.country)}</td><td>{row.year}</td><td>{w}%</td><td>{rate(row.teaching_tariff_rate_tau)}</td>
                 <td><b>{w}% × {rate(row.teaching_tariff_rate_tau)} = {worked(row).x} 个百分点</b></td>
-                <td>{lag == null ? "—" : `${stripNegativeZero((lag * 100).toFixed(worked(row).xDecimals))} 个百分点`}</td>
+                <td>{lag == null ? "—" : lag === 0 ? "0 个百分点" : `${stripNegativeZero((lag * 100).toFixed(worked(row).xDecimals))} 个百分点`}</td>
                 {hasRateChange && <td>{change == null ? "—" : `${stripNegativeZero(change.toFixed(1))} 个百分点`}</td>}
               </tr>;
             })}</tbody>

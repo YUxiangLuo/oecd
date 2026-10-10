@@ -329,7 +329,7 @@ Y = β₀·X + β₁·L1.X + γ·汇率变动 + 国家×行业固定效应 + 年
 
 ### 6.4 接口（`gvcsim/regression_routes.py`、`contracts.py`）
 
-- `POST /api/regression/run`：请求体 `{outcome, baseline?, spec?}`，省略 `spec` 即默认模型；`extra="forbid"`，spec 按白名单校验。缓存键为 `(release, 规范化请求)`，与现在一样只在实际计算时计入限流（每名学生每分钟 12 次）。
+- `POST /api/regression/run`：请求体 `{outcome, baseline?, spec?}`，省略 `spec` 即默认模型；`extra="forbid"`，spec 按白名单校验。缓存键为 `(release, 规范化请求)`，与现在一样只在实际计算时计入限流（每名学生每分钟 20 次；2026-10-11 dogfood 后由 12 次放宽，改模型时 12 次很快用完）。
 - `GET /api/regression/options`（新）：返回白名单、默认设定、上限和各说明文字，前端据此渲染。
 - `GET /api/regression/teaching-overview`：每个 Y 的累计效应、区间、状态、组内标准差。
 - `GET /api/regression/teaching-groups`：三组趋势。

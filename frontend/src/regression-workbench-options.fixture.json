@@ -114,7 +114,8 @@
     "saved": 6,
     "in_report": 3,
     "compared": 4,
-    "name_length": 20
+    "name_length": 20,
+    "runs_per_minute": 20
   },
   "tries": [
     "去掉“汇率变动”：X 各项合计变大还是变小？再改用“国家×年份”固定效应呢？",

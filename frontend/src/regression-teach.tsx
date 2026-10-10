@@ -16,8 +16,7 @@ import {
 } from "./regression-verdict";
 import { api } from "./api";
 import { useAsync } from "./labs";
-import { perPointReading } from "./regression-workbench";
-import { snapshotOf, specSummary } from "./regression-workbench-table";
+import { perPointDigits, perPointReading, snapshotOf, specSummary, xSpanLabel, xSum } from "./regression-workbench-table";
 import type { CustomResult, RegressionOutcome, RegressionResponse, WorkbenchOptions } from "./types";
 import { DivergingBarChart, type DivergingBarRow } from "./viz/regression/diverging-bars";
 
@@ -186,14 +185,16 @@ export function ReportedCustomModels({ getStep, onNavigateStep }: {
         : (
           <div className="table-wrap" role="region" aria-label="放入报告的模型，可横向滚动" tabIndex={0}>
             <table className="data-table reg-reported-table">
-              <thead><tr><th>步骤</th><th>名称</th><th>设定</th><th>X 各项合计（X 每高 1 个百分点，Y 两年累计相差）</th><th>同一 Y 的默认模型</th></tr></thead>
+              <thead><tr><th>步骤</th><th>名称</th><th>设定</th><th>X 各项合计（X 每高 1 个百分点）</th><th>同一 Y 的默认模型（两年累计）</th></tr></thead>
               <tbody>
                 {rows.map(({ step, family, outcome, model, run }) => {
-                  const sum = model.snapshot.result.cumulative;
+                  const sum = xSum(model.snapshot);
                   // The step's default run is compared only when it is on the same Y as the saved model.
                   const sameY = run?.design && run.result && run.design.baseline === model.baseline;
                   const defaultSnapshot = sameY ? snapshotOf({ design: run.design!, result: run.result! }) : null;
                   const defaultSum = defaultSnapshot?.result.cumulative;
+                  // Both numbers at the default's decimals, so the two read alike.
+                  const digits = defaultSum && defaultSnapshot ? perPointDigits(outcome, defaultSum, defaultSnapshot) : undefined;
                   return (
                     <tr key={`${step}-${model.id}`}>
                       <th scope="row">
@@ -203,8 +204,8 @@ export function ReportedCustomModels({ getStep, onNavigateStep }: {
                       </th>
                       <td><b>{model.name}</b><br /><small className="muted">Y：{model.snapshot.depvar_label}</small></td>
                       <td>{options ? specSummary(model.spec, options) : "…"}</td>
-                      <td>{sum ? perPointReading(outcome, sum, model.snapshot) : "—"}</td>
-                      <td>{defaultSum && defaultSnapshot ? perPointReading(outcome, defaultSum, defaultSnapshot) : "—（因变量不同）"}</td>
+                      <td>{sum ? `${perPointReading(outcome, sum, model.snapshot, digits)}（${xSpanLabel(model.spec)}）` : "—"}</td>
+                      <td>{defaultSum && defaultSnapshot ? perPointReading(outcome, defaultSum, defaultSnapshot, digits) : "—（因变量不同）"}</td>
                     </tr>
                   );
                 })}

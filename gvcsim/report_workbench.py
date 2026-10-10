@@ -221,16 +221,18 @@ def _summary_rows(columns: list[dict[str, Any]]) -> list[str]:
     return rows
 
 
-def _omitted_text(item: dict[str, Any]) -> str:
-    label = _TERM_LABELS.get(str(item.get("name")), _safe(str(item.get("name"))))
-    if item.get("reason") == "absorbed":
-        by = item.get("by")
-        return (
-            f"{label}（被{_safe(str(by))} FE 吸收）"
-            if by and by != "常数项"
-            else f"{label}（在样本里不变，与常数项重合）"
-        )
-    return f"{label}（{_OMITTED_REASONS.get(str(item.get('reason')), '无法估计')}）"
+def _omitted_groups(omitted: list[dict[str, Any]]) -> list[str]:
+    """Omitted terms grouped by why, as the page says it: "被国家×年份 FE 吸收：汇率变动、GDP（取对数）"."""
+    groups: dict[str, list[str]] = {}
+    for item in omitted:
+        if item.get("reason") == "absorbed":
+            by = item.get("by")
+            reason = f"被{_safe(str(by))} FE 吸收" if by and by != "常数项" else "在样本里不变，与常数项重合"
+        else:
+            reason = _OMITTED_REASONS.get(str(item.get("reason")), "无法估计")
+        label = _TERM_LABELS.get(str(item.get("name")), _safe(str(item.get("name"))))
+        groups.setdefault(reason, []).append(label)
+    return [f"{reason}：{'、'.join(labels)}" for reason, labels in groups.items()]
 
 
 def custom_model_sections(tables: list[dict[str, Any]]) -> list[str]:
@@ -269,7 +271,7 @@ def custom_model_sections(tables: list[dict[str, Any]]) -> list[str]:
             else:
                 omitted = run["result"].get("omitted") or []
                 if omitted:
-                    text += "；省略：" + "、".join(_omitted_text(item) for item in omitted)
+                    text += "；已省略（" + "；".join(_omitted_groups(omitted)) + "）"
                 if _suppressed(run["result"]):
                     text += "。" + workbench.SUPPRESSED_NOTE
             lines.append(text)

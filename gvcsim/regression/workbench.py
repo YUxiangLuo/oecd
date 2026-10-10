@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from gvcsim import config
 from gvcsim.regression.spec import (
     CONTROL_LAGS,
     CONTROLS,
@@ -95,6 +96,8 @@ def options() -> dict[str, Any]:
             "in_report": MAX_IN_REPORT,
             "compared": MAX_COMPARED,
             "name_length": NAME_MAX_LENGTH,
+            # New calculations per student and minute (a model computed before does not count); said when refused.
+            "runs_per_minute": config.REGRESSION_RUNS_PER_MINUTE,
         },
         "tries": list(TRIES),
         "hints": list(HINTS),

@@ -226,7 +226,8 @@ describe("ReportedCustomModels", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0][0]).toBe("步骤 11 · 贸易流");
     expect(rows[0][1]).toContain("去掉汇率");
-    expect(rows[0][3]).toBe("-0.70 个百分点");
+    // The model's sum says which years it covers; both read at the default's decimals.
+    expect(rows[0][3]).toBe("-0.70 个百分点（两年累计）");
     expect(rows[0][4]).toBe("-0.55 个百分点");
   });
 

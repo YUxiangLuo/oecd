@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
-import { api } from "./api";
-import { ColumnDetails, customReportChanged, perPointReading, RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
+import { api, ApiError } from "./api";
+import { ColumnDetails, customReportChanged, RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
 import {
-  canonicalSpec, coefficientRows, comparisonCsv, effectiveEffects, equationPreview, includedBy, nameProblem, perPointRow,
+  canonicalSpec, coefficientRows, comparisonCsv, effectiveEffects, equationPreview, includedBy, nameProblem, omittedSummary, perPointReading, perPointRow,
   nextResultName, omittedLines, samplesDiffer, significanceStars, snapshotOf, specSummary, summaryRows, termLabel,
   type TableColumn,
 } from "./regression-workbench-table";
@@ -147,21 +147,41 @@ describe("tables", () => {
     expect(summaryRows([column], options).find((row) => row.key === "f")?.cells).toEqual(["—"]);
   });
 
-  test("the X terms' sum also reads per percentage point of X, in the step's unit and the headline's digits", () => {
-    const row = perPointRow(columns, (stat, snapshot) => perPointReading("trade", stat, snapshot))!;
-    expect(row.label).toBe("合计：X 每高 1 个百分点，Y 两年累计相差");
-    expect(row.cells).toEqual(["-0.55 个百分点", "-0.70 个百分点"]);
+  test("the X terms' sum reads per percentage point at the first column's decimals, saying which years it covers", () => {
+    const row = perPointRow(columns, "trade")!;
+    expect(row.label).toBe("合计：X 每高 1 个百分点");
+    expect(row.cells).toEqual(["-0.55 个百分点（两年累计）", "-0.70 个百分点（两年累计）"]);
+    // A tight interval would give 3 decimals on its own (-0.554); in the row it takes the first column's 2.
+    const tight = response(NO_RATE, { teaching_tariff_exposure: -0.3322, teaching_tariff_exposure_lag1: -0.2222 });
+    tight.result.cumulative = { ...coef("cumulative", -0.5544), se: 0.0027, ci_low: -0.5598, ci_high: -0.549 };
+    expect(perPointReading("trade", tight.result.cumulative, snapshotOf(tight))).toBe("-0.554 个百分点");
+    const xOnly = response({ ...DEFAULT, x_lags: [0] }, { teaching_tariff_exposure: -0.4614, [ER]: 0.0053 });
+    const lag2 = response({ ...DEFAULT, x_lags: [0, 1, 2] }, { teaching_tariff_exposure: -0.33, teaching_tariff_exposure_lag1: -0.23, teaching_tariff_exposure_lag2: 0.02, [ER]: 0.005 });
+    const mixed = perPointRow([
+      columns[0],
+      { name: "a", spec: NO_RATE, snapshot: snapshotOf(tight) },
+      { name: "b", spec: { ...DEFAULT, x_lags: [0] }, snapshot: snapshotOf(xOnly) },
+      { name: "c", spec: { ...DEFAULT, x_lags: [0, 1, 2] }, snapshot: snapshotOf(lag2) },
+    ], "trade")!;
+    expect(mixed.cells).toEqual(["-0.55 个百分点（两年累计）", "-0.55 个百分点（两年累计）", "-0.46 个百分点（仅当年）", "-0.54 个百分点（三年累计）"]);
+  });
+
+  test("omitted terms are grouped by why", () => {
+    const run = response(DEFAULT, { teaching_tariff_exposure: -0.33 }, { omitted: [
+      { name: ER, reason: "absorbed", by: "国家×年份" }, { name: "log_gdp_proxy", reason: "absorbed", by: "国家×年份" },
+    ] });
+    expect(omittedSummary(snapshotOf(run), options)).toEqual(["被国家×年份 FE 吸收：汇率变动、GDP（取对数）"]);
   });
 
   test("the CSV has a BOM, two rows per term, the fixed effects, the models and the footnote last", () => {
     const named: TableColumn[] = [columns[0], { ...columns[1], name: "=SUM(1,2)" }];
-    const csv = comparisonCsv(named, options, "外国增加值项占比", perPointRow(named, (stat, snapshot) => perPointReading("trade", stat, snapshot)));
+    const csv = comparisonCsv(named, options, "外国增加值项占比", perPointRow(named, "trade"));
     expect(csv.startsWith("﻿因变量：外国增加值项占比,默认模型,\"'=SUM(1,2)\"\r\n")).toBe(true);
     const lines = csv.slice(1).trimEnd().split("\r\n");
     expect(lines[1]).toBe("X,-0.3298***,-0.4608***");
     expect(lines[2]).toBe(",(0.0330),(0.0461)");
     expect(lines).toContain("国家×年份 FE,否,否");
-    expect(lines).toContain("合计：X 每高 1 个百分点，Y 两年累计相差,-0.55 个百分点,-0.70 个百分点");
+    expect(lines).toContain("合计：X 每高 1 个百分点,-0.55 个百分点（两年累计）,-0.70 个百分点（两年累计）");
     expect(lines).toContain("F（自由度）,\"2,076.70（3, 74）\",\"462.88（2, 74）\"");
     expect(lines.at(-2)).toBe("设定,X + L1.X；汇率变动；国家×行业 + 年份 FE,X + L1.X；无控制变量；国家×行业 + 年份 FE");
     expect(lines.at(-1)).toBe(`"${options.footnote}"`);
@@ -181,8 +201,10 @@ describe("report notice", () => {
   });
 });
 
-function Harness({ initial, onSave, locked = false }: {
+function Harness({ initial, onSave, locked = false, defaultResponse = DEFAULT_RUN }: {
   initial?: WorkbenchStepState; onSave?: (patch: Partial<WorkbenchStepState>) => void; locked?: boolean;
+  /** The step's saved default run (a bar click on the step can change its Y). */
+  defaultResponse?: RegressionResponse;
 }) {
   const [data, setData] = useState<WorkbenchStepState>(initial ?? {});
   const state: StepStateApi<WorkbenchStepState> = {
@@ -191,7 +213,7 @@ function Harness({ initial, onSave, locked = false }: {
     saveView: (patch) => setData((current) => ({ ...current, ...patch })),
     complete: false, syncing: false, syncError: null, syncNow: () => {}, materialLocked: locked,
   };
-  return <RegressionModelWorkbench stepNumber={11} outcome="trade" defaultResponse={DEFAULT_RUN} state={state} />;
+  return <RegressionModelWorkbench stepNumber={11} outcome="trade" defaultResponse={defaultResponse} state={state} />;
 }
 
 const checkbox = (label: RegExp) => screen.getByRole("checkbox", { name: label });
@@ -281,13 +303,49 @@ describe("the workbench", () => {
 });
 
 describe("the open workbench", () => {
+  test("too many calculations: a countdown on the button and a message that is not about the model", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    spyOn(api, "runRegression").mockRejectedValue(new ApiError(429, "计算次数过多，请约 5 秒后再试。", "x", 5) as never);
+    render(<Harness />);
+    const compute = await screen.findByRole("button", { name: "计算这个模型" });
+    fireEvent.click(checkbox(/^汇率变动/));
+    await act(async () => { fireEvent.click(compute); });
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe("计算太频繁：每分钟最多算 20 个新模型（已经算过的不计），请稍等再算。");
+    const waiting = screen.getByRole("button", { name: /^重试（\d 秒后）$/ });
+    expect(waiting.getAttribute("aria-disabled")).toBe("true");
+    expect(alert.textContent).not.toContain("没有算出结果");
+    // Changing the form during the wait keeps the message next to the countdown.
+    fireEvent.click(checkbox(/^GDP/));
+    expect(screen.getByRole("alert").textContent).toContain("计算太频繁");
+  });
+
+  test("out of date: said when the form changed, named when the Y changed, silent when the form is back at the default", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    spyOn(api, "runRegression").mockResolvedValue(NO_RATE_RUN as never);
+    const { rerender } = render(<Harness />);
+    fireEvent.click(await screen.findByRole("checkbox", { name: /^汇率变动/ }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "计算这个模型" })); });
+    await waitFor(() => expect(tableHeaders()).toContain("本次计算（未保存）"));
+    fireEvent.click(checkbox(/^L2\.X/));
+    expect(document.querySelector(".reg-stale-note")?.textContent).toBe("设定已更改，点“计算这个模型”查看新结果。");
+    fireEvent.click(screen.getByRole("button", { name: "恢复默认设定" }));
+    expect(document.querySelector(".reg-stale-note")).toBeNull();
+    // Another Y saved by the bars: the note names it.
+    const other = response(DEFAULT, { teaching_tariff_exposure: 0.33, teaching_tariff_exposure_lag1: 0.22, [ER]: -0.005 }, {}, "DVAex_share");
+    other.design.depvar_label = "国内增加值出口占比";
+    rerender(<Harness defaultResponse={other} />);
+    fireEvent.click(checkbox(/^汇率变动/));
+    expect(document.querySelector(".reg-stale-note")?.textContent).toBe("因变量已换成“国内增加值出口占比”，点“计算这个模型”在新的 Y 上计算。");
+  });
+
   test("it shows the four tries from the server and the default model's column before anything is computed", async () => {
     spyOn(api, "regressionOptions").mockResolvedValue(options);
     render(<Harness />);
     await screen.findByText(/试一试/);
     expect([...document.querySelectorAll(".reg-custom-tries li")].map((item) => item.textContent)).toEqual(options.tries);
     expect(tableHeaders()).toEqual(["变量", "默认模型"]);
-    expect(document.querySelector(".reg-custom-point-row")?.textContent).toBe("合计：X 每高 1 个百分点，Y 两年累计相差-0.55 个百分点");
+    expect(document.querySelector(".reg-custom-point-row")?.textContent).toBe("合计：X 每高 1 个百分点-0.55 个百分点（两年累计）");
   });
 });
 

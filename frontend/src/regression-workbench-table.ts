@@ -4,12 +4,15 @@
  * name every term the same way.
  */
 import { groupedFixed } from "./format";
-import { globalInferenceIsSuppressed } from "./regression-verdict";
+import {
+  chartDisplayScale, depvarKind, estimateDigits, globalInferenceIsSuppressed, signed, withCountUnit,
+} from "./regression-verdict";
 import type {
   CoefStat,
   CustomResult,
   CustomResultSnapshot,
   ModelSpec,
+  RegressionOutcome,
   RegressionResponse,
   WorkbenchOptions,
 } from "./types";
@@ -197,18 +200,56 @@ const effectIncluded = (spec: ModelSpec, key: string, options: WorkbenchOptions)
 const yearsText = (snapshot: CustomResultSnapshot) =>
   snapshot.result.years ? `${snapshot.result.years[0]}–${snapshot.result.years[1]}` : "—";
 
+/** What a column's X-terms sum covers: "两年累计" for X + L1.X, "仅当年" for X alone, "三年累计" with L2.X. */
+export function xSpanLabel(spec: Pick<ModelSpec, "x_lags">): string {
+  const lags = [...spec.x_lags].sort((a, b) => a - b).join(",");
+  return ({ "0": "仅当年", "0,1": "两年累计", "0,1,2": "三年累计" } as Record<string, string>)[lags] ?? "X 各项之和";
+}
+
+/** A coefficient per percentage point of X in the step's unit: β × 0.01 (× 100 for a share, read in points). */
+function perPointValue(outcome: RegressionOutcome, stat: Pick<CoefStat, "coef" | "ci_low" | "ci_high">, snapshot: CustomResultSnapshot) {
+  const design = { depvar_kind: snapshot.depvar_kind };
+  const { scale } = chartDisplayScale(outcome, design);
+  const bounds: [number, number] | null = !snapshot.result.suppressed && stat.ci_low != null && stat.ci_high != null
+    ? [stat.ci_low * scale, stat.ci_high * scale]
+    : null;
+  return { kind: depvarKind(outcome, design), value: stat.coef * scale, bounds };
+}
+
+/** Decimals the step's headline gives this coefficient (its interval sets them, as on the result card). */
+export function perPointDigits(outcome: RegressionOutcome, stat: Pick<CoefStat, "coef" | "ci_low" | "ci_high">, snapshot: CustomResultSnapshot): number {
+  const { kind, value, bounds } = perPointValue(outcome, stat, snapshot);
+  return estimateDigits(kind, value, bounds);
+}
+
+/** "-0.55 个百分点", "-0.0182 个长度单位": the page's reading of a coefficient, at the given decimals or its own. */
+export function perPointReading(
+  outcome: RegressionOutcome, stat: Pick<CoefStat, "coef" | "ci_low" | "ci_high">, snapshot: CustomResultSnapshot, digits?: number,
+): string {
+  const { kind, value, bounds } = perPointValue(outcome, stat, snapshot);
+  return withCountUnit(signed(value, digits ?? estimateDigits(kind, value, bounds)), kind);
+}
+
+/** A column's X-terms sum (the single X term of a one-term model). */
+export function xSum(snapshot: CustomResultSnapshot): CoefStat | null {
+  if (xTerms(snapshot) === 1) return snapshot.result.coefs.find((item) => Object.values(X_COLUMNS).includes(item.name)) ?? null;
+  return snapshot.result.cumulative ?? null;
+}
+
 /**
- * "X 每高 1 个百分点" reading of each column's X-terms sum, in the step's unit ("-0.55 个百分点", "-0.0183 个长度单位"):
- * the page's own reading of the coefficient, which for lengths and centrality is the coefficient / 100.
+ * "合计：X 每高 1 个百分点": each column's X-terms sum read per percentage point, all at the first column's decimals
+ * so the row compares like with like, each saying which years it covers ("（两年累计）", "（仅当年）").
  */
-export function perPointRow(columns: TableColumn[], read: (coef: CoefStat, snapshot: CustomResultSnapshot) => string): SummaryRow | null {
-  if (!columns.some(({ snapshot }) => snapshot.result.cumulative)) return null;
+export function perPointRow(columns: TableColumn[], outcome: RegressionOutcome): SummaryRow | null {
+  const first = columns.find(({ snapshot }) => xSum(snapshot));
+  if (!first) return null;
+  const digits = perPointDigits(outcome, xSum(first.snapshot)!, first.snapshot);
   return {
     key: "per_point",
-    label: "合计：X 每高 1 个百分点，Y 两年累计相差",
-    cells: columns.map(({ snapshot }) => {
-      const sum = snapshot.result.cumulative ?? (xTerms(snapshot) === 1 ? snapshot.result.coefs.find((item) => Object.values(X_COLUMNS).includes(item.name)) : null);
-      return sum ? read(sum, snapshot) : "";
+    label: "合计：X 每高 1 个百分点",
+    cells: columns.map(({ spec, snapshot }) => {
+      const sum = xSum(snapshot);
+      return sum ? `${perPointReading(outcome, sum, snapshot, digits)}（${xSpanLabel(spec)}）` : "";
     }),
   };
 }
@@ -254,6 +295,18 @@ export function omittedLines(snapshot: CustomResultSnapshot, options: WorkbenchO
     }
     return `${label}：${item.reason === "zero" ? "样本里全为 0" : "与其他变量完全共线"}`;
   });
+}
+
+/** Omitted terms grouped by why: "被国家×年份 FE 吸收：汇率变动、GDP（取对数）". */
+export function omittedSummary(snapshot: CustomResultSnapshot, options: WorkbenchOptions): string[] {
+  const groups = new Map<string, string[]>();
+  for (const item of snapshot.result.omitted ?? []) {
+    const reason = item.reason === "absorbed"
+      ? (item.by && item.by !== "常数项" ? `被${item.by} FE 吸收` : "在样本里不变，与常数项重合")
+      : item.reason === "zero" ? "样本里全为 0" : "与其他变量完全共线";
+    groups.set(reason, [...(groups.get(reason) ?? []), termLabel(item.name, options)]);
+  }
+  return [...groups].map(([reason, terms]) => `${reason}：${terms.join("、")}`);
 }
 
 /** "结果N", N one more than the largest number among this step's "结果…" names (the count when none). */

@@ -318,7 +318,10 @@ export function IndicatorTrendChart({
   emptyStatus,
   reasonFor,
   industry,
+  cards = true,
 }: {
+  /** Pair mode: the per-country and gap cards under the chart (step 10's exchange-rate chart has none). */
+  cards?: boolean;
   /** Context mode: the industry the rows belong to, named on the observed country's card. */
   industry?: string;
   /** Replaces "缺失" in the readout where a value is undefined rather than missing (step 9: no outgoing links). */
@@ -633,7 +636,7 @@ export function IndicatorTrendChart({
       )}
       {context
         ? <TrendSummary readings={readings} countries={countries} years={years} unit={unit} distribution={band} sameIndustry={sameIndustry} digits={digits} industry={industry} reasonFor={reasonFor} />
-        : <ComparisonSummary
+        : cards && <ComparisonSummary
           readings={readings}
           countries={countries}
           years={years.filter((_, i) => series.every((points) => points[i].value !== null))}
