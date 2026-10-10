@@ -79,7 +79,7 @@ describe("indicator calculation disclosure", () => {
     );
     expect(html).toContain("外国增加值项占比 = FVA / 总出口");
     expect(html).toContain("= 20.00 / 80.00 = <b>25.000%</b>");
-    expect(html).toContain("FVA 不含外国重复计算 FDC");
+    expect(html).toContain("FVA 不包括外国重复计算 FDC");
   });
 
   test("keeps every integer digit of large operands so they match the displayed total", () => {
@@ -155,7 +155,7 @@ describe("indicator calculation disclosure", () => {
     const negative = renderToStaticMarkup(
       <IndicatorCalculationDisclosure step={5} row={{ "3b_VA_GVC_C": -0.197, SVA: -1.268 }} />,
     );
-    expect(negative).toContain("= -0.197 / -1.268 = <b>—（总量为负，各分项同为负，不按份额解读）</b>");
+    expect(negative).toContain("= -0.197 / -1.268 = <b>—（总量为负，无法计算比重）</b>");
     const missing = renderToStaticMarkup(
       <IndicatorCalculationDisclosure step={5} row={{ "3b_VA_GVC_C": null, SVA: 4 }} />,
     );
@@ -200,9 +200,9 @@ describe("indicator calculation disclosure", () => {
       expect(disclosure.textContent).toContain("3.324 / 3.545 = 0.937");
       // Round 12: the headline length is defined, only its share-weighted split is not; "—" is not missing data.
       const box = view.getByText("当前分解不可用").parentElement!.textContent ?? "";
-      expect(box).toContain("SVA 小于 0：各分项同为负，比值虽可算出，但负增加值的构成不按常规份额解读，本页不按份额加权分解。");
+      expect(box).toContain("SVA 小于 0，无法按份额加权平均。");
       expect(box).toContain("前向总生产长度 PLv = 1.643 仍有定义");
-      expect(box).toContain("“—”表示这一项不按份额显示（不是缺少数据）");
+      expect(box).toContain("“—”表示这一项无法计算（不是缺少数据）");
       expect(box).not.toContain("表示没有数据");
       // Round 27: the segment lengths are defined without shares, so they are still listed (ITA·C19 2020).
       expect(view.container.textContent).toContain("前向各段长度：纯国内 1.061、传统贸易 1.061、GVC 3.324（段长度不需要份额，仍可读）。");
@@ -325,7 +325,7 @@ describe("the unavailable step 4 split names undefined parts as such (round 12)"
 
   test("MLT H51: a negative SVA leaves PLv defined and says so", () => {
     expect(unavailableTotalNote(model("negative-weight-denominator", 2.1310588), cfg)).toBe(
-      "前向总生产长度 PLv = 2.131 仍有定义：总长度由投入产出关系直接算出，不需要份额；SVA 为负时，本页只是不按 SVA 份额把它分解到各段。",
+      "前向总生产长度 PLv = 2.131 仍有定义：总长度由投入产出关系直接算出，不需要份额；无法计算的只是按 SVA 份额加权的各段贡献，因此只是无法按段分解。",
     );
   });
 });
@@ -807,7 +807,7 @@ describe("small amounts read with the precision of the table rows (round 10)", (
           primaryYear={2020} primaryCountry="MLT" />,
       );
       fireEvent.click(view.getByRole("button", { name: "单个行业" }));
-      await waitFor(() => expect(view.container.textContent).toContain("总量为负：各分项同为负，比值虽可算出，但不按常规份额解读，本页不显示比重"));
+      await waitFor(() => expect(view.container.textContent).toContain("总量为负，无法算比重"));
       expect(view.container.textContent).not.toContain("数值太小");
     } finally {
       countryRequest.mockRestore();

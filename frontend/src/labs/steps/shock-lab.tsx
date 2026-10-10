@@ -329,8 +329,8 @@ export function ShockLab({ meta, step: _step, state }: {
         : []),
       ...(panel && otherMissing.length
         ? [`${names(otherMissing)} · ${sectorLabel(industry)} 不在回归样本里：${otherMissing.length > 1
-          ? `这两个国家的这个行业在首年（${years[0]} 年）指标无法计算（例如没有出口、没有产出或增加值为负），回归没有用到它们`
-          : `这个国家的这个行业在首年（${years[0]} 年）指标无法计算（例如没有出口、没有产出或增加值为负），回归没有用到它`}`]
+          ? `这两个国家的这个行业在首年（${years[0]} 年）指标无法计算（例如没有出口或没有增加值），回归没有用到它们`
+          : `这个国家的这个行业在首年（${years[0]} 年）指标无法计算（例如没有出口或没有增加值），回归没有用到它`}`]
         : []),
     ];
     if (!parts.length) return null;
@@ -377,7 +377,7 @@ export function ShockLab({ meta, step: _step, state }: {
         })()}
         <h4 className="teaching-subhead">{overview.taxed_countries} 个被加税国家的 X（从高到低）</h4>
         <p className="teaching-one-line">
-          每条是一个国家 {overview.year} 年各{goodsOnly ? "货物" : ""}行业的平均 X{goodsOnly ? "（服务业不加税，X = 0，不计入）" : ""}。回归样本{goodsOnly ? "（货物和服务业都在内）" : ""}：{overview.countries.length} 国的 {overview.entities.toLocaleString("zh-CN")} 个国家×行业{sampleRows ? ` × ${years.length} 年 = ${sampleRows.toLocaleString("zh-CN")} 条记录` : ""}{overview.entities < overview.countries.length * meta.sectors.length ? `（${overview.countries.length} 国 × ${meta.sectors.length} 个行业中，首年指标无法计算的组合不进入样本，多为当年没有出口或没有产出的行业，另有少数没有 GVC 生产或增加值为负的行业，所以${overview.countries.every((row) => row.industries < meta.sectors.length) ? "每个国家进入样本的行业都少于" : "一国的行业数可能少于"} ${meta.sectors.length} 个）` : ""}。
+          每条是一个国家 {overview.year} 年各{goodsOnly ? "货物" : ""}行业的平均 X{goodsOnly ? "（服务业不加税，X = 0，不计入）" : ""}。回归样本{goodsOnly ? "（货物和服务业都在内）" : ""}：{overview.countries.length} 国的 {overview.entities.toLocaleString("zh-CN")} 个国家×行业{sampleRows ? ` × ${years.length} 年 = ${sampleRows.toLocaleString("zh-CN")} 条记录` : ""}{overview.entities < overview.countries.length * meta.sectors.length ? `（${overview.countries.length} 国 × ${meta.sectors.length} 个行业中，首年指标无法计算的组合不进入样本，多为当年没有出口或没有增加值的行业，所以${overview.countries.every((row) => row.industries < meta.sectors.length) ? "每个国家进入样本的行业都少于" : "一国的行业数可能少于"} ${meta.sectors.length} 个）` : ""}。
         </p>
         <CountryExposureChart data={overview} />
       </>}

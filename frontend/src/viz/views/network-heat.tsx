@@ -9,14 +9,13 @@ import { type Row, SEQ, cardStyle, rowLabel } from "../shared";
 export const HEAT_EVIDENCE_METRIC = "betweenesscentrality" as const;
 
 /**
- * Path metrics follow a node's out-edges to the nodes it can reach. A node that reaches none gets 0 from the
- * pipeline (as Gephi does), but closeness, eccentricity and harmonic closeness (Σ 1/d ÷ reachable nodes) are then
- * 0/0: undefined, not "very far". In 2016–2020 these are the isolated nodes (no intermediate purchases or sales,
- * mostly T) and two sinks whose only out-edge is a self-loop (CMR·Q, PER·Q). Betweenness and degrees are real.
+ * Path metrics follow a node's out-edges to the nodes it can reach. A node that reaches none (an industry with
+ * no output, or one that sells to no other industry) gets 0 from the pipeline, but the value is undefined:
+ * it is not "very close" or "very central". Betweenness and the degrees of such a node are real zeros.
  */
 export const PATH_METRICS: ReadonlySet<string> = new Set(["Eccentricity", "closnesscentrality", "harmonicclosnesscentrality"]);
-export const PATH_UNDEFINED_LABEL = "到不了其他节点，无法定义";
-export const PATH_UNDEFINED_NOTE = "沿供货方向到不了其他国家×行业（多为既不买也不卖中间品的行业，如 T 家庭自用生产；少数只向自己供货），距离没有定义";
+export const PATH_UNDEFINED_LABEL = "无连接，无法定义";
+export const PATH_UNDEFINED_NOTE = "没有向其他行业供货的连接，到其他行业的距离没有定义";
 export function pathMetricUndefined(metric: string, value: unknown): boolean {
   return PATH_METRICS.has(metric) && value === 0;
 }
@@ -198,7 +197,7 @@ export function HeatTableViz({
           <span key={column.key}> {schema?.fields[column.key]?.label ?? column.name}：{schema?.fields[column.key]?.desc ?? column.desc}</span>
         ))}
         <div>
-          颜色深浅表示该列可见行中的相对大小（每列单独计算）。“{PATH_UNDEFINED_LABEL}”：该行业{PATH_UNDEFINED_NOTE}，接近中心性与调和中心性无法定义（软件记为 0，不表示最远）。这张表上的操作不会改变报告材料。
+          颜色深浅表示该列可见行中的相对大小（每列单独计算）。“{PATH_UNDEFINED_LABEL}”：该行业{PATH_UNDEFINED_NOTE}，接近中心性与调和中心性没有定义（不是 0）。这张表上的操作不会改变报告材料。
         </div>
       </div>
     </ScrollableRegion>

@@ -584,7 +584,7 @@ test("two countries not in the sample: plural wording in the one note under the 
   render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["CHN", "MEX"], teaching_industry: "O", teaching_example_chosen: true })} />);
   await waitFor(() => expect(document.querySelector(".reg-boundary[role=status]")).not.toBeNull());
   expect(document.querySelector(".reg-boundary[role=status]")!.textContent).toBe(
-    "CHN 中国、MEX 墨西哥 · O 公共管理与国防 不在回归样本里：这两个国家的这个行业在首年（2016 年）指标无法计算（例如没有出口、没有产出或增加值为负），回归没有用到它们。请换国家或行业。",
+    "CHN 中国、MEX 墨西哥 · O 公共管理与国防 不在回归样本里：这两个国家的这个行业在首年（2016 年）指标无法计算（例如没有出口或没有增加值），回归没有用到它们。请换国家或行业。",
   );
   expect(document.querySelectorAll(".reg-boundary")).toHaveLength(1);
   expect(document.querySelector(".teaching-x-reason")).toBeNull();
@@ -679,7 +679,7 @@ test("ISR · D outside the sample while ISR · S is recorded: one note, and the 
   await waitFor(() => expect(document.body.textContent).toContain("已记录的例子 · 五年趋势"));
   const notes = document.querySelectorAll(".reg-boundary");
   expect(notes).toHaveLength(1);
-  expect(notes[0].textContent).toMatch(/^ISR 以色列 · D .* 不在回归样本里：这个国家的这个行业在首年（2016 年）指标无法计算（例如没有出口、没有产出或增加值为负），回归没有用到它。请换一个国家或行业。下面仍显示已记录的例子 ISR 以色列 · S /);
+  expect(notes[0].textContent).toMatch(/^ISR 以色列 · D .* 不在回归样本里：这个国家的这个行业在首年（2016 年）指标无法计算（例如没有出口或没有增加值），回归没有用到它。请换一个国家或行业。下面仍显示已记录的例子 ISR 以色列 · S /);
   const [isr] = summaryLines();
   expect(isr).toStartWith("ISR 以色列 · S");
   expect(isr).toContain("被加税：2020 年 X = w × τ = 20.00% × 25% = 5.00 个百分点");

@@ -58,11 +58,10 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
       });
       return at.length ? [`${at.join("、")} 年${totalLabel}${word}`] : [];
     });
-    const negative = clauses.some((clause) => clause.endsWith("为负"));
-    return clauses.length ? `${clauses.join("，")}，构成份额${negative ? "不显示（总量为负时各分项同为负，不按常规份额解读）" : "无法计算"}，图中留空。` : null;
+    return clauses.length ? `${clauses.join("，")}，构成份额无法计算，图中留空。` : null;
   };
   if (!extremes.length) return <p role="status">{allUndefined
-    ? `没有可画出的历年构成：所选年份的${totalLabel}都为 0 或为负，份额无法计算或不显示（不是缺少数据）；请换一个行业或国家。`
+    ? `没有可画出的历年构成：所选年份的${totalLabel}都为 0 或为负，份额无法计算（不是缺少数据）；请换一个行业或国家。`
     : "没有可画出的历年构成，请更换国家、行业或年份（缺少的数据留空，不当作 0）。"}</p>;
   const axis = niceDomain(Math.min(0, ...extremes), Math.max(0, ...extremes));
   const W = 420, H = 230, left = 56, right = 14, top = 14, bottom = 30;
@@ -74,7 +73,7 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
       ["", `${facet.label} · ${year}`],
       ...(point?.shares
         ? segments.map((segment, index): TipLine => [segment.name, pct(point.shares![index]), point.shares![index] < 0 ? NEGATIVE : segment.color])
-        : [["构成", nonPositive(facet.rows.find((item) => item.year === year)) ? `无法计算或不显示（${totalLabel}为 0 或为负）` : "缺失", undefined] as TipLine]),
+        : [["构成", nonPositive(facet.rows.find((item) => item.year === year)) ? `无法计算（${totalLabel}为 0 或为负）` : "缺失", undefined] as TipLine]),
       ...(point?.total != null ? [[totalLabel, `${indicatorNumber(point.total, "百万美元")} 百万美元`] as TipLine] : []),
     ];
   };

@@ -132,12 +132,10 @@ _UNIT_KINDS = {"%": "份额", "长度单位": "长度", "无量纲": "位置指�
 _NETWORK_UNITS = {"未归一化介数", "连接数", "路径长度", "中心性单位"}
 
 
-def _unit_kinds(observations: list[dict[str, Any]], step: int | None = None) -> str:
-    """What a section without amounts holds, from its recorded units: "份额", "长度和位置指数", "网络指标".
-    Step 9's closeness, harmonic closeness and eigencentrality are recorded as "无量纲" too; they are network
-    metrics, not step 8's position index."""
+def _unit_kinds(observations: list[dict[str, Any]]) -> str:
+    """What a section without amounts holds, from its recorded units: "份额", "长度和位置指数", "网络指标"."""
     units = list(dict.fromkeys(str(item.get("unit") or "") for item in observations))
-    if step == 9 or (units and all(unit in _NETWORK_UNITS for unit in units)):
+    if units and all(unit in _NETWORK_UNITS for unit in units):
         return "只看连接、不看金额的网络指标"
     kinds = list(dict.fromkeys(_UNIT_KINDS.get(unit, "比值或指数") for unit in units))
     return "和".join(kinds) or "比值或指数"
@@ -323,7 +321,7 @@ def _experiment_sections(session: dict[str, Any], scenario: dict[str, Any] | Non
                 price_note = (
                     "金额按当年价格计，变化可能包含价格因素。"
                     if has_amounts
-                    else f"本节为{_unit_kinds(observations, step)}，不直接受价格水平影响，但仍受下述结构外推影响。"
+                    else f"本节为{_unit_kinds(observations)}，不直接受价格水平影响，但仍受下述结构外推影响。"
                 )
                 lines.append(
                     f"- **2020 年：现价与疫情期外推限制**。{price_note}"

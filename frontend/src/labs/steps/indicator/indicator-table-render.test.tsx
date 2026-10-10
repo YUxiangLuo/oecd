@@ -247,7 +247,7 @@ describe("network table sort scope", () => {
 });
 
 describe("undefined path metrics in the step 5 table (round 12)", () => {
-  test("an isolated node reads 到不了其他节点，无法定义 for its distances, not 0, while its degree stays 0", () => {
+  test("an isolated node reads 无连接，无法定义 for its distances, not 0, while its degree stays 0", () => {
     // LUX A03 2020: no links at all; the pipeline stores 0 for every distance metric.
     const html = renderToStaticMarkup(
       <IndicatorDataTable
@@ -261,7 +261,7 @@ describe("undefined path metrics in the step 5 table (round 12)", () => {
       />,
     );
     expect(html.match(/data-metric-undefined="true"/g)).toHaveLength(3);
-    expect(html).toContain("到不了其他节点，无法定义");
+    expect(html).toContain("无连接，无法定义");
     // The degree of an isolated node is a real zero.
     expect(html).toMatch(/<td>0<\/td>/);
   });

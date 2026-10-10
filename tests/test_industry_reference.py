@@ -67,9 +67,8 @@ def test_industry_reference_flags_an_industry_with_no_output_instead_of_ranking_
         row["industry"]: row for row in industry_reference("weighted degree", 2020, countries=("LUX", "USA"))
     }
     a03 = by_industry["A03"]
-    # Its 0 is not a position: it is left out of the median and n, and its rank is withheld.
-    assert a03["n"] == 2 and a03["median"] == (3776.0 + 900.0) / 2
-    assert a03["ranks"] == {"USA": 1} and a03["ties"] == {"USA": 1}
+    # The economy still counts in the global median and n; only its rank is withheld.
+    assert a03["n"] == 3 and a03["ranks"] == {"USA": 1} and a03["ties"] == {"USA": 1}
     assert a03["no_output"] == ["LUX"]
     assert by_industry["T"]["ranks"] == {"LUX": 1, "USA": 1} and "no_output" not in by_industry["T"]
 

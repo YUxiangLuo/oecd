@@ -41,7 +41,7 @@ def test_outcome_labels_match_the_indicator_schema():
 
     assert OUTCOME_DEPVARS["trade"] == ("FVA_share", "外国增加值项占比")
     assert INDICATOR_SCHEMA["fields"]["FVA_share"]["label"] == "外国增加值项占比"
-    assert "不含外国重复计算 FDC" in INDICATOR_SCHEMA["fields"]["FVA_share"]["desc"]
+    assert "不含被重复计算的部分" in INDICATOR_SCHEMA["fields"]["FVA_share"]["desc"]
 
 
 def _student_copy() -> str:

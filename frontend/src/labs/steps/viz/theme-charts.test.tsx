@@ -145,12 +145,12 @@ describe("undefined values in the theme charts read as such (round 12)", () => {
       years={[2016, 2019, 2020]} segments={segments} total="total" totalLabel="总增加值" />);
     const notes = view.getAllByRole("note");
     expect(notes).toHaveLength(1);
-    expect(notes[0].textContent).toBe("2020 年总增加值为负，构成份额不显示（总量为负时各分项同为负，不按常规份额解读），图中留空。");
+    expect(notes[0].textContent).toBe("2020 年总增加值为负，构成份额无法计算，图中留空。");
   });
 
   test("历年构成 whose total is negative in every year says the shares are undefined", () => {
     const rows: Row[] = [2016, 2020].map((year) => ({ country: "MLT", year, total: -1.268, DVAex: -0.6, FVA: -0.4, taxsub: -0.268 }));
     render(<StackedAreaFacets facets={[{ key: "MLT", label: "MLT 马耳他", rows }]} years={[2016, 2020]} segments={segments} total="total" totalLabel="总增加值" />);
-    expect(screen.getByRole("status").textContent).toContain("总增加值都为 0 或为负，份额无法计算或不显示（不是缺少数据）");
+    expect(screen.getByRole("status").textContent).toContain("总增加值都为 0 或为负，份额无法计算（不是缺少数据）");
   });
 });

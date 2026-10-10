@@ -201,7 +201,7 @@ export function TradePartners({ meta, countries, year, onYear }: {
         </LabeledControl>
       </div>
       <p className="muted" id="region-matrix-note">
-        每两个国家之间双向都有正的贸易流，所以“介数”这类只看连接的指标在国家层面没有区分度（国家层介数均为 0）；本步的网络指标改在“国家×行业”层面计算。这里只看：主要伙伴、买卖方向、各区域之间的流向。
+        几乎每两个国家之间都有贸易，所以“介数”这类只看连接的指标在国家层面几乎没有区分度（国家层介数均为 0）；本步的网络指标改在“国家×行业”层面计算。这里只看：主要伙伴、买卖方向、各区域之间的流向。
       </p>
       <div className={`comparison-facets ${countries.length > 2 ? "comparison-facets--stacked" : "comparison-facets--roomy"}`}>
         {countries.map((country, index) => {
