@@ -266,7 +266,9 @@
 .quiz-question { min-width: 0; margin: 0; padding: 12px 14px; border: 1px solid #e0e4ed; border-radius: 10px; background: #fff; }
 .quiz-question.correct { border-color: #a9ddc0; background: #f4fbf7; }
 .quiz-question.incorrect { border-color: #efbfac; background: #fff8f4; }
-.quiz-question legend { padding: 0 5px; color: #303747; font-size: 13px; font-weight: 700; line-height: 1.55; }
+/* Floated, the legend is a heading inside the box: a two-line question no longer straddles the top border. */
+.quiz-question legend { float: left; width: 100%; padding: 0; margin: 0 0 4px; color: #303747; font-size: 13px; font-weight: 700; line-height: 1.55; }
+.quiz-question legend + * { clear: both; }
 .quiz-options { display: grid; gap: 7px; margin-top: 5px; }
 .quiz-options label { display: flex; align-items: flex-start; gap: 8px; padding: 7px 9px; border-radius: 7px; color: #4e5668; font-size: 12.5px; line-height: 1.5; cursor: pointer; }
 .quiz-options label:hover { background: #f3f5fb; }
