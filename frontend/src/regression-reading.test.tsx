@@ -196,8 +196,8 @@ describe("fixed teaching regression reading", () => {
     data.result.depvar_within_std = 0.58;
     const { container } = render(<RegressionResultCard outcome="length" response={data} />);
     expect(container.querySelector(".reg-headline-main")?.textContent)
-      .toContain("前向 GVC 段长度平均短 0.018 个长度单位（幅度约 0.031 个标准差，标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏）");
-    expect(container.querySelector(".reg-interval-words")?.textContent).toContain("[-0.019, -0.017] 个长度单位；约 [-0.033, -0.029] 个标准差");
+      .toContain("前向 GVC 段长度平均短 0.0182 个长度单位（幅度约 0.031 个标准差，标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏）");
+    expect(container.querySelector(".reg-interval-words")?.textContent).toContain("[-0.0190, -0.0170] 个长度单位；约 [-0.033, -0.029] 个标准差");
     expect(container.textContent).not.toContain("样本均值");
     // The definition is said once on the card.
     expect(container.textContent?.match(/标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏/g)).toHaveLength(1);
@@ -242,7 +242,7 @@ describe("fixed teaching regression reading", () => {
     const headers = [...table.container.querySelectorAll("th")].map((cell) => cell.textContent);
     expect(headers.slice(0, 3)).toEqual(["变量", "X 每高 1 个百分点，Y 平均相差（长度单位）", "系数（X 按份额计）"]);
     const cells = [...table.container.querySelectorAll("tbody td")].map((cell) => cell.textContent);
-    expect(cells[1]).toBe("-0.018 个长度单位");
+    expect(cells[1]).toBe("-0.0182 个长度单位");
     expect(cells[2]).toBe("-1.8186");
   });
 
@@ -262,7 +262,7 @@ describe("fixed teaching regression reading", () => {
     cleanup();
     data.result.support!.suppress_inference = true;
     const suppressed = render(<RegressionCoefficientTable response={data} />);
-    expect(suppressed.container.querySelectorAll("tbody td")[1].textContent).toBe("-0.018 个长度单位");
+    expect(suppressed.container.querySelectorAll("tbody td")[1].textContent).toBe("-0.0184 个长度单位");
   });
 });
 

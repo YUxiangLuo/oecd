@@ -41,7 +41,7 @@ from gvcsim.teaching_report import (
 @pytest.mark.parametrize(
     ("outcome", "coef", "low", "high", "effect", "interval"),
     [
-        ("length", 0.0305694, -0.04700555, 0.10814435, "+0.00031 个长度单位", "[-0.00047, +0.001] 个长度单位"),
+        ("length", 0.0305694, -0.04700555, 0.10814435, "+0.0003 个长度单位", "[-0.0005, +0.0011] 个长度单位"),
         ("trade", 0.37101, -0.00428547, 0.746307, "+0.37 个百分点", "[-0.0043, +0.75] 个百分点"),
         ("production", 0, -0.01, 0.01, "+0.00 个百分点", "[-0.01, +0.01] 个百分点"),
         # The weak Y: under 0.1 point it keeps 3 decimals, as the page headline does.
@@ -740,7 +740,7 @@ def test_report_statements_are_associations_with_their_number():
     _evidence, length = teaching_report._evidence_reading(
         "length", {"coef": -1.8186, "ci_low": -1.9, "ci_high": -1.7}, False, {}
     )
-    assert length == "扣掉各国家×行业自身的平均水平和每年的共同变化后，关税暴露 X 越高，前向 GVC 段长度平均越短（X 每高 1 个百分点，约短 0.018 个长度单位）。"
+    assert length == "扣掉各国家×行业自身的平均水平和每年的共同变化后，关税暴露 X 越高，前向 GVC 段长度平均越短（X 每高 1 个百分点，约短 0.0182 个长度单位）。"
     _evidence, network = teaching_report._evidence_reading(
         "network", {"coef": 3969.9979, "ci_low": 3000.0, "ci_high": 4900.0}, False, {}
     )
@@ -1514,12 +1514,14 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     # Four decimals for every number but p, as the page's 详细数字 table prints them.
     assert "| 关税暴露 X | +1.20 个百分点 | 1.2000 | [0.5721, 1.8279] | 0.3000 | 4.00 | 0.0008 |" in report.markdown
     assert "4 位有效数字" not in report.markdown and "保留 4 位小数" in report.markdown
-    # Versions, the session digest and the unused macro controls are listed only under "报告溯源", at the end.
+    # Versions and the session digest are listed only under "报告溯源", at the end; the unused macro controls
+    # are not mentioned at all.
     body, provenance = report.markdown.split("## 报告溯源", 1)
     assert "数据来源：OECD ICIO 2023 版" in body
-    for detail in (TEACHING_VERSION, X_COLUMN, "会话摘要", "宏观控制变量", "2" * 32):
+    for detail in (TEACHING_VERSION, X_COLUMN, "会话摘要", "2" * 32):
         assert detail not in body
         assert detail in provenance
+    assert "宏观控制变量" not in report.markdown and "控制变量" not in provenance
     assert "## " not in provenance
     assert report.provenance["runs"][0]["model_snapshot"] == model_snapshot("trade")
     assert report.provenance["runs"][0]["variable_catalog"] == variable_catalog("trade")
@@ -1568,8 +1570,7 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert report.provenance["network_algorithm"] == "gephi-compatible-directed-unweighted-positive-v1"
     assert report.provenance["indicator_data_source"]["kind"] == "observed-indicator-input"
     assert report.provenance["simulated_macro_controls"]["kind"] == "deterministic-teaching-mock"
-    assert "宏观控制变量：按固定规则生成的教学数据" in report.markdown
-    assert "不是 WDI 或 IMF 的观测数据" in report.markdown
+    assert "宏观控制变量" not in report.markdown
     assert "Not WDI data" not in report.markdown
 
 
@@ -2832,7 +2833,7 @@ def test_report_appendix_numbers_match_the_page_detail_table():
     }
     lines = _technical_estimate_tables({"depvar_kind": "length"}, result, suppressed=False, outcome="length")
     row = next(line for line in lines if line.startswith("| 关税暴露 X |"))
-    assert row == "| 关税暴露 X | -0.018 个长度单位 | -1.8414 | [-0.4109, -0.3790] | 0.0399 | -46.19 | <0.0001 |"
+    assert row == "| 关税暴露 X | -0.0184 个长度单位 | -1.8414 | [-0.4109, -0.3790] | 0.0399 | -46.19 | <0.0001 |"
 
 
 def test_report_appendix_groups_thousands_like_the_page_detail_table():

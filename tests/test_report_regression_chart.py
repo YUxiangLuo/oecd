@@ -147,7 +147,7 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
             shown = "0.00" if abs(total) < 0.005 else _signed(total, 2)
             assert (
                 f"- 纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（{shown}）；"
-                "前向 GVC 生产总份额 = 简单 + 复杂。" in section
+                "前向 GVC 生产总份额 = 简单 + 复杂（按未取整的原值精确相加，图中取整后的数字可能相差末位 1）。" in section
             )
         else:
             assert "四项份额合计 100%" not in section
@@ -245,13 +245,13 @@ def test_uncertain_and_suppressed_bars_and_a_missing_overview():
     length_coefficient = {"name": X_COLUMN, "coef": -1.8143, "ci_low": -1.9155, "ci_high": -1.7132}
     length_result = {"status": "ok", "support": {"status": "ok"}, "depvar_within_std": 0.5819, "coefs": [length_coefficient]}
     (bar,) = json.loads(family_chart(13, "length", length, length_result, length_coefficient, None)[1])["items"]
-    assert bar["text"] == "-0.018（-0.031 个标准差）"
+    assert bar["text"] == "-0.0181（-0.031 个标准差）"
     assert bar["sub"] == "长度单位"
     # Without a recorded SD the bar is 0 and says so, after the native value (the page's "（没有标准差）").
     (bare,) = json.loads(
         family_chart(13, "length", length, {**length_result, "depvar_within_std": None}, length_coefficient, None)[1]
     )["items"]
-    assert (bare["value"], bare["text"]) == (0.0, "-0.018（没有标准差）")
+    assert (bare["value"], bare["text"]) == (0.0, "-0.0181（没有标准差）")
     summary = json.loads(
         summary_chart(
             {
@@ -263,7 +263,7 @@ def test_uncertain_and_suppressed_bars_and_a_missing_overview():
     assert [item["sub"] for item in summary["items"]] == ["步骤 12 · 生产", "步骤 13 · 长度"]
     assert [item["text"] for item in summary["items"]] == [
         "+0.008 个百分点（+0.001 个标准差）",
-        "-0.018 个长度单位（没有标准差）",
+        "-0.0181 个长度单位（没有标准差）",
     ]
     assert summary["note"].endswith("步骤 11 · 贸易流、步骤 14 · 网络：还没计算。")
 
@@ -323,7 +323,7 @@ def test_each_bar_keeps_its_headline_digits_as_on_the_page():
     ]
     assert texts(13, "length", length) == [
         "-0.0184（-0.032 个标准差）",
-        "-0.015（-0.026 个标准差）",
+        "-0.0152（-0.026 个标准差）",
         "-0.0006（-0.004 个标准差）",
     ]
     # Step 12: only the small estimate takes three decimals ("+0.008", never "+0.01"); the others read as their headlines.

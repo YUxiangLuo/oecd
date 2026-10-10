@@ -171,6 +171,28 @@ describe("simple regression workbench", () => {
     expect(run).toHaveBeenCalledTimes(2);
   });
 
+  test("a click on a grey (方向不确定) bar asks before saving it; 取消 keeps the saved Y", async () => {
+    mockApis();
+    // DVA's interval includes 0 here: its bar is grey.
+    spyOn(api, "teachingOverview").mockResolvedValue({ ...overview, outcomes: { ...overview.outcomes, trade: [
+      overview.outcomes.trade[0], estimate("DVAex_share", "国内增加值出口占比", 0.05, -0.1, 0.2),
+    ] } });
+    const run = spyOn(api, "runRegression").mockImplementation(async () => ({ ...savedRun("DVAex_share", "国内增加值出口占比", 0.05, -0.1, 0.2), benchmark }) as never);
+    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
+    const grey = await screen.findByRole("button", { name: /^国内增加值出口占比：/ });
+    fireEvent.click(grey);
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("改为保存方向不确定的这一项？");
+    expect(dialog.textContent).toContain("“国内增加值出口占比”的 95% 区间包含 0");
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(run).not.toHaveBeenCalled();
+    fireEvent.click(grey);
+    fireEvent.click(await screen.findByRole("button", { name: "改为保存" }));
+    await waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+    expect(run.mock.calls[0][2]).toBe("DVAex_share");
+  });
+
   test("while a run is in flight the bars cannot be selected", async () => {
     mockApis();
     let finish: (value: unknown) => void = () => {};
@@ -432,7 +454,7 @@ describe("simple regression workbench", () => {
     const weak = rows.find((row) => row.key === "3b_FGY_GVC_C_share")!;
     expect([weak.uncertain, weak.valueLabel, weak.intervalLabel]).toEqual([true, "+0.008", "[-0.011, +0.026] 个百分点"]);
     expect(rows.filter((row) => row.uncertain)).toHaveLength(1);
-    expect(forwardShareIdentity(items)).toBe("纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（0.00）；前向 GVC 生产总份额 = 简单 + 复杂。");
+    expect(forwardShareIdentity(items)).toBe("纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（0.00）；前向 GVC 生产总份额 = 简单 + 复杂（按未取整的原值精确相加，条旁取整后的数字可能相差末位 1）。");
     expect(forwardShareIdentity(items.slice(0, 3))).toBeNull();
   });
 
@@ -452,7 +474,7 @@ describe("simple regression workbench", () => {
     expect(length.unitTitle).toBe("X 每高 1 个百分点，Y 平均相差（个标准差）");
     expect(length.rows.map((row) => [row.sublabel, row.valueLabel])).toEqual([
       // Each bar in its own headline's digits.
-      ["长度单位", "-0.018（-0.045 个标准差）"],
+      ["长度单位", "-0.0181（-0.045 个标准差）"],
       ["无量纲", "-0.0008（-0.015 个标准差）"],
     ]);
     const network = familyBarRows("network", [
@@ -476,9 +498,9 @@ describe("simple regression workbench", () => {
       estimate("GVCPs", "GVC 位置指数", -0.0612, -0.08, -0.04, { kind: "position", depvar_within_std: 0.17 }),
     ], "PLv_GVC");
     expect(length.rows.map((row) => row.valueLabel)).toEqual([
-      "-0.0184（-0.032 个标准差）", "-0.015（-0.026 个标准差）", "-0.0006（-0.004 个标准差）",
+      "-0.0184（-0.032 个标准差）", "-0.0152（-0.026 个标准差）", "-0.0006（-0.004 个标准差）",
     ]);
-    expect(length.rows[1].spokenLabel).toBe("-0.015 个长度单位（-0.026 个标准差），95% 区间 [-0.028, -0.025] 个标准差");
+    expect(length.rows[1].spokenLabel).toBe("-0.0152 个长度单位（-0.026 个标准差），95% 区间 [-0.028, -0.025] 个标准差");
     expect(length.rows[1].intervalLabel).toBe("[-0.028, -0.025] 个标准差");
     // Step 12: only the small estimate takes three decimals ("+0.008", never "+0.01").
     const production = familyBarRows("production", [
@@ -529,7 +551,7 @@ describe("simple regression workbench", () => {
     // Half up on the decimal product, as by hand: 0.018 × 23.25 = 0.4185 → 0.419.
     expect(exampleEffect("length", -0.018, 23.25)).toBe("0.419 个长度单位");
     // Lengths print the estimate per point (coef × 0.01) in 3 decimals: -1.5378 → -0.015.
-    expect(shownPerPoint("length", { coef: -1.5378, ci_low: -1.9, ci_high: -1.2 })).toBe(-0.015);
+    expect(shownPerPoint("length", { coef: -1.5378, ci_low: -1.9, ci_high: -1.2 })).toBe(-0.0154);
   });
 
   test("network conversions group thousands, as the report does", () => {
@@ -547,7 +569,7 @@ describe("simple regression workbench", () => {
     expect(gapLabel("network", -1147.1234)).toBe("回归估计的差距 -1,147.12 个中心性原始单位");
     expect(gapLabel("network", -0.00491)).toBe("回归估计的差距 -0.0049 个中心性原始单位");
     expect(gapLabel("share", -1.6512)).toBe("回归估计的差距 -1.65 个百分点");
-    expect(gapLabel("length", 0.0164)).toBe("回归估计的差距 +0.016 个长度单位");
+    expect(gapLabel("length", 0.0164)).toBe("回归估计的差距 +0.0164 个长度单位");
   });
 
   test("step 14 says weighted degree is in + out once all three are in the family", () => {

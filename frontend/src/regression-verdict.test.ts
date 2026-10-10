@@ -78,7 +78,7 @@ describe("fixed TWFE verdict", () => {
     expect(buildRegressionVerdict("trade", response("trade", coefficient(0.4, 0.2, 0.6))).effect)
       .toBe("+0.40 个百分点");
     expect(buildRegressionVerdict("length", response("length", coefficient(2, 1, 3))).effect)
-      .toContain("+0.020 个长度单位");
+      .toContain("+0.0200 个长度单位");
     expect(chartDisplayScale("network")).toEqual({ scale: 0.01, unit: "中心性原始单位" });
   });
 
@@ -201,12 +201,12 @@ describe("bars repeat the headline's numbers", () => {
     expect(buildRegressionVerdict("network", data).effect).toMatch(/^-40\.11 个中心性原始单位（幅度约 0\.047 个标准差/);
     // Step 15 mixes units, so the native value names its unit.
     expect(barFigures(estimate(-0.5493, -0.5711, -0.5274, 0.05), "share", "sd", true).valueLabel).toBe("-0.55 个百分点（-0.110 个标准差）");
-    expect(barFigures(estimate(-1.8143, -1.9, -1.7, 0.4), "length", "sd", true).valueLabel).toBe("-0.018 个长度单位（-0.045 个标准差）");
+    expect(barFigures(estimate(-1.8143, -1.9, -1.7, 0.4), "length", "sd", true).valueLabel).toBe("-0.0181 个长度单位（-0.045 个标准差）");
   });
 
   test("a size in standard deviations keeps its sign, so it sits inside its signed interval on the signed axis", () => {
     const negative = barFigures(estimate(-1.8143, -1.9, -1.7, 0.4), "length", "sd");
-    expect(negative.valueLabel).toBe("-0.018（-0.045 个标准差）");
+    expect(negative.valueLabel).toBe("-0.0181（-0.045 个标准差）");
     expect(negative.intervalLabel).toBe("[-0.047, -0.043] 个标准差");
     const positive = barFigures(estimate(0.00752, -0.0112, 0.0262, 0.05), "share", "sd", true);
     expect(positive.valueLabel).toBe("+0.008 个百分点（+0.002 个标准差）");

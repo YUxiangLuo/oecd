@@ -46,6 +46,7 @@ import { TARIFF_IMPOSER, teachingExample, type TeachingExampleSelection } from "
 import { userFacingRequestError } from "./user-facing-error";
 import { countryLabel, GroupChangeChart, sectorLabel } from "./viz";
 import { DivergingBarChart, type DivergingBarRow } from "./viz/regression/diverging-bars";
+import { ConfirmModal } from "./teacher/ui";
 import { NEGATIVE, POSITIVE, UNCERTAIN } from "./viz/regression/palette";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
@@ -104,7 +105,7 @@ function DesignEquation({ design }: { design: RegressionDesignInfo }) {
       {/* The five terms, always visible (a hover-only gloss went unnoticed). */}
       <ul className="model-eq-terms" aria-label="公式里各项的意思">
         <li><b>Y</b>：结果指标，本步是{yLabel}；i = 国家，j = 行业，t = 年份。</li>
-        <li><b>β·X</b>：X 是关税暴露（首年对美出口份额 w × 加征税率 τ）；β 就是要算的估计值：扣掉下面的 α 和 γ 之后，X 每高 1 个百分点，Y 平均相差多少。</li>
+        <li><b>β·X</b>：X 是关税暴露（首年对美出口份额 w × 加征税率 τ）；β 就是要算的估计值：扣掉下面的 α 和 λ 之后，X 每高 1 个百分点，Y 平均相差多少。</li>
         <li><b>α</b>：每个国家×行业自己的平均水平，先扣掉。</li>
         <li><b>λ</b>：每一年所有国家×行业共同的变化，先扣掉。</li>
         <li><b>ε</b>：剩下的随机波动。</li>
@@ -525,7 +526,7 @@ export function forwardShareIdentity(items: TeachingEstimate[]): string | null {
   const coefs = FORWARD_SHARES.map((key) => items.find((item) => item.key === key)?.coef);
   if (coefs.some((coef) => coef == null || !Number.isFinite(coef))) return null;
   const sum = (coefs as number[]).reduce((total, coef) => total + coef, 0);
-  return `纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（${Math.abs(sum) < 0.005 ? "0.00" : signed(sum, 2)}）；前向 GVC 生产总份额 = 简单 + 复杂。`;
+  return `纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（${Math.abs(sum) < 0.005 ? "0.00" : signed(sum, 2)}）；前向 GVC 生产总份额 = 简单 + 复杂（按未取整的原值精确相加，条旁取整后的数字可能相差末位 1）。`;
 }
 
 /** Steps whose run was still in flight when the student left the step (the request is aborted then). */
@@ -560,6 +561,8 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
   const [result, setResult] = useState<RegressionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  // A grey (方向不确定) bar is for reading its interval by hover; a click on it saves it, so ask first.
+  const [pendingUncertain, setPendingUncertain] = useState<{ key: string; label: string } | null>(null);
   // A run cut off by leaving the step earlier: said once, until the next run starts.
   const [interrupted, setInterrupted] = useState(() => interruptedRuns.has(outcome));
   // Said by the polite live region after a bar saved its Y ("已保存：…"): keyboard focus stays on the bars.
@@ -865,6 +868,15 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
       {result && (
         <div className={error ? "reg-results reg-results-stale" : "reg-results"}>
           {error && !errorAtBars && <p className="reg-stale-note" role="note">这次计算没有成功；下面仍是上次保存的结果。</p>}
+          {pendingUncertain && (
+            <ConfirmModal
+              title="改为保存方向不确定的这一项？"
+              message={`“${pendingUncertain.label}”的 95% 区间包含 0，方向不确定。点“改为保存”后，本步写进报告的结果会改成这一项，不再是默认的${defaultLabel}。只想看它的区间，把鼠标停在条上（或用方向键选中）即可，不用点击。`}
+              confirmLabel="改为保存"
+              onConfirm={() => { const { key } = pendingUncertain; void run(key, false); }}
+              onClose={() => setPendingUncertain(null)}
+            />
+          )}
           <div ref={verdictAnchorRef} className="verdict-anchor">
             {bars ? (
               <div className="reg-family-bars">
@@ -872,7 +884,12 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
                   rows={bars.rows}
                   unitTitle={bars.unitTitle}
                   title={familyBarsTitle(bars.rows.length)}
-                  onSelect={(key) => { if (key !== selectedKey) void run(key, false); }}
+                  onSelect={(key) => {
+                    if (key === selectedKey) return;
+                    const row = bars.rows.find((item) => item.key === key);
+                    if (row?.uncertain) setPendingUncertain({ key, label: row.label });
+                    else void run(key, false);
+                  }}
                   disabled={running}
                 >
                   {/* A bar click saves its Y for the report: when that is not the step's default, say so and offer the way back. */}

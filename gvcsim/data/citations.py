@@ -143,7 +143,7 @@ def report_source_disclosures(data_sources: dict[str, Any] | None) -> list[str]:
             f"- 指标输入数据集：{OECD_ICIO_CITATION}",
             f"- 指标输入方法文档：{OECD_ICIO_METHODOLOGY_CITATION}",
             f"- OECD 使用条款：{OECD_ICIO_TERMS_URL}",
-            "- OECD ICIO 声明只覆盖本系统的指标输入与其派生结果；不覆盖回归控制变量或政策情景。",
+            "- OECD ICIO 声明只覆盖本系统的指标输入与其派生结果；不覆盖课程生成的关税情景。",
             "- 本报告是教学系统生成的衍生结果，不代表 OECD 审核、参与或背书；再分发前应复核下载时适用的元数据和条款。",
         ]
     controls = sources["simulated_macro_controls"]

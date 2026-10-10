@@ -248,9 +248,7 @@ def estimate_digits(kind: str, value: float, bounds: tuple[float, float] | None)
         network_interval_digits(value, bounds)
         if kind == "network"
         else 4
-        if kind == "position"
-        else 3
-        if kind == "length"
+        if kind in ("position", "length")
         else _share_digits(value)
     )
     return distinct_digits(base, value, bounds)

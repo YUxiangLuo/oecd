@@ -566,8 +566,14 @@ export function IndicatorTrendChart({
                   {i > 0 && series[index][i - 1].value !== null && stepped && (
                     <polyline
                       data-series={countries[index]}
-                      // Held until halfway between the years, where the policy line sits, then the new value.
-                      points={`${x(series[index][i - 1].year)},${y(series[index][i - 1].value!)} ${x((series[index][i - 1].year + point.year) / 2)},${y(series[index][i - 1].value!)} ${x((series[index][i - 1].year + point.year) / 2)},${y(point.value)} ${x(point.year)},${y(point.value)}`}
+                      // Held until halfway between the years, where the policy line sits, then the new value. A
+                      // comparison country's riser sits a few px to the right, so the first country's riser (same
+                      // x, drawn on top) does not hide it.
+                      points={(() => {
+                        const prev = series[index][i - 1];
+                        const riser = x((prev.year + point.year) / 2) + index * 5;
+                        return `${x(prev.year)},${y(prev.value!)} ${riser},${y(prev.value!)} ${riser},${y(point.value)} ${x(point.year)},${y(point.value)}`;
+                      })()}
                       fill="none"
                       stroke={CAT[index]}
                       strokeWidth={context && index ? 2 : context ? 3 : 2.5}

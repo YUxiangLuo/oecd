@@ -159,11 +159,11 @@ export function distinctDigits(digits: number, point: number, bounds: [number, n
 
 /**
  * Decimals of an estimate per 1 percentage point of X and its 95% interval, in the Y's own unit (shares in points):
- * shares 2–3, lengths 3, position 4, network 2 or more (networkIntervalDigits); more where an interval end would
+ * shares 2–3, lengths and position 4 (both lengths of step 13 read alike), network 2 or more (networkIntervalDigits); more where an interval end would
  * read the same as the estimate (report `estimate_digits`).
  */
 export function estimateDigits(kind: DepvarKind, value: number, bounds: [number, number] | null): number {
-  const base = kind === "network" ? networkIntervalDigits(value, bounds) : kind === "position" ? 4 : kind === "length" ? 3 : shareDigits(value);
+  const base = kind === "network" ? networkIntervalDigits(value, bounds) : kind === "position" || kind === "length" ? 4 : shareDigits(value);
   return distinctDigits(base, value, bounds);
 }
 

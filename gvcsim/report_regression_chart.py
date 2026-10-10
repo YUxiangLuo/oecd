@@ -127,7 +127,7 @@ def _forward_share_identity(rows: list[dict[str, Any]]) -> str | None:
     shown = "0.00" if abs(total) < 0.005 else _signed(total, 2)
     return (
         f"纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（{shown}）；"
-        "前向 GVC 生产总份额 = 简单 + 复杂。"
+        "前向 GVC 生产总份额 = 简单 + 复杂（按未取整的原值精确相加，图中取整后的数字可能相差末位 1）。"
     )
 
 

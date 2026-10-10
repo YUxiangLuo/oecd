@@ -787,3 +787,20 @@ test("goods only: a taxed country's service industry reads as not taxed, with a 
   series.mockRestore();
   cleanup();
 });
+
+test("two taxed countries: the comparison country's jump sits beside the first one's, not hidden under it", async () => {
+  const meta: Meta = { years: tenYears, countries: ["CAN", "MEX", "USA"], sectors: ["C29"] };
+  const groups = tenGroups();
+  const series = tenSeries((countries, industry) => countries.flatMap((country, index) => tenRows(country, industry, index ? 0.4 : 0.9, true)));
+  render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["CAN", "MEX"], teaching_industry: "C29" })} />);
+  await waitFor(() => expect(document.querySelectorAll('polyline[data-series="MEX"]').length).toBeGreaterThan(1));
+  const riserX = (country: string) => {
+    const points = [...document.querySelectorAll(`polyline[data-series="${country}"]`)][1].getAttribute("points")!
+      .split(" ").map((point) => point.split(",").map(Number));
+    return points[1][0];
+  };
+  expect(riserX("MEX")).toBe(riserX("CAN") + 5);
+  groups.mockRestore();
+  series.mockRestore();
+  cleanup();
+});

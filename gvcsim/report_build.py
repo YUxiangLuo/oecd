@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from datetime import datetime, timezone
 
 from typing import Any
@@ -264,14 +263,9 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         else "OECD ICIO 2023 版"
     )
     disclosures = report_source_disclosures(data_sources)
-    # The regressions use no macro controls; that line is provenance, not method.
-    provenance_disclosures = [line for line in disclosures if line.startswith("- 宏观控制变量")]
-    # The citation line names the generator as a module path ("生成器 gvcsim.data.controls.build_controls@2.0.0");
-    # the report keeps only its version, as for the other versions listed under "报告溯源".
-    provenance_lines = [
-        re.sub(r"（生成器 [^@（）]*@([^（）]+)）", r"（生成程序版本 `\1`）", line) for line in provenance_disclosures
-    ]
-    body_disclosures = [line for line in disclosures if line not in provenance_disclosures]
+    # The regressions use no macro controls: the report does not mention them (the release still records them).
+    macro_control_lines = [line for line in disclosures if line.startswith("- 宏观控制变量")]
+    body_disclosures = [line for line in disclosures if line not in macro_control_lines]
     scenario, teaching_examples = _teaching_scenario(session)
     lines = [
         "# GVC 指标与关税实验报告",
@@ -338,7 +332,6 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         f"- 指标数据版本：`{_safe(metadata.get('release_id') or '—')}`",
         f"- 关税回归数据版本：`{TEACHING_VERSION}`；X 在数据中的字段名：`{X_COLUMN}`",
         f"- 会话摘要：`{fingerprint}`",
-        *provenance_lines,
         "",
     ]
     markdown = "\n".join(lines)
