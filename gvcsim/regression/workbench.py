@@ -43,6 +43,13 @@ FIXED_EFFECT_DESCRIPTIONS = {
     "country_year": "每个国家每年一个截距，包含国家 FE 和年份 FE；会吸收所有国家层面的控制变量（4 个控制变量都是）",
 }
 NO_FIXED_EFFECTS_NOTE = "都不勾时模型加常数项，表头写“无固定效应”。"
+# "试一试": one change at a time, each a contrast the course data were built to show; questions only, no answers.
+TRIES = (
+    "去掉“汇率变动”：X 各项合计变大还是变小？再改用“国家×年份”固定效应呢？",
+    "只放当期 X（去掉 L1.X）：合计和默认模型相差多少？",
+    "固定效应改成“国家 + 行业 + 年份”（不勾“国家×行业”）：结果怎样变？",
+    "加上 L2.X，或加上 GDP、贸易开放度：结论变了吗？",
+)
 HINTS = (
     "每次只改一处设定，与第一列的默认模型比较：X 各项的系数和合计变了多少？观测值和年份是否相同？",
     "与 Y 无关的变量在 10% 水平上大约每 10 次也会出现一次 *，不要只凭一颗星下结论。",
@@ -89,6 +96,7 @@ def options() -> dict[str, Any]:
             "compared": MAX_COMPARED,
             "name_length": NAME_MAX_LENGTH,
         },
+        "tries": list(TRIES),
         "hints": list(HINTS),
         "footnote": FOOTNOTE,
         "sample_differs_note": SAMPLE_DIFFERS_NOTE,

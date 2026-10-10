@@ -900,6 +900,8 @@ export interface WorkbenchOptions {
   fixed_effects: { key: string; label: string; description: string; includes: string[] }[];
   no_fixed_effects_note: string;
   limits: { saved: number; in_report: number; compared: number; name_length: number };
+  /** "试一试": one change at a time, each a contrast the course data were built to show. */
+  tries: string[];
   hints: string[];
   footnote: string;
   sample_differs_note: string;

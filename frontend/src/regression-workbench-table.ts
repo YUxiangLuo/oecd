@@ -4,6 +4,7 @@
  * name every term the same way.
  */
 import { groupedFixed } from "./format";
+import { globalInferenceIsSuppressed } from "./regression-verdict";
 import type {
   CoefStat,
   CustomResult,
@@ -99,18 +100,13 @@ export function termLabel(name: string, options: WorkbenchOptions): string {
 export const significanceStars = (p: number | null | undefined) =>
   p == null ? "" : p < 0.01 ? "***" : p < 0.05 ? "**" : p < 0.1 ? "*" : "";
 
-/** p at three decimals; below 0.001 reads "< 0.001". */
-export function formatP3(p: number | null | undefined): string {
-  if (p == null || !Number.isFinite(p)) return "—";
-  return p < 0.001 ? "< 0.001" : p.toFixed(3);
-}
-
 export const fixed4 = (value: number | null | undefined) => (value == null || !Number.isFinite(value) ? "—" : groupedFixed(value, 4));
 
 /** What a saved model keeps of a run, to show its table again without recomputing (the report recomputes). */
 export function snapshotOf(response: Pick<RegressionResponse, "design" | "result">): CustomResultSnapshot {
   const { result } = response;
-  const suppressed = result.status === "invalid_design" || Boolean(result.support?.suppress_inference);
+  // The same rule as the step's own result: no p, stars or interval unless the run's statuses allow inference.
+  const suppressed = globalInferenceIsSuppressed(result.status, result.support);
   return {
     depvar_label: response.design.depvar_label,
     depvar_kind: response.design.depvar_kind ?? "",
@@ -201,6 +197,22 @@ const effectIncluded = (spec: ModelSpec, key: string, options: WorkbenchOptions)
 const yearsText = (snapshot: CustomResultSnapshot) =>
   snapshot.result.years ? `${snapshot.result.years[0]}–${snapshot.result.years[1]}` : "—";
 
+/**
+ * "X 每高 1 个百分点" reading of each column's X-terms sum, in the step's unit ("-0.55 个百分点", "-0.0183 个长度单位"):
+ * the page's own reading of the coefficient, which for lengths and centrality is the coefficient / 100.
+ */
+export function perPointRow(columns: TableColumn[], read: (coef: CoefStat, snapshot: CustomResultSnapshot) => string): SummaryRow | null {
+  if (!columns.some(({ snapshot }) => snapshot.result.cumulative)) return null;
+  return {
+    key: "per_point",
+    label: "合计：X 每高 1 个百分点，Y 两年累计相差",
+    cells: columns.map(({ snapshot }) => {
+      const sum = snapshot.result.cumulative ?? (xTerms(snapshot) === 1 ? snapshot.result.coefs.find((item) => Object.values(X_COLUMNS).includes(item.name)) : null);
+      return sum ? read(sum, snapshot) : "";
+    }),
+  };
+}
+
 /** Under the coefficients: each fixed effect 是/否, then the sample and the fit, as the report prints them. */
 export function summaryRows(columns: TableColumn[], options: WorkbenchOptions): SummaryRow[] {
   const statistic = (key: string, label: string, read: (snapshot: CustomResultSnapshot) => string): SummaryRow => ({
@@ -271,12 +283,15 @@ function csvField(value: string): string {
 
 /** The comparison table as CSV (UTF-8 with BOM, so Excel reads the Chinese): a coefficient row with its stars and a
  *  row of bracketed SE for each term, then the fixed effects and statistics, the footnote last. */
-export function comparisonCsv(columns: TableColumn[], options: WorkbenchOptions, depvarLabel: string): string {
+export function comparisonCsv(
+  columns: TableColumn[], options: WorkbenchOptions, depvarLabel: string, perPoint?: SummaryRow | null,
+): string {
   const lines: string[][] = [[`因变量：${depvarLabel}`, ...columns.map((column) => column.name)]];
   for (const row of coefficientRows(columns, options)) {
     lines.push([row.label, ...row.cells.map((item) => (item === "omitted" ? "（省略）" : item?.coef ?? ""))]);
     lines.push(["", ...row.cells.map((item) => (item && item !== "omitted" ? item.se : ""))]);
   }
+  if (perPoint) lines.push([perPoint.label, ...perPoint.cells]);
   for (const row of summaryRows(columns, options)) lines.push([row.label, ...row.cells]);
   lines.push(["设定", ...columns.map((column) => specSummary(column.spec, options))]);
   lines.push([options.footnote]);

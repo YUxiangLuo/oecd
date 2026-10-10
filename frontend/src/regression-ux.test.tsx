@@ -12,6 +12,7 @@ import type {
 } from "./types";
 import { GENERATED_DATA_NOTE, GENERATED_Y_DISCLOSURE } from "./regression-lessons";
 import { shownPerPoint } from "./regression-verdict";
+import workbenchOptions from "./regression-workbench-options.fixture.json";
 
 afterEach(() => { cleanup(); mock.restore(); });
 
@@ -107,6 +108,9 @@ function LockedLab({ initial, outdated = true }: { initial: ReturnType<typeof FV
 const benchmark = { backend: "x", policy_coefs: [], max_abs_coef_diff: 0, max_abs_se_diff: 0, coef_check_passed: true, se_check_mode: "x", notes: [] };
 const mockApis = () => {
   spyOn(api, "teachingGroups").mockResolvedValue(groups);
+  // The default model is shown before the run (the server's design) and the change-the-model section is open.
+  spyOn(api, "regressionDesign").mockImplementation(async () => FVA().design as never);
+  spyOn(api, "regressionOptions").mockResolvedValue(workbenchOptions as never);
   spyOn(api, "teachingSeries").mockResolvedValue({ version: "v", disclaimer: "", rows: [], total: 0, years: [] } as TeachingPanelResponse);
   return spyOn(api, "teachingOverview").mockResolvedValue(overview);
 };
@@ -162,11 +166,13 @@ describe("simple regression workbench", () => {
     const card = document.querySelector(".verdict-card")!;
     expect(card.firstElementChild?.textContent).toBe(GENERATED_Y_DISCLOSURE);
     expect(card.textContent?.split(GENERATED_DATA_NOTE)).toHaveLength(1);
-    expect(screen.getByRole("group", { name: /X 每高 1 个百分点，Y 平均相差（个百分点）/ })).toBeTruthy();
-    // Model and numbers are folded away.
-    // (The 加税前后 chart's per-year table is folded under the chart.)
-    // The optional workbench (自己设计模型) is folded last.
-    expect([...document.querySelectorAll("details > summary")].map((node) => node.textContent)).toEqual(["各组逐年读数", "模型设定", "详细数字（可选）", "自己设计模型（选做）"]);
+    expect(screen.getByRole("group", { name: /X 每高 1 个百分点，Y 两年累计平均相差（个百分点）/ })).toBeTruthy();
+    // Three sections: the data, the default model (said above its run button), then the open change-the-model one.
+    expect([...document.querySelectorAll(".reg-workbench > section > .reg-section-step")].map((node) => node.textContent))
+      .toEqual(["先看数据", "默认模型", "改模型、对比（选做）"]);
+    // Folded: the chart's per-year table, the model's data facts, and one column's full numbers.
+    await waitFor(() => expect([...document.querySelectorAll("details > summary")].map((node) => node.textContent))
+      .toEqual(["各组逐年读数", "数据、样本和区间的算法", "某一列的完整数字（区间、t 值、p 值）"]));
     fireEvent.click(screen.getByRole("button", { name: DVA_BAR }));
     await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高 0.56 个百分点"));
     expect(run.mock.calls[1][2]).toBe("DVAex_share");
@@ -234,36 +240,29 @@ describe("simple regression workbench", () => {
     expect(run.mock.calls[0][2]).toBeNull();
   });
 
-  test("自己设计模型 is folded under the result and loads its choices only when opened", async () => {
+  test("the default model is said above the run button before any result, and the change-the-model section opens after it", async () => {
     mockApis();
-    const options = spyOn(api, "regressionOptions").mockImplementation(() => new Promise(() => {}));
+    // The server's v10 design: X, L1.X and the exchange rate.
+    spyOn(api, "regressionDesign").mockResolvedValue({
+      ...FVA().design,
+      spec: { x_lags: [0, 1], controls: [{ name: "teaching_exchange_rate_change", lag: 0 }], fixed_effects: ["country_industry", "year"] },
+      control_labels: { teaching_exchange_rate_change: "汇率变动" },
+    } as never);
+    render(<RegressionRunLab step={step} meta={meta} state={state} />);
+    const model = await screen.findByRole("group", { name: "本步计算的公式" });
+    const section = model.closest("section")!;
+    expect(section.querySelector(".reg-section-step")?.textContent).toBe("默认模型");
+    expect(section.querySelector(".model-eq-terms")?.textContent).toContain("两者之和是两年累计关联");
+    expect(section.querySelector(".model-eq-terms")?.textContent).toContain("γ·汇率变动");
+    // The model comes before its run button, and nothing of the change-the-model section shows before a result.
+    expect(model.compareDocumentPosition(screen.getByRole("button", { name: /计算贸易流回归/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(document.querySelector(".reg-custom-section")).toBeNull();
+    cleanup();
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
-    const summary = await screen.findByText("自己设计模型（选做）");
-    const details = summary.closest("details")!;
-    expect(details.open).toBe(false);
-    expect(options).not.toHaveBeenCalled();
-    details.open = true;
-    fireEvent(details, new Event("toggle"));
-    await waitFor(() => expect(options).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText("正在载入可选的设定…")).toBeTruthy();
-  });
-
-  test("the detailed-numbers notes match the table: no <0.0001 note without such a p, and rounding is named", async () => {
-    mockApis();
-    const run = savedRun("DVAex_share", "国内增加值出口占比");
-    const { unmount } = render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run } as never }} />);
-    // 模型设定, 详细数字, then the optional workbench.
-    await waitFor(() => expect(document.querySelectorAll(".technical-details")).toHaveLength(3));
-    const details = () => document.querySelectorAll(".technical-details")[1]!.textContent ?? "";
-    expect(details()).not.toContain("很小的 p 值");
-    expect(details()).toContain("两列是同一个数，左列按页面精度四舍五入");
-    // The model settings hold the formula and the design, folded.
-    expect(document.querySelectorAll(".technical-details")[0]!.textContent).toContain("双向固定效应");
-    unmount();
-    const tiny = { ...run, result: { ...run.result, coefs: [{ ...run.result.coefs[0], p: 0.00001 }] } };
-    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: tiny } as never }} />);
-    await waitFor(() => expect(document.querySelectorAll(".technical-details")).toHaveLength(3));
-    expect(details()).toContain("很小的 p 值显示为 <0.0001");
+    await screen.findByText("换一种模型试试：每次改一处，和默认模型比较");
+    expect(document.querySelector(".reg-custom-section details")?.hasAttribute("open")).toBe(false);
+    expect(await screen.findByRole("button", { name: "计算这个模型" })).toBeTruthy();
+    expect([...document.querySelectorAll(".reg-custom-compare-table thead th")].map((cell) => cell.textContent)).toEqual(["变量", "默认模型"]);
   });
 
   test("a saved result makes recalculating secondary, and a failed recalculation labels the old result", async () => {
@@ -400,7 +399,7 @@ describe("simple regression workbench", () => {
     expect([...document.querySelectorAll("[data-marker] text")].map((node) => node.textContent)).toEqual(["2018 年第一批加税", "2019 年第二批加税"]);
     // The raw gaps mix the tariff with what else changed: no bracket claims the regression's gap on the chart.
     expect(document.querySelector("[data-estimate-label]")).toBeNull();
-    expect(document.querySelector(".reg-group-figure .reg-gap-caption")?.textContent).toBe(GROUP_CHART_CAPTION);
+    expect(document.querySelector(".reg-group-figure .reg-gap-caption")?.textContent).toStartWith(GROUP_CHART_CAPTION);
     expect(GROUP_CHART_CAPTION).not.toMatch(/高估|低估|汇率.*(高|低)/);
   });
 
@@ -408,8 +407,10 @@ describe("simple regression workbench", () => {
     mockApis();
     render(<RegressionRunLab step={step} meta={meta} state={state} />);
     await screen.findByRole("img", { name: /加税前后/ });
-    expect(document.querySelector(".reg-gap-caption")?.textContent).toBe(GROUP_CHART_CAPTION);
-    expect(document.querySelector(".reg-parallel-note")?.textContent).toContain("如果没有关税，各组的走势应大致平行");
+    // One note under the chart: what it mixes in, then the premise.
+    expect(document.querySelector(".reg-gap-caption")?.textContent).toStartWith(GROUP_CHART_CAPTION);
+    expect(document.querySelector(".reg-gap-caption")?.textContent).toContain("如果没有关税，各组的走势应大致平行");
+    expect(document.querySelector(".reg-parallel-note")).toBeNull();
   });
 
   test("a server before v10 still gets its two lines and one marker", () => {
@@ -451,15 +452,6 @@ describe("simple regression workbench", () => {
     expect(note?.previousElementSibling?.tagName.toLowerCase()).toBe("svg");
   });
 
-  test("the detailed numbers table wraps its headers and narrows its cells so step 14's numbers fit", async () => {
-    mockApis();
-    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
-    await waitFor(() => expect(document.querySelector("table.reg-coef-table")).not.toBeNull());
-    const css = await Bun.file(new URL("./workbench.css", import.meta.url)).text();
-    expect(css).toMatch(/\.data-table\.reg-coef-table th \{[^}]*white-space: normal;[^}]*padding: 8px 8px;/);
-    expect(css).toMatch(/\.data-table\.reg-coef-table td \{[^}]*padding-left: 8px; padding-right: 8px;/);
-  });
-
   test("falls back to the default Y when the saved baseline is not offered by the release", async () => {
     mockApis();
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: savedRun("FDC_share", "外国重复计算项占比") } as never }} />);
@@ -479,7 +471,7 @@ describe("simple regression workbench", () => {
       estimate("3b_FGY_GVC_C_share", "后向复杂 GVC 生产份额", 0.00752, -0.0112, 0.0262),
     ];
     const { rows, unitTitle } = familyBarRows("production", items, "3b_VA_GVC_C_share");
-    expect(unitTitle).toBe("X 每高 1 个百分点，Y 平均相差（个百分点）");
+    expect(unitTitle).toBe("X 每高 1 个百分点，Y 两年累计平均相差（个百分点）");
     const weak = rows.find((row) => row.key === "3b_FGY_GVC_C_share")!;
     expect([weak.uncertain, weak.valueLabel, weak.intervalLabel]).toEqual([true, "+0.008", "[-0.011, +0.026] 个百分点"]);
     expect(rows.filter((row) => row.uncertain)).toHaveLength(1);
@@ -500,7 +492,7 @@ describe("simple regression workbench", () => {
       estimate("PLv_GVC", "前向 GVC 段长度", -1.8143, -1.9, -1.7, { kind: "length", default: true, depvar_within_std: 0.4 }),
       estimate("GVCPs", "GVC 位置指数", -0.0768, -0.09, -0.06, { kind: "position", depvar_within_std: 0.05 }),
     ], "PLv_GVC");
-    expect(length.unitTitle).toBe("X 每高 1 个百分点，Y 平均相差（个标准差）");
+    expect(length.unitTitle).toBe("X 每高 1 个百分点，Y 两年累计平均相差（个标准差）");
     expect(length.rows.map((row) => [row.sublabel, row.valueLabel])).toEqual([
       // Each bar in its own headline's digits.
       ["长度单位", "-0.0181（-0.045 个标准差）"],
@@ -605,7 +597,7 @@ describe("simple regression workbench", () => {
         cumulative: { ...run.result.coefs[0], name: "cumulative", coef: -0.55, ci_low: -0.57, ci_high: -0.53 },
       },
     };
-    expect(lagSplit("trade", twoYear as never)).toBe("其中当年 -0.33 个百分点，次年再 -0.22 个百分点（模型同时放入当年的 X 和上一年的 X，两项之和是累计关联）。");
+    expect(lagSplit("trade", twoYear as never)).toBe("其中当年 -0.33 个百分点，次年再 -0.22 个百分点。");
     expect(lagSplit("trade", run as never)).toBeNull();
     render(<RegressionResultCard outcome="trade" response={{ ...twoYear, benchmark } as never} />);
     expect(screen.getByRole("heading", { level: 3 }).textContent).toContain("两年累计平均低 0.55 个百分点");

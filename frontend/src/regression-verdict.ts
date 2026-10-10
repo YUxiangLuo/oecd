@@ -228,8 +228,8 @@ export interface BarFigures {
 export type BarUnit = "points" | "sd";
 
 export const BAR_UNIT_TITLES: Record<BarUnit, string> = {
-  points: "X 每高 1 个百分点，Y 平均相差（个百分点）",
-  sd: "X 每高 1 个百分点，Y 平均相差（个标准差）",
+  points: "X 每高 1 个百分点，Y 两年累计平均相差（个百分点）",
+  sd: "X 每高 1 个百分点，Y 两年累计平均相差（个标准差）",
 };
 
 export function barUnitFor(kinds: readonly string[]): BarUnit {

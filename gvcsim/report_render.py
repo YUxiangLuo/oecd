@@ -516,7 +516,7 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
         "下表列出四步保存的结果（贸易流、生产、长度、网络），各用自己的单位，表中数值不能直接比较"
         + ("；表后的图将其统一换算为标准差，以便并列比较。" if qualified else "。"),
         "",
-        "| 步骤 | 指标 | X 每高 1 个百分点，Y 平均相差 | 95% 区间 | 方向 |",
+        "| 步骤 | 指标 | X 每高 1 个百分点，Y 两年累计平均相差 | 95% 区间 | 方向 |",
         "|---|---|---|---|---|",
     ]
     designs = []
@@ -631,7 +631,9 @@ def _example_conversion(
                 if item is converted[-1]
                 else ""
             )
-            text = f"{label} 的 X 为 {_example_x(item, x, tau)} 个百分点，按估计与 X 相关的差异{amount}{reading}"
+            text = (
+                f"{label} 的 X 为 {_example_x(item, x, tau)} 个百分点，按估计两年累计与 X 相关的差异{amount}{reading}"
+            )
         elif tau == 0 and _is_service(item.get("industry")):
             text = f"{label} 是服务业，不在加税范围内（τ = 0），X = 0，按估计没有与 X 相关的差异"
         elif tau > 0:
@@ -654,14 +656,26 @@ GENERATED_Y_DISCLOSURE = (
 )
 
 
+def markdown_name(value: Any) -> str:
+    """A name a student typed (a saved model), printed literally in Markdown."""
+    from gvcsim.report_workbench import _name
+
+    return _name(value)
+
+
 def _evidence_summary(
     runs: list[dict[str, Any]],
     source_filter: dict[str, Any] | None = None,
     teaching_observation: Any = None,
     overview: dict[str, Any] | None = None,
+    custom_models: list[dict[str, Any]] | None = None,
 ) -> list[str]:
     """``overview`` is the course's estimate of every Y (``_estimate_overview``) for the per-step bar charts;
-    without it each chart shows the saved Y alone."""
+    without it each chart shows the saved Y alone. ``custom_models`` are the workbench models marked 放入报告
+    (``report_workbench.reported_models``): each step names how many the appendix compares."""
+    compared: dict[int, list[str]] = {}
+    for model in custom_models or []:
+        compared.setdefault(int(model["step"]), []).append(str(model["name"]))
     lines = [
         "## 关键证据摘要",
         "",
@@ -748,6 +762,12 @@ def _evidence_summary(
         design_limit = _summary_design_limit(status, support, reasons)
         if design_limit:
             lines.append(f"- **需要写明的限制**：{design_limit}")
+        names = compared.get(step) if used_in_table or not several else None
+        if names:
+            lines.append(
+                f"- 你还在本步比较了 {len(names)} 个自己设计的模型（{'、'.join(markdown_name(name) for name in names)}），"
+                "见附录“学生设计的模型”。"
+            )
         lines.append("")
     return lines
 
@@ -813,7 +833,7 @@ def _technical_estimate_tables(
     lines = [
         "",
         # The page's column order (详细数字), t 值 included.
-        "| 变量 | X 每高 1 个百分点，Y 平均相差 | 系数（X 按份额计） | 95% 区间（按系数计） | 标准误（按国家聚类） | t 值 | p 值 |",
+        "| 变量 | X 每高 1 个百分点，Y 两年累计平均相差 | 系数（X 按份额计） | 95% 区间（按系数计） | 标准误（按国家聚类） | t 值 | p 值 |",
         "|---|---:|---:|---:|---:|---:|---:|",
     ]
     primary = _primary_coefficient(design, result)

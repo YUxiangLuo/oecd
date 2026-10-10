@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { exampleXText, RegressionCoefficientTable, RegressionResultCard, TEACHING_MODEL_VERSION } from "./regression";
+import { exampleXText, RegressionResultCard, TEACHING_MODEL_VERSION } from "./regression";
 import { BASELINE_LESSONS, GENERATED_Y_DISCLOSURE, REGRESSION_LESSONS } from "./regression-lessons";
 import type { RegressionResponse } from "./types";
 
@@ -216,10 +216,6 @@ describe("fixed teaching regression reading", () => {
     // A ratio: no unit after its amounts, "无量纲" where a unit is named (as step 7 and the report say).
     expect(container.querySelector(".reg-interval-words")?.textContent).toContain("[-0.0030, -0.0012]；约 [");
     expect(container.textContent).not.toContain("位置指数单位");
-    cleanup();
-    const table = render(<RegressionCoefficientTable response={data} />);
-    expect(table.container.querySelectorAll("th")[1].textContent).toBe("X 每高 1 个百分点，Y 平均相差（无量纲）");
-    expect(table.container.querySelectorAll("tbody td")[1].textContent).toBe("-0.0021");
   });
 
   test("allowed estimates still disclose design warnings", () => {
@@ -232,84 +228,7 @@ describe("fixed teaching regression reading", () => {
     expect(screen.getByText("平均高 2.00 个百分点")).toBeTruthy();
   });
 
-  test("the coefficient table states its scale next to the page's per-percentage-point reading", () => {
-    // A length outcome: the raw coefficient (X as a share) is 100 times the reading per percentage point.
-    const data = response();
-    data.design.outcome = "length";
-    data.design.depvar_kind = "length";
-    Object.assign(data.result.coefs[0], { coef: -1.8186, ci_low: -1.9, ci_high: -1.7 });
-    const table = render(<RegressionCoefficientTable response={data} />);
-    const headers = [...table.container.querySelectorAll("th")].map((cell) => cell.textContent);
-    expect(headers.slice(0, 3)).toEqual(["变量", "X 每高 1 个百分点，Y 平均相差（长度单位）", "系数（X 按份额计）"]);
-    const cells = [...table.container.querySelectorAll("tbody td")].map((cell) => cell.textContent);
-    expect(cells[1]).toBe("-0.0182 个长度单位");
-    expect(cells[2]).toBe("-1.8186");
-  });
 
-  test("the table's per-percentage-point reading has the headline's digits (an interval end would read alike)", () => {
-    // Step 13's default Y: -0.0184 with [-0.0192, -0.0176] read "-0.018" in the table but "-0.0184" in the headline.
-    const data = response();
-    data.design.outcome = "length";
-    data.design.depvar_kind = "length";
-    Object.assign(data.result.coefs[0], { coef: -1.8414, ci_low: -1.92, ci_high: -1.76 });
-    data.result.depvar_within_std = 0.58;
-    const card = render(<RegressionResultCard outcome="length" response={data} />);
-    expect(card.container.querySelector(".reg-headline-main")?.textContent).toContain("0.0184 个长度单位");
-    cleanup();
-    const table = render(<RegressionCoefficientTable response={data} />);
-    expect(table.container.querySelectorAll("tbody td")[1].textContent).toBe("-0.0184 个长度单位");
-    // Without an interval (suppressed inference) the base digits stay, as in the report.
-    cleanup();
-    data.result.support!.suppress_inference = true;
-    const suppressed = render(<RegressionCoefficientTable response={data} />);
-    expect(suppressed.container.querySelectorAll("tbody td")[1].textContent).toBe("-0.0184 个长度单位");
-  });
 });
 
-test("step 14's raw coefficients group thousands, as the report's appendix", () => {
-  const data = response();
-  data.design.outcome = "network";
-  data.design.depvar_kind = "network";
-  Object.assign(data.result.coefs[0], { coef: -4080.37226, ci_low: -4158.542, ci_high: -4002.2026, se: 39.88, t: -102.3 });
-  data.result.depvar_within_std = 850;
-  const table = render(<RegressionCoefficientTable response={data} />);
-  const cells = [...table.container.querySelectorAll("tbody td")].map((cell) => cell.textContent);
-  expect(cells.slice(1, 6)).toEqual(["-40.80 个中心性原始单位", "-4,080.3723", "[-4,158.5420, -4,002.2026]", "39.8800", "-102.30"]);
-});
-
-test("the coefficient table never prints a negative zero", () => {
-  const data = response();
-  Object.assign(data.result.coefs[0], { coef: -0.00001, ci_low: -0.00004, ci_high: 0.00002, se: 0.00001, t: -0.001 });
-  const table = render(<RegressionCoefficientTable response={data} />);
-  const cells = [...table.container.querySelectorAll("tbody td")].map((cell) => cell.textContent);
-  expect(cells.slice(2, 6)).toEqual(["0.0000", "[0.0000, 0.0000]", "0.0000", "0.00"]);
-});
-
-test.each(["unknown", "conflicting"])("%s status suppresses table inference", (status) => {
-  const data = response();
-  if (status === "unknown") data.result.status = null;
-  else data.result.support!.status = "warning";
-  const table = render(<RegressionCoefficientTable response={data} />);
-  const cells = table.container.querySelectorAll("tbody td");
-  expect(cells[3].textContent).toBe("—");
-  expect(cells[6].textContent).toBe("—");
-});
-
-test.each([
-  [2.7231068455073544e-24, "<0.0001"],
-  [0, "<0.0001"],
-  [0.00009999, "<0.0001"],
-  [0.0001, "0.0001"],
-  [0.0256, "0.0256"],
-  // Four fixed decimals, never "0.0009587" next to columns of four.
-  [0.0009587, "0.0010"],
-  [0.41, "0.4100"],
-  [1, "1.0000"],
-  [null, "—"],
-] as const)("p=%s is legible in the raw table", (p, expected) => {
-  const data = response();
-  data.result.coefs[0].p = p;
-  const table = render(<RegressionCoefficientTable response={data} />);
-  expect(table.container.querySelector("tbody td:last-child")?.textContent).toBe(expected);
-});
 

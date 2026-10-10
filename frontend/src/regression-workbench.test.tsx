@@ -2,9 +2,9 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { api } from "./api";
-import { customReportChanged, RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
+import { ColumnDetails, customReportChanged, perPointReading, RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
 import {
-  canonicalSpec, coefficientRows, comparisonCsv, effectiveEffects, equationPreview, formatP3, includedBy, nameProblem,
+  canonicalSpec, coefficientRows, comparisonCsv, effectiveEffects, equationPreview, includedBy, nameProblem, perPointRow,
   nextResultName, omittedLines, samplesDiffer, significanceStars, snapshotOf, specSummary, summaryRows, termLabel,
   type TableColumn,
 } from "./regression-workbench-table";
@@ -85,7 +85,6 @@ describe("model wording (the server's ModelSpec.summary and equation)", () => {
     expect(["teaching_tariff_exposure", "teaching_tariff_exposure_lag2", ER, `${ER}__lag1`, "cumulative", "_constant"].map((name) => termLabel(name, options)))
       .toEqual(["X", "L2.X", "汇率变动", "L1.汇率变动", "X 各项合计（累计效应）", "常数项"]);
     expect([0.005, 0.03, 0.07, 0.2, null].map(significanceStars)).toEqual(["***", "**", "*", "", ""]);
-    expect([0.0004, 0.0123, null].map(formatP3)).toEqual(["< 0.001", "0.012", "—"]);
   });
 });
 
@@ -148,14 +147,21 @@ describe("tables", () => {
     expect(summaryRows([column], options).find((row) => row.key === "f")?.cells).toEqual(["—"]);
   });
 
+  test("the X terms' sum also reads per percentage point of X, in the step's unit and the headline's digits", () => {
+    const row = perPointRow(columns, (stat, snapshot) => perPointReading("trade", stat, snapshot))!;
+    expect(row.label).toBe("合计：X 每高 1 个百分点，Y 两年累计相差");
+    expect(row.cells).toEqual(["-0.55 个百分点", "-0.70 个百分点"]);
+  });
+
   test("the CSV has a BOM, two rows per term, the fixed effects, the models and the footnote last", () => {
     const named: TableColumn[] = [columns[0], { ...columns[1], name: "=SUM(1,2)" }];
-    const csv = comparisonCsv(named, options, "外国增加值项占比");
+    const csv = comparisonCsv(named, options, "外国增加值项占比", perPointRow(named, (stat, snapshot) => perPointReading("trade", stat, snapshot)));
     expect(csv.startsWith("﻿因变量：外国增加值项占比,默认模型,\"'=SUM(1,2)\"\r\n")).toBe(true);
     const lines = csv.slice(1).trimEnd().split("\r\n");
     expect(lines[1]).toBe("X,-0.3298***,-0.4608***");
     expect(lines[2]).toBe(",(0.0330),(0.0461)");
     expect(lines).toContain("国家×年份 FE,否,否");
+    expect(lines).toContain("合计：X 每高 1 个百分点，Y 两年累计相差,-0.55 个百分点,-0.70 个百分点");
     expect(lines).toContain("F（自由度）,\"2,076.70（3, 74）\",\"462.88（2, 74）\"");
     expect(lines.at(-2)).toBe("设定,X + L1.X；汇率变动；国家×行业 + 年份 FE,X + L1.X；无控制变量；国家×行业 + 年份 FE");
     expect(lines.at(-1)).toBe(`"${options.footnote}"`);
@@ -189,6 +195,8 @@ function Harness({ initial, onSave, locked = false }: {
 }
 
 const checkbox = (label: RegExp) => screen.getByRole("checkbox", { name: label });
+/** The regression table's column names (the full-numbers fold has a table of its own). */
+const tableHeaders = () => [...document.querySelectorAll(".reg-custom-compare-table thead th")].map((cell) => cell.textContent);
 
 describe("the workbench", () => {
   test("the form sends the canonical spec, and the computed model can be saved once under a checked name", async () => {
@@ -204,8 +212,10 @@ describe("the workbench", () => {
     expect(screen.getByText("Y = β₁·X + β₂·L1.X + 国家×行业 FE + 年份 FE + ε")).toBeTruthy();
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "计算这个模型" })); });
     expect(run).toHaveBeenCalledWith("trade", expect.anything(), "FVA_share", NO_RATE);
-    await screen.findByText("因变量：外国增加值项占比 | 国家×行业 FE + 年份 FE | 标准误按国家聚类");
-    expect((screen.getByLabelText("保存为") as HTMLInputElement).value).toBe("结果1");
+    // The computed model joins the one table, highlighted, after the default model.
+    await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "本次计算（未保存）"]));
+    expect(document.querySelector("th.reg-custom-current")?.textContent).toBe("本次计算（未保存）");
+    expect((screen.getByLabelText(/保存为/) as HTMLInputElement).value).toBe("结果1");
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
     expect(saves).toHaveLength(1);
     const [item] = saves[0].custom_results!;
@@ -213,7 +223,9 @@ describe("the workbench", () => {
     expect(item.snapshot.result.cumulative?.coef).toBeCloseTo(-0.7048);
     // Saved once: the same model is not offered again, and it joins the comparison.
     expect(await screen.findByText("这个设定已保存为“结果1”。")).toBeTruthy();
-    expect(screen.getAllByRole("columnheader").map((cell) => cell.textContent)).toContain("结果1");
+    expect(tableHeaders()).toContain("结果1");
+    expect(screen.queryByRole("columnheader", { name: "本次计算（未保存）" })).toBeNull();
+    expect(document.querySelector("th.reg-custom-current")?.textContent).toBe("结果1");
     // Changing the form marks the shown result as out of date.
     fireEvent.click(checkbox(/^L2\.X/));
     expect(screen.getByText(/设定已更改/)).toBeTruthy();
@@ -225,7 +237,8 @@ describe("the workbench", () => {
     render(<Harness />);
     const compute = await screen.findByRole("button", { name: "计算这个模型" });
     await act(async () => { fireEvent.click(compute); });
-    expect(await screen.findByText("这就是本步的默认模型（对比表第一列），不用另存。")).toBeTruthy();
+    expect(await screen.findByText("这就是本步的默认模型（表中第一列），不用另存。")).toBeTruthy();
+    expect(document.querySelector("th.reg-custom-current")?.textContent).toBe("默认模型");
     expect(screen.queryByRole("button", { name: "保存" })).toBeNull();
   });
 
@@ -264,5 +277,71 @@ describe("the workbench", () => {
     fireEvent.change(screen.getByLabelText("新名称"), { target: { value: " 去掉汇率 " } });
     fireEvent.click(screen.getByRole("button", { name: "确定" }));
     expect(saves[0].custom_results!.map((item) => item.name)).toEqual(["去掉汇率", "结果2"]);
+  });
+});
+
+describe("the open workbench", () => {
+  test("it shows the four tries from the server and the default model's column before anything is computed", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    render(<Harness />);
+    await screen.findByText(/试一试/);
+    expect([...document.querySelectorAll(".reg-custom-tries li")].map((item) => item.textContent)).toEqual(options.tries);
+    expect(tableHeaders()).toEqual(["变量", "默认模型"]);
+    expect(document.querySelector(".reg-custom-point-row")?.textContent).toBe("合计：X 每高 1 个百分点，Y 两年累计相差-0.55 个百分点");
+  });
+});
+
+/** The full-numbers fold of one column: the rules the step's old 详细数字 table kept. */
+describe("one column's full numbers", () => {
+  const column = (spec: ModelSpec, run: RegressionResponse): TableColumn => ({ name: "默认模型", spec, snapshot: snapshotOf(run) });
+  const cells = (run: RegressionResponse, outcome: "trade" | "length" | "network" = "trade") => {
+    const { container } = render(<ColumnDetails column={column(DEFAULT, run)} options={options} perPoint={(stat, snapshot) => perPointReading(outcome, stat, snapshot)} />);
+    const rows = [...container.querySelectorAll("tbody tr")].map((row) => [...row.children].map((cell) => cell.textContent));
+    cleanup();
+    return rows;
+  };
+
+  test("the sum reads per percentage point at the headline's digits; a length divides by 100", () => {
+    const run = response(DEFAULT, { teaching_tariff_exposure: -1.1, teaching_tariff_exposure_lag1: -0.7414, [ER]: 0.0052 });
+    run.design.depvar_kind = "length";
+    run.result.cumulative = { ...coef("cumulative", -1.8414), ci_low: -1.92, ci_high: -1.76 };
+    const sum = cells(run, "length").at(-1)!;
+    expect(sum[0]).toBe("X 各项合计（累计效应）");
+    expect(sum[1]).toBe("-1.8414***");
+    expect(sum[6]).toBe("-0.0184 个长度单位");
+  });
+
+  test("network coefficients group thousands; nothing reads as a negative zero", () => {
+    const run = response(DEFAULT, { teaching_tariff_exposure: -2480.37226, teaching_tariff_exposure_lag1: -1600, [ER]: -0.00001 });
+    run.design.depvar_kind = "network";
+    run.result.coefs[0] = { ...run.result.coefs[0], ci_low: -2558.542, ci_high: -2402.2026, se: 39.88, t: -62.2 };
+    run.result.coefs[2] = { ...run.result.coefs[2], coef: -0.00001, se: 0.00001, t: -0.001, ci_low: -0.00004, ci_high: 0.00002 };
+    const rows = cells(run, "network");
+    expect(rows[0].slice(1, 6)).toEqual(["-2,480.3723***", "(39.8800)", "-62.20", "0.0010", "[-2,558.5420, -2,402.2026]"]);
+    expect(rows[2][1].startsWith("0.0000")).toBe(true);
+    expect(rows[2][5]).toBe("[0.0000, 0.0000]");
+  });
+
+  test.each([
+    ["unknown status", (run: RegressionResponse) => { run.result.status = null; }],
+    ["conflicting support", (run: RegressionResponse) => { run.result.support = { status: "warning", suppress_inference: false } as never; }],
+  ])("%s hides p, t, stars and the interval", (_name, change) => {
+    const run = response(DEFAULT, { teaching_tariff_exposure: -0.33, teaching_tariff_exposure_lag1: -0.22, [ER]: 0.005 });
+    change(run);
+    const [first] = cells(run);
+    expect(first[1]).toBe("-0.3300");
+    expect([first[3], first[4], first[5]]).toEqual(["—", "—", "—"]);
+  });
+
+  test.each([
+    [2.7231068455073544e-24, "<0.0001"],
+    [0.00009999, "<0.0001"],
+    [0.0001, "0.0001"],
+    [0.0009587, "0.0010"],
+    [0.41, "0.4100"],
+  ] as const)("p=%s reads as the report prints it", (p, expected) => {
+    const run = response(DEFAULT, { teaching_tariff_exposure: -0.33, teaching_tariff_exposure_lag1: -0.22, [ER]: 0.005 });
+    run.result.coefs[0] = { ...run.result.coefs[0], p };
+    expect(cells(run)[0][4]).toBe(expected);
   });
 });

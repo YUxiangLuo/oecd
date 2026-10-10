@@ -311,3 +311,25 @@ def test_the_page_tests_use_the_options_the_server_sends():
 
     fixture = ROOT / "frontend" / "src" / "regression-workbench-options.fixture.json"
     assert json.loads(fixture.read_text(encoding="utf-8")) == workbench.options()
+
+
+def test_step_ten_panel_rows_carry_last_years_x_and_the_exchange_rate(monkeypatch):
+    """Step 10's year-by-year table shows X, L1.X and the exchange-rate change of the example."""
+    import asyncio
+
+    # The spec tests' panel has only the trade Y; the endpoint lists every family's Y and w, τ.
+    panel = PANEL.assign(
+        teaching_export_share_w=0.3,
+        teaching_tariff_rate_tau=(PANEL["teaching_tariff_exposure"] > 0) * 0.25,
+        teaching_y_production=0.0,
+        teaching_y_length=0.0,
+        teaching_y_network=0.0,
+    )
+    monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: panel)
+    body = asyncio.run(regression_routes.teaching_panel(countries="C00,C01", industry="C29", limit=60))
+    assert body["rows"] and {"teaching_tariff_exposure_lag1", EXCHANGE_RATE_COLUMN} <= set(body["rows"][0])
+    first = [row for row in body["rows"] if row["country"] == "C00"]
+    # C00 is taxed from 2018: L1.X follows X a year later.
+    by_year = {row["year"]: row for row in first}
+    assert by_year[2018]["teaching_tariff_exposure"] > 0 and by_year[2018]["teaching_tariff_exposure_lag1"] == 0
+    assert by_year[2019]["teaching_tariff_exposure_lag1"] == by_year[2018]["teaching_tariff_exposure"]

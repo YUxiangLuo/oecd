@@ -388,7 +388,7 @@ def _natural_effect(
         else None
     )
     # An association (after each unit's own mean and each year's common change), as on the step pages.
-    effect_label = "关税暴露 X 每高 1 个百分点，Y 平均相差"
+    effect_label = "关税暴露 X 每高 1 个百分点，Y 两年累计平均相差"
     kind = _depvar_kind(outcome, design)
     if kind == "share":
         share_digits = estimate_digits(kind, effect * 100, (ci[0], ci[1]) if ci else None)
@@ -478,9 +478,11 @@ def _association(outcome: str, design: dict[str, Any] | None, coefficient: dict[
     long_short = _depvar_kind(outcome, design or {}) == "length"
     more, less = ("长", "短") if long_short else ("高", "低")
     word = less if negative else more
+    # The course model (teaching data v10): X and L1.X with the exchange-rate control; the number is the two-year sum.
     return (
-        f"扣掉各国家×行业自身的平均水平和每年的共同变化后，关税暴露 X 越高，{_y_label(outcome, design)}平均越{word}"
-        f"（X 每高 1 个百分点，约{word} {_effect_size(outcome, design, coefficient)}）。"
+        f"扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动后，关税暴露 X 越高，"
+        f"{_y_label(outcome, design)}两年累计平均越{word}"
+        f"（X 每高 1 个百分点，两年累计约{word} {_effect_size(outcome, design, coefficient)}）。"
     )
 
 

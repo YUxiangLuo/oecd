@@ -29,6 +29,8 @@ from gvcsim.regression.spec import ModelSpec
 from gvcsim.regression.teaching import (
     BASELINES,
     DISCLAIMER,
+    EXCHANGE_RATE_COLUMN,
+    X_LAG_COLUMNS,
     VERSION,
     Y_COLUMNS,
     available_baselines,
@@ -193,6 +195,8 @@ async def teaching_panel(
             "teaching_export_share_w",
             "teaching_tariff_rate_tau",
             "teaching_tariff_exposure",
+            # Step 10's year-by-year table: last year's X and the country's exchange-rate change (teaching data v10).
+            *(column for column in (X_LAG_COLUMNS[1], EXCHANGE_RATE_COLUMN) if column in panel.columns),
             *Y_COLUMNS.values(),
         ]
         return {

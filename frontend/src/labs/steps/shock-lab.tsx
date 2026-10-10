@@ -38,20 +38,8 @@ export interface ShockStepState extends QuizCompletionState, Record<string, unkn
   };
 }
 
-/**
- * The one worked X = w × τ on step 10, when the followed example is not a taxed country: the default taxed country
- * (CAN, else the most exposed one) with its goods industries' mean, since τ is the same for all its goods industries
- * (services are not taxed and not in that mean) and so mean X = mean w × τ.
- */
 /** Tariff waves by number (teaching data v10: the first from 2018, the second from 2019). */
 const WAVE_NAMES: Record<number, string> = { 1: "第一批", 2: "第二批" };
-
-export function fallbackWorkedCountry(data: TeachingCountriesResponse | undefined, preferred = "CAN") {
-  const taxed = data?.countries.filter((row) => row.taxed && row.mean_exposure > 0) ?? [];
-  const row = taxed.find((item) => item.country === preferred) ?? taxed[0];
-  if (!row || !data?.tariff_rate) return undefined;
-  return { ...row, mean_w: row.mean_exposure / data.tariff_rate };
-}
 
 /**
  * What the two-country gap in step 10 means. X = w × τ is 0 before the tariff for everyone, so after it:
@@ -148,6 +136,12 @@ export function workedNumbers(w: number, tau: number, x: number): { w: string; x
     }
   }
   return { w: wAt(wBase), x: (x * 100).toFixed(xBase), xDecimals: xBase };
+}
+
+/** A number a teaching-panel row may carry (an older release sends no L1.X or exchange-rate change). */
+function numberField(row: Record<string, unknown>, key: string): number | null {
+  const value = row[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 /** A saved step 10 browsing selection, if its countries and industry still exist. */
@@ -309,8 +303,6 @@ export function ShockLab({ meta, step: _step, state }: {
   const isImposer = (country: string) => country === TARIFF_IMPOSER;
   const imposerMissing = missing.filter(isImposer);
   const otherMissing = missing.filter((country) => !isImposer(country));
-  // The one worked X = w × τ in the whole-sample part: CAN's mean over its industries, the same number as its bar.
-  const workedCountry = fallbackWorkedCountry(overview);
   const names = (codes: readonly string[]) => codes.map(countryLabel).join("、");
   const imposers = selectedCountries.filter(isImposer);
   // The data rule that picks the taxed countries (teaching data v7 on); an older server sends none.
@@ -363,8 +355,18 @@ export function ShockLab({ meta, step: _step, state }: {
     return `${parts.join("；")}。${action}。${recorded}`;
   })();
 
+  // Last year's X and the country's exchange-rate change, as the year-by-year table shows them (teaching data v10).
+  const lagOf = (row: Record<string, unknown>) => numberField(row, "teaching_tariff_exposure_lag1");
+  const rateChangeOf = (row: Record<string, unknown>) => numberField(row, "teaching_exchange_rate_change");
+  const hasRateChange = rows.some((row) => rateChangeOf(row) != null);
+  const rateRows = useMemo(() => rows.flatMap((row) => {
+    const value = numberField(row, "teaching_exchange_rate_change");
+    return value == null ? [] : [{ ...row, teaching_exchange_rate_change: value }];
+  }), [rows]);
+  const firstWave = waves.find((wave) => wave.wave === 1)?.start_year ?? policyYear ?? undefined;
+
   return <div className="shock-workbench">
-    {/* One story, top to bottom: the US tariff, what X measures, every taxed country's X, then an optional example. */}
+    {/* One story, top to bottom: the US tariff, the variables of steps 11–14 on one example, then every country's X. */}
     <section className="reg-run-card">
       <span className="reg-section-step">美国加征关税</span>
       <h3>美国对哪些国家加征关税？</h3>
@@ -384,33 +386,28 @@ export function ShockLab({ meta, step: _step, state }: {
             ? `${waves.map((wave) => `${WAVE_NAMES[wave.wave] ?? `第 ${wave.wave} 批`} ${wave.countries} 国 ${wave.start_year} 年起`).join("、")}的税率（此前为 0）`
             : overview.policy_year ? `${overview.policy_year} 年起的税率（此前为 0）` : "加征税率"}</span></li>
         </ul>
-        <h4 className="teaching-subhead">关税暴露 X：一个国家×行业的出口有多少面对美国的新关税</h4>
-        <p className="teaching-one-line">X = 首年对美出口份额 w × 加征税率 τ。w 是这个国家×行业{years[0] ? ` ${years[0]} 年` : "首年"}对美国的出口占它出口总额的比例，固定用加税前的这一年，加税后出口结构的变化不会反过来改变 X。对美出口份额越高，X 越大；{goodsOnly ? "未被加税的国家和所有服务业" : "未被加税的国家"} τ = 0，所以 X = 0。</p>
-        {workedCountry && (() => {
-          const shown = workedNumbers(workedCountry.mean_w, overview.tariff_rate, workedCountry.mean_exposure);
-          return <div className="teaching-x-card" role="group" aria-label="被加税国家的 X 算例">
-            <b>算例：X = w × τ</b>
-            <p>
-              {countryLabel(workedCountry.country)} · {overview.year} 年 · {workedCountry.goods_industries ?? workedCountry.industries} 个{goodsOnly ? "货物" : ""}行业平均：{" "}
-              <span className="teaching-x-formula">X = {shown.w}% × {rate(overview.tariff_rate)} = <b>{shown.x} 个百分点</b></span>（即下图中 {countryLabel(workedCountry.country)} 的那一条）
-            </p>
-            <p className="muted">w = 首年（{years[0]} 年）对美出口份额，之后各年不变；同一国家各{goodsOnly ? "货物" : ""}行业的 τ 相同，所以平均 X = 平均 w × τ{goodsOnly ? "（服务业不加税，不计入这个平均）" : ""}。</p>
-          </div>;
-        })()}
-        <h4 className="teaching-subhead">{overview.taxed_countries} 个被加税国家的 X（从高到低）</h4>
-        <p className="teaching-one-line">
-          每条是一个国家 {overview.year} 年各{goodsOnly ? "货物" : ""}行业的平均 X{goodsOnly ? "（服务业不加税，X = 0，不计入）" : ""}。回归样本{goodsOnly ? "（货物和服务业都在内）" : ""}：{overview.countries.length} 国的 {overview.entities.toLocaleString("zh-CN")} 个国家×行业{sampleRows ? ` × ${years.length} 年 = ${sampleRows.toLocaleString("zh-CN")} 条记录` : ""}{overview.entities < overview.countries.length * meta.sectors.length ? `（${overview.countries.length} 国 × ${meta.sectors.length} 个行业中，首年指标无法计算的组合不进入样本，多为当年没有出口或没有增加值的行业，所以${overview.countries.every((row) => row.industries < meta.sectors.length) ? "每个国家进入样本的行业都少于" : "一国的行业数可能少于"} ${meta.sectors.length} 个）` : ""}。
-        </p>
-        <CountryExposureChart data={overview} />
       </>}
-      <p className="teaching-one-line">步骤 11–14 用每个国家×行业的 X 对照四类指标 Y，读“X 每高 1 个百分点，Y 平均相差多少”。</p>
     </section>
     <section className="reg-run-card">
-      <span className="reg-section-step">举例（可选）</span>
-      <h3>加税前后：一个国家×行业的 X</h3>
+      <span className="reg-section-step">举例</span>
+      <h3>回归要用到的变量：以一个国家×行业为例</h3>
       <p className="teaching-example-lead">
-        选一个国家和一个行业，看 X 从{waves.length > 1 ? `加税那年（${waves.map((wave) => `${WAVE_NAMES[wave.wave] ?? ""} ${wave.start_year} 年`).join("、")}）` : policyYear ? ` ${policyYear} 年` : "加税那年"}起怎样从 0 上升；可再选一个对照国家。默认是被加税的加拿大和未被加税的哥斯达黎加（两国汽车业都主要出口到美国），行业为 C29 汽车及零部件。步骤 11–14 会把回归结果换算到这个例子上。
+        步骤 11–14 的模型用到下面三个变量。选一个国家和一个行业，可再选一个对照国家，在逐年表里看它们怎样变化；默认是被加税的加拿大和未被加税的哥斯达黎加（两国汽车业都主要出口到美国），行业为 C29 汽车及零部件。步骤 11–14 会把回归结果换算到这个例子上。
       </p>
+      <dl className="teaching-variables" aria-label="步骤 11–14 的模型用到的变量">
+        <div>
+          <dt>关税暴露 X = 首年对美出口份额 w × 加征税率 τ</dt>
+          <dd>w 是这个国家×行业{years[0] ? ` ${years[0]} 年` : "首年"}对美国的出口占它出口总额的比例，固定用加税前的这一年，加税后出口结构的变化不会反过来改变 X<span className="source-tag">w：ICIO 数据</span>；τ 是美国加征的税率{waves.length > 1 ? `，${waves.map((wave) => `${WAVE_NAMES[wave.wave] ?? ""} ${wave.start_year} 年起`).join("、")}` : policyYear ? `，${policyYear} 年起` : ""}，此前为 0<span className="source-tag">τ：课程设定</span>。{goodsOnly ? "未被加税的国家和所有服务业" : "未被加税的国家"} τ = 0，所以 X = 0。</dd>
+        </div>
+        <div>
+          <dt>上一年的 X（L1.X）</dt>
+          <dd>就是上一年的 X。加税那一年 X 就上升，L1.X 要到下一年才上升；关税的影响可能分两年显现，所以模型同时放入 X 和 L1.X<span className="source-tag">由 w、τ 计算</span>。</dd>
+        </div>
+        <div>
+          <dt>汇率变动</dt>
+          <dd>本币兑美元的年变动（百分点，负为贬值），每个国家每年一个值。它和加税同时变化、也会影响 Y，所以模型把它作为控制变量<span className="source-tag">课程生成</span>。</dd>
+        </div>
+      </dl>
       <div className="controls" role="group" aria-label="例子的国家与行业">
         <label className="model-control"><span className="model-control-label">例子国家</span>
           <select value={first} onChange={(event) => {
@@ -451,11 +448,9 @@ export function ShockLab({ meta, step: _step, state }: {
         )}
       </div>
       {boundaryNote && <p className="reg-boundary" role="status">{boundaryNote}</p>}
-    </section>
-    {query.status === "loading" && <div className="shock-panel-state shock-workbench-loading" role="status">正在读取关税数据…</div>}
-    {query.status === "error" && <div className="error-box" role="alert">{userFacingRequestError(query.error, "关税数据读取失败")} <button className="secondary" onClick={query.retry}>重试</button></div>}
-    {shownExample && <>
-      <section className="reg-section-card">
+      {query.status === "loading" && <div className="shock-panel-state shock-workbench-loading" role="status">正在读取关税数据…</div>}
+      {query.status === "error" && <div className="error-box" role="alert">{userFacingRequestError(query.error, "关税数据读取失败")} <button className="secondary" onClick={query.retry}>重试</button></div>}
+      {shownExample && <div className="teaching-example-body">
         <span className="reg-section-step">{shownExample.recorded ? "已记录的例子 · " : ""}五年趋势{shownCountries.length === 2 ? " · 两国使用同一刻度" : ""}</span>
         <ul className="teaching-example-summary" aria-label="所选例子的关税暴露">
           {lastRows.map((row) => {
@@ -496,40 +491,69 @@ export function ShockLab({ meta, step: _step, state }: {
               : null;
           return hint && <p className="teaching-example-hint" role="note">{hint}</p>;
         })()}
-        <IndicatorTrendChart
-          rows={chartRows}
-          countries={shownCountries}
-          years={years}
-          metric="teaching_tariff_exposure"
-          label="关税暴露 X"
-          unit="个百分点"
-          markYear={exampleStart ? { year: exampleStart, label: `${exampleStart} 年起加税` } : undefined}
-          stepped
-          gapNote={lastRows.length === 2 && isService(shownIndustry) && !lastRows.some((row) => isImposer(row.country))
-            ? "服务业不加税：两国这个行业的 X 都为 0，没有差距"
-            : stepTenGapNote(
-              lastRows.map((row) => row.teaching_tariff_rate_tau > 0),
-              lastRows.map((row) => row.teaching_tariff_exposure > 0),
-              lastRows.map((row) => isImposer(row.country)),
-            )}
-          digits={chartDigits}
-          countryDigits={countryDigits}
-        />
-      </section>
-      <details className="technical-details">
-        <summary>逐年读数 · {rows.length} 条</summary>
-        <ScrollableRegion className="table-wrap bounded-data-table" label="所选例子的五年关税暴露表">
-          <table className="data-table"><thead><tr><th>国家</th><th>行业</th><th>年份</th><th>首年对美出口份额 w</th><th>加征税率 τ</th><th>关税暴露 X = w × τ</th></tr></thead>
+        <div className={hasRateChange ? "teaching-example-charts" : undefined}>
+          <IndicatorTrendChart
+            rows={chartRows}
+            countries={shownCountries}
+            years={years}
+            metric="teaching_tariff_exposure"
+            label="关税暴露 X"
+            unit="个百分点"
+            markYear={exampleStart ? { year: exampleStart, label: `${exampleStart} 年起加税` } : undefined}
+            stepped
+            gapNote={lastRows.length === 2 && isService(shownIndustry) && !lastRows.some((row) => isImposer(row.country))
+              ? "服务业不加税：两国这个行业的 X 都为 0，没有差距"
+              : stepTenGapNote(
+                lastRows.map((row) => row.teaching_tariff_rate_tau > 0),
+                lastRows.map((row) => row.teaching_tariff_exposure > 0),
+                lastRows.map((row) => isImposer(row.country)),
+              )}
+            digits={chartDigits}
+            countryDigits={countryDigits}
+          />
+          {hasRateChange && (
+            <IndicatorTrendChart
+              rows={rateRows}
+              countries={shownCountries}
+              years={years}
+              metric="teaching_exchange_rate_change"
+              label="汇率变动"
+              unit="个百分点"
+              markYear={firstWave ? { year: firstWave, label: `${firstWave} 年第一批加税` } : undefined}
+              digits={1}
+            />
+          )}
+        </div>
+        <h4 className="teaching-subhead">逐年表</h4>
+        <ScrollableRegion className="table-wrap bounded-data-table" label="所选例子的逐年变量表">
+          <table className="data-table teaching-year-table"><thead><tr><th>国家</th><th>年份</th><th>首年对美出口份额 w</th><th>加征税率 τ</th><th>关税暴露 X = w × τ</th><th>上一年的 X（L1.X）</th>{hasRateChange && <th>汇率变动</th>}</tr></thead>
             {/* Country A first, then B (the rows arrive in alphabetical order). */}
             <tbody>{[...rows].sort((a, b) => shownCountries.indexOf(a.country) - shownCountries.indexOf(b.country) || a.year - b.year).map((row) => {
               // w is fixed at its first-year value, so every year of a unit shows it at the same digits: those its
               // last (taxed) year needs to check by hand, not two decimals in the zero-rate years.
               const w = sharedW(row);
-              return <tr key={`${row.country}-${row.industry}-${row.year}`}><td>{countryLabel(row.country)}</td><td>{sectorLabel(row.industry)}</td><td>{row.year}</td><td>{w}%</td><td>{rate(row.teaching_tariff_rate_tau)}</td><td><b>{w}% × {rate(row.teaching_tariff_rate_tau)} = {worked(row).x} 个百分点</b></td></tr>;
+              const lag = lagOf(row);
+              const change = rateChangeOf(row);
+              return <tr key={`${row.country}-${row.industry}-${row.year}`}>
+                <td>{countryLabel(row.country)}</td><td>{row.year}</td><td>{w}%</td><td>{rate(row.teaching_tariff_rate_tau)}</td>
+                <td><b>{w}% × {rate(row.teaching_tariff_rate_tau)} = {worked(row).x} 个百分点</b></td>
+                <td>{lag == null ? "—" : `${stripNegativeZero((lag * 100).toFixed(worked(row).xDecimals))} 个百分点`}</td>
+                {hasRateChange && <td>{change == null ? "—" : `${stripNegativeZero(change.toFixed(1))} 个百分点`}</td>}
+              </tr>;
             })}</tbody>
           </table>
         </ScrollableRegion>
-      </details>
-    </>}
+        <p className="muted teaching-table-note">行业：{sectorLabel(shownIndustry)}。2016 年没有上一年的 τ，按加税前处理，L1.X 为 0。</p>
+      </div>}
+    </section>
+    {overview && <section className="reg-run-card">
+      <span className="reg-section-step">各国的关税暴露</span>
+      <h3>{overview.taxed_countries} 个被加税国家的 X（从高到低）</h3>
+      <p className="teaching-one-line">
+        每条是一个国家 {overview.year} 年各{goodsOnly ? "货物" : ""}行业的平均 X{goodsOnly ? "（服务业不加税，X = 0，不计入）" : ""}。回归样本{goodsOnly ? "（货物和服务业都在内）" : ""}：{overview.countries.length} 国的 {overview.entities.toLocaleString("zh-CN")} 个国家×行业{sampleRows ? ` × ${years.length} 年 = ${sampleRows.toLocaleString("zh-CN")} 条记录` : ""}{overview.entities < overview.countries.length * meta.sectors.length ? `（${overview.countries.length} 国 × ${meta.sectors.length} 个行业中，首年指标无法计算的组合不进入样本，多为当年没有出口或没有增加值的行业，所以${overview.countries.every((row) => row.industries < meta.sectors.length) ? "每个国家进入样本的行业都少于" : "一国的行业数可能少于"} ${meta.sectors.length} 个）` : ""}。
+      </p>
+      <CountryExposureChart data={overview} />
+      <p className="teaching-one-line">步骤 11–14 用每个国家×行业的 X、上一年的 X 和汇率变动，分别对照四类指标 Y，读“X 每高 1 个百分点，Y 两年累计平均相差多少”。</p>
+    </section>}
   </div>;
 }

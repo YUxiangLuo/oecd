@@ -14,7 +14,11 @@ import {
   teachingEffect,
   termCoefficient,
 } from "./regression-verdict";
-import type { RegressionOutcome, RegressionResponse } from "./types";
+import { api } from "./api";
+import { useAsync } from "./labs";
+import { perPointReading } from "./regression-workbench";
+import { snapshotOf, specSummary } from "./regression-workbench-table";
+import type { CustomResult, RegressionOutcome, RegressionResponse, WorkbenchOptions } from "./types";
 import { DivergingBarChart, type DivergingBarRow } from "./viz/regression/diverging-bars";
 
 interface SavedRegression {
@@ -25,6 +29,8 @@ interface SavedRegression {
 export interface SiblingStepData {
   run?: SavedRegression;
   qualified_run?: SavedRegression;
+  /** The workbench models saved in the step (改模型、对比); those marked 放入报告 go into the report's appendix. */
+  custom_results?: CustomResult[];
 }
 
 const SAVED_BENCHMARK: RegressionResponse["benchmark"] = {
@@ -153,6 +159,59 @@ export function RegressionEvidenceMatrix({
           </tbody>
         </table>
       </div>
+    </section>
+  );
+}
+
+/**
+ * Step 15: the workbench models marked 放入报告 in steps 11–14, each with its X-terms sum next to the step's default
+ * model (the report's appendix recomputes both). Each links back to its step.
+ */
+export function ReportedCustomModels({ getStep, onNavigateStep }: {
+  getStep?: (step: number) => SiblingStepData | undefined;
+  onNavigateStep?: (step: number) => void;
+}) {
+  const rows = REGRESSION_FAMILIES.flatMap((item) => {
+    const data = getStep?.(item.step);
+    return (data?.custom_results ?? []).filter((model) => model.in_report).map((model) => ({ ...item, model, run: familyRun(item.outcome, getStep) }));
+  });
+  const optionsQuery = useAsync<WorkbenchOptions>(() => api.regressionOptions(), ["regression-options"], { enabled: rows.length > 0 });
+  const options = optionsQuery.status === "success" ? optionsQuery.data ?? null : null;
+  return (
+    <section className="reg-reported-models" aria-labelledby="reg-reported-models-title">
+      <span className="reg-section-step">改模型、对比</span>
+      <h3 id="reg-reported-models-title">你放入报告的模型</h3>
+      {rows.length === 0
+        ? <p className="muted">还没有放入报告的自选模型（选做）：在步骤 11–14 的“改模型、对比”里保存模型并勾选“放入报告”，报告附录会列出它们。</p>
+        : (
+          <div className="table-wrap" role="region" aria-label="放入报告的模型，可横向滚动" tabIndex={0}>
+            <table className="data-table reg-reported-table">
+              <thead><tr><th>步骤</th><th>名称</th><th>设定</th><th>X 各项合计（X 每高 1 个百分点，Y 两年累计相差）</th><th>同一 Y 的默认模型</th></tr></thead>
+              <tbody>
+                {rows.map(({ step, family, outcome, model, run }) => {
+                  const sum = model.snapshot.result.cumulative;
+                  // The step's default run is compared only when it is on the same Y as the saved model.
+                  const sameY = run?.design && run.result && run.design.baseline === model.baseline;
+                  const defaultSnapshot = sameY ? snapshotOf({ design: run.design!, result: run.result! }) : null;
+                  const defaultSum = defaultSnapshot?.result.cumulative;
+                  return (
+                    <tr key={`${step}-${model.id}`}>
+                      <th scope="row">
+                        {onNavigateStep
+                          ? <button type="button" className="link-button" onClick={() => onNavigateStep(step)}>步骤 {step} · {family}</button>
+                          : `步骤 ${step} · ${family}`}
+                      </th>
+                      <td><b>{model.name}</b><br /><small className="muted">Y：{model.snapshot.depvar_label}</small></td>
+                      <td>{options ? specSummary(model.spec, options) : "…"}</td>
+                      <td>{sum ? perPointReading(outcome, sum, model.snapshot) : "—"}</td>
+                      <td>{defaultSum && defaultSnapshot ? perPointReading(outcome, defaultSum, defaultSnapshot) : "—（因变量不同）"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
     </section>
   );
 }

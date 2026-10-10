@@ -187,7 +187,7 @@ export const REGRESSION_FAMILIES = (["trade", "production", "length", "network"]
 
 export function lessonQuestion(outcome: RegressionOutcome, baseline?: string | null): string {
   const lesson = lessonFor(outcome, baseline);
-  return `关税暴露（X）每高 1 个百分点，${lesson.shortMetric}（Y）平均相差多少？`;
+  return `关税暴露（X）每高 1 个百分点，${lesson.shortMetric}（Y）两年累计平均相差多少？`;
 }
 
 /** The direction column of the four-step summary, in the result card's words. */

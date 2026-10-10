@@ -747,7 +747,7 @@ def test_report_statements_are_associations_with_their_number():
     assert evidence == "方向明确：X 越高，Y 越低"
     assert (
         copy
-        == "扣掉各国家×行业自身的平均水平和每年的共同变化后，关税暴露 X 越高，复杂 GVC 生产份额平均越低（X 每高 1 个百分点，约低 0.40 个百分点）。"
+        == "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动后，关税暴露 X 越高，复杂 GVC 生产份额两年累计平均越低（X 每高 1 个百分点，两年累计约低 0.40 个百分点）。"
     )
     assert "模拟" not in copy and "真实" not in copy and "下降" not in copy
     assert re.search(r"与.*(?:扩张|收缩)一致", copy) is None
@@ -757,12 +757,12 @@ def test_report_statements_are_associations_with_their_number():
     )
     assert (
         length
-        == "扣掉各国家×行业自身的平均水平和每年的共同变化后，关税暴露 X 越高，前向 GVC 段长度平均越短（X 每高 1 个百分点，约短 0.0182 个长度单位）。"
+        == "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动后，关税暴露 X 越高，前向 GVC 段长度两年累计平均越短（X 每高 1 个百分点，两年累计约短 0.0182 个长度单位）。"
     )
     _evidence, network = teaching_report._evidence_reading(
         "network", {"coef": 3969.9979, "ci_low": 3000.0, "ci_high": 4900.0}, False, {}
     )
-    assert network.endswith("加权总度平均越高（X 每高 1 个百分点，约高 39.70 个中心性原始单位）。")
+    assert network.endswith("加权总度两年累计平均越高（X 每高 1 个百分点，两年累计约高 39.70 个中心性原始单位）。")
     assert teaching_report._evidence_reading("trade", {"coef": -0.1, "ci_low": -0.3, "ci_high": 0.1}, False, {})[0] == (
         "方向不确定"
     )
@@ -1489,7 +1489,7 @@ def test_report_prints_automatically_saved_teaching_row(tmp_path, monkeypatch):
         "步骤 14 · 网络",
     ]
     for step, chart in zip(range(11, 15), regression[1:]):
-        assert chart["title"] == f"步骤 {step} · 你保存的 Y：X 每高 1 个百分点，Y 平均相差多少"
+        assert chart["title"] == f"步骤 {step} · 你保存的 Y：X 每高 1 个百分点，Y 两年累计平均相差多少"
         (item,) = chart["items"]
         assert item["saved"] is True
         assert item["ci_low"] <= item["value"] <= item["ci_high"]
@@ -1518,7 +1518,7 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert report.provenance["release_id"] == "2" * 32
     assert report.provenance["quiz_version"] == quizzes.QUIZ_VERSION
     assert report.provenance["quiz_versions"] == {
-        str(step): "course-quiz-v9" if step in (11, 14) else "course-quiz-v8" for step in range(1, 15)
+        str(step): "course-quiz-v10" if 10 <= step <= 14 else "course-quiz-v8" for step in range(1, 15)
     }
     assert report.provenance["course_release"] == config.COURSE_RELEASE
     assert report.provenance["runs"][0]["step"] == 11
@@ -1535,7 +1535,7 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert "## 技术附录：保存的回归结果" in report.markdown
     # The raw coefficient states its scale, next to the per-percentage-point reading used in the body.
     assert (
-        "| 变量 | X 每高 1 个百分点，Y 平均相差 | 系数（X 按份额计） | 95% 区间（按系数计） | 标准误（按国家聚类） | t 值 | p 值 |"
+        "| 变量 | X 每高 1 个百分点，Y 两年累计平均相差 | 系数（X 按份额计） | 95% 区间（按系数计） | 标准误（按国家聚类） | t 值 | p 值 |"
         in report.markdown
     )
     # Four decimals for every number but p, as the page's 详细数字 table prints them.
@@ -1560,10 +1560,13 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert f"剩下 {disclosure['published_entities']} 个用于四项回归" in report.markdown
     assert "预设" not in report.markdown
     assert (
-        "扣掉各国家×行业自身的平均水平和每年的共同变化后，关税暴露 X 越高，外国增加值项占比平均越高（X 每高 1 个百分点，约高 1.20 个百分点）。"
+        "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动后，关税暴露 X 越高，外国增加值项占比两年累计平均越高（X 每高 1 个百分点，两年累计约高 1.20 个百分点）。"
         in report.markdown
     )
-    assert "- **可以支持的表述**：扣掉各国家×行业自身的平均水平和每年的共同变化后，关税暴露 X 越高" in report.markdown
+    assert (
+        "- **可以支持的表述**：扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动后，关税暴露 X 越高"
+        in report.markdown
+    )
     # The method notes state the tariff's scope, the parallel-trends premise and the SD basis.
     assert (
         "美国分两批对被加税国家的货物行业（ICIO 行业 A–C）加税" in report.markdown and "服务业 τ = 0" in report.markdown
@@ -1571,7 +1574,7 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert "前提是没有关税时两组的 Y 会平行变化" in report.markdown
     assert "扣掉各国家×行业平均水平和每年共同变化后 Y 的标准差" in report.markdown
     assert (
-        "- **按步骤 10 的例子换算**：CHN 中国 · s1 的 X 为 2.00 个百分点，按估计与 X 相关的差异约为 +2.40 个百分点（Y 偏高）。"
+        "- **按步骤 10 的例子换算**：CHN 中国 · s1 的 X 为 2.00 个百分点，按估计两年累计与 X 相关的差异约为 +2.40 个百分点（Y 偏高）。"
         in report.markdown
     )
     assert "本实验没有生成冲击后的投入产出表或网络" not in report.markdown
@@ -2445,7 +2448,7 @@ def test_report_draws_every_y_of_each_family_with_the_saved_one_marked(tmp_path,
     ]
     assert not {"binscatter", "coefficient"} & {chart["type"] for chart in charts}
     trade = next(chart for chart in charts if chart["title"].startswith("步骤 11"))
-    assert trade["title"] == "步骤 11 · 贸易流的 2 个 Y：X 每高 1 个百分点，Y 平均相差多少"
+    assert trade["title"] == "步骤 11 · 贸易流的 2 个 Y：X 每高 1 个百分点，Y 两年累计平均相差多少"
     assert trade["items"] == [
         {
             "label": "外国增加值项占比",
@@ -2458,12 +2461,12 @@ def test_report_draws_every_y_of_each_family_with_the_saved_one_marked(tmp_path,
         {"label": "国内增加值出口占比", "value": 0.55, "text": "+0.55", "ci_low": 0.495, "ci_high": 0.605},
     ]
     step_11 = markdown.split("### 步骤 11 · 贸易流回归", 1)[1].split("### ", 1)[0]
-    assert "| 关税暴露 X 每高 1 个百分点，Y 平均相差 | **-0.55 个百分点** |" in step_11
+    assert "| 关税暴露 X 每高 1 个百分点，Y 两年累计平均相差 | **-0.55 个百分点** |" in step_11
     assert "- 图中标“已保存”的是你保存的 Y，下表是它的详细数字" in step_11
     # Steps 13 and 14 mix units, so their bars are in standard deviations with the native value first.
     network = next(chart for chart in charts if chart["title"].startswith("步骤 14"))
     assert len(network["items"]) == len(teaching.BASELINES["network"])
-    assert network["x_label"] == "X 每高 1 个百分点，Y 平均相差（个标准差）"
+    assert network["x_label"] == "X 每高 1 个百分点，Y 两年累计平均相差（个标准差）"
     assert network["items"][1]["text"] == "-20.00（-0.040 个标准差）"
     assert "介数" in [item["label"] for item in network["items"]]
     assert "生成报告时不会重算" in markdown and "其余 Y 的条形是课程用同一份数据、同一个模型算出的结果" in markdown
@@ -2493,7 +2496,7 @@ def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(
     markdown = build(session, "同学").markdown
     assert "| 结果指标 Y | GVC 位置指数 |" in markdown
     assert "位置指数单位" not in markdown
-    assert "GVC 位置指数平均越低（X 每高 1 个百分点，约低 0.0040）" in markdown
+    assert "GVC 位置指数两年累计平均越低（X 每高 1 个百分点，两年累计约低 0.0040）" in markdown
     charts = [
         json.loads(block)
         for block in re.findall("```gvcsim-chart" + chr(10) + "(.*?)" + chr(10) + "```", markdown, re.S)
@@ -2503,11 +2506,11 @@ def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(
     length = next(chart for chart in charts if chart["title"].startswith("步骤 13"))
     assert [item["label"] for item in length["items"]] == ["前向 GVC 段长度", "后向 GVC 段长度", "GVC 位置指数"]
     assert [item.get("saved", False) for item in length["items"]] == [False, False, True]
-    assert length["x_label"] == "X 每高 1 个百分点，Y 平均相差（个标准差）"
+    assert length["x_label"] == "X 每高 1 个百分点，Y 两年累计平均相差（个标准差）"
     saved = length["items"][2]
     assert saved["value"] == pytest.approx(-0.004 / 0.17, rel=1e-3)
     assert saved["text"] == "-0.0040（-0.024 个标准差）"
-    assert "| 关税暴露 X 每高 1 个百分点，Y 平均相差 | **-0.0040（幅度约 0.024 个标准差）** |" in markdown
+    assert "| 关税暴露 X 每高 1 个百分点，Y 两年累计平均相差 | **-0.0040（幅度约 0.024 个标准差）** |" in markdown
     assert [item["sub"] for item in length["items"]] == ["长度单位", "长度单位", "无量纲"]
     summary = next(chart for chart in charts if chart["title"] == "四步保存的结果（都换算成标准差）")
     assert summary["items"][2]["text"] == "-0.0040（-0.024 个标准差）"
@@ -2625,7 +2628,7 @@ def test_report_example_conversion_reads_like_the_page():
     coefficient = {"coef": -0.55}
     line = _example_conversion("trade", {}, coefficient, True, example)
     assert line is not None and line.endswith(
-        "的 X 为 23.25 个百分点，按估计与 X 相关的差异约为 -12.79 个百分点（Y 偏低）。"
+        "的 X 为 23.25 个百分点，按估计两年累计与 X 相关的差异约为 -12.79 个百分点（Y 偏低）。"
     )
     length = _example_conversion("length", {"depvar_kind": "length"}, {"coef": -1.8}, True, example)
     assert length is not None and length.endswith("约为 -0.419 个长度单位（Y 偏短）。")
@@ -2651,7 +2654,7 @@ def test_report_example_conversion_multiplies_the_printed_numbers():
     coefficient = {"coef": -0.5517, "ci_low": -0.61, "ci_high": -0.49}
     line = _example_conversion("trade", {}, coefficient, True, example)
     assert line is not None and line.endswith(
-        "的 X 为 20.44 个百分点，按估计与 X 相关的差异约为 -11.24 个百分点（Y 偏低）。"
+        "的 X 为 20.44 个百分点，按估计两年累计与 X 相关的差异约为 -11.24 个百分点（Y 偏低）。"
     )
 
 
@@ -2672,7 +2675,10 @@ def test_report_example_x_uses_step_ten_digits():
         "teaching_export_share_w": 0.0089776,
     }
     line = _example_conversion("network", {"depvar_kind": "network"}, {"coef": 4080}, True, example)
-    assert line is not None and "的 X 为 0.22444 个百分点，按估计与 X 相关的差异约为 +9.16 个中心性原始单位" in line
+    assert (
+        line is not None
+        and "的 X 为 0.22444 个百分点，按估计两年累计与 X 相关的差异约为 +9.16 个中心性原始单位" in line
+    )
     # Without w (an older record), two decimals as before.
     del example["teaching_export_share_w"]
     line = _example_conversion("network", {"depvar_kind": "network"}, {"coef": 4080}, True, example)
@@ -2895,7 +2901,7 @@ def test_report_scenario_line_and_two_example_conversion_read_like_step_ten():
     untaxed = {"country": "CRI", "industry": "C29", X_COLUMN: 0.0, "teaching_tariff_rate_tau": 0.0}
     line = _example_conversion("trade", {}, {"coef": -0.55}, True, [taxed, untaxed])
     assert line == (
-        f"- **按步骤 10 的例子换算**：{country_label('CAN')} · {_sector('C29')} 的 X 为 23.25 个百分点，按估计与 X 相关的"
+        f"- **按步骤 10 的例子换算**：{country_label('CAN')} · {_sector('C29')} 的 X 为 23.25 个百分点，按估计两年累计与 X 相关的"
         f"差异约为 -12.79 个百分点（Y 偏低）；{country_label('CRI')} · {_sector('C29')} 未被加税，X = 0，按估计没有与 X 相关的差异。"
     )
     # An open direction is said once, after the converted example, not after the untaxed one.
@@ -3042,6 +3048,10 @@ def test_report_appendix_recomputes_the_models_marked_for_the_report(tmp_path, m
         {"step": 11, "name": "去掉汇率", "outcome": "trade", "baseline": "FVA_share", "spec": no_rate.to_dict()},
         {"step": 11, "name": "国家×年份*", "outcome": "trade", "baseline": "FVA_share", "spec": country_year.to_dict()},
     ]
+    # Each step's evidence names the models the appendix compares.
+    summary = markdown.split("## 关键证据摘要", 1)[1].split("## 理解题答题记录", 1)[0]
+    assert "- 你还在本步比较了 2 个自己设计的模型（去掉汇率、国家×年份\\*），见附录“学生设计的模型”。" in summary
+    assert summary.count("你还在本步比较了") == 1
     # The methods note says the appendix is the one part recomputed.
     assert "“学生设计的模型”附录中的模型则按你保存的设定在生成报告时重新计算。" in markdown
 

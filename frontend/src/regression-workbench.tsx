@@ -1,10 +1,12 @@
 /**
- * 自己设计模型（选做）, under the result of steps 11–14: the student picks the X terms, controls and fixed effects,
- * computes the model, saves it as "结果N", compares saved models with the course default, exports the comparison
- * and marks up to three for the report (whose appendix recomputes them from the saved model).
+ * 改模型、对比 (the workbench of steps 11–14): open under the step's result. The student changes one setting of the
+ * course default model at a time (X terms, controls, fixed effects), computes it, and reads it in one regression table
+ * next to the default model; saves it as "结果N", exports the comparison and marks up to three for the report (whose
+ * appendix recomputes them from the saved model).
  */
 import { useRef, useState } from "react";
 import { ScrollableRegion } from "./a11y";
+import { groupedFixed } from "./format";
 import { api, ApiError } from "./api";
 import { useAsync } from "./labs";
 import {
@@ -13,11 +15,11 @@ import {
   comparisonCsv,
   equationPreview,
   fixed4,
-  formatP3,
   includedBy,
   nameProblem,
   nextResultName,
   omittedLines,
+  perPointRow,
   sameSpec,
   samplesDiffer,
   significanceStars,
@@ -28,9 +30,13 @@ import {
   type TableColumn,
   X_COLUMNS,
 } from "./regression-workbench-table";
+import { formatPValue } from "./regression-statistics";
+import { teachingEffect } from "./regression-verdict";
 import { ConfirmModal } from "./teacher/ui";
 import type {
+  CoefStat,
   CustomResult,
+  CustomResultSnapshot,
   ModelSpec,
   RegressionOutcome,
   RegressionResponse,
@@ -42,7 +48,7 @@ import { userFacingRequestError } from "./user-facing-error";
 
 export interface WorkbenchDraft {
   spec?: ModelSpec;
-  /** Ids of the saved models shown next to the default model in the comparison table. */
+  /** Ids of the saved models shown next to the default model in the regression table. */
   compare?: string[];
 }
 
@@ -52,6 +58,7 @@ export interface WorkbenchStepState extends Record<string, unknown> {
 }
 
 const DEFAULT_COLUMN = "默认模型";
+const UNSAVED_COLUMN = "本次计算（未保存）";
 
 /** Whether the models marked 放入报告 differ from the ones the report printed (name, Y and model). */
 export function customReportChanged(
@@ -102,7 +109,7 @@ function ModelForm({ options, spec, onChange }: {
   return (
     <div className="reg-custom-form">
       <fieldset>
-        <legend>核心自变量（至少选一项）</legend>
+        <legend>关税暴露 X（至少选一项）</legend>
         {options.x_lags.map((item) => (
           <label key={item.lag} className="reg-custom-choice">
             <input type="checkbox" checked={spec.x_lags.includes(item.lag)} onChange={() => toggleLag(item.lag)} />
@@ -153,101 +160,53 @@ function ModelForm({ options, spec, onChange }: {
   );
 }
 
-function ResultTable({ response, options }: { response: RegressionResponse; options: WorkbenchOptions }) {
-  const snapshot = snapshotOf(response);
-  const { result } = response;
-  const suppressed = snapshot.result.suppressed;
-  const spec = response.design.spec!;
+/** "-0.55 个百分点": a coefficient read per percentage point of X in the step's unit, at the digits the step's headline
+ *  uses (its interval sets them, as on the result card and in the report). */
+export function perPointReading(outcome: RegressionOutcome, stat: CoefStat, snapshot: CustomResultSnapshot): string {
+  const bounds: [number, number] | null = !snapshot.result.suppressed && stat.ci_low != null && stat.ci_high != null
+    ? [stat.ci_low, stat.ci_high]
+    : null;
+  return teachingEffect(outcome, stat.coef, { depvar_kind: snapshot.depvar_kind }, bounds);
+}
+
+/** One column's every number: coefficient, SE, t, p and the 95% interval of each term, the sum included. */
+export function ColumnDetails({ column, options, perPoint }: {
+  column: TableColumn; options: WorkbenchOptions; perPoint: (stat: CoefStat, snapshot: CustomResultSnapshot) => string;
+}) {
+  const { result } = column.snapshot;
   const xTerms = result.coefs.filter((item) => Object.values(X_COLUMNS).includes(item.name)).length;
   const rows = [
     ...result.coefs,
     ...(xTerms > 1 && result.cumulative ? [{ ...result.cumulative, name: "cumulative" }] : []),
     ...(result.constant ? [result.constant] : []),
   ];
-  const effects = spec.fixed_effects.length
-    ? spec.fixed_effects.map((key) => options.fixed_effects.find((item) => item.key === key)?.label ?? key).join(" + ")
-    : "无固定效应";
-  const column: TableColumn = { name: "", spec, snapshot };
-  const summary = summaryRows([column], options).filter((row) => !options.fixed_effects.some((item) => item.key === row.key));
-  const omitted = omittedLines(snapshot, options);
   return (
-    <div className="reg-custom-result">
-      <p className="reg-custom-caption">因变量：{response.design.depvar_label} | {effects} | 标准误按国家聚类</p>
-      <ScrollableRegion className="table-wrap" label="自己设计的模型的回归结果，可横向滚动">
-        <table className="data-table reg-custom-table">
-          <thead><tr><th>变量</th><th>系数</th><th>标准误</th><th>t 值</th><th>p 值</th><th>显著性</th></tr></thead>
-          <tbody>
-            {rows.map((coef) => (
-              <tr key={coef.name}>
-                <td>{termLabel(coef.name, options)}</td>
-                <td>{fixed4(coef.coef)}</td>
-                <td>({fixed4(coef.se)})</td>
-                <td>{coef.t == null ? "—" : coef.t.toFixed(2)}</td>
-                <td>{suppressed ? "—" : formatP3(coef.p)}</td>
-                <td>{suppressed ? "—" : significanceStars(coef.p) || "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </ScrollableRegion>
-      <dl className="reg-custom-stats">
-        {summary.map((row) => <div key={row.key}><dt>{row.label}</dt><dd>{row.cells[0]}</dd></div>)}
-      </dl>
-      {omitted.length > 0 && <p className="muted reg-custom-omitted">已省略：{omitted.join("；")}。</p>}
-      {suppressed && <p className="reg-boundary" role="note">{options.suppressed_note}</p>}
-    </div>
-  );
-}
-
-function ComparisonTable({ columns, options, stepNumber, depvarLabel }: {
-  columns: TableColumn[]; options: WorkbenchOptions; stepNumber: number; depvarLabel: string;
-}) {
-  const coefficients = coefficientRows(columns, options);
-  const summary = summaryRows(columns, options);
-  return (
-    <div className="reg-custom-compare">
-      <div className="reg-custom-compare-head">
-        <h4>对比表（因变量：{depvarLabel}）</h4>
-        <button type="button" className="secondary" onClick={() => download(comparisonCsv(columns, options, depvarLabel), `步骤${stepNumber}-回归对比.csv`)}>
-          导出 CSV
-        </button>
-      </div>
-      <ScrollableRegion className="table-wrap" label="模型对比表，可横向滚动">
-        <table className="data-table reg-custom-table reg-custom-compare-table">
-          <thead><tr><th>变量</th>{columns.map((column, index) => <th key={index} scope="col">{column.name}</th>)}</tr></thead>
-          <tbody>
-            {coefficients.map((row) => (
-              <tr key={row.key}>
-                <th scope="row">{row.label}</th>
-                {row.cells.map((item, index) => (
-                  <td key={index}>
-                    {item === "omitted" ? <span className="muted">（省略）</span>
-                      : item ? <><span>{item.coef}</span><br /><span className="muted">{item.se}</span></> : null}
-                  </td>
-                ))}
-              </tr>
-            ))}
-            {summary.map((row, index) => (
-              <tr key={row.key} className={index === 0 ? "reg-custom-summary-start" : undefined}>
-                <th scope="row">{row.label}</th>
-                {row.cells.map((value, cell) => <td key={cell}>{value}</td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </ScrollableRegion>
-      <ul className="muted reg-custom-legend">
-        {columns.map((column, index) => <li key={index}><b>{column.name}</b>：{specSummary(column.spec, options)}</li>)}
-      </ul>
-      {samplesDiffer(columns) && <p className="reg-boundary" role="note">{options.sample_differs_note}</p>}
-    </div>
+    <ScrollableRegion className="table-wrap" label={`${column.name}的完整数字，可横向滚动`}>
+      <table className="data-table reg-custom-table">
+        <thead><tr><th>变量</th><th>系数</th><th>标准误</th><th>t 值</th><th>p 值</th><th>95% 区间</th><th>X 每高 1 个百分点</th></tr></thead>
+        <tbody>
+          {rows.map((coef) => (
+            <tr key={coef.name}>
+              <td>{termLabel(coef.name, options)}</td>
+              <td>{fixed4(coef.coef)}{result.suppressed ? "" : significanceStars(coef.p)}</td>
+              <td>({fixed4(coef.se)})</td>
+              <td>{result.suppressed || coef.t == null ? "—" : groupedFixed(coef.t, 2)}</td>
+              <td>{result.suppressed ? "—" : formatPValue(coef.p)}</td>
+              <td>{result.suppressed || coef.ci_low == null || coef.ci_high == null ? "—" : `[${fixed4(coef.ci_low)}, ${fixed4(coef.ci_high)}]`}</td>
+              {/* The page's reading, for the X terms' sum (or the single X term) only. */}
+              <td>{coef.name === "cumulative" || (xTerms === 1 && Object.values(X_COLUMNS).includes(coef.name)) ? perPoint(coef, column.snapshot) : "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </ScrollableRegion>
   );
 }
 
 export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse, state, reportCustomResults, reportOutdated = false }: {
   stepNumber: number;
   outcome: RegressionOutcome;
-  /** The course default model on this step's saved Y: the first column of every comparison. */
+  /** The course default model on this step's saved Y: the first column of the regression table. */
   defaultResponse: RegressionResponse;
   state: StepStateApi<WorkbenchStepState>;
   /** The workbench models the current report printed (its provenance). */
@@ -268,21 +227,23 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const [saveName, setSaveName] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState<CustomResult | null>(null);
+  const [detailColumn, setDetailColumn] = useState(0);
   const controller = useRef<AbortController | null>(null);
 
   if (optionsQuery.status === "error") {
-    return <div className="error-box" role="alert">自己设计模型的选项没有加载成功：{optionsQuery.error}<button type="button" className="secondary" onClick={optionsQuery.retry}>重试</button></div>;
+    return <div className="error-box" role="alert">可选的设定没有加载成功：{optionsQuery.error}<button type="button" className="secondary" onClick={optionsQuery.retry}>重试</button></div>;
   }
   if (!options || !spec) return <div className="reg-request-state muted" role="status" aria-busy="true">正在载入可选的设定…</div>;
 
   const limits = options.limits;
+  const perPoint = (stat: CoefStat, snapshot: CustomResultSnapshot) => perPointReading(outcome, stat, snapshot);
   const changeSpec = (next: ModelSpec) => {
     setLocalSpec(next);
     setError(null);
     state.saveView?.({ custom_draft: { ...draft, spec: next } });
   };
-  // The result shown belongs to this Y and this form; otherwise it is kept but marked out of date.
-  const current = computed && computed.design.baseline === baseline && sameSpec(computed.design.spec!, spec, options);
+  // The computed model belongs to this Y and this form; otherwise it is kept but marked out of date.
+  const current = Boolean(computed && computed.design.baseline === baseline && sameSpec(computed.design.spec!, spec, options));
   const noX = spec.x_lags.length === 0;
   const run = async () => {
     if (running || noX) return;
@@ -309,29 +270,31 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
     }
   };
 
-  const duplicate = current && computed
-    ? saved.find((item) => item.baseline === baseline && sameSpec(item.spec, computed.design.spec!, options))
+  const computedSpec = computed?.design.spec ?? null;
+  const isDefault = Boolean(current && computedSpec && sameSpec(computedSpec, options.default_spec, options));
+  const duplicate = current && computedSpec && !isDefault
+    ? saved.find((item) => item.baseline === baseline && sameSpec(item.spec, computedSpec, options))
     : undefined;
-  const isDefault = Boolean(current && computed && sameSpec(computed.design.spec!, options.default_spec, options));
+  const unsaved = current && computed && !isDefault && !duplicate ? computed : null;
   const name = saveName ?? nextResultName(saved);
   const problem = nameProblem(name, saved, limits.name_length);
   const full = saved.length >= limits.saved;
-  // Saved models of this Y shown next to the default (all of them, up to the limit, until the student picks).
+  // Saved models of this Y next to the default (all of them, up to the limit, until the student picks).
   const compare = (draft.compare ?? saved.map((item) => item.id))
     .filter((id) => saved.some((item) => item.id === id && item.baseline === baseline))
     .slice(0, limits.compared);
   const setCompare = (ids: string[]) => state.saveView?.({ custom_draft: { ...draft, spec, compare: ids } });
   const save = () => {
-    if (!computed || !current || isDefault || duplicate || problem || full) return;
+    if (!unsaved || problem || full) return;
     const item: CustomResult = {
       id: newId(),
       name: name.trim(),
       outcome,
-      baseline: computed.design.baseline ?? baseline,
-      spec: computed.design.spec!,
+      baseline: unsaved.design.baseline ?? baseline,
+      spec: unsaved.design.spec!,
       in_report: false,
       saved_at: new Date().toISOString(),
-      snapshot: snapshotOf(computed),
+      snapshot: snapshotOf(unsaved),
     };
     state.save({ custom_results: [...saved, item] });
     if (compare.length < limits.compared) setCompare([...compare, item.id]);
@@ -342,17 +305,30 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const inReport = saved.filter((item) => item.in_report).length;
   const renameProblem = renaming ? nameProblem(renaming.name, saved, limits.name_length, renaming.id) : null;
 
-  const defaultColumn: TableColumn = { name: DEFAULT_COLUMN, spec: options.default_spec, snapshot: snapshotOf(defaultResponse) };
-  const columns: TableColumn[] = [
-    defaultColumn,
-    ...saved.filter((item) => compare.includes(item.id)).map((item) => ({ name: item.name, spec: item.spec, snapshot: item.snapshot })),
+  // One table: the default model, the saved models compared, then the model just computed (until it is saved).
+  const comparedColumns: (TableColumn & { id?: string })[] = [
+    { name: DEFAULT_COLUMN, spec: options.default_spec, snapshot: snapshotOf(defaultResponse) },
+    ...saved.filter((item) => compare.includes(item.id)).map((item) => ({ id: item.id, name: item.name, spec: item.spec, snapshot: item.snapshot })),
   ];
+  const columns: (TableColumn & { id?: string })[] = unsaved
+    ? [...comparedColumns, { name: UNSAVED_COLUMN, spec: unsaved.design.spec!, snapshot: snapshotOf(unsaved) }]
+    : comparedColumns;
+  // The column the computed model is: the new one, a saved one it repeats, or the default.
+  const highlighted = unsaved ? columns.length - 1 : isDefault ? 0 : duplicate ? columns.findIndex((column) => column.id === duplicate.id) : -1;
+  const coefficients = coefficientRows(columns, options);
+  const pointRow = perPointRow(columns, perPoint);
+  const summary = summaryRows(columns, options);
+  const shownDetail = Math.min(detailColumn, columns.length - 1);
   const reportChanged = Boolean(state.materialLocked && reportOutdated && customReportChanged(stepNumber, saved, reportCustomResults));
+  const cellClass = (index: number) => (index === highlighted ? "reg-custom-current" : undefined);
 
   return (
     <div className="reg-custom">
       <p className="reg-custom-y">因变量：<b>{depvarLabel}</b>（本步保存的 Y；在上面的条形图上点另一条可以换 Y）</p>
-      <ul className="reg-custom-hints">{options.hints.map((hint) => <li key={hint}>{hint}</li>)}</ul>
+      <div className="reg-custom-tries">
+        <b>试一试：每次只改一处设定，算出后和表中第一列的默认模型比较</b>
+        <ol>{options.tries.map((item) => <li key={item}>{item}</li>)}</ol>
+      </div>
       <ModelForm options={options} spec={spec} onChange={changeSpec} />
       <p className="reg-custom-equation" aria-live="polite">{noX ? "至少选一项关税暴露 X。" : equationPreview(spec, options)}</p>
       <div className="reg-custom-actions">
@@ -363,26 +339,69 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         <span className="sr-only" role="status" aria-live="polite">{running ? "正在计算…" : ""}</span>
       </div>
       {error && <div className="error-box async-error" role="alert">{error}</div>}
-      {computed && (
-        <div className={current ? "reg-custom-computed" : "reg-custom-computed reg-results-stale"}>
-          {!current && <p className="reg-stale-note" role="note">设定已更改，点“计算这个模型”查看新结果；下面仍是上次算出的结果。</p>}
-          <ResultTable response={computed} options={options} />
-          {current && (
-            <div className="reg-custom-save">
-              {isDefault ? <p className="muted">这就是本步的默认模型（对比表第一列），不用另存。</p>
-                : duplicate ? <p className="muted">这个设定已保存为“{duplicate.name}”。</p>
-                : full ? <p className="muted">每步最多保存 {limits.saved} 个模型，请先删除一个。</p>
-                  : (
-                    <>
-                      <label>保存为 <input value={name} maxLength={limits.name_length + 5} onChange={(event) => setSaveName(event.target.value)} aria-invalid={problem ? true : undefined} /></label>
-                      <button type="button" className="secondary" aria-disabled={problem ? true : undefined} onClick={save}>保存</button>
-                      {problem && <span className="field-error" role="alert">{problem}</span>}
-                    </>
-                  )}
-            </div>
-          )}
+      {computed && !current && <p className="reg-stale-note" role="note">设定已更改，点“计算这个模型”查看新结果。</p>}
+
+      <div className="reg-custom-compare">
+        <div className="reg-custom-compare-head">
+          <h4>回归结果表（因变量：{depvarLabel}）</h4>
+          <button type="button" className="secondary" onClick={() => download(comparisonCsv(comparedColumns, options, depvarLabel, perPointRow(comparedColumns, perPoint)), `步骤${stepNumber}-回归对比.csv`)}>
+            导出 CSV
+          </button>
+        </div>
+        <ScrollableRegion className="table-wrap" label="回归结果表，可横向滚动">
+          <table className="data-table reg-custom-table reg-custom-compare-table">
+            <thead><tr><th>变量</th>{columns.map((column, index) => <th key={index} scope="col" className={cellClass(index)}>{column.name}</th>)}</tr></thead>
+            <tbody>
+              {coefficients.map((row) => (
+                <tr key={row.key}>
+                  <th scope="row">{row.label}</th>
+                  {row.cells.map((item, index) => (
+                    <td key={index} className={cellClass(index)}>
+                      {item === "omitted" ? <span className="muted">（省略）</span>
+                        : item ? <><span>{item.coef}</span><br /><span className="muted">{item.se}</span></> : null}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {pointRow && (
+                <tr className="reg-custom-point-row">
+                  <th scope="row">{pointRow.label}</th>
+                  {pointRow.cells.map((value, index) => <td key={index} className={cellClass(index)}>{value}</td>)}
+                </tr>
+              )}
+              {summary.map((row, index) => (
+                <tr key={row.key} className={index === 0 ? "reg-custom-summary-start" : undefined}>
+                  <th scope="row">{row.label}</th>
+                  {row.cells.map((value, cell) => <td key={cell} className={cellClass(cell)}>{value}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ScrollableRegion>
+        <ul className="muted reg-custom-legend">
+          {columns.map((column, index) => {
+            const omitted = omittedLines(column.snapshot, options);
+            return <li key={index}><b>{column.name}</b>：{specSummary(column.spec, options)}{omitted.length ? `；已省略 ${omitted.join("、")}` : ""}{column.snapshot.result.suppressed ? `。${options.suppressed_note}` : ""}</li>;
+          })}
+        </ul>
+        {samplesDiffer(columns) && <p className="reg-boundary" role="note">{options.sample_differs_note}</p>}
+      </div>
+
+      {current && computed && (
+        <div className="reg-custom-save">
+          {isDefault ? <p className="muted">这就是本步的默认模型（表中第一列），不用另存。</p>
+            : duplicate ? <p className="muted">这个设定已保存为“{duplicate.name}”。</p>
+              : full ? <p className="muted">每步最多保存 {limits.saved} 个模型，请先删除一个。</p>
+                : (
+                  <>
+                    <label>把“{UNSAVED_COLUMN}”保存为 <input value={name} maxLength={limits.name_length + 5} onChange={(event) => setSaveName(event.target.value)} aria-invalid={problem ? true : undefined} /></label>
+                    <button type="button" className="secondary" aria-disabled={problem ? true : undefined} onClick={save}>保存</button>
+                    {problem && <span className="field-error" role="alert">{problem}</span>}
+                  </>
+                )}
         </div>
       )}
+
       {saved.length > 0 && (
         <div className="reg-custom-saved">
           <h4>已保存的模型（{saved.length}/{limits.saved}）</h4>
@@ -392,7 +411,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
           {reportChanged && <p className="reg-rerun-warning reg-replaced-notice" role="status">放入报告的模型与已提交报告里的不同；请到步骤 15 更新报告并重新提交给老师。</p>}
           <ScrollableRegion className="table-wrap" label="已保存的模型，可横向滚动">
             <table className="data-table reg-custom-saved-table">
-              <thead><tr><th>名称</th><th>设定</th><th>对比</th><th>放入报告（最多 {limits.in_report} 个）</th><th>操作</th></tr></thead>
+              <thead><tr><th>名称</th><th>设定</th><th>在上表对比</th><th>放入报告（最多 {limits.in_report} 个）</th><th>操作</th></tr></thead>
               <tbody>
                 {saved.map((item) => {
                   const otherY = item.baseline !== baseline;
@@ -434,8 +453,18 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
           </ScrollableRegion>
         </div>
       )}
-      <ComparisonTable columns={columns} options={options} stepNumber={stepNumber} depvarLabel={depvarLabel} />
-      <p className="muted reg-custom-footnote">{options.footnote}</p>
+
+      <details className="technical-details reg-custom-details">
+        <summary>某一列的完整数字（区间、t 值、p 值）</summary>
+        <label className="reg-custom-detail-pick">查看
+          <select value={shownDetail} onChange={(event) => setDetailColumn(Number(event.target.value))}>
+            {columns.map((column, index) => <option key={index} value={index}>{column.name}</option>)}
+          </select>
+        </label>
+        <ColumnDetails column={columns[shownDetail]} options={options} perPoint={perPoint} />
+        <p className="muted">表里的“系数”按 X 以份额计：X 每高 1（即 100 个百分点）时 Y 相差多少；最后一列换算成“X 每高 1 个百分点”，与上面的结论读法相同。</p>
+      </details>
+      <p className="muted reg-custom-footnote">{options.footnote}{options.hints[1] ? ` ${options.hints[1]}` : ""}</p>
       {deleting && (
         <ConfirmModal
           title={`删除“${deleting.name}”？`}

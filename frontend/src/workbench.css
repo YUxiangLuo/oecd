@@ -390,10 +390,16 @@
 .country-exposure-table { margin-top: 10px; }
 .country-exposure-table > summary { cursor: pointer; color: #4b47e0; font-size: 11.5px; font-weight: 700; }
 .country-exposure-table table { margin-top: 6px; }
-.teaching-x-card { margin: 12px 0 0; padding: 11px 14px; border: 1px solid #dcdff0; border-radius: 10px; background: #f8f8ff; }
-.teaching-x-card > b { display: block; color: #35328d; font-size: 12.5px; }
-.teaching-x-card > p { margin: 4px 0 0; color: #3f4759; font-size: 12.5px; line-height: 1.6; }
-.teaching-x-card .teaching-x-formula { font-size: 15px; color: #1b1f2b; font-variant-numeric: tabular-nums; }
+/* Step 10: the three variables of steps 11–14, each with where it comes from. */
+.teaching-variables { display: grid; gap: 8px; margin: 10px 0 12px; }
+.teaching-variables > div { padding: 9px 12px; border: 1px solid #dcdff0; border-radius: 9px; background: #f8f8ff; }
+.teaching-variables dt { color: #35328d; font-size: 13px; font-weight: 750; }
+.teaching-variables dd { margin: 4px 0 0; color: #3f4759; font-size: 12.5px; line-height: 1.65; }
+.source-tag { display: inline-block; margin: 0 2px 0 6px; padding: 0 6px; border-radius: 999px; background: #eceef8; color: #4b5266; font-size: 11px; font-weight: 650; line-height: 1.7; white-space: nowrap; }
+.teaching-example-body { margin-top: 14px; padding-top: 12px; border-top: 1px solid #eceef3; }
+.teaching-example-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 12px; }
+.teaching-example-charts > * { min-width: 0; }
+.teaching-table-note { margin: 6px 0 0; font-size: 11.5px; }
 @media (max-width: 600px) { .teaching-tiles { grid-template-columns: minmax(0, 1fr); } }
 .reg-group-figure { margin: 10px 0 12px; }
 
@@ -541,12 +547,8 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 }
 .reg-saved-chip-reset[aria-disabled="true"] { color: #8a8f9c; cursor: progress; }
 .reg-saved-chip-reset:focus-visible { outline: 2px solid #4b47e0; outline-offset: 2px; border-radius: 3px; }
-/* Under the trend chart: what the dashed bracket is. */
-.reg-gap-caption, .reg-parallel-note { margin: 6px 0 0; font-size: 12px; line-height: 1.6; }
-/* Step 14's numbers are long ("[-4109.8400, -3911.5600]"): headers wrap and cells are narrower, so the table fits
-   a 1280 px window instead of clipping its p 值 column. */
-.data-table.reg-coef-table th { white-space: normal; padding: 8px 8px; vertical-align: bottom; }
-.data-table.reg-coef-table td { padding-left: 8px; padding-right: 8px; }
+/* Under the 加税前后 chart: what it mixes in, and the premise it can only partly show. */
+.reg-gap-caption { margin: 6px 0 0; font-size: 12px; line-height: 1.6; }
 .verdict-card p.reg-verdict-direction .reg-interval-words { color: #4f586b; font-weight: 500; font-size: 12.5px; }
 
 /* 自己设计模型（选做）, steps 11–14: the form's three groups sit side by side and stack when the step is narrow. */
@@ -591,3 +593,17 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 .reg-custom-compare-head { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .reg-custom-legend { margin: 6px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.6; }
 .reg-custom-footnote { margin: 0; font-size: 11.5px; line-height: 1.6; }
+
+/* Steps 11–14: the default model above its run button, and the open change-the-model section. */
+.reg-model-box { margin: 6px 0 12px; }
+.reg-model-box .model-eq-terms { margin: 8px 0 6px; }
+.reg-model-facts { margin: 4px 0 0; font-size: 12px; }
+.reg-model-facts > summary { cursor: pointer; color: #4b47e0; font-weight: 650; }
+.reg-model-facts .design-meta { margin-top: 6px; }
+.reg-custom-section h3 { margin: 5px 0 10px; font-size: 17px; }
+.reg-custom-tries { padding: 9px 12px; border: 1px solid #dcdff0; border-radius: 9px; background: #f8f8ff; font-size: 12.5px; }
+.reg-custom-tries > b { color: #35328d; }
+.reg-custom-tries ol { margin: 6px 0 0; padding-left: 20px; line-height: 1.7; }
+.reg-custom-compare-table th.reg-custom-current, .reg-custom-compare-table td.reg-custom-current { background: #fff8e1; }
+.reg-custom-point-row > * { border-top: 1px dashed #c9cde0; font-weight: 650; }
+.reg-custom-detail-pick { display: inline-flex; gap: 6px; align-items: center; margin: 8px 0; font-size: 12.5px; }

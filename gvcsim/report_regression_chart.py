@@ -30,8 +30,8 @@ from gvcsim.report_common import (
 
 _FAMILIES = {11: "贸易流", 12: "生产", 13: "长度", 14: "网络"}
 UNIT_TITLES = {
-    "points": "X 每高 1 个百分点，Y 平均相差（个百分点）",
-    "sd": "X 每高 1 个百分点，Y 平均相差（个标准差）",
+    "points": "X 每高 1 个百分点，Y 两年累计平均相差（个百分点）",
+    "sd": "X 每高 1 个百分点，Y 两年累计平均相差（个标准差）",
 }
 # Step 12's four forward shares add up to 100% of value added, so their four estimates add up to about 0.
 _FORWARD_SHARES = ("1_VA_D_share", "2_VA_RT_share", "3a_VA_GVC_S_share", "3b_VA_GVC_C_share")
@@ -206,7 +206,7 @@ def family_chart(
         "type": "diverging-bar",
         "title": f"步骤 {step} · "
         + (f"{_FAMILIES.get(step, '本步')}的 {len(items)} 个 Y" if len(items) > 1 else "你保存的 Y")
-        + "：X 每高 1 个百分点，Y 平均相差多少",
+        + "：X 每高 1 个百分点，Y 两年累计平均相差多少",
         "x_label": UNIT_TITLES["sd" if standardized else "points"],
         "items": items,
     }

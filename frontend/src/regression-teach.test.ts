@@ -4,9 +4,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   RegressionEvidenceMatrix,
   RegressionSummaryBars,
+  ReportedCustomModels,
   familyVerdict,
   regressionSummaryRows,
 } from "./regression-teach";
+import { snapshotOf } from "./regression-workbench-table";
 import type { CoefStat, RegressionOutcome, RegressionResponse } from "./types";
 
 const coefficient = (coef: number, low: number, high: number): CoefStat => ({
@@ -193,7 +195,44 @@ describe("RegressionSummaryBars", () => {
     const dom = new DOMParser().parseFromString(html, "text/html");
     expect(dom.querySelectorAll("[data-bar]")).toHaveLength(2);
     expect(dom.querySelector("svg")?.getAttribute("role")).toBe("img");
-    expect(html).toContain("X 每高 1 个百分点，Y 平均相差（个标准差）");
+    expect(html).toContain("X 每高 1 个百分点，Y 两年累计平均相差（个标准差）");
     expect(dom.querySelector(".reg-family-missing")?.textContent).toBe("步骤 12 · 生产、步骤 14 · 网络：还没计算");
+  });
+});
+
+describe("ReportedCustomModels", () => {
+  const withSum = (value: number, low: number, high: number) => {
+    const run = response("trade", coefficient(value, low, high));
+    run.design.baseline = "FVA_share";
+    run.design.depvar_kind = "share";
+    run.result.cumulative = { ...coefficient(value, low, high), name: "cumulative" };
+    return run;
+  };
+
+  test("lists each model marked for the report with its sum next to the step's default model", () => {
+    const defaultRun = withSum(-0.55, -0.57, -0.53);
+    const noRate = withSum(-0.70, -0.75, -0.65);
+    const model = (name: string, inReport: boolean) => ({
+      id: name, name, outcome: "trade" as const, baseline: "FVA_share", in_report: inReport, saved_at: "2026-10-11",
+      spec: { x_lags: [0, 1], controls: [], fixed_effects: ["country_industry", "year"] }, snapshot: snapshotOf(noRate),
+    });
+    const html = renderToStaticMarkup(createElement(ReportedCustomModels, {
+      getStep: (step: number) => step === 11
+        ? { run: { design: defaultRun.design, result: defaultRun.result }, custom_results: [model("去掉汇率", true), model("没放入", false)] }
+        : undefined,
+    }));
+    const dom = new DOMParser().parseFromString(html, "text/html");
+    const rows = [...dom.querySelectorAll("tbody tr")].map((row) => [...row.children].map((cell) => cell.textContent));
+    expect(rows).toHaveLength(1);
+    expect(rows[0][0]).toBe("步骤 11 · 贸易流");
+    expect(rows[0][1]).toContain("去掉汇率");
+    expect(rows[0][3]).toBe("-0.70 个百分点");
+    expect(rows[0][4]).toBe("-0.55 个百分点");
+  });
+
+  test("says how to add one when none is marked", () => {
+    const html = renderToStaticMarkup(createElement(ReportedCustomModels, { getStep: () => undefined }));
+    expect(html).toContain("还没有放入报告的自选模型（选做）");
+    expect(html).not.toContain("<table");
   });
 });

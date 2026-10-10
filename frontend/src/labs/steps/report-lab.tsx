@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, isApiErrorStatus } from "../../api";
-import { RegressionEvidenceMatrix, RegressionSummaryBars, type SiblingStepData } from "../../regression-teach";
+import { RegressionEvidenceMatrix, RegressionSummaryBars, ReportedCustomModels, type SiblingStepData } from "../../regression-teach";
 import { scrollIntoCourseContent } from "../../content-scroll";
 import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-lazy";
 import { ReportOutro } from "../../report-outro";
@@ -42,9 +42,9 @@ const REFLECTION_FIELDS: {
   starter: string;
   min: number;
 }[] = [
-  { key: "research_question", label: "研究问题", prompt: "我比较了哪些国家、行业和年份？我想了解哪项指标的变化？请区分指标比较和关税回归。", starter: "句式参考：本实验比较了……和……的……指标，想了解……；再用关税回归看关税暴露 X 每高 1 个百分点，这些指标平均高还是低。", min: 12 },
-  { key: "evidence_interpretation", label: "结果解释", prompt: "引用保存的数字，注明对象、年份、指标、方向和区间。比较四项回归结果；方向不确定或没算出估计值时写明原因，不要写成“没有关联”。", starter: "句式参考：步骤……显示，……在……年的……为……；步骤 11 的回归估计关税暴露 X 每高 1 个百分点，Y 平均高（或低）……，95% 区间为……。", min: 40 },
-  { key: "limitations", label: "局限与反思", prompt: "我的比较还有哪些限制？哪些结论不能推出？下一步需要什么数据或检验？", starter: "句式参考：回归只描述 X 与 Y 的关联，因此……；我的比较只覆盖……；若要进一步验证，需要……。", min: 30 },
+  { key: "research_question", label: "研究问题", prompt: "我比较了哪些国家、行业和年份？我想了解哪项指标的变化？请区分指标比较和关税回归。", starter: "句式参考：本实验比较了……和……的……指标，想了解……；再用关税回归看关税暴露 X 每高 1 个百分点，这些指标两年累计平均高还是低。", min: 12 },
+  { key: "evidence_interpretation", label: "结果解释", prompt: "引用保存的数字，注明对象、年份、指标、方向和区间。比较四项回归的两年累计结果；方向不确定或没算出估计值时写明原因，不要写成“没有关联”。如果你改过模型，写明改了什么、X 各项合计怎样变、为什么。", starter: "句式参考：步骤……显示，……在……年的……为……；步骤 11 的默认模型估计关税暴露 X 每高 1 个百分点，Y 两年累计平均高（或低）……，95% 区间为……；去掉……后，合计变为……，因为……。", min: 40 },
+  { key: "limitations", label: "局限与反思", prompt: "我的比较还有哪些限制？哪些结论不能推出？模型的设定（控制变量、固定效应、滞后期）会怎样影响结论？下一步需要什么数据或检验？", starter: "句式参考：回归只描述 X 与 Y 的关联，因此……；换一种固定效应或去掉……后结论会……；我的比较只覆盖……；若要进一步验证，需要……。", min: 30 },
 ];
 
 type ReflectionAnswers = Pick<ReportReflectionState, "research_question" | "evidence_interpretation" | "limitations">;
@@ -814,12 +814,15 @@ export function ReportLab({
         </ol>
       </section>
       {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} flash={gateFlash} verb={reportGateVerb(report)} />}
-      <details className="report-reference"><summary>查看已保存的四项回归结果</summary>
+      {/* Open: the four steps' results and the models marked for the report are what the analysis below cites. */}
+      <section className="report-reference" aria-labelledby="report-regression-results-title">
+        <h3 id="report-regression-results-title" className="report-reference-title">四步回归结果</h3>
         <p className="muted">四个 Y 的单位不同，条长都换算成标准差；条末先写各自单位的值。</p>
         <RegressionSummaryBars getStep={getStep} />
         <RegressionEvidenceMatrix getStep={getStep} />
+        <ReportedCustomModels getStep={getStep} onNavigateStep={onNavigateStep} />
         <p className="muted">按你的例子换算的结果在步骤 11–14；步骤 6–9 的图表读数会自动写进报告。这里只列出已保存的结果，结论要你自己写。</p>
-      </details>
+      </section>
       <section className="report-reflection" aria-labelledby={REPORT_REFLECTION_TITLE_ID}>
         <div>
           <span className="reg-section-step">你的分析 · 自动保存</span>

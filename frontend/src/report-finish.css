@@ -45,3 +45,7 @@
   .report-print-grade > span { display: block; color: #4b5563; }
   .report-print-grade > p { margin: 6pt 0 0; white-space: pre-wrap; }
 }
+.report-reference-title { margin: 0 0 6px; color: #2f3747; font-size: 15px; }
+.reg-reported-models { margin: 14px 0 6px; }
+.reg-reported-models h3 { margin: 4px 0 8px; font-size: 15px; }
+.reg-reported-table .link-button { padding: 0; border: 0; background: none; color: #4b47e0; cursor: pointer; text-decoration: underline; font: inherit; }

@@ -5,16 +5,18 @@ import pytest
 from gvcsim import quizzes
 
 
-def test_bank_covers_steps_1_through_14_with_19_questions():
+def test_bank_covers_steps_1_through_14_with_24_questions():
     assert sorted(quizzes.STEP_QUIZZES) == list(range(1, 15))
-    assert sum(len(items) for items in quizzes.STEP_QUIZZES.values()) == 19
+    # Steps 10–14 have three each (rewritten for the v10 model); steps 1–9 keep theirs.
+    assert sum(len(items) for items in quizzes.STEP_QUIZZES.values()) == 24
+    assert [len(quizzes.STEP_QUIZZES[step]) for step in range(10, 15)] == [3, 3, 3, 3, 3]
     assert all(1 <= len(items) <= 3 for items in quizzes.STEP_QUIZZES.values())
 
 
 def test_public_quiz_never_exposes_answers_or_feedback():
     for step in range(1, 15):
         public = quizzes.public_quiz(step)
-        assert public and public["version"] == ("course-quiz-v9" if step in (11, 14) else "course-quiz-v8")
+        assert public and public["version"] == ("course-quiz-v10" if 10 <= step <= 14 else "course-quiz-v8")
         assert all("correct" not in question and "explanation" not in question for question in public["questions"])
     assert quizzes.public_quiz(15) is None
 
@@ -52,29 +54,47 @@ def test_selected_answers_renders_only_a_fully_correct_current_quiz():
     assert quizzes.selected_answers(1, {"version": "old", "answers": {}}) == []
 
 
-@pytest.mark.parametrize("answer, expected", [("a", True), ("b", False), ("c", False)])
+@pytest.mark.parametrize("answer, expected", [("a", False), ("b", True), ("c", False)])
 def test_step_11_reads_percentage_points_without_claiming_real_causation(answer, expected):
-    answers = {"s11-metric": "b", "s11-reading-v9": answer}
-    passed, _, feedback = quizzes.grade(11, "course-quiz-v9", answers)
+    answers = {"s11-cumulative-v10": "a", "s11-control-v10": "c", "s11-reading-v10": answer}
+    passed, _, feedback = quizzes.grade(11, "course-quiz-v10", answers)
     assert passed is expected
-    assert feedback[1]["correct"] is expected
+    assert feedback[2]["correct"] is expected
     if expected:
-        assert "Y 平均低 1.20 个百分点" in feedback[1]["explanation"]
-        assert "不是相对低 1.20%" in feedback[1]["explanation"]
-        assert "不是平均差异" in feedback[1]["explanation"]
-        assert "模拟" not in feedback[1]["explanation"]
+        assert "Y 两年累计平均低 1.20 个百分点" in feedback[2]["explanation"]
+        assert "不是相对低 1.20%" in feedback[2]["explanation"]
+        assert "不是平均差异" in feedback[2]["explanation"]
+        assert "模拟" not in feedback[2]["explanation"]
     else:
         # A wrong answer gets a hint, not the answer.
-        assert feedback[1]["explanation"] == quizzes.HINTS["s11-reading-v9"]
-        assert "平均低 1.20 个百分点" not in feedback[1]["explanation"]
-    assert len(quizzes.public_quiz(11)["questions"]) == 2
+        assert feedback[2]["explanation"] == quizzes.HINTS["s11-reading-v10"]
+        assert "平均低 1.20 个百分点" not in feedback[2]["explanation"]
+    assert len(quizzes.public_quiz(11)["questions"]) == 3
+
+
+def test_steps_10_to_14_ask_about_the_v10_model_without_its_numbers():
+    """The rewritten questions test the lag, the exchange-rate control, the fixed effects and L2.X; none quotes a
+    result of the course data (they read the same whatever the release)."""
+    prompts = " ".join(question["prompt"] for step in range(10, 15) for question in quizzes.STEP_QUIZZES[step])
+    for concept in ("L1.X", "汇率变动", "两年累计", "国家×行业", "L2.X", "控制变量"):
+        assert concept in prompts, concept
+    for number in ("−0.55", "-0.55", "0.0182", "40.4"):
+        assert number not in prompts
+    # The correct options do not sit in one position.
+    corrects = [question["correct"] for step in range(10, 15) for question in quizzes.STEP_QUIZZES[step]]
+    assert len(set(corrects)) == 3
 
 
 def test_regression_quizzes_read_an_association_not_a_change_over_time():
     for step in range(10, 15):
         for question in quizzes.STEP_QUIZZES[step]:
             text = " ".join(
-                [question["prompt"], question["explanation"], quizzes.HINTS[question["id"]], *(o["label"] for o in question["options"])]
+                [
+                    question["prompt"],
+                    question["explanation"],
+                    quizzes.HINTS[question["id"]],
+                    *(o["label"] for o in question["options"]),
+                ]
             )
             for phrase in ("每增加", "平均下降", "平均上升", "上升还是下降", "平均变化"):
                 assert phrase not in text, (question["id"], phrase)
@@ -89,16 +109,17 @@ def test_wrong_answer_hints_never_state_the_correct_option():
             assert hint != question["explanation"]
 
 
-def test_step_11_old_answers_cannot_pass_under_either_version():
-    old = {"s11-metric": "b", "s11-compare": "b"}
-    with pytest.raises(ValueError, match="版本已更新"):
-        quizzes.grade(11, "course-quiz-v8", old)
+def test_step_11_old_answers_cannot_pass_under_any_version():
+    old = {"s11-metric": "b", "s11-reading-v9": "a"}
+    for version in ("course-quiz-v8", "course-quiz-v9"):
+        with pytest.raises(ValueError, match="版本已更新"):
+            quizzes.grade(11, version, old)
     with pytest.raises(ValueError, match="未作答"):
-        quizzes.grade(11, "course-quiz-v9", old)
-    assert quizzes.selected_answers(11, {"version": "course-quiz-v8", "answers": old}) == []
+        quizzes.grade(11, "course-quiz-v10", old)
+    assert quizzes.selected_answers(11, {"version": "course-quiz-v9", "answers": old}) == []
 
 
-@pytest.mark.parametrize("step, version", [(10, "course-quiz-v8"), (11, "course-quiz-v9"), (12, "course-quiz-v8")])
+@pytest.mark.parametrize("step, version", [(9, "course-quiz-v8"), (10, "course-quiz-v10"), (11, "course-quiz-v10")])
 def test_submission_response_preserves_step_version_for_session_save(step, version):
     from gvcsim.classroom.routes import QuizSubmitRequest, submit_quiz
 
@@ -116,7 +137,7 @@ def test_step_12_asks_to_read_the_grey_bar_without_clicking_it():
 
     question = next(item for item in quizzes.STEP_QUIZZES[12] if item["id"] == "s12-compare")
     assert "点灰色" not in question["prompt"] and "不用点击" in question["prompt"]
-    assert question["correct"] == "b" and quizzes.quiz_version(12) == quizzes.QUIZ_VERSION
+    assert question["correct"] == "b" and quizzes.quiz_version(12) == "course-quiz-v10"
     tasks = " ".join(next(step for step in STEPS if step["n"] == 12)["tasks"])
     assert "点灰色" not in tasks and "不用点击" in tasks
 
@@ -152,7 +173,7 @@ def test_betweenness_reads_as_a_sum_of_shares_and_shortest_routes_have_one_name_
 
 def test_quizzes_read_x_as_exposure_an_association_and_step_14_y_as_no_amount_round_27():
     every = " ".join(_quiz_text(question) for question in QUIZ_BY_ID.values())
-    assert "受新关税影响" not in every and "面对的新关税暴露越强" in QUIZ_BY_ID["s10-unit-v8"]["explanation"]
+    assert "受新关税影响" not in every
     assert "没有影响" not in every and "没有关联" in QUIZ_BY_ID["s12-compare"]["explanation"]
     # Step 14's Y is generated on the real 加权总度 ranking, in 中心性原始单位: not an amount.
     assert "中心性原始单位" in QUIZ_BY_ID["s14-metric-v9"]["explanation"]
@@ -169,5 +190,5 @@ def test_hints_guide_without_giving_the_answer_away_round_27():
     assert "逐年表" not in x_hint and "逐年读数" in x_hint
     compare_hint = quizzes.HINTS["s13-compare"]
     assert "单位不同的数能直接比较大小吗" not in compare_hint and "标准差" in compare_hint
-    assert [q["correct"] for q in quizzes.STEP_QUIZZES[10]] == ["a", "a"]
-    assert [q["correct"] for q in quizzes.STEP_QUIZZES[13]] == ["a", "a"]
+    assert [q["correct"] for q in quizzes.STEP_QUIZZES[10]] == ["a", "b", "c"]
+    assert [q["correct"] for q in quizzes.STEP_QUIZZES[13]] == ["a", "a", "b"]

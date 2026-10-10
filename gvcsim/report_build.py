@@ -303,6 +303,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
             metadata["simulation_contract"]["source_filter_disclosure"],
             teaching_examples,
             _regression_overview() if runs else None,
+            custom_models,
         ),
         *_quiz_sections(session),
         *_experiment_sections(session, scenario),

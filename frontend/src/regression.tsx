@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { ScrollableRegion } from "./a11y";
 import { scrollIntoCourseContent } from "./content-scroll";
 import { api, ApiError } from "./api";
 import { groupedFixed, percentagePoints } from "./format";
 import { useAsync } from "./labs";
 import { DEFAULT_BASELINES, displayBaselineLabel, GENERATED_DATA_NOTE, GENERATED_Y_DISCLOSURE, lessonFor, lessonQuestion } from "./regression-lessons";
 import { nextRegressionSave } from "./regression-save";
-import { formatPValue } from "./regression-statistics";
 import {
   BAR_UNIT_TITLES,
   barFigures,
@@ -128,29 +126,31 @@ function withSubscripts(text: string) {
 
 const FALLBACK_EQUATION = ["Y_ijt", " = ", "β·X_ijt", " + ", "α_ij", " + ", "λ_t", " + ", "ε_ijt"];
 
+/** The step's model before and after the run: its equation and what each part does, the data facts folded. */
 function DesignEquation({ design }: { design: RegressionDesignInfo }) {
   const parts = design.equation_parts?.length ? design.equation_parts.map(equationSymbol) : FALLBACK_EQUATION;
   const yLabel = displayBaselineLabel(design.depvar_label) || "本步的结果指标";
+  const lagged = (design.spec?.x_lags ?? [0]).includes(1);
+  const controls = Object.values(design.control_labels ?? {});
   return (
-    <div>
+    <div className="reg-model-box">
       <div className="model-eq" role="group" aria-label="本步计算的公式">
         {parts.map((text, index) => <span key={`${text}-${index}`}>{withSubscripts(text)}</span>)}
       </div>
-      {/* The five terms, always visible (a hover-only gloss went unnoticed). */}
+      {/* Three points, always visible (a hover-only gloss went unnoticed). */}
       <ul className="model-eq-terms" aria-label="公式里各项的意思">
-        <li><b>Y</b>：结果指标，本步是{yLabel}；i = 国家，j = 行业，t = 年份。</li>
-        {(design.spec?.x_lags ?? [0]).includes(1)
-          ? <li><b>β₁·X 与 β₂·L1.X</b>：X 是当年的关税暴露（首年对美出口份额 w × 加征税率 τ），L1.X 是上一年的 X（加税前为 0）。关税的影响可能分两年显现，β₁ 是当年的关联，β₂ 是次年再出现的关联，两者之和是累计关联，即本步的主结果。</li>
-          : <li><b>β·X</b>：X 是关税暴露（首年对美出口份额 w × 加征税率 τ）；β 就是要算的估计值：扣掉下面的 α 和 λ 之后，X 每高 1 个百分点，Y 平均相差多少。</li>}
-        {Object.keys(design.control_labels ?? {}).length > 0 && (
-          <li><b>γ·控制变量</b>：{Object.values(design.control_labels ?? {}).join("、")}。它与加税同时变化、又与 Y 有关，放进模型是为了不把它的作用算到关税头上。</li>
+        {lagged
+          ? <li><b>β₁·X + β₂·L1.X</b>：当年和上一年的关税暴露。关税的影响可能分两年显现，β₁ 是当年的关联，β₂ 是次年再出现的关联，<b>两者之和是两年累计关联</b>，即本步的主结果。</li>
+          : <li><b>β·X</b>：关税暴露（首年对美出口份额 w × 加征税率 τ）；β 是 X 每高 1 个百分点时 Y 平均相差多少。</li>}
+        {controls.length > 0 && (
+          <li><b>γ·{controls.join("、")}</b>：控制变量。它与加税同时变化、又与 Y 有关，放进模型是为了不把它的作用算到关税头上。</li>
         )}
-        <li><b>α</b>：每个国家×行业自己的平均水平，先扣掉。</li>
-        <li><b>λ</b>：每一年所有国家×行业共同的变化，先扣掉。</li>
-        <li><b>ε</b>：剩下的随机波动。</li>
+        <li><b>α + λ</b>：先扣掉每个国家×行业自己的平均水平（α）和每年所有国家×行业共同的变化（λ），即“双向固定效应”；ε 是剩下的随机波动。Y 是{yLabel}，i = 国家，j = 行业，t = 年份。</li>
       </ul>
-      <p className="muted">扣掉 α 和 λ 的做法叫“双向固定效应”：这样比较的是同一个国家×行业在不同年份、相对共同变化的起伏。</p>
-      <DesignMeta design={design} />
+      <details className="reg-model-facts">
+        <summary>数据、样本和区间的算法</summary>
+        <DesignMeta design={design} />
+      </details>
     </div>
   );
 }
@@ -313,21 +313,6 @@ export function RegressionResultCard({ outcome, response, examples = [], example
 }
 
 /**
- * A raw coefficient, SE or interval end at four decimals with thousands grouped (report ``_fixed4``): step 14's
- * "-4,080.3723"; never "-0.0000".
- */
-const fixed4 = (value: number) => groupedFixed(value, 4);
-
-/** Column names in the coefficient table, as the page names them (the code stays in the report appendix). */
-const COEFFICIENT_NAMES: Record<string, string> = {
-  teaching_tariff_exposure: "关税暴露 X（当年）",
-  teaching_tariff_exposure_lag1: "关税暴露 L1.X（上一年）",
-  teaching_tariff_exposure_lag2: "关税暴露 L2.X（两年前）",
-  teaching_exchange_rate_change: "汇率变动（控制变量）",
-  cumulative: "X 各项合计（累计关联）",
-};
-
-/**
  * "其中当年 -0.33、次年再 -0.22 个百分点": the headline split over the tariff's year (X) and the next (L1.X), in the
  * headline's units; null when the run has no L1.X.
  */
@@ -337,57 +322,8 @@ export function lagSplit(outcome: RegressionOutcome, response: Pick<RegressionRe
   if (!current || !previous) return null;
   const now = teachingEffect(outcome, current.coef, response.design);
   const next = teachingEffect(outcome, previous.coef, response.design);
-  return `其中当年 ${now}，次年再 ${next}（模型同时放入当年的 X 和上一年的 X，两项之和是累计关联）。`;
-}
-
-/**
- * The raw coefficients, with their scale said in the header: X is stored as a share (0.01 = 1 percentage
- * point), so a coefficient is "Y per 1.00 of X". The column next to it repeats the page's reading, "Y per
- * 1 percentage point of X", so the two numbers can be matched (for lengths and centrality they differ 100×).
- */
-export function RegressionCoefficientTable({ response }: { response: RegressionResponse }) {
-  const outcome = response.design.outcome;
-  const display = chartDisplayScale(outcome, response.design);
-  const headline = headlineCoefficient(response);
-  return (
-    <ScrollableRegion className="table-wrap" label="完整回归系数表，可横向滚动">
-      {/* Headers wrap and cells are narrower (workbench.css), so step 14's long numbers fit without clipping p 值. */}
-      <table className="data-table reg-coef-table">
-        <thead><tr>
-          <th>变量</th>
-          <th>X 每高 1 个百分点，Y 平均相差（{display.unit}）</th>
-          <th>系数（X 按份额计）</th>
-          <th>95% 区间（按系数计）</th>
-          <th>标准误（按国家聚类）</th>
-          <th>t 值</th>
-          <th>p 值</th>
-        </tr></thead>
-        <tbody>{[...response.result.coefs, ...(response.result.cumulative ? [response.result.cumulative] : [])].map((coef) => {
-          const globallySuppressed = globalInferenceIsSuppressed(
-            response.result.status, response.result.support,
-          );
-          const inferenceAllowed = !globallySuppressed;
-          const ciLow = inferenceAllowed ? coef.ci_low : null;
-          const ciHigh = inferenceAllowed ? coef.ci_high : null;
-          const p = inferenceAllowed ? coef.p : null;
-          return (
-            <tr key={coef.name}>
-              <td>{COEFFICIENT_NAMES[coef.name] ?? coef.name}</td>
-              {/* The headline's digits: with the interval it shows (none when suppressed), as the report's appendix. */}
-              {/* The headline's reading (the cumulative relation, or X itself in a single-X model) on its own row only. */}
-              <td>{coef === headline
-                ? teachingEffect(outcome, coef.coef, response.design, ciLow != null && ciHigh != null ? [ciLow, ciHigh] : null)
-                : "—"}</td>
-              <td>{fixed4(coef.coef)}</td>
-              <td>{ciLow != null && ciHigh != null ? `[${fixed4(ciLow)}, ${fixed4(ciHigh)}]` : "—"}</td>
-              {/* With inference suppressed, SE and t are not read either (the backend keeps them for integrity checks). */}
-              <td>{inferenceAllowed && coef.se != null ? fixed4(coef.se) : "—"}</td><td>{inferenceAllowed && coef.t != null ? groupedFixed(coef.t, 2) : "—"}</td><td>{formatPValue(p)}</td>
-            </tr>
-          );
-        })}</tbody>
-      </table>
-    </ScrollableRegion>
-  );
+  // The model box above the run button says what the two terms are; here only the split.
+  return `其中当年 ${now}，次年再 ${next}。`;
 }
 
 /** 自动保存最近一次真实运行，供刷新恢复与报告复估。 */
@@ -576,7 +512,7 @@ export function waveMarkers(years: readonly number[]): { year: number; label: st
  * years, which the regression separates; said without telling which way, so the student still finds it in the
  * workbench.
  */
-export const GROUP_CHART_CAPTION = "图上各组的变化不全是关税造成的：同一时期还有其他变化（如汇率），回归在扣掉它们之后估计关税暴露 X 的关联，所以条形图的数字不必等于图上两条线的距离。";
+export const GROUP_CHART_CAPTION = "图上的变化混有同一时期的其他变化（如汇率），回归会把它们分开，所以条形图的数字不必等于图上两条线的距离。";
 
 /** Under the 加税前后 chart: the premise the regression rests on, and how little the chart can show of it. */
 export function parallelTrendsNote(years: readonly number[], policyYear: number | null | undefined, groups = 2): string {
@@ -619,9 +555,6 @@ export function familyBarsTitle(count: number): string {
  * step's default Y and draws a bar for every Y of the family; clicking a bar runs that Y, which becomes the
  * headline and the saved report material.
  */
-/** Steps whose page offers 自己设计模型（选做）; a staged trial can list fewer. */
-export const WORKBENCH_STEPS: readonly number[] = [11, 12, 13, 14];
-
 export function RegressionRunLab({ step, meta, state, getStep, reportRuns, reportCustomResults, reportOutdated = false }: {
   step: Step;
   meta: Pick<Meta, "countries" | "sectors">;
@@ -652,7 +585,6 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
   const [replacedBy, setReplacedBy] = useState<"bar" | "button" | null>(null);
   // A failed request is retried as it was: the Y of a failed bar click, not the Y saved before it.
   const [failedRequest, setFailedRequest] = useState<{ key: string | null; fromBar: boolean } | null>(null);
-  const [workbenchOpened, setWorkbenchOpened] = useState(false);
   const replacedNoticeRef = useRef<HTMLParagraphElement>(null);
   const revealReplacedNotice = useRef(false);
   const barErrorRef = useRef<HTMLDivElement>(null);
@@ -680,6 +612,10 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
 
   // Before the run: the taxed vs untaxed comparison that the regression then quantifies.
   const groupsQuery = useAsync<TeachingGroupsResponse>(() => api.teachingGroups(), ["teaching-groups"]);
+  // The default model as the server describes it (its equation), shown above the run button before any result.
+  const designKey = `regression-design:${outcome}`;
+  const designQuery = useAsync<RegressionDesignInfo>(() => api.regressionDesign(outcome), [designKey], { requestKey: designKey });
+  const modelDesign = result?.design ?? (designQuery.status === "success" ? designQuery.data ?? null : null);
   const groups = groupsQuery.status === "success" ? groupsQuery.data : null;
   const baselineOptions = groups?.baselines?.[outcome] ?? [];
   const defaultKey = baselineOptions.find((option) => option.default)?.key ?? DEFAULT_BASELINES[outcome];
@@ -872,11 +808,51 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
 
   return (
     <div className="reg-workbench">
+      {/* 1 · The data first: the question and the three groups before and after the tariffs. */}
       <section className="reg-run-card">
+        <span className="reg-section-step">先看数据</span>
         <h3>{lessonQuestion(outcome, selectedKey)}</h3>
         {staleSavedY && (
           <p className="reg-boundary" role="status">上次计算的 Y（{displayBaselineLabel(savedRun?.design?.baseline_label) || "—"}）不在当前课程数据中，已恢复为本步默认指标，请重新计算。</p>
         )}
+        {groups && (() => {
+          const series = selectedKey === defaultKey ? groups.outcomes[outcome] : groups.series?.[outcome]?.[selectedKey];
+          if (!series) return null;
+          const kind = result ? depvarKind(outcome, result.design) : kindOf(selectedOption?.kind ?? "", outcome);
+          const display = chartDisplayScale(outcome, { depvar_kind: kind });
+          // display.scale converts β to "per 1 percentage point of X"; the chart shows Y levels, which need ×100
+          // for shares (percentage points) and ×1 for lengths and centrality.
+          const levelScale = display.scale * 100;
+          const lines = groupLines(series);
+          const markers = waveMarkers(groups.policy_years ?? [groups.policy_year]);
+          return (
+            <div className="reg-group-figure">
+              <GroupChangeChart
+                years={groups.years}
+                markers={markers}
+                lines={lines}
+                scale={levelScale}
+                unit={display.unit ?? lesson.unit}
+                title={`加税前后：各组${latinGap}${lesson.shortMetric}的平均变化`}
+              />
+              {/* One note: what the chart mixes in, and the premise it can only partly show. */}
+              <p className="muted reg-gap-caption">{lines.length > 2 ? GROUP_CHART_CAPTION : ""}{parallelTrendsNote(groups.years, groups.policy_year, lines.length)}</p>
+            </div>
+          );
+        })()}
+        {groupsQuery.status === "error" && groupsQuery.error && (
+          <RegressionRequestError label="分组对比图" error={groupsQuery.error} onRetry={groupsQuery.retry} />
+        )}
+      </section>
+
+      {/* 2 · The course default model, said before it is computed; the run button computes it for every Y. */}
+      <section className="reg-run-card">
+        <span className="reg-section-step">默认模型</span>
+        {modelDesign
+          ? <DesignEquation design={modelDesign} />
+          : designQuery.status === "error" && designQuery.error
+            ? <RegressionRequestError label="模型说明" error={designQuery.error} onRetry={designQuery.retry} />
+            : <div className="reg-request-state muted" role="status" aria-busy="true">正在读取模型…</div>}
         {/* Said before the run (the result card repeats it), so the Y is never read as OECD data first. */}
         {!result && <p className="muted reg-data-note reg-data-note-before" role="note">{GENERATED_DATA_NOTE}</p>}
         {/* Once a result exists, recalculating is a secondary action; it replaces saved material. */}
@@ -904,34 +880,6 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
           showReplaced
             ? <p className="reg-rerun-warning reg-replaced-notice" role="status">{replacedNotice}</p>
             : <p className="reg-rerun-warning" role="note"><b>报告已提交</b>重新计算或点击另一条，会替换报告材料里保存的结果；之后要到步骤 15 更新报告，并重新提交给老师。</p>
-        )}
-        {groups && (() => {
-          const series = selectedKey === defaultKey ? groups.outcomes[outcome] : groups.series?.[outcome]?.[selectedKey];
-          if (!series) return null;
-          const kind = result ? depvarKind(outcome, result.design) : kindOf(selectedOption?.kind ?? "", outcome);
-          const display = chartDisplayScale(outcome, { depvar_kind: kind });
-          // display.scale converts β to "per 1 percentage point of X"; the chart shows Y levels, which need ×100
-          // for shares (percentage points) and ×1 for lengths and centrality.
-          const levelScale = display.scale * 100;
-          const lines = groupLines(series);
-          const markers = waveMarkers(groups.policy_years ?? [groups.policy_year]);
-          return (
-            <div className="reg-group-figure">
-              <GroupChangeChart
-                years={groups.years}
-                markers={markers}
-                lines={lines}
-                scale={levelScale}
-                unit={display.unit ?? lesson.unit}
-                title={`加税前后：各组${latinGap}${lesson.shortMetric}的平均变化`}
-              />
-              {lines.length > 2 && <p className="muted reg-gap-caption">{GROUP_CHART_CAPTION}</p>}
-              <p className="muted reg-parallel-note">{parallelTrendsNote(groups.years, groups.policy_year, lines.length)}</p>
-            </div>
-          );
-        })()}
-        {groupsQuery.status === "error" && groupsQuery.error && (
-          <RegressionRequestError label="分组对比图" error={groupsQuery.error} onRetry={groupsQuery.retry} />
         )}
       </section>
 
@@ -1005,40 +953,23 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
               : overviewQuery.status === "loading" && <div className="reg-request-state muted" role="status" aria-busy="true">正在绘制本类各 Y 的条形图…</div>}
             <RegressionResultCard outcome={outcome} response={result} examples={examples} exampleSaved={exampleSaved} exampleYear={lastYear} />
           </div>
-          <details className="technical-details">
-            <summary>模型设定</summary>
-            <DesignEquation design={result.design} />
-          </details>
-          <details className="technical-details">
-            <summary>详细数字（可选）</summary>
-            <RegressionCoefficientTable response={result} />
-            {/* Only when the table actually shows one (the table hides p when inference is suppressed). */}
-            {!globalInferenceIsSuppressed(result.result.status, result.result.support)
-              && result.result.coefs.some((coef) => formatPValue(coef.p) === "<0.0001")
-              && <p className="muted">很小的 p 值显示为 &lt;0.0001，不表示概率为零。</p>}
-            <p className="muted">表里的“系数”按 X 以份额计：X 每高 1（即 100 个百分点），Y 平均相差多少。{depvarKind(outcome, result.design) === "share"
-              ? "这一步的 Y 是份额，页面也按百分点读，X 和 Y 都换成百分点后倍数正好抵消：两列是同一个数，左列按页面精度四舍五入。"
-              : "除以 100 即为页面上“X 每高 1 个百分点”对应的数值。"}</p>
-            <p className="muted">共 {result.result.n_obs.toLocaleString("zh-CN")} 条记录 = {result.result.n_entities.toLocaleString("zh-CN")} 个国家×行业 × {result.result.n_times} 年；95% 区间按 {result.result.n_clusters} 个国家计算；{result.result.r2_within == null ? "这次结果没有组内 R²" : `组内 R² = ${result.result.r2_within.toFixed(3)}（扣掉各国家×行业的平均水平和每年共同变化后，模型能解释的那部分变动所占比例）`}。</p>
-          </details>
-          {WORKBENCH_STEPS.includes(step.n) && (
-            // Mounted when first opened (its options are fetched then), kept mounted afterwards so a computed model
-            // survives folding it away.
-            <details className="technical-details reg-custom-details" onToggle={(event) => { if (event.currentTarget.open) setWorkbenchOpened(true); }}>
-              <summary>自己设计模型（选做）</summary>
-              {workbenchOpened && (
-                <RegressionModelWorkbench
-                  stepNumber={step.n}
-                  outcome={outcome}
-                  defaultResponse={result}
-                  state={state as unknown as StepStateApi<WorkbenchStepState>}
-                  reportCustomResults={reportCustomResults}
-                  reportOutdated={reportOutdated}
-                />
-              )}
-            </details>
-          )}
         </div>
+      )}
+
+      {/* 3 · Change one setting at a time and read it next to the default model (open; optional for completion). */}
+      {result && (
+        <section className="reg-run-card reg-custom-section">
+          <span className="reg-section-step">改模型、对比（选做）</span>
+          <h3>换一种模型试试：每次改一处，和默认模型比较</h3>
+          <RegressionModelWorkbench
+            stepNumber={step.n}
+            outcome={outcome}
+            defaultResponse={result}
+            state={state as unknown as StepStateApi<WorkbenchStepState>}
+            reportCustomResults={reportCustomResults}
+            reportOutdated={reportOutdated}
+          />
+        </section>
       )}
     </div>
   );
