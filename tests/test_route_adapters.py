@@ -16,6 +16,7 @@ from gvcsim.data import quality
 from gvcsim.api import app
 
 from gvcsim.regression.contracts import RegressionRequest
+from gvcsim.regression.spec import DEFAULT_SPEC
 
 
 @pytest.fixture(autouse=True)
@@ -900,7 +901,12 @@ def test_malformed_qc_api_uses_controlled_artifact_error(teaching_db, tmp_path, 
 
 def test_regression_design_and_validation(teaching_db):
     client = _authenticated_client(teaching_db)
-    assert client.get("/api/regression/options").status_code == 404
+    # The workbench's choices (自己设计模型): the default model, the whitelist and the limits.
+    options = client.get("/api/regression/options")
+    assert options.status_code == 200
+    assert options.json()["default_spec"] == DEFAULT_SPEC.to_dict()
+    assert [item["lag"] for item in options.json()["x_lags"]] == [0, 1, 2]
+    assert options.json()["limits"] == {"saved": 6, "in_report": 3, "compared": 4, "name_length": 20}
     design = client.get("/api/regression/design", params={"outcome": "trade"})
     assert design.status_code == 200
     assert design.json()["outcome"] == "trade"
@@ -935,10 +941,13 @@ def test_regression_route_coalesces_identical_inflight_work(monkeypatch):
     computations = 0
     release_id = "b" * 32
 
+    panels = {release_id: panel}
+
     def read_panel(_name):
         nonlocal reads
         reads += 1
-        return panel
+        # A new release is a new panel object (the artifact cache keys on the file), which empties the run cache.
+        return panels.setdefault(release_id, panel.copy())
 
     class Result:
         def to_dict(self):

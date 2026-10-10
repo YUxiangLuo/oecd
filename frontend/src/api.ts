@@ -364,12 +364,16 @@ export const api = {
     outcome: import("./types").RegressionOutcome,
     signal?: AbortSignal,
     baseline?: string | null,
+    spec?: import("./types").ModelSpec | null,
   ) => {
     return post<import("./types").CurrentRegressionResponse>("/api/regression/run", {
       outcome,
       ...(baseline ? { baseline } : {}),
+      ...(spec ? { spec } : {}),
     }, "POST", signal);
   },
+  /** The workbench's choices; the same for every student and release, fetched once. */
+  regressionOptions: () => getOnce<import("./types").WorkbenchOptions>("/api/regression/options"),
   classroom: {
     submitQuiz: (body: { step: number; version: string; answers: Record<string, string> }) =>
       post<{

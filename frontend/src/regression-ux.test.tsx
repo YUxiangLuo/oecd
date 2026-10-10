@@ -165,7 +165,8 @@ describe("simple regression workbench", () => {
     expect(screen.getByRole("group", { name: /X 每高 1 个百分点，Y 平均相差（个百分点）/ })).toBeTruthy();
     // Model and numbers are folded away.
     // (The 加税前后 chart's per-year table is folded under the chart.)
-    expect([...document.querySelectorAll("details > summary")].map((node) => node.textContent)).toEqual(["各组逐年读数", "模型设定", "详细数字（可选）"]);
+    // The optional workbench (自己设计模型) is folded last.
+    expect([...document.querySelectorAll("details > summary")].map((node) => node.textContent)).toEqual(["各组逐年读数", "模型设定", "详细数字（可选）", "自己设计模型（选做）"]);
     fireEvent.click(screen.getByRole("button", { name: DVA_BAR }));
     await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高 0.56 个百分点"));
     expect(run.mock.calls[1][2]).toBe("DVAex_share");
@@ -233,11 +234,26 @@ describe("simple regression workbench", () => {
     expect(run.mock.calls[0][2]).toBeNull();
   });
 
+  test("自己设计模型 is folded under the result and loads its choices only when opened", async () => {
+    mockApis();
+    const options = spyOn(api, "regressionOptions").mockImplementation(() => new Promise(() => {}));
+    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
+    const summary = await screen.findByText("自己设计模型（选做）");
+    const details = summary.closest("details")!;
+    expect(details.open).toBe(false);
+    expect(options).not.toHaveBeenCalled();
+    details.open = true;
+    fireEvent(details, new Event("toggle"));
+    await waitFor(() => expect(options).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("正在载入可选的设定…")).toBeTruthy();
+  });
+
   test("the detailed-numbers notes match the table: no <0.0001 note without such a p, and rounding is named", async () => {
     mockApis();
     const run = savedRun("DVAex_share", "国内增加值出口占比");
     const { unmount } = render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run } as never }} />);
-    await waitFor(() => expect(document.querySelectorAll(".technical-details")).toHaveLength(2));
+    // 模型设定, 详细数字, then the optional workbench.
+    await waitFor(() => expect(document.querySelectorAll(".technical-details")).toHaveLength(3));
     const details = () => document.querySelectorAll(".technical-details")[1]!.textContent ?? "";
     expect(details()).not.toContain("很小的 p 值");
     expect(details()).toContain("两列是同一个数，左列按页面精度四舍五入");
@@ -246,7 +262,7 @@ describe("simple regression workbench", () => {
     unmount();
     const tiny = { ...run, result: { ...run.result, coefs: [{ ...run.result.coefs[0], p: 0.00001 }] } };
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: tiny } as never }} />);
-    await waitFor(() => expect(document.querySelectorAll(".technical-details")).toHaveLength(2));
+    await waitFor(() => expect(document.querySelectorAll(".technical-details")).toHaveLength(3));
     expect(details()).toContain("很小的 p 值显示为 <0.0001");
   });
 

@@ -576,6 +576,8 @@ export interface ClassroomReport {
     years: number[];
     session_fingerprint: string;
     runs: ReportRun[];
+    /** The workbench models the report printed (自己设计模型 marked 放入报告); absent on older reports. */
+    custom_results?: ReportedCustomResult[];
   };
   state: "draft" | "pending" | "graded";
   score: number | null;
@@ -716,6 +718,8 @@ export interface RegressionSampleFlow {
   missing_by_field_counts_overlap: boolean;
   // Mutually exclusive: ROW first, then first missing field in Y, X, treated order.
   dropped_by_reason: { code: string; field: string; rows: number }[];
+  /** First and last year in the sample (a model's spec; a lagged control starts it a year later). */
+  years?: [number, number];
 }
 
 export interface RegressionPreflight {
@@ -882,4 +886,54 @@ export interface ModelSpec {
   x_lags: number[];
   controls: { name: string; lag: number }[];
   fixed_effects: string[];
+}
+
+/** GET /api/regression/options: what the workbench (自己设计模型) offers, in page order. */
+export interface WorkbenchOptions {
+  version: string;
+  default_spec: ModelSpec;
+  x_lags: { lag: number; label: string; description: string }[];
+  x_lag_note: string;
+  controls: { name: string; label: string; definition: string; source: string }[];
+  control_lags: { lag: number; label: string }[];
+  control_lag_note: string;
+  fixed_effects: { key: string; label: string; description: string; includes: string[] }[];
+  no_fixed_effects_note: string;
+  limits: { saved: number; in_report: number; compared: number; name_length: number };
+  hints: string[];
+  footnote: string;
+  sample_differs_note: string;
+  suppressed_note: string;
+}
+
+/** What a saved model keeps to show its table again (the report recomputes it from the spec). */
+export interface CustomResultSnapshot {
+  depvar_label: string;
+  depvar_kind: string;
+  result: Pick<RegressionResponse["result"],
+    "coefs" | "cumulative" | "constant" | "omitted" | "r2" | "r2_adj" | "r2_within" | "f_stat" | "f_df" | "f_p"
+    | "n_obs" | "n_entities" | "n_times" | "n_clusters" | "status"> & {
+    years: [number, number] | null;
+    suppressed: boolean;
+  };
+}
+
+/** steps[11–14].data.custom_results[]: one saved workbench model. */
+export interface CustomResult {
+  id: string;
+  name: string;
+  outcome: RegressionOutcome;
+  baseline: string;
+  spec: ModelSpec;
+  in_report: boolean;
+  saved_at: string;
+  snapshot: CustomResultSnapshot;
+}
+
+export interface ReportedCustomResult {
+  step: number;
+  name: string;
+  outcome: string;
+  baseline: string;
+  spec: ModelSpec;
 }

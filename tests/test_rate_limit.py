@@ -95,6 +95,8 @@ def test_expensive_regression_routes_limit_each_account_before_repeating_work(
 
     monkeypatch.setattr(regression_routes, limiter_name, SlidingWindowRateLimiter(1))
     monkeypatch.setattr(regression_routes, "_RESULT_CACHE", Uncached())
+    # Neither cache keeps the result, so the second request repeats the work.
+    monkeypatch.setattr(regression_routes, "_store_payload", lambda *_args: None)
     monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: "a" * 32)
     monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: object())
     monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", fake_cpu)
@@ -106,6 +108,45 @@ def test_expensive_regression_routes_limit_each_account_before_repeating_work(
 
     assert exc_info.value.status_code == 429
     assert exc_info.value.headers == {"Retry-After": "60"}
+
+
+def test_a_run_already_computed_does_not_count_against_the_limit(monkeypatch):
+    """The report (or another student) computed this model on the same panel: answering it is not a calculation."""
+
+    class Uncached:
+        async def get_or_compute(self, _key, factory, *, admit, owner):
+            admit()
+            return await factory()
+
+        def clear(self):
+            pass
+
+    computations = []
+
+    async def fake_cpu(function, *_args, **_kwargs):
+        computations.append(function)
+        return SimpleNamespace(to_dict=lambda: {"status": "ok", "support": {}}), {"benchmark_passed": True}
+
+    panel = object()
+    monkeypatch.setattr(regression_routes, "_RUN_LIMITER", SlidingWindowRateLimiter(1))
+    monkeypatch.setattr(regression_routes, "_RESULT_CACHE", Uncached())
+    monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: "a" * 32)
+    monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: panel)
+    monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", fake_cpu)
+    regression_routes.clear_result_cache()
+    request = SimpleNamespace(state=SimpleNamespace(user={"role": "student", "sub": "student", "aid": 2}))
+    payload = RegressionRequest(outcome="trade")
+
+    first = asyncio.run(regression_routes.regression_run(payload, request))
+    for _ in range(3):
+        assert asyncio.run(regression_routes.regression_run(payload, request)) is first
+    assert len(computations) == 1
+    # A model not computed yet is a calculation, and this account has used its one.
+    other = RegressionRequest(outcome="trade", spec={"x_lags": [0], "controls": [], "fixed_effects": ["year"]})
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(regression_routes.regression_run(other, request))
+    assert exc_info.value.status_code == 429
+    regression_routes.clear_result_cache()
 
 
 def test_regression_limit_requires_stable_account_identity():

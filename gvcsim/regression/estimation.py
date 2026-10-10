@@ -138,14 +138,31 @@ def prune_regressors(
             continue
         keep.append(index)
     if not any(xcols[i] in protected for i in keep):
-        if any(item["reason"] == "zero" and item["name"] in protected for item in omitted) and not any(
-            item["reason"] != "zero" and item["name"] in protected for item in omitted
-        ):
-            raise ValueError("关税暴露 X 在这个样本里全为 0，无法估计")
-        if any(item["reason"] == "absorbed" and item["name"] in protected for item in omitted):
-            raise ValueError("核心解释变量被固定效应完全吸收,无法估计")
-        raise ValueError("核心解释变量之间存在完全共线性,无法估计")
+        reasons = {item["reason"] for item in omitted if item["name"] in protected}
+        if reasons == {"zero"}:
+            raise ValueError("关税暴露 X 在这个设定下无法估计：所选的 X 各项在这个样本里全为 0")
+        if "absorbed" in reasons and absorbed_by == "常数项":
+            raise ValueError("关税暴露 X 在这个设定下无法估计：X 各项在样本里都不变，与常数项重合")
+        if "absorbed" in reasons:
+            raise ValueError(f"关税暴露 X 在这个设定下无法估计：X 各项都被{absorbed_by or '所选'}固定效应吸收")
+        raise ValueError("关税暴露 X 在这个设定下无法估计：所选的 X 各项彼此完全共线")
     return transformed[:, keep], [xcols[i] for i in keep], omitted
+
+
+def _attribute_absorbed(omitted: list[dict], raw: np.ndarray, xcols: list[str], data: pd.DataFrame, effects) -> None:
+    """Name the single fixed effect that absorbs each absorbed regressor ("国家×年份"); when only the effects taken
+    together absorb it, the combined label stays."""
+    for item in omitted:
+        if item["reason"] != "absorbed":
+            continue
+        values = raw[:, xcols.index(item["name"])]
+        scale = _ABSORBED_RELATIVE_NORM * max(1.0, float(np.linalg.norm(values)))
+        for column in effects:
+            frame = pd.Series(values)
+            within = values - frame.groupby(data[column].to_numpy()).transform("mean").to_numpy()
+            if float(np.linalg.norm(within)) <= scale:
+                item["by"] = _FE_DIMENSION_LABELS.get(column, column)
+                break
 
 
 _FE_DIMENSION_LABELS = {
@@ -195,6 +212,7 @@ def demean_and_prune(model: PreparedModel):
         X, names, omitted = prune_regressors(
             transformed[:, 1:], raw[:, 1:], list(model.xcols), set(model.policy_xcols), _effects_label(effects)
         )
+        _attribute_absorbed(omitted, raw[:, 1:], list(model.xcols), data, effects)
         model.omitted = omitted
         return transformed[:, 0], X, names, [item["name"] for item in omitted]
     # No fixed effects: ordinary least squares with a constant column. Which regressors to keep is decided on the

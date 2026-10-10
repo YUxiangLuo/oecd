@@ -1,0 +1,281 @@
+"""Report appendix "学生设计的模型": the workbench models a student marked 放入报告 in steps 11–14.
+
+Every number is recomputed here from the saved ``(outcome, baseline, spec)``; the page's snapshot is never read,
+so editing it in the browser changes nothing in the report. Each Y gets one table, the course default model first.
+"""
+
+from __future__ import annotations
+
+import math
+from typing import Any, cast
+
+import numpy as np
+
+from gvcsim import config
+from gvcsim.artifacts import ArtifactContractError, read_csv_artifact
+from gvcsim.regression import workbench
+from gvcsim.regression.design import RegressionDesign
+from gvcsim.regression.spec import (
+    CONTROLS,
+    DEFAULT_SPEC,
+    FIXED_EFFECT_INCLUDES,
+    FIXED_EFFECT_LABELS,
+    FIXED_EFFECTS,
+    X_LAG_COLUMNS,
+    ModelSpec,
+    control_column,
+    control_term_label,
+    x_term_label,
+)
+from gvcsim.regression.teaching import selectable_baselines
+from gvcsim.report_common import _no_negative_zero, _safe
+from gvcsim.report_saved_run import _STEP_OUTCOMES
+from gvcsim.steps import STEPS
+
+_STEP_TITLES = {
+    cast(int, item["n"]): str(item["title"]).split("：")[0] for item in STEPS if item.get("regression_outcome")
+}
+_DEFAULT_NAME = "默认模型"
+_TERM_LABELS = {X_LAG_COLUMNS[lag]: x_term_label(lag) for lag in X_LAG_COLUMNS} | {
+    control_column(key, lag): control_term_label(key, lag) for key in CONTROLS for lag in (0, 1)
+}
+_OMITTED_REASONS = {"zero": "样本里全为 0", "collinear": "与其他变量完全共线"}
+
+
+def reported_models(session: dict[str, Any]) -> list[dict[str, Any]]:
+    """The saved models marked 放入报告, step by step, in saved order: ``{step, name, outcome, baseline, spec}``.
+    The session route checks them on save; an entry that no longer passes (an older release) is left out."""
+    models: list[dict[str, Any]] = []
+    for step, outcome in sorted(_STEP_OUTCOMES.items()):
+        data = session.get("steps", {}).get(str(step), {}).get("data", {})
+        saved = data.get("custom_results") if isinstance(data, dict) else None
+        if not isinstance(saved, list) or workbench.custom_results_problem(saved, outcome):
+            continue
+        baselines = {item.key for item in selectable_baselines(outcome)}
+        for item in workbench.reported_custom_results(saved):
+            if item["baseline"] in baselines:
+                models.append({"step": step, **item})
+    return models
+
+
+def _run(panel: Any, outcome: str, baseline: str, spec: ModelSpec) -> dict[str, Any] | str:
+    """The run's response from the shared run cache (the same numbers the page showed), or why it failed."""
+    from gvcsim.regression_routes import cached_run
+
+    try:
+        return cached_run(panel, RegressionDesign(outcome, teaching=True, baseline=baseline, spec=spec))
+    except (ValueError, KeyError, np.linalg.LinAlgError, FloatingPointError, OverflowError) as error:
+        return str(error) or "计算失败"
+
+
+def recompute(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One table per (step, Y): the default model's run, then each reported model's run (or its failure)."""
+    if not models:
+        return []
+    try:
+        panel = read_csv_artifact(config.PROCESSED_DIR / "panel_teaching.csv")
+    except (ArtifactContractError, OSError, ValueError, KeyError, TypeError):
+        panel = None
+    tables: list[dict[str, Any]] = []
+    for model in models:
+        key = (model["step"], model["baseline"])
+        table = next((item for item in tables if (item["step"], item["baseline"]) == key), None)
+        if table is None:
+            default = (
+                _run(panel, model["outcome"], model["baseline"], DEFAULT_SPEC)
+                if panel is not None
+                else "课程数据暂时不可用"
+            )
+            table = {
+                "step": model["step"],
+                "outcome": model["outcome"],
+                "baseline": model["baseline"],
+                "columns": [{"name": _DEFAULT_NAME, "spec": DEFAULT_SPEC, "run": default}],
+            }
+            tables.append(table)
+        spec = ModelSpec.from_dict(model["spec"])
+        run = _run(panel, model["outcome"], model["baseline"], spec) if panel is not None else "课程数据暂时不可用"
+        table["columns"].append({"name": model["name"], "spec": spec, "run": run})
+    return tables
+
+
+def _escape(text: str) -> str:
+    """Markdown-literal text: stars (significance), a model name a student typed."""
+    for char in "\\*_[]<>#":
+        text = text.replace(char, "\\" + char)
+    return text
+
+
+def _name(value: Any) -> str:
+    return _escape(_safe(value))
+
+
+def _fixed(value: Any, digits: int) -> str:
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(float(value)):
+        return "—"
+    return _no_negative_zero(f"{float(value):,.{digits}f}")
+
+
+def _suppressed(result: dict[str, Any]) -> bool:
+    support = result.get("support")
+    suppressed = isinstance(support, dict) and bool(support.get("suppress_inference"))
+    return result.get("status") == "invalid_design" or suppressed
+
+
+def _x_terms(result: dict[str, Any]) -> int:
+    return sum(1 for item in result.get("coefs", []) if item.get("name") in X_LAG_COLUMNS.values())
+
+
+def _coefficient_rows(columns: list[dict[str, Any]]) -> list[str]:
+    # Rows in page order: X terms, controls, the cumulative relation (two or more X terms), a constant.
+    order = [*X_LAG_COLUMNS.values(), *(control_column(key, lag) for key in CONTROLS for lag in (0, 1))]
+    used = {
+        item.get("name")
+        for column in columns
+        if isinstance(column["run"], dict)
+        for item in [*column["run"]["result"].get("coefs", []), *column["run"]["result"].get("omitted", [])]
+    }
+    names = [name for name in order if name in used]
+    rows: list[str] = []
+
+    def cells(pick) -> tuple[str, str]:
+        coefs, ses = [], []
+        for column in columns:
+            run = column["run"]
+            if not isinstance(run, dict):
+                coefs.append("")
+                ses.append("")
+                continue
+            coefficient, omitted = pick(run["result"])
+            if coefficient is None:
+                coefs.append("（省略）" if omitted else "")
+                ses.append("")
+                continue
+            stars = "" if _suppressed(run["result"]) else str(coefficient.get("stars") or "")
+            coefs.append(_fixed(coefficient.get("coef"), 4) + _escape(stars))
+            ses.append(f"({_fixed(coefficient.get('se'), 4)})")
+        return " | ".join(coefs), " | ".join(ses)
+
+    for name in names:
+
+        def pick(result: dict[str, Any], name: str = name) -> tuple[dict[str, Any] | None, bool]:
+            found = next((item for item in result.get("coefs", []) if item.get("name") == name), None)
+            return found, any(item.get("name") == name for item in result.get("omitted", []))
+
+        coef_cells, se_cells = cells(pick)
+        rows += [f"| {_TERM_LABELS.get(name, _safe(name))} | {coef_cells} |", f"|  | {se_cells} |"]
+    if any(isinstance(column["run"], dict) and _x_terms(column["run"]["result"]) > 1 for column in columns):
+        coef_cells, se_cells = cells(lambda result: (result.get("cumulative") if _x_terms(result) > 1 else None, False))
+        rows += [f"| X 各项合计（累计效应） | {coef_cells} |", f"|  | {se_cells} |"]
+    if any(isinstance(column["run"], dict) and column["run"]["result"].get("constant") for column in columns):
+        coef_cells, se_cells = cells(lambda result: (result.get("constant"), False))
+        rows += [f"| 常数项 | {coef_cells} |", f"|  | {se_cells} |"]
+    return rows
+
+
+def _included(spec: ModelSpec, key: str) -> bool:
+    return key in spec.fixed_effects or any(
+        key in FIXED_EFFECT_INCLUDES.get(chosen, ()) for chosen in spec.fixed_effects
+    )
+
+
+def _summary_rows(columns: list[dict[str, Any]]) -> list[str]:
+    def row(label: str, value) -> str:
+        values = [value(column["run"]["result"]) if isinstance(column["run"], dict) else "" for column in columns]
+        return f"| {label} | " + " | ".join(values) + " |"
+
+    rows = [
+        f"| {FIXED_EFFECT_LABELS[key]} | "
+        + " | ".join("是" if _included(column["spec"], key) else "否" for column in columns)
+        + " |"
+        for key in FIXED_EFFECTS
+    ]
+
+    def years(result: dict[str, Any]) -> str:
+        span = (result.get("sample_flow") or {}).get("years")
+        return f"{span[0]}–{span[1]}" if isinstance(span, list) and len(span) == 2 else "—"
+
+    def f_value(result: dict[str, Any]) -> str:
+        df = result.get("f_df")
+        if _suppressed(result) or not isinstance(df, list) or len(df) != 2:
+            return "—"
+        return f"{_fixed(result.get('f_stat'), 2)}（{df[0]}, {df[1]}）"
+
+    rows += [
+        row("观测值", lambda result: f"{int(result.get('n_obs') or 0):,}"),
+        row("年份", years),
+        row("聚类数（国家）", lambda result: str(result.get("n_clusters") or "—")),
+        row("R²", lambda result: _fixed(result.get("r2"), 4)),
+        row("调整 R²", lambda result: _fixed(result.get("r2_adj"), 4)),
+        # Without fixed effects nothing is "within": the row would repeat R².
+        "| 组内 R² | "
+        + " | ".join(
+            (_fixed(column["run"]["result"].get("r2_within"), 4) if column["spec"].fixed_effects else "—")
+            if isinstance(column["run"], dict)
+            else ""
+            for column in columns
+        )
+        + " |",
+        row("F（自由度）", f_value),
+    ]
+    return rows
+
+
+def _omitted_text(item: dict[str, Any]) -> str:
+    label = _TERM_LABELS.get(str(item.get("name")), _safe(str(item.get("name"))))
+    if item.get("reason") == "absorbed":
+        by = item.get("by")
+        return (
+            f"{label}（被{_safe(str(by))} FE 吸收）"
+            if by and by != "常数项"
+            else f"{label}（在样本里不变，与常数项重合）"
+        )
+    return f"{label}（{_OMITTED_REASONS.get(str(item.get('reason')), '无法估计')}）"
+
+
+def custom_model_sections(tables: list[dict[str, Any]]) -> list[str]:
+    if not tables:
+        return []
+    lines = [
+        "## 附录：学生设计的模型",
+        "",
+        "以下是你在步骤 11–14 的“自己设计模型（选做）”中保存、并勾选了“放入报告”的模型。"
+        "数字由服务器在生成报告时按保存的设定重新计算；每张表的第一列是本步的默认模型，便于对照。",
+        "",
+    ]
+    used = {key for table in tables for column in table["columns"] for key, _ in column["spec"].controls}
+    if used:
+        definitions = "；".join(
+            f"{info.label} = {info.definition}（{'课程生成' if info.source == 'generated' else '按 OECD ICIO 计算'}）"
+            for key, info in CONTROLS.items()
+            if key in used
+        )
+        lines += [f"控制变量都是国家层面的逐年数值：{definitions}。", ""]
+    for table in tables:
+        columns = table["columns"]
+        first = next((column["run"] for column in columns if isinstance(column["run"], dict)), None)
+        label = first["design"]["depvar_label"] if first else table["baseline"]
+        lines += [f"### 步骤 {table['step']} · {_STEP_TITLES.get(table['step'], '')}（Y：{_safe(label)}）", ""]
+        header = " | ".join(_name(column["name"]) for column in columns)
+        lines += [f"| 变量 | {header} |", "|---|" + "---:|" * len(columns)]
+        lines += _coefficient_rows(columns)
+        lines += _summary_rows(columns)
+        lines.append("")
+        for column in columns:
+            run = column["run"]
+            text = f"- {_name(column['name'])}：{column['spec'].summary()}"
+            if not isinstance(run, dict):
+                text += f"。这次没能重算：{_safe(run)}"
+            else:
+                omitted = run["result"].get("omitted") or []
+                if omitted:
+                    text += "；省略：" + "、".join(_omitted_text(item) for item in omitted)
+                if _suppressed(run["result"]):
+                    text += "。" + workbench.SUPPRESSED_NOTE
+            lines.append(text)
+        computed = [column["run"]["result"] for column in columns if isinstance(column["run"], dict)]
+        samples = {(result.get("n_obs"), str((result.get("sample_flow") or {}).get("years"))) for result in computed}
+        if len(samples) > 1:
+            lines.append(f"- {workbench.SAMPLE_DIFFERS_NOTE}")
+        lines += ["", _escape(workbench.FOOTNOTE), ""]
+    return lines

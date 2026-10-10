@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ScrollableRegion } from "./a11y";
 import { scrollIntoCourseContent } from "./content-scroll";
 import { api, ApiError } from "./api";
-import { percentagePoints, stripNegativeZero } from "./format";
+import { groupedFixed, percentagePoints } from "./format";
 import { useAsync } from "./labs";
 import { DEFAULT_BASELINES, displayBaselineLabel, GENERATED_DATA_NOTE, GENERATED_Y_DISCLOSURE, lessonFor, lessonQuestion } from "./regression-lessons";
 import { nextRegressionSave } from "./regression-save";
@@ -36,6 +36,7 @@ import type {
   RegressionOutcome,
   RegressionResponse,
   RegressionStatus,
+  ReportedCustomResult,
   Step,
   StepStateApi,
   TeachingEstimate,
@@ -51,6 +52,7 @@ import type { GroupLine } from "./viz/regression/charts";
 import { TAXED, TAXED_LATER, UNTAXED } from "./viz/regression/palette";
 import { DivergingBarChart, type DivergingBarRow } from "./viz/regression/diverging-bars";
 import { ConfirmModal } from "./teacher/ui";
+import { RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
 import { NEGATIVE, POSITIVE, UNCERTAIN } from "./viz/regression/palette";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
@@ -170,13 +172,7 @@ export interface RegressionExample {
 /** Defined with the other number formats (regression-verdict.ts); re-exported where it was first used. */
 export { networkDigits };
 
-/**
- * A number with fixed decimals and thousands separators: 1382.4 → "1,382" (0 digits), -12.5 → "-12.50" (2); a value
- * that rounds to zero reads "0.00", never "-0.00".
- */
-export function groupedFixed(value: number, digits: number): string {
-  return stripNegativeZero(value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits }));
-}
+export { groupedFixed };
 
 /**
  * An example's X in percentage points with the digits step 10 shows for it ("0.22444", not "0.22"), so the
@@ -623,7 +619,10 @@ export function familyBarsTitle(count: number): string {
  * step's default Y and draws a bar for every Y of the family; clicking a bar runs that Y, which becomes the
  * headline and the saved report material.
  */
-export function RegressionRunLab({ step, meta, state, getStep, reportRuns, reportOutdated = false }: {
+/** Steps whose page offers 自己设计模型（选做）; a staged trial can list fewer. */
+export const WORKBENCH_STEPS: readonly number[] = [11, 12, 13, 14];
+
+export function RegressionRunLab({ step, meta, state, getStep, reportRuns, reportCustomResults, reportOutdated = false }: {
   step: Step;
   meta: Pick<Meta, "countries" | "sectors">;
   state: StepStateApi<RegressionStepState>;
@@ -631,6 +630,8 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
   getStep?: <T>(step: number) => T | undefined;
   /** The runs the current report was built from (its provenance). */
   reportRuns?: ReportRuns;
+  /** The workbench models the current report printed (its provenance). */
+  reportCustomResults?: ReportedCustomResult[];
   /** The report needs updating: the same signal as the sidebar and step 15 (unsaved edits, or the server says so). */
   reportOutdated?: boolean;
 }) {
@@ -651,6 +652,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
   const [replacedBy, setReplacedBy] = useState<"bar" | "button" | null>(null);
   // A failed request is retried as it was: the Y of a failed bar click, not the Y saved before it.
   const [failedRequest, setFailedRequest] = useState<{ key: string | null; fromBar: boolean } | null>(null);
+  const [workbenchOpened, setWorkbenchOpened] = useState(false);
   const replacedNoticeRef = useRef<HTMLParagraphElement>(null);
   const revealReplacedNotice = useRef(false);
   const barErrorRef = useRef<HTMLDivElement>(null);
@@ -1019,6 +1021,23 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
               : "除以 100 即为页面上“X 每高 1 个百分点”对应的数值。"}</p>
             <p className="muted">共 {result.result.n_obs.toLocaleString("zh-CN")} 条记录 = {result.result.n_entities.toLocaleString("zh-CN")} 个国家×行业 × {result.result.n_times} 年；95% 区间按 {result.result.n_clusters} 个国家计算；{result.result.r2_within == null ? "这次结果没有组内 R²" : `组内 R² = ${result.result.r2_within.toFixed(3)}（扣掉各国家×行业的平均水平和每年共同变化后，模型能解释的那部分变动所占比例）`}。</p>
           </details>
+          {WORKBENCH_STEPS.includes(step.n) && (
+            // Mounted when first opened (its options are fetched then), kept mounted afterwards so a computed model
+            // survives folding it away.
+            <details className="technical-details reg-custom-details" onToggle={(event) => { if (event.currentTarget.open) setWorkbenchOpened(true); }}>
+              <summary>自己设计模型（选做）</summary>
+              {workbenchOpened && (
+                <RegressionModelWorkbench
+                  stepNumber={step.n}
+                  outcome={outcome}
+                  defaultResponse={result}
+                  state={state as unknown as StepStateApi<WorkbenchStepState>}
+                  reportCustomResults={reportCustomResults}
+                  reportOutdated={reportOutdated}
+                />
+              )}
+            </details>
+          )}
         </div>
       )}
     </div>

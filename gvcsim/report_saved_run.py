@@ -38,7 +38,8 @@ def _fixed_design_matches(design: dict[str, Any]) -> bool:
     canonical = _course_design(design) if isinstance(design, dict) else None
     if canonical is None:
         return False
-    if design.get("spec") is not None and design.get("spec") != canonical.spec.to_dict():  # type: ignore[union-attr]
+    # The model itself: a v10 run always records it (the snapshot check pins the release's teaching version).
+    if design.get("spec") != canonical.spec.to_dict():  # type: ignore[union-attr]
         return False
     return all(design.get(key) == getattr(canonical, key) for key in _FIXED_FIELDS)
 

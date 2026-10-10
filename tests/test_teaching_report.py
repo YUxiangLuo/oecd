@@ -2966,3 +2966,96 @@ def test_report_example_conversion_groups_thousands_like_the_page():
 
     assert _example_size("network", -1382.4) == "1,382 个中心性原始单位"
     assert _example_size("network", 12.345) == "12.3 个中心性原始单位"
+
+
+def _custom(name: str, spec, *, in_report: bool = True, baseline: str = "FVA_share", snapshot=None) -> dict:
+    return {
+        "id": f"id-{name}",
+        "name": name,
+        "outcome": "trade",
+        "baseline": baseline,
+        "spec": spec.canonical().to_dict(),
+        "in_report": in_report,
+        "saved_at": "2026-10-11T09:00:00Z",
+        "snapshot": snapshot or {"result": {"coefs": [{"name": "teaching_tariff_exposure", "coef": 99.0}]}},
+    }
+
+
+def test_report_appendix_recomputes_the_models_marked_for_the_report(tmp_path, monkeypatch):
+    """自己设计模型: each Y gets a table with the default model first; the numbers come from the saved spec, so a
+    tampered snapshot changes nothing, and models not marked 放入报告 are left out."""
+    from gvcsim import regression_routes
+    from gvcsim.regression.design import RegressionDesign
+    from gvcsim.regression.spec import DEFAULT_SPEC, EXCHANGE_RATE_COLUMN, ModelSpec
+
+    from test_model_spec import _panel
+
+    from gvcsim import report_workbench
+
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    regression_routes.clear_result_cache()
+    plain = build(_complete(), "同学")
+    assert "附录：学生设计的模型" not in plain.markdown and "按你保存的设定" not in plain.markdown
+    assert plain.provenance["custom_results"] == []
+    # The small release fixture has no tariff (X = 0 everywhere): each model says it could not be recomputed.
+    failing = _complete()
+    failing["steps"]["11"]["data"]["custom_results"] = [_custom("结果1", ModelSpec((0,), (), ("year",)))]
+    lines = build(failing, "同学").markdown.split("## 附录：学生设计的模型", 1)[1]
+    assert "- 结果1：X；无控制变量；年份 FE。这次没能重算：关税暴露 X 在这个设定下无法估计" in lines
+    # The rest of this test reads a teaching-shaped panel with two tariff waves.
+    panel = _panel()
+    monkeypatch.setattr(report_workbench, "read_csv_artifact", lambda _path: panel)
+    regression_routes.clear_result_cache()
+
+    no_rate = ModelSpec((0, 1), (), ("country_industry", "year"))
+    country_year = ModelSpec((0, 1), ((EXCHANGE_RATE_COLUMN, 0),), ("country_industry", "country_year"))
+    session = _complete()
+    session["steps"]["11"]["data"]["custom_results"] = [
+        _custom("去掉汇率", no_rate),
+        _custom("没放入报告", ModelSpec((0,), (), ()), in_report=False),
+        _custom("国家×年份*", country_year),
+    ]
+    report = build(session, "同学")
+    markdown = report.markdown
+    appendix = markdown.split("## 附录：学生设计的模型", 1)[1].split("\n## ", 1)[0]
+    assert "| 变量 | 默认模型 | 去掉汇率 | 国家×年份\\* |" in appendix
+    assert "控制变量都是国家层面的逐年数值：汇率变动 = 本币兑美元的年变动（百分点，负为贬值）（课程生成）。" in appendix
+    assert "没放入报告" not in appendix
+    # The recomputed numbers, not the snapshot's 99.
+    for spec in (DEFAULT_SPEC, no_rate):
+        run = regression_routes.cached_run(panel, RegressionDesign("trade", teaching=True, spec=spec))
+        x = next(item for item in run["result"]["coefs"] if item["name"] == X_COLUMN)
+        assert _fixed4(x["coef"]) in appendix
+    assert "99.0000" not in appendix
+    # The exchange rate is absorbed by country × year effects and said so; the default column's model is summarised.
+    assert (
+        "- 国家×年份\\*：X + L1.X；汇率变动；国家×行业 + 国家×年份 FE；省略：汇率变动（被国家×年份 FE 吸收）"
+        in appendix
+    )
+    assert "- 默认模型：X + L1.X；汇率变动；国家×行业 + 年份 FE" in appendix
+    assert "| 国家×年份 FE | 否 | 否 | 是 |" in appendix
+    assert "| 国家 FE | 是 | 是 | 是 |" in appendix
+    assert "| 观测值 |" in appendix and "| 组内 R² |" in appendix and "| F（自由度） |" in appendix
+    assert "注：括号内为按国家聚类的标准误。\\*\\*\\* p\\<0.01" in appendix
+    assert report.provenance["custom_results"] == [
+        {"step": 11, "name": "去掉汇率", "outcome": "trade", "baseline": "FVA_share", "spec": no_rate.to_dict()},
+        {"step": 11, "name": "国家×年份*", "outcome": "trade", "baseline": "FVA_share", "spec": country_year.to_dict()},
+    ]
+    # The methods note says the appendix is the one part recomputed.
+    assert "“学生设计的模型”附录中的模型则按你保存的设定在生成报告时重新计算。" in markdown
+
+    tampered = copy.deepcopy(session)
+    tampered["steps"]["11"]["data"]["custom_results"][0]["snapshot"] = {"result": {"coefs": [{"coef": -1e9}]}}
+    tampered_appendix = build(tampered, "同学").markdown.split("## 附录：学生设计的模型", 1)[1].split("\n## ", 1)[0]
+    assert tampered_appendix == appendix
+    regression_routes.clear_result_cache()
+
+
+def test_report_technical_appendix_writes_the_v10_formula():
+    from gvcsim.regression.spec import DEFAULT_SPEC
+    from gvcsim.report_render import _formula_line
+
+    assert _formula_line({"spec": DEFAULT_SPEC.to_dict()}) == (
+        "- 公式：Y = β₁·X + β₂·L1.X + γ₁·汇率变动 + α（每个国家×行业的平均水平）+ λ（每年的共同变化）+ ε（随机波动）"
+    )

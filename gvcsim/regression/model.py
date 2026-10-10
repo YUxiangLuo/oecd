@@ -219,6 +219,9 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
         "missing_by_field_counts_overlap": True,
         "dropped_by_reason": reasons,
     }
+    if spec is not None and len(data):
+        # The sample's first and last year (a lagged control drops the first year): the workbench table's 年份 row.
+        flow["years"] = [int(data["year"].min()), int(data["year"].max())]
     duplicate = data.duplicated([design.entity, "year"], keep=False)
     if duplicate.any():
         raise ValueError("最终回归样本要求 entity-time 唯一")

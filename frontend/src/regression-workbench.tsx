@@ -1,0 +1,455 @@
+/**
+ * 自己设计模型（选做）, under the result of steps 11–14: the student picks the X terms, controls and fixed effects,
+ * computes the model, saves it as "结果N", compares saved models with the course default, exports the comparison
+ * and marks up to three for the report (whose appendix recomputes them from the saved model).
+ */
+import { useRef, useState } from "react";
+import { ScrollableRegion } from "./a11y";
+import { api, ApiError } from "./api";
+import { useAsync } from "./labs";
+import {
+  canonicalSpec,
+  coefficientRows,
+  comparisonCsv,
+  equationPreview,
+  fixed4,
+  formatP3,
+  includedBy,
+  nameProblem,
+  nextResultName,
+  omittedLines,
+  sameSpec,
+  samplesDiffer,
+  significanceStars,
+  snapshotOf,
+  specSummary,
+  summaryRows,
+  termLabel,
+  type TableColumn,
+  X_COLUMNS,
+} from "./regression-workbench-table";
+import { ConfirmModal } from "./teacher/ui";
+import type {
+  CustomResult,
+  ModelSpec,
+  RegressionOutcome,
+  RegressionResponse,
+  ReportedCustomResult,
+  StepStateApi,
+  WorkbenchOptions,
+} from "./types";
+import { userFacingRequestError } from "./user-facing-error";
+
+export interface WorkbenchDraft {
+  spec?: ModelSpec;
+  /** Ids of the saved models shown next to the default model in the comparison table. */
+  compare?: string[];
+}
+
+export interface WorkbenchStepState extends Record<string, unknown> {
+  custom_results?: CustomResult[];
+  custom_draft?: WorkbenchDraft;
+}
+
+const DEFAULT_COLUMN = "默认模型";
+
+/** Whether the models marked 放入报告 differ from the ones the report printed (name, Y and model). */
+export function customReportChanged(
+  stepNumber: number, saved: readonly CustomResult[], reported: readonly ReportedCustomResult[] | undefined,
+): boolean {
+  const identity = (item: { name: string; outcome: string; baseline: string; spec: ModelSpec }) =>
+    JSON.stringify([item.name, item.outcome, item.baseline, item.spec]);
+  const mine = saved.filter((item) => item.in_report).map(identity);
+  const theirs = (reported ?? []).filter((item) => item.step === stepNumber).map(identity);
+  return mine.length !== theirs.length || mine.some((item, index) => item !== theirs[index]);
+}
+
+function download(text: string, filename: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function newId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function ModelForm({ options, spec, onChange }: {
+  options: WorkbenchOptions; spec: ModelSpec; onChange: (spec: ModelSpec) => void;
+}) {
+  const toggleLag = (lag: number) => onChange({
+    ...spec, x_lags: spec.x_lags.includes(lag) ? spec.x_lags.filter((item) => item !== lag) : [...spec.x_lags, lag],
+  });
+  const control = (name: string) => spec.controls.find((item) => item.name === name);
+  const toggleControl = (name: string) => onChange({
+    ...spec,
+    controls: control(name) ? spec.controls.filter((item) => item.name !== name) : [...spec.controls, { name, lag: 0 }],
+  });
+  const setControlLag = (name: string, lag: number) => onChange({
+    ...spec, controls: spec.controls.map((item) => (item.name === name ? { name, lag } : item)),
+  });
+  const toggleEffect = (key: string) => onChange({
+    ...spec,
+    fixed_effects: spec.fixed_effects.includes(key) ? spec.fixed_effects.filter((item) => item !== key) : [...spec.fixed_effects, key],
+  });
+  return (
+    <div className="reg-custom-form">
+      <fieldset>
+        <legend>核心自变量（至少选一项）</legend>
+        {options.x_lags.map((item) => (
+          <label key={item.lag} className="reg-custom-choice">
+            <input type="checkbox" checked={spec.x_lags.includes(item.lag)} onChange={() => toggleLag(item.lag)} />
+            <span><b>{item.label}</b><small>{item.description}</small></span>
+          </label>
+        ))}
+        <p className="muted reg-custom-note">{options.x_lag_note}</p>
+      </fieldset>
+      <fieldset>
+        <legend>控制变量</legend>
+        {options.controls.map((item) => {
+          const chosen = control(item.name);
+          return (
+            <div key={item.name} className="reg-custom-control">
+              <label className="reg-custom-choice">
+                <input type="checkbox" checked={Boolean(chosen)} onChange={() => toggleControl(item.name)} />
+                <span><b>{item.label}</b><small>{item.definition}（{item.source}）</small></span>
+              </label>
+              {chosen && (
+                <select aria-label={`${item.label}的期数`} value={chosen.lag} onChange={(event) => setControlLag(item.name, Number(event.target.value))}>
+                  {options.control_lags.map((lag) => <option key={lag.lag} value={lag.lag}>{lag.label}</option>)}
+                </select>
+              )}
+            </div>
+          );
+        })}
+        <p className="muted reg-custom-note">{options.control_lag_note}</p>
+      </fieldset>
+      <fieldset>
+        <legend>固定效应</legend>
+        {options.fixed_effects.map((item) => {
+          const parent = includedBy(item.key, spec.fixed_effects, options);
+          return (
+            <label key={item.key} className={parent ? "reg-custom-choice reg-custom-included" : "reg-custom-choice"} title={item.description}>
+              <input
+                type="checkbox"
+                checked={parent != null || spec.fixed_effects.includes(item.key)}
+                disabled={parent != null}
+                onChange={() => toggleEffect(item.key)}
+              />
+              <span><b>{item.label}</b><small>{parent ? `已包含在${parent}中` : item.description}</small></span>
+            </label>
+          );
+        })}
+        <p className="muted reg-custom-note">{options.no_fixed_effects_note}</p>
+      </fieldset>
+    </div>
+  );
+}
+
+function ResultTable({ response, options }: { response: RegressionResponse; options: WorkbenchOptions }) {
+  const snapshot = snapshotOf(response);
+  const { result } = response;
+  const suppressed = snapshot.result.suppressed;
+  const spec = response.design.spec!;
+  const xTerms = result.coefs.filter((item) => Object.values(X_COLUMNS).includes(item.name)).length;
+  const rows = [
+    ...result.coefs,
+    ...(xTerms > 1 && result.cumulative ? [{ ...result.cumulative, name: "cumulative" }] : []),
+    ...(result.constant ? [result.constant] : []),
+  ];
+  const effects = spec.fixed_effects.length
+    ? spec.fixed_effects.map((key) => options.fixed_effects.find((item) => item.key === key)?.label ?? key).join(" + ")
+    : "无固定效应";
+  const column: TableColumn = { name: "", spec, snapshot };
+  const summary = summaryRows([column], options).filter((row) => !options.fixed_effects.some((item) => item.key === row.key));
+  const omitted = omittedLines(snapshot, options);
+  return (
+    <div className="reg-custom-result">
+      <p className="reg-custom-caption">因变量：{response.design.depvar_label} | {effects} | 标准误按国家聚类</p>
+      <ScrollableRegion className="table-wrap" label="自己设计的模型的回归结果，可横向滚动">
+        <table className="data-table reg-custom-table">
+          <thead><tr><th>变量</th><th>系数</th><th>标准误</th><th>t 值</th><th>p 值</th><th>显著性</th></tr></thead>
+          <tbody>
+            {rows.map((coef) => (
+              <tr key={coef.name}>
+                <td>{termLabel(coef.name, options)}</td>
+                <td>{fixed4(coef.coef)}</td>
+                <td>({fixed4(coef.se)})</td>
+                <td>{coef.t == null ? "—" : coef.t.toFixed(2)}</td>
+                <td>{suppressed ? "—" : formatP3(coef.p)}</td>
+                <td>{suppressed ? "—" : significanceStars(coef.p) || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </ScrollableRegion>
+      <dl className="reg-custom-stats">
+        {summary.map((row) => <div key={row.key}><dt>{row.label}</dt><dd>{row.cells[0]}</dd></div>)}
+      </dl>
+      {omitted.length > 0 && <p className="muted reg-custom-omitted">已省略：{omitted.join("；")}。</p>}
+      {suppressed && <p className="reg-boundary" role="note">{options.suppressed_note}</p>}
+    </div>
+  );
+}
+
+function ComparisonTable({ columns, options, stepNumber, depvarLabel }: {
+  columns: TableColumn[]; options: WorkbenchOptions; stepNumber: number; depvarLabel: string;
+}) {
+  const coefficients = coefficientRows(columns, options);
+  const summary = summaryRows(columns, options);
+  return (
+    <div className="reg-custom-compare">
+      <div className="reg-custom-compare-head">
+        <h4>对比表（因变量：{depvarLabel}）</h4>
+        <button type="button" className="secondary" onClick={() => download(comparisonCsv(columns, options, depvarLabel), `步骤${stepNumber}-回归对比.csv`)}>
+          导出 CSV
+        </button>
+      </div>
+      <ScrollableRegion className="table-wrap" label="模型对比表，可横向滚动">
+        <table className="data-table reg-custom-table reg-custom-compare-table">
+          <thead><tr><th>变量</th>{columns.map((column, index) => <th key={index} scope="col">{column.name}</th>)}</tr></thead>
+          <tbody>
+            {coefficients.map((row) => (
+              <tr key={row.key}>
+                <th scope="row">{row.label}</th>
+                {row.cells.map((item, index) => (
+                  <td key={index}>
+                    {item === "omitted" ? <span className="muted">（省略）</span>
+                      : item ? <><span>{item.coef}</span><br /><span className="muted">{item.se}</span></> : null}
+                  </td>
+                ))}
+              </tr>
+            ))}
+            {summary.map((row, index) => (
+              <tr key={row.key} className={index === 0 ? "reg-custom-summary-start" : undefined}>
+                <th scope="row">{row.label}</th>
+                {row.cells.map((value, cell) => <td key={cell}>{value}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </ScrollableRegion>
+      <ul className="muted reg-custom-legend">
+        {columns.map((column, index) => <li key={index}><b>{column.name}</b>：{specSummary(column.spec, options)}</li>)}
+      </ul>
+      {samplesDiffer(columns) && <p className="reg-boundary" role="note">{options.sample_differs_note}</p>}
+    </div>
+  );
+}
+
+export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse, state, reportCustomResults, reportOutdated = false }: {
+  stepNumber: number;
+  outcome: RegressionOutcome;
+  /** The course default model on this step's saved Y: the first column of every comparison. */
+  defaultResponse: RegressionResponse;
+  state: StepStateApi<WorkbenchStepState>;
+  /** The workbench models the current report printed (its provenance). */
+  reportCustomResults?: ReportedCustomResult[];
+  reportOutdated?: boolean;
+}) {
+  const optionsQuery = useAsync<WorkbenchOptions>(() => api.regressionOptions(), ["regression-options"]);
+  const options = optionsQuery.status === "success" ? optionsQuery.data ?? null : null;
+  const saved = state.data?.custom_results ?? [];
+  const draft = state.data?.custom_draft ?? {};
+  const baseline = defaultResponse.design.baseline ?? "";
+  const depvarLabel = defaultResponse.design.depvar_label;
+  const [localSpec, setLocalSpec] = useState<ModelSpec | null>(null);
+  const spec = localSpec ?? draft.spec ?? options?.default_spec ?? null;
+  const [computed, setComputed] = useState<RegressionResponse | null>(null);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saveName, setSaveName] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting] = useState<CustomResult | null>(null);
+  const controller = useRef<AbortController | null>(null);
+
+  if (optionsQuery.status === "error") {
+    return <div className="error-box" role="alert">自己设计模型的选项没有加载成功：{optionsQuery.error}<button type="button" className="secondary" onClick={optionsQuery.retry}>重试</button></div>;
+  }
+  if (!options || !spec) return <div className="reg-request-state muted" role="status" aria-busy="true">正在载入可选的设定…</div>;
+
+  const limits = options.limits;
+  const changeSpec = (next: ModelSpec) => {
+    setLocalSpec(next);
+    setError(null);
+    state.saveView?.({ custom_draft: { ...draft, spec: next } });
+  };
+  // The result shown belongs to this Y and this form; otherwise it is kept but marked out of date.
+  const current = computed && computed.design.baseline === baseline && sameSpec(computed.design.spec!, spec, options);
+  const noX = spec.x_lags.length === 0;
+  const run = async () => {
+    if (running || noX) return;
+    controller.current?.abort();
+    const request = new AbortController();
+    controller.current = request;
+    setRunning(true);
+    setError(null);
+    try {
+      const response = await api.runRegression(outcome, request.signal, baseline, canonicalSpec(spec, options));
+      if (response.model_snapshot?.version !== options.version || !response.design.spec) {
+        throw new Error("页面版本已更新，请刷新页面后再计算");
+      }
+      setComputed(response);
+      setSaveName(null);
+    } catch (cause) {
+      if (!(cause instanceof DOMException && cause.name === "AbortError")) {
+        setError(userFacingRequestError(cause, "这个模型没有算出结果"));
+        if (cause instanceof ApiError && cause.status === 400) setComputed(null);
+      }
+    } finally {
+      if (controller.current === request) controller.current = null;
+      setRunning(false);
+    }
+  };
+
+  const duplicate = current && computed
+    ? saved.find((item) => item.baseline === baseline && sameSpec(item.spec, computed.design.spec!, options))
+    : undefined;
+  const isDefault = Boolean(current && computed && sameSpec(computed.design.spec!, options.default_spec, options));
+  const name = saveName ?? nextResultName(saved);
+  const problem = nameProblem(name, saved, limits.name_length);
+  const full = saved.length >= limits.saved;
+  // Saved models of this Y shown next to the default (all of them, up to the limit, until the student picks).
+  const compare = (draft.compare ?? saved.map((item) => item.id))
+    .filter((id) => saved.some((item) => item.id === id && item.baseline === baseline))
+    .slice(0, limits.compared);
+  const setCompare = (ids: string[]) => state.saveView?.({ custom_draft: { ...draft, spec, compare: ids } });
+  const save = () => {
+    if (!computed || !current || isDefault || duplicate || problem || full) return;
+    const item: CustomResult = {
+      id: newId(),
+      name: name.trim(),
+      outcome,
+      baseline: computed.design.baseline ?? baseline,
+      spec: computed.design.spec!,
+      in_report: false,
+      saved_at: new Date().toISOString(),
+      snapshot: snapshotOf(computed),
+    };
+    state.save({ custom_results: [...saved, item] });
+    if (compare.length < limits.compared) setCompare([...compare, item.id]);
+    setSaveName(null);
+  };
+  const update = (id: string, change: Partial<CustomResult>) =>
+    state.save({ custom_results: saved.map((item) => (item.id === id ? { ...item, ...change } : item)) });
+  const inReport = saved.filter((item) => item.in_report).length;
+  const renameProblem = renaming ? nameProblem(renaming.name, saved, limits.name_length, renaming.id) : null;
+
+  const defaultColumn: TableColumn = { name: DEFAULT_COLUMN, spec: options.default_spec, snapshot: snapshotOf(defaultResponse) };
+  const columns: TableColumn[] = [
+    defaultColumn,
+    ...saved.filter((item) => compare.includes(item.id)).map((item) => ({ name: item.name, spec: item.spec, snapshot: item.snapshot })),
+  ];
+  const reportChanged = Boolean(state.materialLocked && reportOutdated && customReportChanged(stepNumber, saved, reportCustomResults));
+
+  return (
+    <div className="reg-custom">
+      <p className="reg-custom-y">因变量：<b>{depvarLabel}</b>（本步保存的 Y；在上面的条形图上点另一条可以换 Y）</p>
+      <ul className="reg-custom-hints">{options.hints.map((hint) => <li key={hint}>{hint}</li>)}</ul>
+      <ModelForm options={options} spec={spec} onChange={changeSpec} />
+      <p className="reg-custom-equation" aria-live="polite">{noX ? "至少选一项关税暴露 X。" : equationPreview(spec, options)}</p>
+      <div className="reg-custom-actions">
+        <button type="button" className="run-btn" aria-disabled={running || noX || undefined} onClick={() => void run()}>
+          {running ? "正在计算…" : "计算这个模型"}
+        </button>
+        <button type="button" className="secondary" onClick={() => changeSpec(options.default_spec)}>恢复默认设定</button>
+        <span className="sr-only" role="status" aria-live="polite">{running ? "正在计算…" : ""}</span>
+      </div>
+      {error && <div className="error-box async-error" role="alert">{error}</div>}
+      {computed && (
+        <div className={current ? "reg-custom-computed" : "reg-custom-computed reg-results-stale"}>
+          {!current && <p className="reg-stale-note" role="note">设定已更改，点“计算这个模型”查看新结果；下面仍是上次算出的结果。</p>}
+          <ResultTable response={computed} options={options} />
+          {current && (
+            <div className="reg-custom-save">
+              {isDefault ? <p className="muted">这就是本步的默认模型（对比表第一列），不用另存。</p>
+                : duplicate ? <p className="muted">这个设定已保存为“{duplicate.name}”。</p>
+                : full ? <p className="muted">每步最多保存 {limits.saved} 个模型，请先删除一个。</p>
+                  : (
+                    <>
+                      <label>保存为 <input value={name} maxLength={limits.name_length + 5} onChange={(event) => setSaveName(event.target.value)} aria-invalid={problem ? true : undefined} /></label>
+                      <button type="button" className="secondary" aria-disabled={problem ? true : undefined} onClick={save}>保存</button>
+                      {problem && <span className="field-error" role="alert">{problem}</span>}
+                    </>
+                  )}
+            </div>
+          )}
+        </div>
+      )}
+      {saved.length > 0 && (
+        <div className="reg-custom-saved">
+          <h4>已保存的模型（{saved.length}/{limits.saved}）</h4>
+          {state.materialLocked && (
+            <p className="reg-rerun-warning" role="note"><b>报告已提交</b>勾选或取消“放入报告”、给已放入报告的模型改名或删除它，都会改变报告；之后要到步骤 15 更新报告，并重新提交给老师。</p>
+          )}
+          {reportChanged && <p className="reg-rerun-warning reg-replaced-notice" role="status">放入报告的模型与已提交报告里的不同；请到步骤 15 更新报告并重新提交给老师。</p>}
+          <ScrollableRegion className="table-wrap" label="已保存的模型，可横向滚动">
+            <table className="data-table reg-custom-saved-table">
+              <thead><tr><th>名称</th><th>设定</th><th>对比</th><th>放入报告（最多 {limits.in_report} 个）</th><th>操作</th></tr></thead>
+              <tbody>
+                {saved.map((item) => {
+                  const otherY = item.baseline !== baseline;
+                  const compared = compare.includes(item.id);
+                  return (
+                    <tr key={item.id}>
+                      <td>
+                        {renaming?.id === item.id ? (
+                          <span className="reg-custom-rename">
+                            <input aria-label="新名称" value={renaming.name} onChange={(event) => setRenaming({ id: item.id, name: event.target.value })} aria-invalid={renameProblem ? true : undefined} />
+                            <button type="button" className="secondary" aria-disabled={renameProblem ? true : undefined}
+                              onClick={() => { if (renameProblem) return; update(item.id, { name: renaming.name.trim() }); setRenaming(null); }}>确定</button>
+                            <button type="button" className="link-button" onClick={() => setRenaming(null)}>取消</button>
+                            {renameProblem && <span className="field-error" role="alert">{renameProblem}</span>}
+                          </span>
+                        ) : <b>{item.name}</b>}
+                      </td>
+                      <td>{specSummary(item.spec, options)}{otherY && <><br /><small className="muted">因变量：{item.snapshot.depvar_label}</small></>}</td>
+                      <td>
+                        <input type="checkbox" aria-label={`对比 ${item.name}`} checked={compared && !otherY}
+                          disabled={otherY || (!compared && compare.length >= limits.compared)}
+                          title={otherY ? "因变量不同，不能和本步的默认模型对比" : undefined}
+                          onChange={() => setCompare(compared ? compare.filter((id) => id !== item.id) : [...compare, item.id])} />
+                      </td>
+                      <td>
+                        <input type="checkbox" aria-label={`把 ${item.name} 放入报告`} checked={item.in_report}
+                          disabled={!item.in_report && inReport >= limits.in_report}
+                          onChange={() => update(item.id, { in_report: !item.in_report })} />
+                      </td>
+                      <td className="reg-custom-row-actions">
+                        <button type="button" className="link-button" onClick={() => setRenaming({ id: item.id, name: item.name })}>改名</button>
+                        <button type="button" className="link-button danger" onClick={() => setDeleting(item)}>删除</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </ScrollableRegion>
+        </div>
+      )}
+      <ComparisonTable columns={columns} options={options} stepNumber={stepNumber} depvarLabel={depvarLabel} />
+      <p className="muted reg-custom-footnote">{options.footnote}</p>
+      {deleting && (
+        <ConfirmModal
+          title={`删除“${deleting.name}”？`}
+          message={deleting.in_report ? "这个模型已放入报告，删除后报告附录里也不再有它。" : "删除后可以重新计算同样的设定再保存。"}
+          confirmLabel="删除"
+          danger
+          onConfirm={() => {
+            state.save({ custom_results: saved.filter((item) => item.id !== deleting.id) });
+            setCompare(compare.filter((id) => id !== deleting.id));
+            setDeleting(null);
+          }}
+          onClose={() => setDeleting(null)}
+        />
+      )}
+    </div>
+  );
+}

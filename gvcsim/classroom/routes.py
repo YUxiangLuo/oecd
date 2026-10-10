@@ -16,6 +16,7 @@ from gvcsim import session as session_model
 from gvcsim import teaching_report
 from gvcsim.classroom import db, management, records
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
+from gvcsim.regression.workbench import custom_results_problem
 from gvcsim.report_saved_run import _STEP_OUTCOMES, _parse_saved_run
 from gvcsim.request_validation import TextRequest
 from gvcsim.singleflight import AsyncSingleFlightCache
@@ -138,6 +139,11 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
                     status_code=422,
                     detail=f"步骤 {step} 保存的回归结果已过期，请回到步骤 {step} 点“{_run_button(step)}”重新计算。",
                 )
+        # The workbench's saved models (自己设计模型): the report recomputes the ones marked 放入报告.
+        if "custom_results" in data:
+            problem = custom_results_problem(data["custom_results"], _STEP_OUTCOMES[step])
+            if problem:
+                raise HTTPException(status_code=422, detail=f"步骤 {step} 自己设计的模型没有保存：{problem}。")
     try:
         saved = db.save_session(user["sub"], payload, req.base_updated_at)
     except records.SessionChanged as error:

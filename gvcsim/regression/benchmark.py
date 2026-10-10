@@ -160,6 +160,7 @@ def summarize_benchmark(model: PreparedModel, own: RegressionResult, reference: 
     names = [*policy, *(name for name in own_by if name not in policy)]
     rows: list[dict] = []
     coef_diffs: list[float] = []
+    coef_tolerances: list[float] = []
     se_diffs: list[float] = []
     se_tolerances: list[float] = []
     for name in names:
@@ -182,12 +183,15 @@ def summarize_benchmark(model: PreparedModel, own: RegressionResult, reference: 
             }
         )
         coef_diffs.append(abs(coef_diff))
+        # Absolute 1e-8, plus 1e-9 of the coefficient: a network Y (thousands) without fixed effects is fitted on raw
+        # levels with a constant, where the two solvers differ by a few 1e-8 on coefficients in the hundreds.
+        coef_tolerances.append(1e-8 + 1e-9 * max(abs(a.coef), abs(b.coef)))
         se_diffs.append(abs(se_diff))
         se_tolerances.append(1e-10 + 1e-6 * max(abs(a.se), abs(b.se)))
     max_coef = max(coef_diffs)
     max_se = max(se_diffs)
     require_finite("标准库对照摘要", max_coef, max_se, coef_diffs, se_diffs, se_tolerances)
-    coef_passed = max_coef < 1e-8
+    coef_passed = all(diff <= tolerance for diff, tolerance in zip(coef_diffs, coef_tolerances, strict=True))
     se_passed = all(diff <= tolerance for diff, tolerance in zip(se_diffs, se_tolerances, strict=True))
     return {
         "backend": reference.diagnostics.get("backend", "linearmodels.PanelOLS"),

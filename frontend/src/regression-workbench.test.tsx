@@ -1,0 +1,268 @@
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
+import { api } from "./api";
+import { customReportChanged, RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
+import {
+  canonicalSpec, coefficientRows, comparisonCsv, effectiveEffects, equationPreview, formatP3, includedBy, nameProblem,
+  nextResultName, omittedLines, samplesDiffer, significanceStars, snapshotOf, specSummary, summaryRows, termLabel,
+  type TableColumn,
+} from "./regression-workbench-table";
+import optionsFixture from "./regression-workbench-options.fixture.json";
+import type { CoefStat, CustomResult, ModelSpec, RegressionResponse, StepStateApi, WorkbenchOptions } from "./types";
+
+afterEach(() => { cleanup(); mock.restore(); });
+
+const options = optionsFixture as WorkbenchOptions;
+const ER = "teaching_exchange_rate_change";
+const DEFAULT: ModelSpec = options.default_spec;
+const NO_RATE: ModelSpec = { x_lags: [0, 1], controls: [], fixed_effects: ["country_industry", "year"] };
+
+const coef = (name: string, value: number, p = 0.001): CoefStat => ({
+  name, coef: value, se: Math.abs(value) / 10 || 0.01, t: 10, p, stars: significanceStars(p), ci_low: value - 0.1, ci_high: value + 0.1,
+});
+
+function response(spec: ModelSpec, values: Record<string, number>, extra: Partial<RegressionResponse["result"]> = {}, baseline = "FVA_share"): RegressionResponse {
+  const coefs = Object.entries(values).map(([name, value]) => coef(name, value));
+  const xSum = coefs.filter((item) => item.name.startsWith("teaching_tariff_exposure")).reduce((sum, item) => sum + item.coef, 0);
+  return {
+    design: {
+      outcome: "trade", baseline, depvar: "teaching_y_trade", depvar_label: "外国增加值项占比", depvar_kind: "share",
+      granularity: "country_industry", shock_type: "tariff", shock_col: "teaching_tariff_exposure", treated_col: "teaching_treated",
+      method: "twfe_intensity", control_mode: "spec", interaction: false, price_mode: "nominal", scenario: "clean", scenario_label: "",
+      sample_filter: "", exclude_row: true, controls: [], control_labels: {}, equation: "", equation_parts: [], panel_file: "",
+      entity: "entity_id", cluster: "country", spec,
+    },
+    result: {
+      depvar: "teaching_y_trade", coefs, n_obs: 16000, n_entities: 3200, n_times: 5, n_clusters: 75, r2_within: 0.8774,
+      depvar_mean: 0.2, depvar_std: 0.1, diagnostics: {}, notes: [], status: "ok", status_reasons: [], support: null,
+      cumulative: coef("cumulative", xSum), constant: null, omitted: [], r2: 0.9975, r2_adj: 0.9968, f_stat: 2076.7, f_df: [3, 74], f_p: 0,
+      sample_flow: { input_rows: 16000, row_excluded_rows: 0, complete_case_input_rows: 16000, estimation_rows: 16000, dropped_rows_total: 0,
+        missing_by_field: {}, missing_by_field_counts_overlap: true, dropped_by_reason: [], years: [2016, 2020] },
+      ...extra,
+    },
+    benchmark: { backend: "x", policy_coefs: [], max_abs_coef_diff: 0, max_abs_se_diff: 0, coef_check_passed: true, se_check_mode: "", notes: [] },
+    disclaimer: "",
+    model_snapshot: { version: options.version } as RegressionResponse["model_snapshot"],
+    variable_catalog: [],
+  };
+}
+
+const DEFAULT_RUN = response(DEFAULT, { teaching_tariff_exposure: -0.3298, teaching_tariff_exposure_lag1: -0.2206, [ER]: 0.0052 });
+const NO_RATE_RUN = response(NO_RATE, { teaching_tariff_exposure: -0.4608, teaching_tariff_exposure_lag1: -0.244 }, { f_df: [2, 74], f_stat: 462.88 });
+
+function saved(name: string, spec: ModelSpec, run: RegressionResponse, change: Partial<CustomResult> = {}): CustomResult {
+  return {
+    id: `id-${name}`, name, outcome: "trade", baseline: "FVA_share", spec, in_report: false, saved_at: "2026-10-11T09:00:00Z",
+    snapshot: snapshotOf(run), ...change,
+  };
+}
+
+describe("model wording (the server's ModelSpec.summary and equation)", () => {
+  test("a spec reads as the report prints it, contained effects dropped", () => {
+    expect(specSummary(DEFAULT, options)).toBe("X + L1.X；汇率变动；国家×行业 + 年份 FE");
+    expect(equationPreview(DEFAULT, options)).toBe("Y = β₁·X + β₂·L1.X + γ₁·汇率变动 + 国家×行业 FE + 年份 FE + ε");
+    const messy: ModelSpec = {
+      x_lags: [2, 0], controls: [{ name: "log_gdp_proxy", lag: 1 }, { name: ER, lag: 0 }],
+      fixed_effects: ["year", "country", "country_year", "industry"],
+    };
+    expect(canonicalSpec(messy, options)).toEqual({
+      x_lags: [0, 2], controls: [{ name: ER, lag: 0 }, { name: "log_gdp_proxy", lag: 1 }], fixed_effects: ["industry", "country_year"],
+    });
+    expect(specSummary(messy, options)).toBe("X + L2.X；汇率变动、L1.GDP（取对数）；行业 + 国家×年份 FE");
+    expect(equationPreview({ x_lags: [0], controls: [], fixed_effects: [] }, options)).toBe("Y = β₁·X + 常数项 + ε");
+    expect(specSummary({ x_lags: [0], controls: [], fixed_effects: [] }, options)).toBe("X；无控制变量；无固定效应");
+  });
+
+  test("a combined effect contains its parts", () => {
+    expect(effectiveEffects(["country", "country_industry", "year"], options)).toEqual(["country_industry", "year"]);
+    expect(includedBy("country", ["country_industry"], options)).toBe("国家×行业 FE");
+    expect(includedBy("year", ["country_year"], options)).toBe("国家×年份 FE");
+    expect(includedBy("industry", ["country_year"], options)).toBeNull();
+  });
+
+  test("terms, stars and p values", () => {
+    expect(["teaching_tariff_exposure", "teaching_tariff_exposure_lag2", ER, `${ER}__lag1`, "cumulative", "_constant"].map((name) => termLabel(name, options)))
+      .toEqual(["X", "L2.X", "汇率变动", "L1.汇率变动", "X 各项合计（累计效应）", "常数项"]);
+    expect([0.005, 0.03, 0.07, 0.2, null].map(significanceStars)).toEqual(["***", "**", "*", "", ""]);
+    expect([0.0004, 0.0123, null].map(formatP3)).toEqual(["< 0.001", "0.012", "—"]);
+  });
+});
+
+describe("names", () => {
+  test("the next default name follows the largest number, and names are checked", () => {
+    expect(nextResultName([])).toBe("结果1");
+    expect(nextResultName([{ name: "结果1" }, { name: "去掉汇率" }])).toBe("结果3");
+    expect(nextResultName([{ name: "结果5" }])).toBe("结果6");
+    const list = [{ id: "a", name: "结果1" }];
+    expect(nameProblem("  ", list, 20)).toBe("请输入名称");
+    expect(nameProblem("一".repeat(21), list, 20)).toBe("名称最多 20 个字符");
+    expect(nameProblem("结果1", list, 20)).toBe("本步已有名为“结果1”的模型");
+    expect(nameProblem("结果1", list, 20, "a")).toBeNull();
+  });
+});
+
+describe("tables", () => {
+  const columns: TableColumn[] = [
+    { name: "默认模型", spec: DEFAULT, snapshot: snapshotOf(DEFAULT_RUN) },
+    { name: "去掉汇率", spec: NO_RATE, snapshot: snapshotOf(NO_RATE_RUN) },
+  ];
+
+  test("rows are the union of the columns' terms, then each fixed effect and the statistics", () => {
+    const rows = coefficientRows(columns, options);
+    expect(rows.map((row) => row.label)).toEqual(["X", "L1.X", "汇率变动", "X 各项合计（累计效应）"]);
+    expect(rows[2].cells).toEqual([{ coef: "0.0052***", se: "(0.0005)" }, null]);
+    expect(rows[3].cells[1]).toEqual({ coef: "-0.7048***", se: "(0.0705)" });
+    const summary = summaryRows(columns, options);
+    expect(summary.slice(0, 5).map((row) => [row.label, ...row.cells])).toEqual([
+      ["国家 FE", "是", "是"], ["行业 FE", "是", "是"], ["国家×行业 FE", "是", "是"], ["年份 FE", "是", "是"], ["国家×年份 FE", "否", "否"],
+    ]);
+    expect(summary.find((row) => row.key === "f")?.cells).toEqual(["2,076.70（3, 74）", "462.88（2, 74）"]);
+    expect(samplesDiffer(columns)).toBe(false);
+  });
+
+  test("one X term has no sum row; no fixed effects shows a constant and no within R²; absorbed terms are said", () => {
+    const plainSpec: ModelSpec = { x_lags: [0], controls: [{ name: ER, lag: 1 }], fixed_effects: [] };
+    const plain = response(plainSpec, { teaching_tariff_exposure: 0.1, [`${ER}__lag1`]: 0.0005 }, {
+      constant: coef("_constant", 0.6), n_obs: 12800, sample_flow: { ...NO_RATE_RUN.result.sample_flow!, years: [2017, 2020] },
+    });
+    const absorbedSpec: ModelSpec = { x_lags: [0], controls: [{ name: ER, lag: 0 }], fixed_effects: ["country_industry", "country_year"] };
+    const absorbed = response(absorbedSpec, { teaching_tariff_exposure: -0.33 }, { omitted: [{ name: ER, reason: "absorbed", by: "国家×年份" }] });
+    const both: TableColumn[] = [
+      { name: "a", spec: plainSpec, snapshot: snapshotOf(plain) },
+      { name: "b", spec: absorbedSpec, snapshot: snapshotOf(absorbed) },
+    ];
+    const rows = coefficientRows(both, options);
+    expect(rows.map((row) => row.label)).toEqual(["X", "汇率变动", "L1.汇率变动", "常数项"]);
+    expect(rows[1].cells).toEqual([null, "omitted"]);
+    expect(summaryRows(both, options).find((row) => row.key === "r2_within")?.cells).toEqual(["—", "0.8774"]);
+    expect(summaryRows(both, options).find((row) => row.key === "years")?.cells).toEqual(["2017–2020", "2016–2020"]);
+    expect(samplesDiffer(both)).toBe(true);
+    expect(omittedLines(snapshotOf(absorbed), options)).toEqual(["汇率变动：被国家×年份 FE 吸收"]);
+  });
+
+  test("suppressed inference keeps coefficients and SE but drops the stars and F", () => {
+    const failed = response(NO_RATE, { teaching_tariff_exposure: -0.46, teaching_tariff_exposure_lag1: -0.24 }, { status: "invalid_design" });
+    const column: TableColumn = { name: "x", spec: NO_RATE, snapshot: snapshotOf(failed) };
+    expect(coefficientRows([column], options)[0].cells[0]).toEqual({ coef: "-0.4600", se: "(0.0460)" });
+    expect(summaryRows([column], options).find((row) => row.key === "f")?.cells).toEqual(["—"]);
+  });
+
+  test("the CSV has a BOM, two rows per term, the fixed effects, the models and the footnote last", () => {
+    const named: TableColumn[] = [columns[0], { ...columns[1], name: "=SUM(1,2)" }];
+    const csv = comparisonCsv(named, options, "外国增加值项占比");
+    expect(csv.startsWith("﻿因变量：外国增加值项占比,默认模型,\"'=SUM(1,2)\"\r\n")).toBe(true);
+    const lines = csv.slice(1).trimEnd().split("\r\n");
+    expect(lines[1]).toBe("X,-0.3298***,-0.4608***");
+    expect(lines[2]).toBe(",(0.0330),(0.0461)");
+    expect(lines).toContain("国家×年份 FE,否,否");
+    expect(lines).toContain("F（自由度）,\"2,076.70（3, 74）\",\"462.88（2, 74）\"");
+    expect(lines.at(-2)).toBe("设定,X + L1.X；汇率变动；国家×行业 + 年份 FE,X + L1.X；无控制变量；国家×行业 + 年份 FE");
+    expect(lines.at(-1)).toBe(`"${options.footnote}"`);
+  });
+});
+
+describe("report notice", () => {
+  test("only the models marked for the report, by name, Y and model, count", () => {
+    const a = saved("去掉汇率", NO_RATE, NO_RATE_RUN, { in_report: true });
+    const b = saved("结果2", DEFAULT, DEFAULT_RUN);
+    const reported = [{ step: 11, name: "去掉汇率", outcome: "trade", baseline: "FVA_share", spec: NO_RATE }];
+    expect(customReportChanged(11, [a, b], reported)).toBe(false);
+    expect(customReportChanged(11, [{ ...a, name: "改了名" }, b], reported)).toBe(true);
+    expect(customReportChanged(11, [a, { ...b, in_report: true }], reported)).toBe(true);
+    expect(customReportChanged(12, [], reported)).toBe(false);
+    expect(customReportChanged(11, [a], undefined)).toBe(true);
+  });
+});
+
+function Harness({ initial, onSave, locked = false }: {
+  initial?: WorkbenchStepState; onSave?: (patch: Partial<WorkbenchStepState>) => void; locked?: boolean;
+}) {
+  const [data, setData] = useState<WorkbenchStepState>(initial ?? {});
+  const state: StepStateApi<WorkbenchStepState> = {
+    data,
+    save: (patch) => { onSave?.(patch); setData((current) => ({ ...current, ...patch })); },
+    saveView: (patch) => setData((current) => ({ ...current, ...patch })),
+    complete: false, syncing: false, syncError: null, syncNow: () => {}, materialLocked: locked,
+  };
+  return <RegressionModelWorkbench stepNumber={11} outcome="trade" defaultResponse={DEFAULT_RUN} state={state} />;
+}
+
+const checkbox = (label: RegExp) => screen.getByRole("checkbox", { name: label });
+
+describe("the workbench", () => {
+  test("the form sends the canonical spec, and the computed model can be saved once under a checked name", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    const run = spyOn(api, "runRegression").mockResolvedValue(NO_RATE_RUN as never);
+    const saves: Partial<WorkbenchStepState>[] = [];
+    render(<Harness onSave={(patch) => saves.push(patch)} />);
+    await screen.findByText("Y = β₁·X + β₂·L1.X + γ₁·汇率变动 + 国家×行业 FE + 年份 FE + ε");
+    // 国家×行业 contains 国家 and 行业: shown checked and greyed.
+    expect((checkbox(/^国家 FE/) as HTMLInputElement).disabled).toBe(true);
+    expect((checkbox(/^国家 FE/) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(checkbox(/^汇率变动/));
+    expect(screen.getByText("Y = β₁·X + β₂·L1.X + 国家×行业 FE + 年份 FE + ε")).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "计算这个模型" })); });
+    expect(run).toHaveBeenCalledWith("trade", expect.anything(), "FVA_share", NO_RATE);
+    await screen.findByText("因变量：外国增加值项占比 | 国家×行业 FE + 年份 FE | 标准误按国家聚类");
+    expect((screen.getByLabelText("保存为") as HTMLInputElement).value).toBe("结果1");
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    expect(saves).toHaveLength(1);
+    const [item] = saves[0].custom_results!;
+    expect(item).toMatchObject({ name: "结果1", outcome: "trade", baseline: "FVA_share", spec: NO_RATE, in_report: false });
+    expect(item.snapshot.result.cumulative?.coef).toBeCloseTo(-0.7048);
+    // Saved once: the same model is not offered again, and it joins the comparison.
+    expect(await screen.findByText("这个设定已保存为“结果1”。")).toBeTruthy();
+    expect(screen.getAllByRole("columnheader").map((cell) => cell.textContent)).toContain("结果1");
+    // Changing the form marks the shown result as out of date.
+    fireEvent.click(checkbox(/^L2\.X/));
+    expect(screen.getByText(/设定已更改/)).toBeTruthy();
+  });
+
+  test("the default model itself is not saved again", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    spyOn(api, "runRegression").mockResolvedValue(DEFAULT_RUN as never);
+    render(<Harness />);
+    const compute = await screen.findByRole("button", { name: "计算这个模型" });
+    await act(async () => { fireEvent.click(compute); });
+    expect(await screen.findByText("这就是本步的默认模型（对比表第一列），不用另存。")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "保存" })).toBeNull();
+  });
+
+  test("at most three go into the report; another Y cannot be compared; deleting asks first", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    const list = [
+      saved("结果1", NO_RATE, NO_RATE_RUN, { in_report: true }),
+      saved("结果2", { ...NO_RATE, x_lags: [0] }, NO_RATE_RUN, { in_report: true }),
+      saved("结果3", { ...NO_RATE, x_lags: [1] }, NO_RATE_RUN, { in_report: true }),
+      saved("结果4", { ...NO_RATE, x_lags: [2] }, NO_RATE_RUN, { baseline: "DVAex_share" }),
+    ];
+    const saves: Partial<WorkbenchStepState>[] = [];
+    render(<Harness initial={{ custom_results: list }} onSave={(patch) => saves.push(patch)} locked />);
+    await screen.findByText("已保存的模型（4/6）");
+    expect((checkbox(/把 结果4 放入报告/) as HTMLInputElement).disabled).toBe(true);
+    expect((checkbox(/对比 结果4/) as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText(/报告已提交/)).toBeTruthy();
+    fireEvent.click(checkbox(/把 结果1 放入报告/));
+    expect(saves.at(-1)!.custom_results!.filter((item) => item.in_report).map((item) => item.name)).toEqual(["结果2", "结果3"]);
+    await waitFor(() => expect((checkbox(/把 结果4 放入报告/) as HTMLInputElement).disabled).toBe(false));
+    fireEvent.click(screen.getAllByRole("button", { name: "删除" })[0]);
+    expect(await screen.findByText("删除“结果1”？")).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: "删除" }).at(-1)!);
+    expect(saves.at(-1)!.custom_results!.map((item) => item.name)).toEqual(["结果2", "结果3", "结果4"]);
+  });
+
+  test("renaming checks the name in this step", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    const saves: Partial<WorkbenchStepState>[] = [];
+    render(<Harness initial={{ custom_results: [saved("结果1", NO_RATE, NO_RATE_RUN), saved("结果2", DEFAULT, DEFAULT_RUN)] }} onSave={(patch) => saves.push(patch)} />);
+    fireEvent.click((await screen.findAllByRole("button", { name: "改名" }))[0]);
+    fireEvent.change(screen.getByLabelText("新名称"), { target: { value: "结果2" } });
+    expect(screen.getByText("本步已有名为“结果2”的模型")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "确定" }));
+    expect(saves).toHaveLength(0);
+    fireEvent.change(screen.getByLabelText("新名称"), { target: { value: " 去掉汇率 " } });
+    fireEvent.click(screen.getByRole("button", { name: "确定" }));
+    expect(saves[0].custom_results!.map((item) => item.name)).toEqual(["去掉汇率", "结果2"]);
+  });
+});

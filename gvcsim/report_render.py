@@ -849,6 +849,21 @@ def _technical_estimate_tables(
     return lines
 
 
+def _formula_line(design: dict[str, Any]) -> str:
+    """The saved model in the page's symbols: X terms, controls, the two fixed effects and the error."""
+    from gvcsim.regression.spec import ModelSpec
+
+    try:
+        spec = ModelSpec.from_dict(design["spec"]) if isinstance(design.get("spec"), dict) else None
+    except ValueError:
+        spec = None
+    if spec is None or spec.fixed_effects != ("country_industry", "year"):
+        return "- 公式：Y = β·X + α（每个国家×行业的平均水平）+ λ（每年的共同变化）+ ε（随机波动）"
+    terms = spec.equation().split(" = ", 1)[1].split(" + ")
+    kept = [term for term in terms if not term.endswith(" FE") and term != "ε"]
+    return "- 公式：Y = " + " + ".join(kept) + " + α（每个国家×行业的平均水平）+ λ（每年的共同变化）+ ε（随机波动）"
+
+
 def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
     lines = [
         "## 技术附录：保存的回归结果",
@@ -889,7 +904,7 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
                     f"- 结果指标 Y：{_safe(_y_label(run['outcome'], design))}",
                     f"- 单位：{_KIND_DIMENSIONS.get(_depvar_kind(run['outcome'], design), '原始单位')}",
                     # The saved equation names data columns; the report shows its symbols, as the step pages do.
-                    "- 公式：Y = β·X + α（每个国家×行业的平均水平）+ λ（每年的共同变化）+ ε（随机波动）",
+                    _formula_line(design),
                     f"- 结果能否解读：{_STATUS_LABELS.get(str(status), _STATUS_LABELS['unknown'])}；记录数：{_count(result.get('n_obs'))}",
                 )
             )

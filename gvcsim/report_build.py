@@ -47,6 +47,7 @@ from gvcsim.report_render import (
     _run_sections,
 )
 from gvcsim.report_saved_run import _saved_runs
+from gvcsim.report_workbench import custom_model_sections, recompute, reported_models
 
 
 def _regression_overview() -> dict[str, Any] | None:
@@ -206,6 +207,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
     if not years:
         raise ReportGateError([{"step": 0, "title": "数据不可用", "missing": ["课程数据暂时不可用，请联系老师。"]}])
     runs = _saved_runs(session)
+    custom_models = reported_models(session)
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     # The pages show server-local wall-clock time (PostgreSQL now()) as "YYYY-MM-DD HH:MM"; the report says the same,
     # without the "+09:00" offset an ISO time carries.
@@ -255,6 +257,8 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
             }
             for run in runs
         ],
+        # The workbench models the report prints (自己设计模型, marked 放入报告); their numbers are recomputed below.
+        "custom_results": custom_models,
         "algorithm": "WWZ/TLS and WWYZ observed indicators; separate seeded tariff simulation; entity/year fixed effects with country-clustered standard errors",
         "simulation_contract": metadata.get("simulation_contract"),
         "network_algorithm": network_algorithm,
@@ -303,6 +307,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         *_quiz_sections(session),
         *_experiment_sections(session, scenario),
         *_run_sections(runs),
+        *custom_model_sections(recompute(custom_models)),
         *_qc_disclosure_section(qc_summary, integrity_metadata),
         "## 数据与方法说明",
         "",
@@ -327,7 +332,8 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "- 控制汇率的原因：同期的汇率变动与加税对象有共同原因（对美顺差大的出口型经济体），又与 Y 有关；不控制它，会把汇率的作用算到关税头上。"
         "本身受关税影响的变量不应作为控制变量。",
         "- 回归结果来自你在步骤 11–14 保存的计算，生成报告时不会重算；各步图中其余 Y 的条形是课程用同一份数据、"
-        "同一个模型算出的结果。",
+        "同一个模型算出的结果。"
+        + ("“学生设计的模型”附录中的模型则按你保存的设定在生成报告时重新计算。" if custom_models else ""),
         f"- 生成时间：{generated_local}。",
         "",
         "## 方法参考文献",

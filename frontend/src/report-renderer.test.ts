@@ -7,6 +7,18 @@ import { layoutDivergingBars, MIN_WIDTH } from "./viz/regression/diverging-bars"
 import { NEGATIVE, POSITIVE, UNCERTAIN, ZERO_LINE } from "./viz/regression/palette";
 
 describe("report tables", () => {
+  test("the workbench appendix's significance stars and typed model names print literally", () => {
+    // As gvcsim/report_workbench.py writes them: stars, "<" and a student's "*" escaped.
+    const markdown = "| 变量 | 默认模型 | 国家×年份\\* |\n|---|---:|---:|\n| X | -0.3298\\*\\*\\* | 0.1043\\* |\n|  | (0.0082) | (0.0653) |\n\n"
+      + "注：括号内为按国家聚类的标准误。\\*\\*\\* p\\<0.01, \\*\\* p\\<0.05, \\* p\\<0.1。";
+    const element = document.createElement("div");
+    element.innerHTML = renderToStaticMarkup(createElement(ReportMarkdown, { markdown }));
+    expect([...element.querySelectorAll("th")].map((cell) => cell.textContent)).toEqual(["变量", "默认模型", "国家×年份*"]);
+    expect([...element.querySelectorAll("td")].map((cell) => cell.textContent).slice(0, 3)).toEqual(["X", "-0.3298***", "0.1043*"]);
+    expect(element.querySelector("p")?.textContent).toBe("注：括号内为按国家聚类的标准误。*** p<0.01, ** p<0.05, * p<0.1。");
+    expect(element.querySelector("em, strong")).toBeNull();
+  });
+
   test("isolates literal reflection text from following report headings, tables and charts", () => {
     const prose = "段落 `指标` | 原文\n\n~~~\n```\n</div><script>文本</script>\n## 学生粘贴的标题";
     const chart = JSON.stringify({ version: 1, type: "bar", items: [{ label: "CHN", value: 1 }] });

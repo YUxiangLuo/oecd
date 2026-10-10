@@ -41,9 +41,34 @@ def _session_fingerprint(session: dict[str, Any]) -> str:
 # submitted report look out of date (the report prints recorded material, never these view settings).
 # `browse_selection` (steps 6–8) and `network_browse` (step 9) keep the countries and view a student left an
 # exploration-only chart on; the recorded material is `compared` / `indicator_selection` / `observations`.
+# `custom_draft` (steps 11–14) is the workbench form a student left half-filled.
 _VIEW_ONLY_KEYS = frozenset(
-    {"slice", "year", "country", "chart", "drill", "heat_sort", "heat_coverage", "browse_selection", "network_browse"}
+    {
+        "slice",
+        "year",
+        "country",
+        "chart",
+        "drill",
+        "heat_sort",
+        "heat_coverage",
+        "browse_selection",
+        "network_browse",
+        "custom_draft",
+    }
 )
+
+
+def _report_data(data: dict[str, Any]) -> dict[str, Any]:
+    """A step's data as the report reads it. The workbench's saved models count only by what the report prints of
+    them (name, Y and model of those marked 放入报告); with none marked, the key is left out, so a session that never
+    used the workbench keeps the fingerprint it had before."""
+    from gvcsim.regression.workbench import reported_custom_results
+
+    projected = {k: v for k, v in data.items() if k not in _VIEW_ONLY_KEYS and k != "custom_results"}
+    reported = reported_custom_results(data.get("custom_results"))
+    if reported:
+        projected["custom_results"] = reported
+    return projected
 
 
 def report_fingerprint(session: dict[str, Any]) -> str:
@@ -53,7 +78,7 @@ def report_fingerprint(session: dict[str, Any]) -> str:
         return _session_fingerprint(session)
     projected_steps = {
         key: (
-            {**value, "data": {k: v for k, v in value["data"].items() if k not in _VIEW_ONLY_KEYS}}
+            {**value, "data": _report_data(value["data"])}
             if isinstance(value, dict) and isinstance(value.get("data"), dict)
             else value
         )
