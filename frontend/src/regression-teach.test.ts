@@ -200,6 +200,18 @@ describe("RegressionSummaryBars", () => {
     expect(html).toContain("X 每高 1 个百分点，Y 两年累计平均相差（个标准差）");
     expect(dom.querySelector(".reg-family-missing")?.textContent).toBe("步骤 12 · 生产、步骤 14 · 网络：还没计算");
   });
+
+  test("a course-model run without its two-year sum (L1.X dropped) has no estimate, not its X alone", () => {
+    const trade = response("trade", coefficient(-0.33, -0.35, -0.31));
+    trade.design.spec = { x_lags: [0, 1], controls: [], fixed_effects: ["country_industry", "year"] };
+    trade.result.cumulative = null;
+    const { rows } = regressionSummaryRows((step: number) => step === 11 ? { run: { design: trade.design, result: trade.result } } : undefined);
+    expect(rows.map((row) => row.valueLabel)).toEqual(["没算出估计值"]);
+    // A single-X model keeps its X as the headline.
+    trade.design.spec = { x_lags: [0], controls: [], fixed_effects: ["country_industry", "year"] };
+    expect(regressionSummaryRows((step: number) => step === 11 ? { run: { design: trade.design, result: trade.result } } : undefined)
+      .rows.map((row) => row.valueLabel)).toEqual(["-0.33 个百分点（-0.0017 个标准差）"]);
+  });
 });
 
 describe("ReportedCustomModels", () => {

@@ -355,12 +355,15 @@ function naturalScale(
 
 /**
  * A run's headline estimate: the X terms' cumulative relation when the model has it (teaching data v10: X and L1.X,
- * so the relation over the tariff's year and the next), else the single X coefficient.
+ * so the relation over the tariff's year and the next), else the coefficient of a model's single X. A model of
+ * several X terms that has no sum (one was dropped) has no headline: the term left is not the sum it is read as,
+ * and the overview's bars leave it out the same way.
  */
 export function headlineCoefficient(
-  response: Pick<RegressionResponse, "design" | "result" | "model_snapshot">,
+  response: Pick<RegressionResponse, "design" | "result"> & Partial<Pick<RegressionResponse, "model_snapshot">>,
 ): CoefStat | null {
   if (response.result.cumulative) return response.result.cumulative;
+  if ((response.design.spec?.x_lags.length ?? 1) > 1) return null;
   const expected = response.model_snapshot?.x_columns ?? [response.design.shock_col];
   return response.result.coefs.find((item) => expected.includes(item.name)) ?? null;
 }

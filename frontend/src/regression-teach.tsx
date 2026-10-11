@@ -11,6 +11,7 @@ import {
   buildRegressionVerdict,
   depvarKind,
   globalInferenceIsSuppressed,
+  headlineCoefficient,
   lagSplitParts,
   SD_DEFINITION,
 } from "./regression-verdict";
@@ -89,8 +90,8 @@ export function regressionSummaryRows(getStep?: (step: number) => SiblingStepDat
       missing.push(`步骤 ${family.step} · ${family.family}`);
       continue;
     }
-    // The step's headline: the cumulative relation of X and L1.X (teaching data v10), else its X coefficient.
-    const coefficient = run.result.cumulative ?? run.result.coefs[0] ?? null;
+    // The step's headline, as on the step's page: the cumulative relation of X and L1.X (teaching data v10).
+    const coefficient = headlineCoefficient({ design: run.design, result: run.result });
     const suppressed = globalInferenceIsSuppressed(run.result.status, run.result.support);
     const figures = barFigures({
       coef: coefficient?.coef ?? null, ci_low: coefficient?.ci_low ?? null, ci_high: coefficient?.ci_high ?? null,
