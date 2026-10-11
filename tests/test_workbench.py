@@ -430,6 +430,12 @@ def test_the_page_tests_use_the_options_the_server_sends():
     assert json.loads(fixture.read_text(encoding="utf-8")) == workbench.options()
 
 
+def test_the_suppressed_note_fits_both_causes():
+    # Inference is hidden after a failed library check (regression.panel) or for the design's treatment support
+    # (estimation.within_ols); the page and the report print one note for both, so it must not name only one.
+    assert "标准库" not in workbench.SUPPRESSED_NOTE and "已隐藏推断结果" in workbench.SUPPRESSED_NOTE
+
+
 def test_step_ten_panel_rows_carry_last_years_x_and_the_exchange_rate(monkeypatch):
     """Step 10's year-by-year table shows X, L1.X and the exchange-rate change of the example."""
     import asyncio

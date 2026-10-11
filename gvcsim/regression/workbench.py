@@ -61,7 +61,8 @@ FOOTNOTE = (
     "X 增加 1 个百分点时 Y 的变化 = 系数 × 0.01。2018 年以前没有关税，X 的滞后在加税前按 0 处理。"
 )
 SAMPLE_DIFFERS_NOTE = "这几列的样本不同，差异有一部分来自样本，而不只是设定。"
-SUPPRESSED_NOTE = "标准库对照未通过，已隐藏推断结果（p 值、星号与区间）。"
+# Said whatever stopped the inference: the library check (regression.panel) or the design's treatment support.
+SUPPRESSED_NOTE = "未通过估计检查，已隐藏推断结果（p 值、星号与区间）。"
 
 
 def options() -> dict[str, Any]:
