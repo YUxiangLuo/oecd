@@ -166,3 +166,18 @@ def test_effect_structure_does_not_require_a_dense_dummy_matrix(monkeypatch):
     structure = panel._fixed_effect_structure(frame, "entity", "time")
     assert structure.rank == 5004
     assert structure.components == 1
+
+
+def test_three_effect_groups_count_their_disconnected_blocks():
+    from gvcsim.regression.estimation import fixed_effect_rank
+
+    def block(countries, industries, years):
+        return [dict(country=c, industry=s, year=y) for c in countries for s in industries for y in years]
+
+    columns = ["country", "industry", "year"]
+    split = pd.DataFrame(block(("A", "B"), ("s1", "s2"), (2016, 2017)) + block(("C", "D"), ("s3", "s4"), (2018, 2019)))
+    dense = np.column_stack([pd.get_dummies(split[column], dtype=float).to_numpy() for column in columns])
+    assert fixed_effect_rank(split, columns) == (np.linalg.matrix_rank(dense), 2)
+    # One shared year joins the two blocks.
+    joined = pd.concat([split, pd.DataFrame(block(("C",), ("s3",), (2016,)))], ignore_index=True)
+    assert fixed_effect_rank(joined, columns)[1] == 1

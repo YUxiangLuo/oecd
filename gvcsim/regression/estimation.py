@@ -45,7 +45,8 @@ def fixed_effect_rank(data: pd.DataFrame, columns: Sequence[str]) -> tuple[int, 
     """Rank of the dummy matrix of the absorbed effects, and the number of disconnected blocks (1 when connected).
 
     One group: its level count. Two groups: levels minus connected components of their bipartite graph (exact, no
-    dense matrix). More groups only occur with few levels (country + industry + year), where the dense rank is cheap.
+    dense matrix). More groups only occur with few levels (country + industry + year), where the dense rank is cheap;
+    their blocks are the connected components of the graph in which each row links its levels across the groups.
     """
     columns = list(columns)
     if not columns:
@@ -59,8 +60,17 @@ def fixed_effect_rank(data: pd.DataFrame, columns: Sequence[str]) -> tuple[int, 
     if levels > _DENSE_RANK_MAX_LEVELS:
         raise ValueError(f"三组及以上固定效应的水平数过多（{levels}），无法计算秩")
     check_cancelled()
+    codes = [pd.factorize(data[column], sort=False)[0] for column in columns]
+    offsets = np.cumsum([0, *(int(code.max()) + 1 for code in codes)])
+    first = codes[0] + offsets[0]
+    others = [code + offset for code, offset in zip(codes[1:], offsets[1:-1], strict=True)]
+    graph = csr_matrix(
+        (np.ones(len(first) * len(others), dtype=bool), (np.tile(first, len(others)), np.concatenate(others))),
+        shape=(int(offsets[-1]), int(offsets[-1])),
+    )
+    components, _ = connected_components(graph, directed=False)
     dummies = np.column_stack([pd.get_dummies(data[column], dtype=float).to_numpy() for column in columns])
-    return int(np.linalg.matrix_rank(dummies)), 1
+    return int(np.linalg.matrix_rank(dummies)), int(components)
 
 
 def require_finite(label: str, *values) -> None:
