@@ -515,11 +515,20 @@ describe("saving when the tab is hidden or closed", () => {
     }
   });
 
-  test("a record too large for keepalive starts saving at once and asks before leaving", async () => {
-    // A finished record (four regression runs, long analysis) can pass the 64 KiB keepalive limit.
-    const large = patchSessionStep(emptySession(), 11, { notes: "长".repeat(22_000) });
+  // A finished record (four regression runs and saved models, a long analysis) is about 80–105 KB, past the 64 KiB
+  // keepalive limit.
+  const large = patchSessionStep(emptySession(), 11, { notes: "长".repeat(22_000) });
+  const pagehide = (persisted: boolean) => {
+    const event = new Event("pagehide");
+    Object.defineProperty(event, "persisted", { value: persisted });
+    return event;
+  };
+  const unloading = () => pagehide(false);
+
+  test("a large record closing sends only the steps changed since the last save, with keepalive and without asking", async () => {
     const get = spyOn(api.classroom, "session").mockResolvedValue(response(large));
     const save = spyOn(api.classroom, "saveSession").mockImplementation(async ({ session }) => response(session, NEWER));
+    const patch = spyOn(api.classroom, "patchSession").mockImplementation(async () => response(large, NEWER));
     const hook = renderHook(() => useSession(true, "student"));
     try {
       await waitFor(() => expect(hook.result.current.status).toBe("ready"));
@@ -527,11 +536,58 @@ describe("saving when the tab is hidden or closed", () => {
       act(() => {
         hook.result.current.patchStep(15, { research_question: "typed on a large record" });
         window.dispatchEvent(leaving);
+        window.dispatchEvent(unloading());
+      });
+      expect(leaving.defaultPrevented).toBe(false);
+      expect(save).not.toHaveBeenCalled();
+      expect(patch.mock.calls).toEqual([[{
+        steps: { "15": patchSessionStep(emptySession(), 15, { research_question: "typed on a large record" }).steps["15"] },
+        shared: {},
+        base_updated_at: STAMP,
+      }]]);
+    } finally { hook.unmount(); get.mockRestore(); save.mockRestore(); patch.mockRestore(); }
+  });
+
+  test("changes too large even as steps start saving at once and ask before leaving", async () => {
+    const get = spyOn(api.classroom, "session").mockResolvedValue(response());
+    const save = spyOn(api.classroom, "saveSession").mockImplementation(async ({ session }) => response(session, NEWER));
+    const patch = spyOn(api.classroom, "patchSession");
+    const hook = renderHook(() => useSession(true, "student"));
+    try {
+      await waitFor(() => expect(hook.result.current.status).toBe("ready"));
+      const leaving = new Event("beforeunload", { cancelable: true });
+      act(() => {
+        hook.result.current.patchStep(11, { notes: "长".repeat(22_000) });
+        window.dispatchEvent(leaving);
       });
       expect(leaving.defaultPrevented).toBe(true);
       expect(save).toHaveBeenCalledTimes(1);
       expect(save.mock.calls[0]).toHaveLength(1);
+      expect(patch).not.toHaveBeenCalled();
       await waitFor(() => expect(hook.result.current.unsynced).toBe(false));
-    } finally { hook.unmount(); get.mockRestore(); save.mockRestore(); }
+    } finally { hook.unmount(); get.mockRestore(); save.mockRestore(); patch.mockRestore(); }
+  });
+
+  test("a page kept in the back-forward cache, or one with a save on its way, does not send the changed steps", async () => {
+    const get = spyOn(api.classroom, "session").mockResolvedValue(response(large));
+    let answer!: (value: SessionSaveResponse) => void;
+    const save = spyOn(api.classroom, "saveSession").mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
+    const patch = spyOn(api.classroom, "patchSession");
+    const hook = renderHook(() => useSession(true, "student"));
+    try {
+      await waitFor(() => expect(hook.result.current.status).toBe("ready"));
+      act(() => {
+        hook.result.current.patchStep(15, { research_question: "kept in the cache" });
+        window.dispatchEvent(pagehide(true));
+      });
+      // The page saves as usual (it may be shown again); that save is now on its way.
+      expect(save).toHaveBeenCalledTimes(1);
+      act(() => {
+        hook.result.current.patchStep(15, { research_question: "typed while it was on its way" });
+        window.dispatchEvent(unloading());
+      });
+      expect(patch).not.toHaveBeenCalled();
+      await act(async () => { answer(response(large, NEWER)); });
+    } finally { hook.unmount(); get.mockRestore(); save.mockRestore(); patch.mockRestore(); }
   });
 });

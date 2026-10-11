@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, AUTH_TOKEN_KEY, fitsKeepalive, getActiveAuthToken, isApiErrorStatus, RequestTimeoutError } from "./api";
-import { emptySession, isValidSession, patchStep as patchStoredStep, readShared, readStep, sameJsonValue, sameSessionContent, writeShared } from "./session-store";
+import { emptySession, isValidSession, patchStep as patchStoredStep, readShared, readStep, sameJsonValue, sameSessionContent, sessionChanges, writeShared } from "./session-store";
 import type {
   ClassroomReport,
   CompletionSummary,
@@ -266,6 +266,16 @@ export class SessionSaveQueue {
   /** The snapshot of a save sent but not confirmed (on its way, or failed without an answer). */
   getSentSession(): ExperimentSession | null {
     return this.sent;
+  }
+
+  /** The server's version of the confirmed snapshot (what the next save names as its base). */
+  getBaseUpdatedAt(): string | null {
+    return this.baseUpdatedAt;
+  }
+
+  /** Whether a save is on its way (its answer will change the base). */
+  isSaving(): boolean {
+    return this.saving !== null;
   }
 
   hasUnsynced(): boolean {
@@ -571,20 +581,41 @@ export function useSession(enabled: boolean, username?: string, mergers?: FieldM
       && !saveFailedRef.current
       && !syncConflictRef.current
       && statusRef.current === "ready";
+    const wholeFits = () => fitsKeepalive({ session: sessionRef.current, base_updated_at: null });
+    // A record too large for keepalive (a finished one is about 80–105 KB) is sent as the steps changed since the last
+    // confirmed save, which outlives the page. Not while a save is on its way: its answer changes the base this would
+    // name (that case relies on the kept copy, which a refresh puts back).
+    const changedSteps = () => {
+      const confirmed = queue.current?.getConfirmedSession();
+      const base = queue.current?.getBaseUpdatedAt();
+      if (!confirmed || !base || queue.current?.isSaving()) return null;
+      const body = { ...sessionChanges(confirmed, sessionRef.current), base_updated_at: base };
+      return fitsKeepalive(body) ? body : null;
+    };
     const preserveBeforeLeaving = (event: Event) => {
       if (!queue.current?.hasUnsynced()) return;
       // A refresh puts the kept copy back; a closed tab loses it (sessionStorage belongs to the tab).
       const saved = keepCopy();
       if (event.type === "pagehide") {
         leavingRef.current = true;
-        flushBeforeLeaving();
+        // Unloading (not kept in the back-forward cache, where the page saves as usual when shown again).
+        const changes = !(event as PageTransitionEvent).persisted && canSaveNow() && !wholeFits() ? changedSteps() : null;
+        if (!changes) {
+          flushBeforeLeaving();
+          return;
+        }
+        if (timer.current != null) {
+          window.clearTimeout(timer.current);
+          timer.current = null;
+        }
+        void api.classroom.patchSession(changes).catch(() => {});
         return;
       }
       // beforeunload: ask before leaving when the edits can neither be kept here (storage failure) nor be
-      // saved on the way out (offline, a failed save, a conflict, or a record too large to be sent with
-      // keepalive, which a finished record with a long analysis can be).
+      // saved on the way out (offline, a failed save, a conflict, or edits too large to be sent with keepalive
+      // even as the changed steps, or a save on its way).
       const canSave = canSaveNow();
-      const fits = fitsKeepalive({ session: sessionRef.current, base_updated_at: null });
+      const fits = wholeFits() || changedSteps() !== null;
       // Too large for keepalive: start the normal save now, so it is already on its way while the browser asks.
       if (canSave && !fits) flushBeforeLeaving();
       if (!saved || (!leavingOnPurposeRef.current && !(canSave && fits))) {

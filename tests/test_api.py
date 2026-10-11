@@ -156,6 +156,52 @@ def test_session_contract_uses_optimistic_concurrency(teaching_db):
     assert client.get("/api/classroom/session").json()["session"] == second
 
 
+def test_session_patch_changes_only_the_sent_steps_of_the_version_it_names(teaching_db):
+    """The save sent as a page closes carries only the changed steps (it must fit a 64 KiB keepalive request)."""
+    client = _client(teaching_db)
+    # No saved record yet: nothing to patch.
+    nothing = client.patch("/api/classroom/session", json={"steps": {}, "base_updated_at": "2026-10-11T00:00:00Z"})
+    assert nothing.status_code == 409
+    first = empty_session()
+    first["steps"]["2"] = make_record({"value": 2})
+    first["steps"]["15"] = make_record({"research_question": "第一版"})
+    base = client.put("/api/classroom/session", json={"session": first, "base_updated_at": None}).json()["updated_at"]
+
+    patch = {
+        "steps": {"15": make_record({"research_question": "关闭页面前的第二版"}), "2": None},
+        "base_updated_at": base,
+    }
+    patched = client.patch("/api/classroom/session", json=patch)
+    assert patched.status_code == 200
+    assert set(patched.json()) == {
+        "session",
+        "updated_at",
+        "completion",
+        "report_current",
+        "report_gate",
+        "material_gate",
+    }
+    stored = client.get("/api/classroom/session").json()
+    assert stored["session"]["steps"] == {"15": make_record({"research_question": "关闭页面前的第二版"})}
+    assert stored["updated_at"] == patched.json()["updated_at"] != base
+
+    # Another version: nothing is written, as for a stale PUT.
+    stale = client.patch(
+        "/api/classroom/session", json={**patch, "steps": {"15": make_record({"research_question": "旧"})}}
+    )
+    assert stale.status_code == 409 and stale.json()["detail"]["code"] == "session_changed"
+    # The merged record passes the PUT's checks: a workbench model on a step without the workbench is refused whole.
+    refused = client.patch(
+        "/api/classroom/session",
+        json={"steps": {"3": make_record({"custom_results": []})}, "base_updated_at": stored["updated_at"]},
+    )
+    assert refused.status_code == 422 and "步骤 3" in refused.json()["detail"]
+    assert client.get("/api/classroom/session").json() == stored
+    # Only steps, shared entries and the version; the version is required.
+    assert client.patch("/api/classroom/session", json={**patch, "session": first}).status_code == 422
+    assert client.patch("/api/classroom/session", json={"steps": {}}).status_code == 422
+
+
 @pytest.mark.parametrize("existing_session", [False, True])
 def test_session_retry_after_unacknowledged_commit_keeps_saved_content(teaching_db, existing_session):
     client = _client(teaching_db)
