@@ -20,3 +20,12 @@ export function normalizeLabel(value: string): string {
   const folded = value.split(FULLWIDTH_PUNCTUATION).map((part, index) => (index % 2 ? part : part.normalize("NFKC"))).join("");
   return folded.replace(ZERO_WIDTH, "").replace(/\s+/g, " ").trim();
 }
+
+/**
+ * What a teacher's search compares: the label with full-width punctuation folded as well, case-folded. Names keep
+ * their Chinese punctuation as typed, but rows stored before that rule have it folded to ASCII, so “王五（” must also
+ * find “王五(转专业)” (and the other way round).
+ */
+export function searchKey(value: string): string {
+  return value.normalize("NFKC").replace(ZERO_WIDTH, "").replace(/\s+/g, " ").trim().toLowerCase();
+}

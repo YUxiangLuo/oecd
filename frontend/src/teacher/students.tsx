@@ -6,7 +6,7 @@ import type { AcademicSemester, StudentRow } from "../types";
 import { userFacingRequestError } from "../user-facing-error";
 import { AcademicFilters, matchesAcademicFilter, enrollmentLabel, UNASSIGNED_CLASS } from "./academic-filter";
 import { batchClassOptions, StudentBatchModal } from "./student-batch";
-import { normalizeLabel, stripInvisibleEdges } from "./text";
+import { normalizeLabel, searchKey, stripInvisibleEdges } from "./text";
 import { showToast } from "../toast";
 import { EmptyState, LoadFailure, Modal, SearchInput, StatusPill, Toolbar, useFieldErrorFocus, useModalErrorFocus, useRefetchOnVisible } from "./ui";
 
@@ -363,12 +363,12 @@ export function StudentsTab({ onOpenReport, onGoToSemesters, onRefresh }: {
   }
   const all = data?.students ?? [];
   const semesters = academic?.semesters ?? [];
-  // Normalized like stored names (full-width letters/digits, zero-width characters), then case-folded.
-  const needle = normalizeLabel(query).toLowerCase();
+  // Compared with full-width punctuation folded too (names stored before it was kept as typed have ASCII).
+  const needle = searchKey(query);
   const students = sortStudents(all
     .filter((student) => matchesAcademicFilter(student.enrollments, semesterId, classId))
     .filter((student) => !needle || [student.display_name, student.username, student.student_no]
-      .some((value) => normalizeLabel(value ?? "").toLowerCase().includes(needle))), sort);
+      .some((value) => searchKey(value ?? "").includes(needle))), sort);
   const submitted = students.filter((student) => student.report_state === "pending" || student.report_state === "graded").map((student) => student.id);
   // The batch import starts in the class being looked at, when it can still take students.
   const batchClassId = classId != null && classId !== UNASSIGNED_CLASS && batchClassOptions(semesters).some((option) => option.id === classId) ? classId : null;

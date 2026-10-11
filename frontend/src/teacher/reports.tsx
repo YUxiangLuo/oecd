@@ -1,4 +1,4 @@
-import { normalizeLabel } from "./text";
+import { searchKey } from "./text";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ScrollableRegion } from "../a11y";
 import { api, isApiErrorStatus } from "../api";
@@ -161,13 +161,13 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh, onReturn 
   useRefetchOnVisible(() => setRefresh((value) => value + 1), openAccountId == null);
   const reports = data?.reports ?? [];
   const semesters = academic?.semesters ?? [];
-  // Normalized like stored names (full-width letters/digits, zero-width characters), then case-folded.
-  const needle = normalizeLabel(query).toLowerCase();
+  // Compared with full-width punctuation folded too (names stored before it was kept as typed have ASCII).
+  const needle = searchKey(query);
   // The term/class filter and the search narrow every tab alike, so the 待评阅 count is taken after them
   // (as 学生与进度 counts its summary over the rows its filters leave); only the sidebar badge counts them all.
   const narrowed = reports
     .filter((report) => matchesAcademicFilter(report.enrollments, semesterId, classId))
-    .filter((report) => !needle || [report.display_name, report.username, report.student_no].some((value) => normalizeLabel(value ?? "").toLowerCase().includes(needle)));
+    .filter((report) => !needle || [report.display_name, report.username, report.student_no].some((value) => searchKey(value ?? "").includes(needle)));
   const shown = narrowed.filter((report) => filter === "all" || report.state === filter);
   // The open review comes first: a list refresh failing in the background must not unmount an unsaved review.
   if (openAccountId != null) {
