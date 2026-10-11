@@ -393,3 +393,72 @@ export function comparisonCsv(
   // Only the header row carries names a student typed (the model names).
   return `\ufeff${lines.map((line, row) => line.map((cell, index) => csvField(cell, row === 0 && index > 0)).join(",")).join("\r\n")}\r\n`;
 }
+
+/** What the server takes per step (gvcsim/regression/workbench.py MAX_SAVED, MAX_IN_REPORT); options.limits says the same. */
+export const SAVED_LIMITS: { readonly saved: number; readonly in_report: number } = { saved: 6, in_report: 3 };
+
+/**
+ * A step's saved models changed on this page and elsewhere (two tabs or devices), merged by id instead of one side
+ * replacing the other: a model either side added stays, one deleted on one side and untouched on the other goes,
+ * and a model changed on both sides keeps the server's version. The result is then made acceptable to the server
+ * (workbench.custom_results_problem): a model of this page saved elsewhere too (same Y and model) is not added twice,
+ * a name taken elsewhere becomes the next 结果N, and the limits keep the server's models first. `notes` says what of
+ * this page's models was not kept as it was.
+ */
+export function mergeCustomResults(
+  baseValue: unknown, serverValue: unknown, localValue: unknown, place: string,
+): { value: CustomResult[]; notes: string[] } {
+  const list = (value: unknown) => (Array.isArray(value) ? value as CustomResult[] : []);
+  const same = (first: unknown, second: unknown) => JSON.stringify(first) === JSON.stringify(second);
+  const base = new Map(list(baseValue).map((item) => [item.id, item]));
+  const local = new Map(list(localValue).map((item) => [item.id, item]));
+  const merged: { item: CustomResult; mine: boolean }[] = [];
+  for (const item of list(serverValue)) {
+    const before = base.get(item.id);
+    const mine = local.get(item.id);
+    // Deleted here and untouched elsewhere: gone. Changed here only: this page's version.
+    if (!mine && before && same(item, before)) continue;
+    if (mine && before && same(item, before) && !same(mine, before)) merged.push({ item: mine, mine: true });
+    else merged.push({ item, mine: false });
+  }
+  const onServer = new Set(list(serverValue).map((item) => item.id));
+  const notes: string[] = [];
+  for (const item of list(localValue)) {
+    // Kept or merged above, or deleted elsewhere after this page had it.
+    if (onServer.has(item.id) || base.has(item.id)) continue;
+    const model = (other: CustomResult) => other.baseline === item.baseline && specKey(other.spec) === specKey(item.spec);
+    if (merged.some(({ item: other }) => model(other))) continue;
+    if (merged.length >= SAVED_LIMITS.saved) {
+      notes.push(`${place}：本页保存的“${item.name}”没能保留（每步最多保存 ${SAVED_LIMITS.saved} 个模型），需要时请删去一个后重新计算并保存`);
+      continue;
+    }
+    merged.push({ item, mine: true });
+  }
+  // In server order, then this page's additions. Names and the report's limit: the server's models first, this
+  // page's changes give way.
+  const taken: CustomResult[] = merged.filter(({ mine }) => !mine).map(({ item }) => item);
+  let inReport = taken.filter((item) => item.in_report).length;
+  const value = merged.map(({ item, mine }) => {
+    if (!mine) return item;
+    let kept = item;
+    if (taken.some((other) => nameKey(other.name) === nameKey(kept.name))) {
+      kept = { ...kept, name: nextResultName(taken) };
+      notes.push(`${place}：本页保存的“${item.name}”与另一处保存的模型同名，已改名为“${kept.name}”`);
+    }
+    if (kept.in_report && inReport >= SAVED_LIMITS.in_report) {
+      kept = { ...kept, in_report: false };
+      notes.push(`${place}：“${kept.name}”没能放入报告（每步最多 ${SAVED_LIMITS.in_report} 个），已取消勾选`);
+    }
+    if (kept.in_report) inReport += 1;
+    taken.push(kept);
+    return kept;
+  });
+  return { value, notes };
+}
+
+/** The workbench's step fields for the session's merge of edits made here and elsewhere (useSession's `mergers`). */
+export const WORKBENCH_FIELD_MERGERS = {
+  custom_results: mergeCustomResults,
+  // The half-filled form is browsing state: the server's stays, and it never costs the step's saved models.
+  custom_draft: (_base: unknown, server: unknown) => ({ value: server, notes: [] as string[] }),
+};

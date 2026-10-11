@@ -1,10 +1,12 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api, ApiError } from "../api";
 import type { AcademicSemester } from "../types";
 import {
-  batchClassOptions, detectRosterSeparator, parseRoster, ROSTER_COLUMNS_MISSING, rosterFileContent, rosterFileName, StudentBatchModal,
+  BATCH_DISCARD_CONFIRM, batchClassOptions, detectRosterSeparator, parseRoster, ROSTER_COLUMNS_MISSING, rosterFileContent, rosterFileName,
+  StudentBatchModal,
 } from "./student-batch";
+import { STUDENT_DISCARD_CONFIRM, StudentModal } from "./students";
 
 afterEach(cleanup);
 
@@ -233,3 +235,38 @@ test("a preview conflict is a pill on a tinted row, and the summary names the �
     expect(screen.getByRole("status").textContent).toBe("共 2 人，其中 1 个学号已有账号（0012），请返回修改名单。");
   } finally { api.classroom.createStudentBatch = original; }
 });
+
+test("a pasted roster or a typed student is not dropped by a click beside the dialog or Esc without asking", () => {
+  const confirm = spyOn(window, "confirm").mockReturnValue(false);
+  let closed = 0;
+  try {
+    const batch = render(<StudentBatchModal semesters={[]} initialClassId={1} onClose={() => { closed += 1; }} onCreated={() => {}} />);
+    fireEvent.change(screen.getByLabelText("学生名单"), { target: { value: "0012\t张三\n0013\t李四" } });
+    fireEvent.mouseDown(document.querySelector(".modal-scrim")!);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    expect(confirm.mock.calls.map(([message]) => message)).toEqual([BATCH_DISCARD_CONFIRM, BATCH_DISCARD_CONFIRM]);
+    expect(closed).toBe(0);
+    confirm.mockReturnValue(true);
+    fireEvent.mouseDown(document.querySelector(".modal-scrim")!);
+    expect(closed).toBe(1);
+    batch.unmount();
+
+    // Nothing pasted: closes at once.
+    confirm.mockClear();
+    const empty = render(<StudentBatchModal semesters={[]} initialClassId={1} onClose={() => { closed += 1; }} onCreated={() => {}} />);
+    fireEvent.mouseDown(document.querySelector(".modal-scrim")!);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(closed).toBe(2);
+    empty.unmount();
+
+    confirm.mockReturnValue(false);
+    render(<StudentModal onClose={() => { closed += 1; }} onSubmit={async () => {}} />);
+    fireEvent.change(screen.getByLabelText(/用户名/), { target: { value: "dfc-a03" } });
+    fireEvent.mouseDown(document.querySelector(".modal-scrim")!);
+    expect(confirm).toHaveBeenLastCalledWith(STUDENT_DISCARD_CONFIRM);
+    expect(closed).toBe(2);
+  } finally {
+    confirm.mockRestore();
+  }
+});
+

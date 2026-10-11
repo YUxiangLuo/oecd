@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { api, ApiError, RequestTimeoutError } from "./api";
+import { WORKBENCH_FIELD_MERGERS } from "./regression-workbench-table";
 import { emptySession, readShared, readStep } from "./session-store";
 import type { ExperimentSession, SessionResponse, SessionSaveResponse } from "./types";
 import {
@@ -290,6 +291,86 @@ describe("session helpers", () => {
     // A step the copy removed is removed, when the server still has the base version.
     const removed = { ...local, steps: Object.fromEntries(Object.entries(local.steps).filter(([key]) => key !== "9")) };
     expect(readStep(mergeKeptEdits(base, { base, session: removed }), 9)).toBeUndefined();
+  });
+
+  test("a save on its way when the page was left is this page's own: what was typed after it goes back on top", () => {
+    const base = patchSessionStep(emptySession(), 15, { research_question: "", reflection: "旧" });
+    const sent = patchSessionStep(base, 15, { research_question: "第一版" });
+    const local = patchSessionStep(sent, 15, { research_question: "第二版" });
+    const question = (session: ExperimentSession) => readStep<Record<string, unknown>>(session, 15)?.research_question;
+    // The save landed: the server holds the sent snapshot.
+    expect(question(mergeKeptEdits(sent, { base, sent, session: local }))).toBe("第二版");
+    // It never landed: the server still holds the base.
+    expect(question(mergeKeptEdits(base, { base, sent, session: local }))).toBe("第二版");
+    // Without the sent snapshot the server's step reads as changed elsewhere (the old rule).
+    expect(question(mergeKeptEdits(sent, { base, session: local }))).toBe("第一版");
+    // It landed and another tab then changed another field: both survive.
+    const elsewhere = patchSessionStep(sent, 15, { reflection: "别处" });
+    expect(readStep<Record<string, unknown>>(mergeKeptEdits(elsewhere, { base, sent, session: local }), 15))
+      .toEqual({ research_question: "第二版", reflection: "别处" });
+    // Another tab changed the same field after it: the server's step stays, as before.
+    const sameField = patchSessionStep(sent, 15, { research_question: "别处的问题" });
+    expect(question(mergeKeptEdits(sameField, { base, sent, session: local }))).toBe("别处的问题");
+  });
+
+  test("a step's saved models changed on both sides are merged by id; the rest of the step is combined as before", () => {
+    const model = (id: string, name: string, effects: string[]) => ({
+      id, name, outcome: "trade", baseline: "FVA_share", spec: { x_lags: [0, 1], controls: [], fixed_effects: effects },
+      in_report: false, saved_at: "2026-10-11T09:00:00Z", snapshot: {},
+    });
+    const base = patchSessionStep(emptySession(), 11, { custom_results: [model("a", "结果1", [])], custom_draft: { n: 0 } });
+    const server = patchSessionStep(base, 11, {
+      custom_results: [model("a", "结果1", []), model("other", "结果2", ["year"])], custom_draft: { n: 1 },
+    });
+    const local = patchSessionStep(base, 11, {
+      custom_results: [model("a", "结果1", []), model("mine", "结果2", ["country_year"])], custom_draft: { n: 2 }, note: "本页",
+    });
+    const notes: string[] = [];
+    const merged = readStep<Record<string, unknown>>(
+      mergeKeptEdits(server, { base, session: local }, { mergers: WORKBENCH_FIELD_MERGERS, notes }), 11,
+    )!;
+    expect((merged.custom_results as { id: string; name: string }[]).map((item) => `${item.id}:${item.name}`))
+      .toEqual(["a:结果1", "other:结果2", "mine:结果3"]);
+    expect(merged.custom_draft).toEqual({ n: 1 });
+    expect(merged.note).toBe("本页");
+    expect(notes).toEqual(["步骤 11：本页保存的“结果2”与另一处保存的模型同名，已改名为“结果3”"]);
+    // Without mergers the server keeps its whole step (the rule for fields recorded together).
+    expect(readStep<Record<string, unknown>>(mergeKeptEdits(server, { base, session: local }), 11)).toEqual(readStep(server, 11));
+  });
+
+  test("the queue keeps the snapshot it sent until the server confirms one, also after a failure", async () => {
+    const requests: ReturnType<typeof deferred<SessionSaveResponse>>[] = [];
+    const queue = new SessionSaveQueue(() => {
+      const request = deferred<SessionSaveResponse>();
+      requests.push(request);
+      return request.promise;
+    }, { onSaved: () => {}, onError: () => {}, onSyncing: () => {}, onUnsynced: () => {} });
+    const first = patchSessionStep(emptySession(), 15, { research_question: "first" });
+    queue.enqueue(first);
+    const failing = queue.drain();
+    expect(queue.getSentSession()).toBe(first);
+    requests[0].reject(new Error("offline"));
+    await expect(failing).rejects.toThrow("offline");
+    expect(queue.getSentSession()).toBe(first);
+    const retry = queue.drain();
+    requests[1].resolve(response(first));
+    await retry;
+    expect(queue.getSentSession()).toBeNull();
+  });
+
+  test("the kept copy carries the snapshot that was on its way", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+      removeItem: (key: string) => { values.delete(key); },
+    };
+    const sent = patchSessionStep(emptySession(), 15, { research_question: "第一版" });
+    const session = patchSessionStep(sent, 15, { research_question: "第二版" });
+    keepEdits(storage, { username: "student", release_id: RELEASE_A, base: emptySession(), sent, session });
+    expect(readKeptEdits(storage, "student", RELEASE_A)?.sent).toEqual(sent);
+    values.set(KEPT_EDITS_KEY, JSON.stringify({ ...JSON.parse(values.get(KEPT_EDITS_KEY)!), sent: { version: "forged" } }));
+    expect(readKeptEdits(storage, "student", RELEASE_A)).toBeNull();
   });
 
   test("composes step and shared patches", () => {

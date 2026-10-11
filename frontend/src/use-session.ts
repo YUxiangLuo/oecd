@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, AUTH_TOKEN_KEY, fitsKeepalive, getActiveAuthToken, isApiErrorStatus, RequestTimeoutError } from "./api";
-import { emptySession, isValidSession, patchStep as patchStoredStep, readShared, readStep, sameJsonValue, sameSessionContent, writeShared } from "./session-store";
+import { emptySession, isValidSession, patchStep as patchStoredStep, readShared, readStep, sameJsonValue, sameSessionContent, sessionChanges, writeShared } from "./session-store";
 import type {
   ClassroomReport,
   CompletionSummary,
@@ -23,7 +23,9 @@ type KeptStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 /**
  * Edits the server had not confirmed when the page was left (refresh, navigation, expired login,
  * logout or password change). `base` is the last record the server confirmed, so the next load can
- * tell which steps were edited and put back only those, without asking the student.
+ * tell which steps were edited and put back only those, without asking the student. `sent` is the
+ * snapshot of a save still on its way when the page was left: it may have landed, and the server's
+ * step equal to it is then this page's own save, not an edit made elsewhere.
  */
 export interface KeptEdits {
   version: 3;
@@ -31,6 +33,7 @@ export interface KeptEdits {
   release_id: string;
   base: ExperimentSession;
   session: ExperimentSession;
+  sent?: ExperimentSession;
 }
 
 export function keepEdits(storage: KeptStorage, kept: Omit<KeptEdits, "version">): boolean {
@@ -53,6 +56,7 @@ export function readKeptEdits(storage: KeptStorage, username: string, releaseId:
       || value.release_id !== releaseId
       || !isValidSession(value.base)
       || !isValidSession(value.session)
+      || (value.sent !== undefined && !isValidSession(value.sent))
     ) return null;
     return value as KeptEdits;
   } catch {
@@ -80,14 +84,30 @@ export function clearKeptEdits(storage: KeptStorage): void {
   storage.removeItem(KEPT_EDITS_KEY);
 }
 
+/** Combines one step field changed both on this page and elsewhere (see mergeKeptEdits); `notes` say what of this
+ *  page's change was not kept as it was. `place` names the step ("步骤 11"). */
+export type FieldMerger = (base: unknown, server: unknown, local: unknown, place: string) => { value: unknown; notes: string[] };
+export type FieldMergers = Readonly<Record<string, FieldMerger>>;
+
 /**
  * Put this page's edits back on the server's current record. Each step (or shared entry) the copy
  * changed since its base is applied when the server did not change it too. When both changed it,
  * the two are combined only if they changed different fields; a field changed on both sides keeps
  * the server's whole step, since fields recorded together (e.g. a chart's countries and readings)
  * must not be mixed.
+ *
+ * A step (or field) the server holds exactly as `sent` (this page's save that was on its way) was not changed
+ * elsewhere: the server took this page's own save, so what was typed after it is put back on top. A save the
+ * server normalised on the way in no longer matches `sent` and is treated as before.
+ *
+ * A field with a merger in `mergers` (the workbench's saved models) is combined by it instead, and the step's other
+ * fields go on as above; what the merger could not keep is added to `notes`.
  */
-export function mergeKeptEdits(server: ExperimentSession, kept: Pick<KeptEdits, "base" | "session">): ExperimentSession {
+export function mergeKeptEdits(
+  server: ExperimentSession,
+  kept: Pick<KeptEdits, "base" | "session" | "sent">,
+  { mergers, notes }: { mergers?: FieldMergers; notes?: string[] } = {},
+): ExperimentSession {
   const changed = (from: Record<string, unknown>, to: Record<string, unknown>) =>
     [...new Set([...Object.keys(from), ...Object.keys(to)])].filter((key) => !sameJsonValue(from[key], to[key]));
   const put = <T,>(out: Record<string, T>, key: string, value: T | undefined) => {
@@ -95,26 +115,44 @@ export function mergeKeptEdits(server: ExperimentSession, kept: Pick<KeptEdits, 
     else out[key] = value;
   };
   const data = (record: unknown) => ((record as { data?: Record<string, unknown> } | undefined)?.data ?? {});
-  const merge = <T,>(current: Record<string, T>, base: Record<string, T>, local: Record<string, T>) => {
+  const merge = <T,>(
+    current: Record<string, T>, base: Record<string, T>, local: Record<string, T>, sent: Record<string, T> | undefined,
+    place: (key: string) => string,
+  ) => {
     const out = { ...current };
-    for (const key of changed(base, local)) {
-      if (sameJsonValue(current[key], base[key])) {
+    for (const key of new Set([...changed(base, local), ...(sent ? changed(sent, local) : [])])) {
+      // The server holds this page's own save of this step: what the page has since then goes on top of it.
+      const own = sent !== undefined && sameJsonValue(current[key], sent[key]);
+      if (sameJsonValue(local[key], own ? sent[key] : base[key])) continue;
+      if (own || sameJsonValue(current[key], base[key])) {
         put(out, key, local[key]);
         continue;
       }
       const mine = changed(data(base[key]), data(local[key]));
-      const theirs = new Set(changed(data(base[key]), data(current[key])));
-      if (current[key] === undefined || local[key] === undefined || mine.some((field) => theirs.has(field))) continue;
+      // A field the server holds as this page sent it was changed by this page, not elsewhere.
+      const theirs = new Set(changed(data(base[key]), data(current[key]))
+        .filter((field) => !(sent && sameJsonValue(data(current[key])[field], data(sent[key])[field]))));
+      // A field changed on both sides is combined only by its merger; otherwise the server's whole step stays.
+      if (current[key] === undefined || local[key] === undefined) continue;
+      if (mine.some((field) => theirs.has(field) && !mergers?.[field])) continue;
       const combined = { ...data(current[key]) };
-      for (const field of mine) put(combined, field, data(local[key])[field]);
+      for (const field of mine) {
+        if (!theirs.has(field)) {
+          put(combined, field, data(local[key])[field]);
+          continue;
+        }
+        const result = mergers![field](data(base[key])[field], data(current[key])[field], data(local[key])[field], place(key));
+        put(combined, field, result.value);
+        notes?.push(...result.notes);
+      }
       out[key] = { ...current[key], data: combined };
     }
     return out;
   };
   return {
     ...server,
-    steps: merge(server.steps, kept.base.steps, kept.session.steps),
-    shared: merge(server.shared, kept.base.shared, kept.session.shared),
+    steps: merge(server.steps, kept.base.steps, kept.session.steps, kept.sent?.steps, (key) => `步骤 ${key}`),
+    shared: merge(server.shared, kept.base.shared, kept.session.shared, kept.sent?.shared, (key) => key),
   };
 }
 
@@ -154,6 +192,10 @@ export interface SessionApi {
   workspaceGeneration: number;
   /** Incremented each time edits kept in this tab (an expired login, a logout offline) are put back after login. */
   restoredEdits?: number;
+  /** What of this page's edits a merge with the server's record could not keep as it was (a saved model renamed,
+   *  taken out of the report or left out), shown until the student dismisses it. */
+  mergeNotes?: readonly string[];
+  dismissMergeNotes?: () => void;
   getStep: <T>(step: number) => T | undefined;
   getConfirmedStep: <T>(step: number) => T | undefined;
   patchStep: <T extends object>(step: number, patch: Partial<T>) => void;
@@ -194,6 +236,8 @@ export class SessionSaveQueue {
   private saving: Promise<void> | null = null;
   private baseUpdatedAt: string | null = null;
   private confirmed: ExperimentSession | null = null;
+  // The snapshot of the save on its way, kept after a failure too: the server may still have taken it.
+  private sent: ExperimentSession | null = null;
   private outcomeUncertain = false;
 
   constructor(
@@ -210,12 +254,28 @@ export class SessionSaveQueue {
 
   setConfirmedSession(session: ExperimentSession) {
     this.confirmed = session;
+    this.sent = null;
     this.outcomeUncertain = false;
   }
 
   /** The last snapshot the server confirmed. */
   getConfirmedSession(): ExperimentSession | null {
     return this.confirmed;
+  }
+
+  /** The snapshot of a save sent but not confirmed (on its way, or failed without an answer). */
+  getSentSession(): ExperimentSession | null {
+    return this.sent;
+  }
+
+  /** The server's version of the confirmed snapshot (what the next save names as its base). */
+  getBaseUpdatedAt(): string | null {
+    return this.baseUpdatedAt;
+  }
+
+  /** Whether a save is on its way (its answer will change the base). */
+  isSaving(): boolean {
+    return this.saving !== null;
   }
 
   hasUnsynced(): boolean {
@@ -258,6 +318,7 @@ export class SessionSaveQueue {
           if (!this.outcomeUncertain && this.confirmed && sameSessionContent(next, this.confirmed)) continue;
           let response: SessionSaveResponse;
           this.outcomeUncertain = true;
+          this.sent = next;
           try {
             response = await this.save(next, this.baseUpdatedAt);
           } catch (cause) {
@@ -292,7 +353,7 @@ export function updateSessionShared<T>(session: ExperimentSession, key: SharedSe
   return writeShared(session, key, apply(readShared<T>(session, key)));
 }
 
-export function useSession(enabled: boolean, username?: string): SessionApi {
+export function useSession(enabled: boolean, username?: string, mergers?: FieldMergers): SessionApi {
   const [status, setStatus] = useState<SessionStatus>(enabled ? "loading" : "unavailable");
   const [loadAttempt, setLoadAttempt] = useState(0);
   // An automatic retry reads again behind the failure page (no loading state): the page, its focus and its alert stay.
@@ -310,6 +371,9 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const [materialGate, setMaterialGate] = useState<ReportGateItem[] | null>(null);
   const [workspaceGeneration, setWorkspaceGeneration] = useState(0);
   const [restoredEdits, setRestoredEdits] = useState(0);
+  const [mergeNotes, setMergeNotes] = useState<readonly string[]>([]);
+  const mergersRef = useRef(mergers);
+  mergersRef.current = mergers;
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncConflict, setSyncConflict] = useState(false);
@@ -423,7 +487,9 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         // Edits kept when this tab was last left go back on top of the server's record, step by step.
         const kept = username ? readKeptEdits(sessionStorage, username, response.release_id) : null;
         if (kept) clearKeptEdits(sessionStorage);
-        const restored = kept ? mergeKeptEdits(response.session, kept) : response.session;
+        const notes: string[] = [];
+        const restored = kept ? mergeKeptEdits(response.session, kept, { mergers: mergersRef.current, notes }) : response.session;
+        setMergeNotes(notes);
         replace(restored);
         setConfirmedSession(response.session);
         setUpdatedAt(response.updated_at ?? null);
@@ -487,6 +553,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       username,
       release_id: releaseIdRef.current,
       base: queue.current.getConfirmedSession() ?? emptySession(),
+      sent: queue.current.getSentSession() ?? undefined,
       session: sessionRef.current,
     });
   }, [enabled, username]);
@@ -500,9 +567,12 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
 
   useEffect(() => {
     if (!enabled || !username) return;
+    // Set once the changed steps went out as the page unloads: the hidden event that follows does not send the whole
+    // record again (it would only be refused, the base having moved on).
+    let changesSent = false;
     // Send unsaved edits now, without waiting for the autosave delay: the tab is being hidden or closed.
     const flushBeforeLeaving = () => {
-      if (!queue.current?.hasUnsynced() || syncConflictRef.current || statusRef.current !== "ready") return;
+      if (changesSent || !queue.current?.hasUnsynced() || syncConflictRef.current || statusRef.current !== "ready") return;
       if (timer.current != null) {
         window.clearTimeout(timer.current);
         timer.current = null;
@@ -514,20 +584,42 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       && !saveFailedRef.current
       && !syncConflictRef.current
       && statusRef.current === "ready";
+    const wholeFits = () => fitsKeepalive({ session: sessionRef.current, base_updated_at: null });
+    // A record too large for keepalive (a finished one is about 80–105 KB) is sent as the steps changed since the last
+    // confirmed save, which outlives the page. Not while a save is on its way: its answer changes the base this would
+    // name (that case relies on the kept copy, which a refresh puts back).
+    const changedSteps = () => {
+      const confirmed = queue.current?.getConfirmedSession();
+      const base = queue.current?.getBaseUpdatedAt();
+      if (!confirmed || !base || queue.current?.isSaving()) return null;
+      const body = { ...sessionChanges(confirmed, sessionRef.current), base_updated_at: base };
+      return fitsKeepalive(body) ? body : null;
+    };
     const preserveBeforeLeaving = (event: Event) => {
       if (!queue.current?.hasUnsynced()) return;
       // A refresh puts the kept copy back; a closed tab loses it (sessionStorage belongs to the tab).
       const saved = keepCopy();
       if (event.type === "pagehide") {
         leavingRef.current = true;
-        flushBeforeLeaving();
+        // Unloading (not kept in the back-forward cache, where the page saves as usual when shown again).
+        const changes = !(event as PageTransitionEvent).persisted && canSaveNow() && !wholeFits() ? changedSteps() : null;
+        if (!changes) {
+          flushBeforeLeaving();
+          return;
+        }
+        if (timer.current != null) {
+          window.clearTimeout(timer.current);
+          timer.current = null;
+        }
+        changesSent = true;
+        void api.classroom.patchSession(changes).catch(() => {});
         return;
       }
       // beforeunload: ask before leaving when the edits can neither be kept here (storage failure) nor be
-      // saved on the way out (offline, a failed save, a conflict, or a record too large to be sent with
-      // keepalive, which a finished record with a long analysis can be).
+      // saved on the way out (offline, a failed save, a conflict, or edits too large to be sent with keepalive
+      // even as the changed steps, or a save on its way).
       const canSave = canSaveNow();
-      const fits = fitsKeepalive({ session: sessionRef.current, base_updated_at: null });
+      const fits = wholeFits() || changedSteps() !== null;
       // Too large for keepalive: start the normal save now, so it is already on its way while the browser asks.
       if (canSave && !fits) flushBeforeLeaving();
       if (!saved || (!leavingOnPurposeRef.current && !(canSave && fits))) {
@@ -625,7 +717,13 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       // Keep this page's edits the other page did not touch: the same rule as edits kept on leaving.
       const sameRelease = response.release_id === releaseIdRef.current;
       const base = queue.current?.getConfirmedSession() ?? emptySession();
-      const merged = sameRelease ? mergeKeptEdits(response.session, { base, session: localSnapshot }) : response.session;
+      // A save that failed without an answer may have gone through: the server's step equal to it is this page's.
+      const sent = queue.current?.getSentSession() ?? undefined;
+      const notes: string[] = [];
+      const merged = sameRelease
+        ? mergeKeptEdits(response.session, { base, session: localSnapshot, sent }, { mergers: mergersRef.current, notes })
+        : response.session;
+      setMergeNotes(notes);
       releaseIdRef.current = response.release_id;
       queue.current?.discardPending(response.updated_at ?? null);
       queue.current?.setConfirmedSession(response.session);
@@ -675,6 +773,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   return {
     status, session, report, updatedAt, syncing, syncError, syncConflict, unsynced, autoRetry: retryAt != null,
     completion, reportCurrent, reportGate, materialGate, workspaceGeneration, restoredEdits,
+    mergeNotes, dismissMergeNotes: useCallback(() => setMergeNotes([]), []),
     getStep: useCallback(<T,>(step: number) => readStep<T>(session, step), [session]),
     getConfirmedStep: useCallback(<T,>(step: number) => readStep<T>(confirmedSession, step), [confirmedSession]),
     patchStep: useCallback(<T extends object,>(step: number, patch: Partial<T>) => update((value) => patchStoredStep(value, step, patch)), [update]),

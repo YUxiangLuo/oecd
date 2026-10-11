@@ -157,6 +157,8 @@ function conflictList(existing: readonly string[]) {
   return `（${existing.slice(0, 5).join("、")}${existing.length > 5 ? " 等" : ""}）`;
 }
 
+export const BATCH_DISCARD_CONFIRM = "粘贴的名单还没有创建账号，关闭后不会保留。确定关闭？";
+
 export function StudentBatchModal({ semesters, initialClassId, onClose, onCreated }: {
   semesters: AcademicSemester[]; initialClassId: number | null; onClose: () => void; onCreated: () => void;
 }) {
@@ -184,7 +186,14 @@ export function StudentBatchModal({ semesters, initialClassId, onClose, onCreate
     target?.focus();
   }, [accounts]);
   const close = () => {
-    if (!busy && (!attempted || done || window.confirm("创建结果还没确认。关闭后请到“学生与进度”核对。确定关闭？"))) onClose();
+    if (busy) return;
+    if (attempted && !done) {
+      if (window.confirm("创建结果还没确认。关闭后请到“学生与进度”核对。确定关闭？")) onClose();
+      return;
+    }
+    // The scrim and Esc close too: a pasted roster not created yet (up to 200 lines) is not dropped without asking.
+    if (!done && text.trim() && !window.confirm(BATCH_DISCARD_CONFIRM)) return;
+    onClose();
   };
   const preview = async () => {
     setError("");

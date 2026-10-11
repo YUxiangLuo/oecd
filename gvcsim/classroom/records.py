@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime
+from collections.abc import Callable
 from typing import Any
 
 import psycopg
@@ -174,6 +175,37 @@ def save_session(
         if saved is None:
             raise SessionChanged("实验记录已被另一个标签页更新")
         return saved
+
+
+def patch_session(
+    username: str,
+    apply: Callable[[dict[str, Any]], dict[str, Any]],
+    expected_updated_at: datetime,
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """Change the stored session under its row lock when it is still the version the browser saw.
+
+    ``apply`` gets the stored session and returns the whole new one, checked; its errors propagate and nothing is
+    written. Returns the new session and the row (``updated_at``), or None for an unknown student. A missing row or
+    another version raises ``SessionChanged``, as a stale whole-session save does.
+    """
+    release_id = database.current_release_id()
+    with database.conn() as c:
+        account = _student(c, username)
+        if not account:
+            return None
+        current = c.execute(
+            "SELECT session,updated_at FROM experiment_sessions WHERE account_id=%s AND release_id=%s FOR UPDATE",
+            (account["id"], release_id),
+        ).fetchone()
+        if current is None or current["updated_at"] != expected_updated_at:
+            raise SessionChanged("实验记录已被另一个标签页更新")
+        session = apply(current["session"])
+        saved = c.execute(
+            "UPDATE experiment_sessions SET session=%s,updated_at=clock_timestamp()"
+            " WHERE account_id=%s AND release_id=%s RETURNING updated_at",
+            (json.dumps(session, ensure_ascii=False), account["id"], release_id),
+        ).fetchone()
+        return session, saved
 
 
 _REPORT_COLUMNS = (

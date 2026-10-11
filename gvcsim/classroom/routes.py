@@ -110,10 +110,10 @@ def _run_button(step: int) -> str:
     return f"计算{title.split('：')[0] or '回归'}"
 
 
-@router.put("/session")
-def put_session(req: SessionRequest, user: dict = Depends(require_student)):
+def _checked_session(raw: dict[str, Any]) -> dict[str, Any]:
+    """A session as it may be stored (the whole record a save would leave), or 422 saying what is wrong with it."""
     try:
-        payload = session_model.validate_session(req.session)
+        payload = session_model.validate_session(raw)
     except session_model.SessionError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     step10 = payload.get("steps", {}).get("10", {}).get("data", {})
@@ -143,8 +143,8 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
         if not isinstance(data, dict):
             continue
         for key in ("run", "qualified_run"):
-            raw = data.get(key)
-            if raw is not None and _parse_saved_run(raw, _STEP_OUTCOMES[step]) is None:
+            raw_run = data.get(key)
+            if raw_run is not None and _parse_saved_run(raw_run, _STEP_OUTCOMES[step]) is None:
                 raise HTTPException(
                     status_code=422,
                     detail=f"步骤 {step} 保存的回归结果已过期，请回到步骤 {step} 点“{_run_button(step)}”重新计算。",
@@ -154,28 +154,78 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
             problem = custom_results_problem(data["custom_results"], _STEP_OUTCOMES[step])
             if problem:
                 raise HTTPException(status_code=422, detail=f"步骤 {step} 自己设计的模型没有保存：{problem}。")
+    return payload
+
+
+def _session_changed() -> HTTPException:
+    return HTTPException(
+        status_code=409,
+        detail={
+            "message": (
+                "服务器记录版本已变化，本次请求未覆盖服务器内容。"
+                "可能是其他页面已更新，也可能是此前保存成功但未收到响应。"
+                "请载入服务器版本并核对内容后再操作。"
+            ),
+            "code": "session_changed",
+        },
+    )
+
+
+def _saved_session_response(username: str, payload: dict[str, Any], updated_at: datetime) -> dict[str, Any]:
+    report = db.latest_report(username)
+    return {
+        "session": payload,
+        "updated_at": updated_at,
+        **_learning_state(payload, report=report),
+    }
+
+
+@router.put("/session")
+def put_session(req: SessionRequest, user: dict = Depends(require_student)):
+    payload = _checked_session(req.session)
     try:
         saved = db.save_session(user["sub"], payload, req.base_updated_at)
     except records.SessionChanged as error:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": (
-                    "服务器记录版本已变化，本次请求未覆盖服务器内容。"
-                    "可能是其他页面已更新，也可能是此前保存成功但未收到响应。"
-                    "请载入服务器版本并核对内容后再操作。"
-                ),
-                "code": "session_changed",
-            },
-        ) from error
+        raise _session_changed() from error
     if saved is None:
         raise HTTPException(status_code=404, detail="学生账号不存在")
-    report = db.latest_report(user["sub"])
-    return {
-        "session": payload,
-        "updated_at": saved["updated_at"],
-        **_learning_state(payload, report=report),
-    }
+    return _saved_session_response(user["sub"], payload, saved["updated_at"])
+
+
+class SessionPatchRequest(BaseModel):
+    """The save sent as a page closes: only the steps and shared entries changed since the version the browser saw
+    (`base_updated_at`), so it fits a keepalive request (64 KiB) when the whole record does not. A null removes one."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    steps: dict[str, dict[str, Any] | None] = Field(default_factory=dict)
+    shared: dict[str, Any] = Field(default_factory=dict)
+    base_updated_at: datetime
+
+
+@router.patch("/session")
+def patch_session(req: SessionPatchRequest, user: dict = Depends(require_student)):
+    """Apply the changed steps to the stored record under its row lock, when it is still the version the browser
+    saw; the whole result passes the same checks as a PUT."""
+
+    def apply(stored: dict[str, Any]) -> dict[str, Any]:
+        merged = {**stored, "steps": dict(stored.get("steps") or {}), "shared": dict(stored.get("shared") or {})}
+        for part, changes in (("steps", req.steps), ("shared", req.shared)):
+            for key, value in changes.items():
+                if value is None:
+                    merged[part].pop(key, None)
+                else:
+                    merged[part][key] = value
+        return _checked_session(merged)
+
+    try:
+        result = db.patch_session(user["sub"], apply, req.base_updated_at)
+    except records.SessionChanged as error:
+        raise _session_changed() from error
+    if result is None:
+        raise HTTPException(status_code=404, detail="学生账号不存在")
+    payload, saved = result
+    return _saved_session_response(user["sub"], payload, saved["updated_at"])
 
 
 async def _prepare_report(user: dict) -> tuple[dict[str, Any], teaching_report.TeachingReport, datetime]:

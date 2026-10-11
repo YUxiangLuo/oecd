@@ -491,6 +491,8 @@ function HintedField({ label, hint, children }: { label: string; hint: string; c
   );
 }
 
+export const STUDENT_DISCARD_CONFIRM = "填写的内容还没有保存，关闭后不会保留。确定关闭？";
+
 export function StudentModal({ semesters = [], onClose, onSubmit }: { semesters?: AcademicSemester[]; onClose: () => void; onSubmit: (body: { username: string; display_name: string; password: string; student_no: string; class_id?: number }) => Promise<void> }) {
   const [form, setForm] = useState<{ username: string; display_name: string; password: string; student_no: string; class_id?: number }>({ username: "", display_name: "", password: "", student_no: "" });
   const [error, setError] = useState<string | null>(null);
@@ -505,7 +507,9 @@ export function StudentModal({ semesters = [], onClose, onSubmit }: { semesters?
   };
   // A check that names its field sends focus there; a server refusal goes to the error box.
   const errorRef = useFieldErrorFocus(error, errorField ? fields[errorField] : null);
-  const close = () => { if (!saving) onClose(); };
+  // The scrim and Esc close too: what was typed is not dropped without asking.
+  const typed = [form.username, form.display_name, form.password, form.student_no].some((value) => value.trim());
+  const close = () => { if (!saving && (!typed || window.confirm(STUDENT_DISCARD_CONFIRM))) onClose(); };
   const fieldProps = (field: NewStudentField) => ({
     ref: fields[field],
     "aria-invalid": errorField === field ? true : undefined,

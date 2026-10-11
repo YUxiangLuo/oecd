@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { emptySession, isValidSession, patchStep, readShared, readStep, writeShared } from "./session-store";
+import { emptySession, isValidSession, patchStep, readShared, readStep, sessionChanges, writeShared } from "./session-store";
 import { SESSION_VERSION } from "./types";
 
 describe("simple session store", () => {
@@ -20,3 +20,14 @@ describe("simple session store", () => {
     expect(isValidSession({ ...session, shared: { regression_history: { data: {} } } })).toBe(false);
   });
 });
+
+test("the changes between two records name only what differs; a removed entry is null", () => {
+  let from = patchStep(emptySession(), 2, { country: "CHN" });
+  from = patchStep(from, 9, { year: 2020 });
+  from = writeShared(from, "regression_settings", { trade: 1 });
+  let to = patchStep(from, 15, { research_question: "new" });
+  to = { ...to, steps: Object.fromEntries(Object.entries(to.steps).filter(([key]) => key !== "9")) };
+  expect(sessionChanges(from, to)).toEqual({ steps: { "15": to.steps["15"], "9": null }, shared: {} });
+  expect(sessionChanges(from, from)).toEqual({ steps: {}, shared: {} });
+});
+

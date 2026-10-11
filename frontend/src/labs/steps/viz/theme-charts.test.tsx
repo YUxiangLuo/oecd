@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Butterfly, Dumbbell, IndustryDotPlot, StackedAreaFacets } from "./theme-charts";
 import type { Row } from "./scaffold";
+import { CAT, CAT_TEXT } from "../../../viz/shared";
 
 afterEach(cleanup);
 
@@ -79,6 +80,29 @@ describe("industry dot plot", () => {
     expect(row.querySelectorAll(".national")).toHaveLength(2);
     // Missing readings leave no dot.
     expect(screen.getByRole("group", { name: /C20 化学品/ }).querySelectorAll("i.dot")).toHaveLength(1);
+  });
+});
+
+describe("text in a series' colour", () => {
+  const luminance = (hex: string) => {
+    const channel = (value: number) => (value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+    const [r, g, b] = [1, 3, 5].map((start) => channel(parseInt(hex.slice(start, start + 2), 16) / 255));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contrast = (hex: string) => 1.05 / (luminance(hex) + 0.05);
+
+  test("reads at 4.5:1 on white for every series, where the mark colours (CAT) do not", () => {
+    expect(CAT_TEXT).toHaveLength(CAT.length);
+    for (const color of CAT_TEXT) expect(contrast(color)).toBeGreaterThanOrEqual(4.5);
+    expect(CAT.filter((color) => contrast(color) < 4.5)).toEqual(["#1baf7a", "#eda100", "#e34948"]);
+  });
+
+  test("the dot plot's readings use the text colours, its dots the series colours", () => {
+    const { container } = render(
+      <IndustryDotPlot groups={[{ key: "C26", label: "C26", values: [0.3, 0.1, 0.2] }]} countries={["CHN", "USA", "DEU"]} unit="%" label="外国增加值项占比" />,
+    );
+    const readings = [...container.querySelectorAll<HTMLElement>(".dot-plot-values b")].map((node) => node.style.color);
+    expect(readings).toEqual(CAT_TEXT.slice(0, 3));
   });
 });
 

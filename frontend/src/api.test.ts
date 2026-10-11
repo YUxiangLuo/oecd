@@ -40,6 +40,25 @@ test("report generation sends the observed report revision without rounding it",
   } finally { globalThis.fetch = originalFetch; }
 });
 
+test("the changed steps sent as a page closes are a PATCH with keepalive", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: { url: string; init?: RequestInit }[] = [];
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), init });
+    return new Response("{}", { status: 200 });
+  }) as typeof fetch;
+  setActiveAuthToken("token-a");
+  try {
+    const body = { steps: { "15": { data: { research_question: "q" } }, "2": null }, shared: {}, base_updated_at: "2026-10-09T00:00:00Z" };
+    await api.classroom.patchSession(body);
+    expect(calls.map((call) => [call.url, call.init?.method, call.init?.keepalive])).toEqual([["/api/classroom/session", "PATCH", true]]);
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual(body);
+  } finally {
+    globalThis.fetch = originalFetch;
+    setActiveAuthToken(null);
+  }
+});
+
 test("a session save sent while leaving is the same PUT with keepalive, unless the body is too large for it", async () => {
   const originalFetch = globalThis.fetch;
   const calls: { url: string; init?: RequestInit }[] = [];

@@ -436,3 +436,11 @@
 }
 /* Under the report status: the student changed the record after handing the report in. */
 .report-outdated-note { display: block; margin-top: 3px; color: #8a5a00; font-size: 11px; line-height: 1.4; }
+
+/* After a reload over a review saved elsewhere: that review, beside the kept draft. */
+.grade-current {
+  margin: 0 0 10px; padding: 9px 12px; border: 1px solid #e8c77b; border-left: 4px solid #d99a2b;
+  border-radius: 8px; background: #fff8e8; color: #6b450b; font-size: 12px; line-height: 1.6;
+}
+.grade-current-feedback { margin: 4px 0 6px; white-space: pre-wrap; max-height: 9em; overflow: auto; color: var(--text, #1f2937); }
+

@@ -509,6 +509,12 @@ export interface ExperimentSession {
   shared: Partial<Record<SharedSessionKey, SessionRecord>>;
 }
 
+/** The steps and shared entries changed between two records (null: removed), as PATCH /api/classroom/session takes them. */
+export interface SessionChanges {
+  steps: Record<string, SessionRecord | null>;
+  shared: Partial<Record<SharedSessionKey, SessionRecord | null>>;
+}
+
 /**
  * 一步实验台读写自己的自动保存状态。
  *

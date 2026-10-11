@@ -225,7 +225,8 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   // Read out once a calculation, a save or a delete is done (the table changes without moving focus there).
   const [announcement, setAnnouncement] = useState("");
   const [detailColumn, setDetailColumn] = useState(0);
-  // A refused calculation (429) waits out Retry-After with a visible countdown, as the step's run button does.
+  // A refused calculation (429) shows how long new models must wait. The button stays usable: a model computed before
+  // (by anyone) is answered from the server's cache and not counted, and a new one is simply refused again.
   const [retryAt, setRetryAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -272,7 +273,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const current = Boolean(computed && computed.design.baseline === baseline && sameSpec(computed.design.spec!, spec, options));
   const noX = spec.x_lags.length === 0;
   const run = async () => {
-    if (running || noX || retryWait > 0) return;
+    if (running || noX) return;
     controller.current?.abort();
     const request = new AbortController();
     controller.current = request;
@@ -291,7 +292,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         // Not a problem with the model: the student's calculations of the minute are used up.
         setNow(Date.now());
         setRetryAt(Date.now() + cause.retryAfter * 1000);
-        setError(`计算太频繁：每分钟最多算 ${options.limits.runs_per_minute} 个新模型（已经算过的不计），请稍等再算。`);
+        setError(`计算太频繁：每分钟最多算 ${options.limits.runs_per_minute} 个新模型，新的设定请等倒计时结束；已经算过的设定不计次，现在就能算。`);
       } else if (!(cause instanceof DOMException && cause.name === "AbortError")) {
         setError(userFacingRequestError(cause, "这个模型没有算出结果"));
         if (cause instanceof ApiError && cause.status === 400) setComputed(null);
@@ -382,9 +383,10 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       <ModelForm options={options} spec={spec} onChange={changeSpec} />
       <p className="reg-custom-equation" aria-live="polite">{noX ? "至少选一项关税暴露 X。" : equationPreview(spec, options)}</p>
       <div className="reg-custom-actions">
-        <button type="button" className="run-btn" aria-disabled={running || noX || retryWait > 0 || undefined} onClick={() => void run()}>
-          {running ? "正在计算…" : retryWait > 0 ? `重试（${retryWait} 秒后）` : "计算这个模型"}
+        <button type="button" className="run-btn" aria-disabled={running || noX || undefined} onClick={() => void run()}>
+          {running ? "正在计算…" : "计算这个模型"}
         </button>
+        {retryWait > 0 && <span className="muted reg-custom-wait">新的设定 {retryWait} 秒后可以计算</span>}
         <button type="button" className="secondary" onClick={() => changeSpec(options.default_spec)}>恢复默认设定</button>
         <span className="sr-only" role="status" aria-live="polite">{running ? "正在计算…" : announcement}</span>
       </div>

@@ -1,7 +1,7 @@
 import { useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { countryLabel } from "../../../viz";
 import { useHoverTip, type TipLine } from "../../../viz/hover";
-import { CAT } from "../../../viz/shared";
+import { CAT, CAT_TEXT } from "../../../viz/shared";
 import { niceDomain } from "../../../viz/nice-ticks";
 import { finiteValue } from "./indicator-model";
 import { indicatorNumber, indicatorTick } from "./indicator-charts";
@@ -247,7 +247,7 @@ export function IndustryDotPlot({ groups, countries, unit, nationals = [], label
               <i key={countries[index]} className="dot" data-country={countries[index]} style={{ left: `${px(value)}%`, background: CAT[index], zIndex: 10 - index }} />
             ))}
           </div>
-          <span className="dot-plot-values">{group.values.map((_, index) => <b key={countries[index]} style={{ color: CAT[index] }}>{reading(group, index)}</b>)}</span>
+          <span className="dot-plot-values">{group.values.map((_, index) => <b key={countries[index]} style={{ color: CAT_TEXT[index] }}>{reading(group, index)}</b>)}</span>
         </div>
       ))}
       {Tip}
@@ -320,8 +320,8 @@ export function Dumbbell({ rows, leftLabel, rightLabel, unit, title, domain }: {
               : <i className="dot" style={{ left: `${px(row.right)}%`, background: CAT[1] }} />)}
           </div>
           <span className="dot-plot-values">
-            <b style={{ color: CAT[0] }}>{reading(row.left, row.leftReason)}</b>
-            <b style={{ color: CAT[1] }}>{reading(row.right, row.rightReason)}</b>
+            <b style={{ color: CAT_TEXT[0] }}>{reading(row.left, row.leftReason)}</b>
+            <b style={{ color: CAT_TEXT[1] }}>{reading(row.right, row.rightReason)}</b>
           </span>
         </div>
       ))}
@@ -376,9 +376,9 @@ export function Butterfly({ rows, leftLabel, rightLabel, unit, title, onPick }: 
   return (
     <div ref={wrapRef} className="hover-wrap butterfly" role="region" aria-label={title}>
       <div className="butterfly-head" aria-hidden="true">
-        <span style={{ color: CAT[1] }}>◀ {leftLabel}</span>
+        <span style={{ color: CAT_TEXT[1] }}>◀ {leftLabel}</span>
         <span />
-        <span style={{ color: CAT[0] }}>{rightLabel} ▶</span>
+        <span style={{ color: CAT_TEXT[0] }}>{rightLabel} ▶</span>
       </div>
       {rows.map((row, index) => (
         <div

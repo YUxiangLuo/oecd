@@ -84,7 +84,10 @@ fi
 if [[ -n "$artifact_dir" ]]; then
   "${ab[@]}" screenshot "$artifact_dir/teacher-duplicate-student-preserved.png"
 fi
+# Closing with the fields still filled asks first (nothing typed is dropped silently): confirm it.
 "${ab[@]}" find role button click --name '关闭' --exact
+"${ab[@]}" dialog status | grep -q '填写的内容还没有保存' || { echo "closing the filled add-student dialog did not ask first" >&2; exit 1; }
+"${ab[@]}" dialog accept >/dev/null
 "${ab[@]}" network requests --clear >/dev/null
 
 "${ab[@]}" find role button click --name '修改密码' --exact

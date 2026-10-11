@@ -14,6 +14,7 @@ import {
 import { AppBootSkeleton, NarrowWindowNotice, TeacherWorkspace } from "./app-shell";
 import { AUTH_TOKEN_KEY, api, getActiveAuthToken, isApiErrorStatus, setActiveAuthToken } from "./api";
 import { LoginPage } from "./login";
+import { WORKBENCH_FIELD_MERGERS } from "./regression-workbench-table";
 import { resetStepScroller } from "./step-navigation";
 import { StudentWorkspace } from "./student-workspace";
 import type { AuthUser, Meta, StepsResponse, StepStateApi } from "./types";
@@ -90,6 +91,7 @@ function AppContent() {
   const session = useSession(
     user?.role === "student",
     user?.role === "student" ? user.username : undefined,
+    WORKBENCH_FIELD_MERGERS,
   );
 
   const completedSteps = new Set(session.completion?.completed ?? []);

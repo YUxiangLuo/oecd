@@ -1,4 +1,4 @@
-import type { ExperimentSession, ReportMutationResponse, SessionResponse, SessionSaveResponse } from "./types";
+import type { ExperimentSession, ReportMutationResponse, SessionChanges, SessionResponse, SessionSaveResponse } from "./types";
 
 export const AUTH_TOKEN_KEY = "gvcsim_token";
 
@@ -185,8 +185,9 @@ function get<T>(url: string, signal?: AbortSignal): Promise<T> {
 }
 
 /** Browsers refuse a keepalive request once the bodies of all keepalive requests in flight pass 64 KiB
- * (65,536 bytes); the session saves are sent one at a time, so stay just below it. A finished record measured
- * about 61 KB before the step-15 analysis, so a long analysis can pass it. */
+ * (65,536 bytes); the session saves are sent one at a time, so stay just below it. A finished record with the
+ * regression runs and saved models of teaching data v10 is about 80–105 KB, so a page closing sends only the steps
+ * changed since the last confirmed save (`patchSession`), which fits unless one step alone is that large. */
 export const KEEPALIVE_BODY_LIMIT = 64_000;
 
 /** Whether a JSON body is small enough to be sent with `keepalive` (it then outlives the page). */
@@ -391,6 +392,10 @@ export const api = {
     /** `keepalive`: the page is being hidden or closed; the same request is sent so that it outlives the page. */
     saveSession: (body: { session: ExperimentSession; base_updated_at: string | null }, options?: { keepalive?: boolean }) =>
       post<SessionSaveResponse>("/api/classroom/session", body, "PUT", undefined, options?.keepalive ?? false),
+    /** Only the steps and shared entries changed since `base_updated_at` (null removes one): the save sent as the page
+     *  closes when the whole record is too large for a keepalive request. */
+    patchSession: (body: SessionChanges & { base_updated_at: string }) =>
+      post<SessionSaveResponse>("/api/classroom/session", body, "PATCH", undefined, true),
     submitReport: () => post<ReportMutationResponse>("/api/classroom/report/submit"),
     generateReport: (expectedReportUpdatedAt: string | null) =>
       post<ReportMutationResponse>("/api/classroom/report/generate", { expected_report_updated_at: expectedReportUpdatedAt }),

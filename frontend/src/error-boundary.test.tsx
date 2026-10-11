@@ -37,3 +37,20 @@ test("the root boundary replaces an empty page with a message and a reload butto
   expect(screen.getByRole("button", { name: "刷新页面" })).toBeTruthy();
   quiet.mockRestore();
 });
+
+test("focus goes to the message's button when it appears, also after 再试一次 failed again", () => {
+  const quiet = spyOn(console, "error").mockImplementation(() => {});
+  state.broken = true;
+  const root = render(<RootErrorBoundary><Step label="页面" /></RootErrorBoundary>);
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "刷新页面" }));
+  root.unmount();
+
+  render(<StepErrorBoundary resetKey="11"><Step label="步骤 11" /></StepErrorBoundary>);
+  const first = screen.getByRole("button", { name: "再试一次" });
+  expect(document.activeElement).toBe(first);
+  // Still broken: the retry draws the message again, and focus does not fall to <body>.
+  fireEvent.click(first);
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "再试一次" }));
+  expect(document.activeElement).not.toBe(document.body);
+  quiet.mockRestore();
+});

@@ -5,7 +5,7 @@ import { TeacherWorkspace } from "../app-shell";
 import type { TeacherReport } from "../types";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  GRADE_RUBRIC, GradeView, RELOADED_REVIEW_NOTE, REPORT_FILTER_LABELS, ReportRowAction, STALE_REVIEW_HINT, UNCHANGED_REVIEW_HINT, reportRowAction, reportsEmptyState,
+  GRADE_RUBRIC, GradeView, RELOADED_OVER_REVIEW_NOTE, RELOADED_REVIEW_NOTE, REPORT_FILTER_LABELS, ReportRowAction, STALE_REVIEW_HINT, UNCHANGED_REVIEW_HINT, reportRowAction, reportsEmptyState,
   reviewPosition,
 } from "./reports";
 
@@ -259,6 +259,37 @@ describe("teacher review flow", () => {
     } finally {
       spies.forEach((spy) => spy.mockRestore());
       confirm.mockRestore();
+    }
+  });
+
+  test("a 409 reload over a review saved elsewhere shows that review beside the kept draft, and can take it", async () => {
+    const elsewhere = { ...pendingReport, state: "graded" as const, score: 70, feedback: "另一窗口的评语\n第二行", updated_at: "2026-08-14T00:00:00Z" };
+    const detail = spyOn(api.classroom, "reportDetail").mockResolvedValueOnce(pendingReport).mockResolvedValue(elsewhere);
+    const spies = [
+      spyOn(api.classroom, "reports").mockResolvedValue({ reports: [pendingReport] }),
+      spyOn(api.classroom, "students").mockResolvedValue({ students: [] }),
+      spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] }),
+      spyOn(api.classroom, "grade").mockRejectedValue(new ApiError(409, "你在另一个窗口已把这份报告评为 70 分", "409")),
+      detail,
+    ];
+    try {
+      renderReports();
+      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "评阅报告：学生" }));
+      fireEvent.change(await screen.findByRole("spinbutton"), { target: { value: "88" } });
+      fireEvent.change(screen.getByRole("textbox", { name: "评语（选填）" }), { target: { value: "本页的评语" } });
+      fireEvent.click(screen.getByRole("button", { name: "提交评阅" }));
+      fireEvent.click(await screen.findByRole("button", { name: "载入最新报告" }));
+      await screen.findByText(RELOADED_OVER_REVIEW_NOTE);
+      const current = screen.getByRole("group", { name: "服务器上当前的评阅" });
+      expect(current.textContent).toContain("服务器上当前的评阅：70 分");
+      expect(current.querySelector(".grade-current-feedback")?.textContent).toBe("另一窗口的评语\n第二行");
+      expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("88");
+      fireEvent.click(screen.getByRole("button", { name: "改用这份评阅" }));
+      expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("70");
+      expect((screen.getByRole("textbox", { name: "评语（选填）" }) as HTMLTextAreaElement).value).toBe("另一窗口的评语\n第二行");
+    } finally {
+      spies.forEach((spy) => spy.mockRestore());
     }
   });
 

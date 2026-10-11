@@ -55,6 +55,8 @@ export const GRADE_RUBRIC = [
 /** Said after the cause of a refused save (another grade, a resubmission); the reload button points here. */
 export const STALE_REVIEW_HINT = "点“载入最新报告”查看，已填的分数和评语会保留。";
 export const RELOADED_REVIEW_NOTE = "已载入最新报告，并保留了你输入的分数和评语；请核对报告内容后再保存。";
+/** After a reload over a review saved elsewhere (another window or teacher): shown with that review, which saving replaces. */
+export const RELOADED_OVER_REVIEW_NOTE = "已载入最新报告，并保留了你输入的分数和评语。另一处刚保存了下面这份评阅，保存你的评阅会替换它。";
 export const UNCHANGED_REVIEW_HINT = "分数和评语都没有修改。";
 
 /** Whether the rubric starts open: open until the teacher's first saved review, then as they last left it. */
@@ -322,6 +324,8 @@ export function GradeView({ data, grader, semesters = [], backLabel = BACK_TO_LI
   // Re-saving an unchanged grade only moved its timestamp.
   const unchanged = data.state === "graded" && !dirty;
   const reloaded = initialDraft != null;
+  // The review saved elsewhere that a reload found, when the kept draft differs from it: shown so it is not replaced unseen.
+  const savedElsewhere = reloaded && data.score != null && (initialDraft.score !== initialScore || initialDraft.feedback !== data.feedback);
   const ids = useId();
   const formHeadingId = `${ids}-form`;
   const scoreErrorId = `${ids}-score-error`;
@@ -411,7 +415,20 @@ export function GradeView({ data, grader, semesters = [], backLabel = BACK_TO_LI
             )}
           </div>
           <div className="grade-panel-body">
-            {reloaded && <p ref={reloadedRef} className="muted grade-note" role="status" tabIndex={-1}>{RELOADED_REVIEW_NOTE}</p>}
+            {reloaded && <p ref={reloadedRef} className="muted grade-note" role="status" tabIndex={-1}>{savedElsewhere ? RELOADED_OVER_REVIEW_NOTE : RELOADED_REVIEW_NOTE}</p>}
+            {savedElsewhere && (
+              <div className="grade-current" role="group" aria-label="服务器上当前的评阅">
+                <b>服务器上当前的评阅：{data.score} 分</b>
+                {data.feedback ? <p className="grade-current-feedback">{data.feedback}</p> : <p className="muted">（无评语）</p>}
+                <button type="button" className="secondary sm" disabled={saving} onClick={() => {
+                  setScore(initialScore);
+                  setFeedback(data.feedback);
+                  setScoreError(null);
+                  setSaveError(null);
+                  reviewGuard.publish({ dirty: false, saving: false });
+                }}>改用这份评阅</button>
+              </div>
+            )}
             <label className="grade-field">评语（选填）<textarea disabled={saving} value={feedback} onChange={(event) => {
               // 4000 characters as the server counts them (an emoji is one); only text beyond that is cut, and said so.
               const characters = [...event.target.value];

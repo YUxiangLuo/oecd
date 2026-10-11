@@ -373,6 +373,7 @@ from gvcsim.classroom.records import (  # noqa: E402
     grade_report as grade_report,
     latest_report as latest_report,
     list_reports as list_reports,
+    patch_session as patch_session,
     save_generated_report as save_generated_report,
     save_session as save_session,
     submit_report as submit_report,

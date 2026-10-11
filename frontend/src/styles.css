@@ -989,6 +989,12 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
 .lens-hint { margin: -6px 0 14px; max-width: 760px; }
 /* Save problems shown inside an expanded fullscreen panel, where the page banner is covered. */
 .persistent-qc-warning.sync-problem--compact { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; padding: 8px 12px; }
+/* What a merge with the server's record could not keep as it was: stays until dismissed. */
+.merge-notes {
+  margin: 0 0 12px; padding: 10px 14px; border: 1px solid #e8c77b; border-left: 4px solid #d99a2b;
+  border-radius: 10px; background: #fff8e8; color: #6b450b; font-size: 13px; line-height: 1.6;
+}
+.merge-notes ul { margin: 6px 0 8px; padding-left: 20px; }
 .sync-problem--compact span { flex: 1; min-width: 0; }
 .sync-problem--compact button { flex: none; }
 /* Teacher feedback keeps its paragraphs and list lines on the step 15 status line too. */
