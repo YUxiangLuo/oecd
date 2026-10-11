@@ -263,16 +263,17 @@ async def teaching_countries():
     return await concurrency.run_sync(read)
 
 
-def _estimate_overview(panel: Any) -> dict:
-    """The estimate of every Y of every family, as the run endpoint would compute it (one bar per Y)."""
+def _estimate_overview(panel: Any, release: str | None = None) -> dict:
+    """The estimate of every Y of every family, as the run endpoint computes it (one bar per Y). Through the run
+    cache, so a student's first run of a step's default model reads it instead of computing (and charging) it again.
+    `release`: read before the panel was."""
     outcomes: dict[str, list[dict[str, Any]]] = {}
     for outcome in OUTCOMES:
         default_key = BASELINES[outcome][0].key
         items = []
         for baseline in available_baselines(outcome, panel.columns):
             design = RegressionDesign(outcome, teaching=True, baseline=baseline.key)
-            result, _ = run_design_with_benchmark(panel, design)
-            info = result.to_dict()
+            info = cached_run(panel, design, release)["result"]
             # The headline of a run is the X terms' cumulative relation (the course model has X and L1.X). With a term
             # dropped there is none, and the other term alone is not shown in its place.
             coef = info.get("cumulative") or {}
@@ -306,8 +307,9 @@ async def teaching_overview():
     once per release, so it does not count against the per-student run limit)."""
 
     def read() -> dict:
+        release = current_release()
         panel = _read_csv("panel_teaching.csv")
-        return _cached_on_panel(_ESTIMATE_OVERVIEW_CACHE, panel, _estimate_overview)
+        return _cached_on_panel(_ESTIMATE_OVERVIEW_CACHE, panel, lambda frame: _estimate_overview(frame, release))
 
     try:
         return await concurrency.run_cpu_bound(read)

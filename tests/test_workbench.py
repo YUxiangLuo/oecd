@@ -183,6 +183,23 @@ def test_the_report_and_the_page_share_one_computed_run(monkeypatch):
     regression_routes.clear_result_cache()
 
 
+def test_the_overview_fills_the_run_cache_so_a_default_run_is_neither_computed_nor_charged(monkeypatch):
+    release = "a" * 32
+    monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: release)
+    monkeypatch.setattr(regression_routes, "OUTCOMES", ("trade",))
+    overview = regression_routes._estimate_overview(PANEL)
+    calls = []
+    monkeypatch.setattr(regression_routes, "run_design_with_benchmark", lambda *args: calls.append(args))
+    for design in (
+        RegressionDesign("trade", teaching=True),
+        RegressionDesign("trade", teaching=True, spec=DEFAULT_SPEC),
+    ):
+        assert regression_routes._run_cached(regression_routes._run_key(design), release)  # admit() charges nothing
+        run = regression_routes.cached_run(PANEL, design, release)
+        assert run["result"]["cumulative"]["coef"] == overview["outcomes"]["trade"][0]["coef"]
+    assert calls == []
+
+
 def test_absorbed_controls_name_the_effect_that_absorbs_them():
     spec = ModelSpec((0, 1), ((EXCHANGE_RATE_COLUMN, 0), ("log_gdp_proxy", 1)), ("country_industry", "country_year"))
     result, benchmark = run_design_with_benchmark(PANEL, RegressionDesign("trade", teaching=True, spec=spec))

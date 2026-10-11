@@ -52,6 +52,16 @@ def clear_process_request_limits():
     regression_routes.clear_rate_limits()
 
 
+@pytest.fixture(autouse=True)
+def clear_regression_results():
+    """Completed runs are cached per release, and tests feed their own panels under one release: start each empty."""
+    from gvcsim import regression_routes
+
+    regression_routes.clear_result_cache()
+    yield
+    regression_routes.clear_result_cache()
+
+
 @pytest.fixture(params=["hash", "notify"])
 def file_identity_backend(request, monkeypatch):
     from gvcsim import file_identity
