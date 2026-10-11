@@ -1,7 +1,7 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { countryLabel, joinCountries, sectorLabel } from "../../../viz";
 import { useHoverTip, type TipLine } from "../../../viz/hover";
-import { CAT } from "../../../viz/shared";
+import { CAT, CAT_TEXT } from "../../../viz/shared";
 import { changeReading, finiteValue, NO_OUTPUT, NO_RANK, NO_RANK_NOTE, rankText, readingDigits, type YearDistribution } from "./indicator-model";
 import { integerDomain, niceDomain } from "../../../viz/nice-ticks";
 import { stripNegativeZero } from "../../../format";
@@ -910,7 +910,7 @@ export function DistributionStrip({
               textAnchor="start"
               fontSize={12}
               fontWeight={700}
-              fill={CAT[point.index]}
+              fill={CAT_TEXT[point.index]}
               stroke="#fff"
               strokeWidth={3}
               paintOrder="stroke"

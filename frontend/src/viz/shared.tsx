@@ -10,6 +10,9 @@ import { useRef } from "react";
 
 // 固定顺序的类别槽位(经校验的默认调色板,前 6 位)
 export const CAT = ["#216cc0", "#1baf7a", "#eda100", "#008300", "#4a3aa7", "#e34948"];
+/** CAT for text: the same hues, darkened where needed so a reading in a series' colour has 4.5:1 on white (WCAG AA);
+ *  dots, lines and bars keep CAT. Green, orange and red are mixed with black (24%, 34%, 9%). */
+export const CAT_TEXT = ["#216cc0", "#15855d", "#9c6a00", "#008300", "#4a3aa7", "#cf4242"];
 /** 分解分项的固定颜色:定义分项的步骤(2–4)与作图的步骤(6–8)共用同一套,同一分项处处同色。
  * 取自 CAT 槽位(即步骤 6–7 原有配色),没有一项接近负分项的红色。 */
 export const COMPONENT_COLORS = {
