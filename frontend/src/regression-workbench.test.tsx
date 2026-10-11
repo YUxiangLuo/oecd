@@ -226,12 +226,15 @@ describe("tables", () => {
     expect(csv.startsWith("﻿因变量：外国增加值项占比,默认模型,\"'=SUM(1,2)\"\r\n")).toBe(true);
     const lines = csv.slice(1).trimEnd().split("\r\n");
     expect(lines[1]).toBe("X,-0.3298***,-0.4608***");
-    expect(lines[2]).toBe(",(0.0330),(0.0461)");
+    // Plain numbers on a labelled row: a spreadsheet reads "(0.0330)" as a negative number.
+    expect(lines[2]).toBe("标准误,0.0330,0.0461");
     expect(lines).toContain("国家×年份 FE,否,否");
     expect(lines).toContain("合计：X 每高 1 个百分点,-0.55 个百分点（两年累计）,-0.70 个百分点（两年累计）");
     expect(lines).toContain("F（自由度）,\"2,076.70（3, 74）\",\"462.88（2, 74）\"");
     expect(lines.at(-2)).toBe("设定,X + L1.X；汇率变动；国家×行业 + 年份 FE,X + L1.X；无控制变量；国家×行业 + 年份 FE");
-    expect(lines.at(-1)).toBe(`"${options.footnote}"`);
+    expect(options.footnote).toContain("括号内为按国家聚类的标准误");
+    expect(lines.at(-1)).toBe(`"${options.footnote.replace("括号内为按国家聚类的标准误", "“标准误”一行为按国家聚类的标准误")}"`);
+    expect(csv).not.toMatch(/,\(\d/);
   });
 });
 

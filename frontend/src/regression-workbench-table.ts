@@ -382,7 +382,8 @@ function csvField(value: string, typed = false): string {
 }
 
 /** The comparison table as CSV (UTF-8 with BOM, so Excel reads the Chinese): a coefficient row with its stars and a
- *  row of bracketed SE for each term, then the fixed effects and statistics, the footnote last. */
+ *  标准误 row for each term, then the fixed effects and statistics, the footnote last. The SE are plain numbers, not
+ *  bracketed as on the page: a spreadsheet reads "(0.0330)" as −0.033. */
 export function comparisonCsv(
   columns: TableColumn[], options: WorkbenchOptions, depvarLabel: string, perPoint?: SummaryRow | null,
 ): string {
@@ -395,11 +396,11 @@ export function comparisonCsv(
       continue;
     }
     lines.push([row.label, ...row.cells.map((item) => (item === "omitted" ? "（省略）" : item?.coef ?? ""))]);
-    lines.push(["", ...row.cells.map((item) => (item && item !== "omitted" ? item.se : ""))]);
+    lines.push(["标准误", ...row.cells.map((item) => (item && item !== "omitted" ? item.se.replace(/^\((.*)\)$/, "$1") : ""))]);
   }
   for (const row of summaryRows(columns, options)) lines.push([row.label, ...row.cells]);
   lines.push(["设定", ...columns.map((column) => specSummary(column.spec, options))]);
-  lines.push([options.footnote]);
+  lines.push([options.footnote.replace("括号内为按国家聚类的标准误", "“标准误”一行为按国家聚类的标准误")]);
   // Only the header row carries names a student typed (the model names).
   return `\ufeff${lines.map((line, row) => line.map((cell, index) => csvField(cell, row === 0 && index > 0)).join(",")).join("\r\n")}\r\n`;
 }
