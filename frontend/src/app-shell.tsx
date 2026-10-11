@@ -144,7 +144,8 @@ function TeacherWorkspaceContent({
           <button onClick={() => reviewGuard.attempt(() => { reviewGuard.clear(); onLogout(); })}>退出登录</button>
         </div>
       </header>
-      <TeacherDashboard user={user} />
+      <TeacherDashboard user={user}
+        onChangePassword={fixedDemoPassword ? undefined : () => reviewGuard.attempt(onRequestPasswordChange)} />
       {/* 教师和学生分支互斥，因此任一时刻只挂载一个 ToastHost。 */}
       <ToastHost />
       {showPasswordChange && (

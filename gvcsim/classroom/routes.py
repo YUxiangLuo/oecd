@@ -272,6 +272,8 @@ def students(user: dict = Depends(require_teacher)):
     return {"students": db.list_students(user["sub"])}
 
 
+# Full-width punctuation (！＂＃…／ ：；…＠ ［＼…｀ ｛｜｝～｟｠), split out as runs so NFKC still composes the rest.
+_FULLWIDTH_PUNCTUATION = re.compile("([\uff01-\uff0f\uff1a-\uff20\uff3b-\uff40\uff5b-\uff60]+)")
 _ZERO_WIDTH = re.compile("[\u200b\u200c\u200d\u2060\ufeff]")
 _WHITESPACE_RUN = re.compile(r"\s+")
 
@@ -281,11 +283,15 @@ def normalize_label(value: Any) -> Any:
 
     NFKC folds full-width letters and digits, zero-width characters are dropped everywhere, and any run
     of whitespace becomes one space, so names that look the same are stored the same (and collide on the
-    unique indexes). Runs as a ``mode="before"`` validator: length limits apply to the normalized text.
+    unique indexes). Full-width punctuation is how Chinese is written (“王五（转专业）”, “国贸：一班”), so it is
+    kept as typed rather than folded to ASCII. Runs as a ``mode="before"`` validator: length limits apply to
+    the normalized text.
     """
     if not isinstance(value, str):
         return value
-    value = _ZERO_WIDTH.sub("", unicodedata.normalize("NFKC", value))
+    parts = _FULLWIDTH_PUNCTUATION.split(value)
+    value = "".join(part if index % 2 else unicodedata.normalize("NFKC", part) for index, part in enumerate(parts))
+    value = _ZERO_WIDTH.sub("", value)
     return _WHITESPACE_RUN.sub(" ", value).strip()
 
 

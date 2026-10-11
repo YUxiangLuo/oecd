@@ -230,6 +230,9 @@
 /* ---------- 表格补充(行内菜单 / 等宽) ---------- */
 /* Most 学号 are short or "—": a narrow column, the full value in the cell's title. */
 .student-table-scroll .student-no-cell { max-width: 7em; overflow: hidden; text-overflow: ellipsis; }
+/* A long login name wraps after its separators (breakableUsername) instead of pushing 最近登录 under the sticky
+   操作 column at 1024 px. */
+.student-table-scroll .username-cell { white-space: normal; }
 .student-table-scroll { max-height: calc(100vh - 290px); overflow: auto; scrollbar-gutter: stable; }
 .student-table-scroll thead th { position: sticky; top: 0; z-index: 3; }
 .student-table-scroll th:last-child, .student-table-scroll td:last-child {

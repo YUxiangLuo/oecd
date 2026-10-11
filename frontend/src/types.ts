@@ -52,6 +52,8 @@ export interface AuthUser {
   username: string;
   name: string;
   role: string;
+  /** A teacher still on the password the deployment set (never changed or reset): the workspace asks them to change it. */
+  initial_password?: boolean;
 }
 
 export interface LoginResponse {
@@ -529,6 +531,11 @@ export interface StepStateApi<T = Record<string, unknown>> {
   /** Another tab saved a newer record: retrying cannot help until the server version is loaded. */
   syncConflict?: boolean;
   syncNow: () => void;
+  /**
+   * Adopt the server's record as this page's base (another tab saved newer content), keeping this page's edits the
+   * server did not touch. Step 15 uses it for "这三段是本页的旧文字 → 载入服务器版本".
+   */
+  loadServerVersion?: () => Promise<void>;
   /**
    * The report has been submitted (or graded): browsing must no longer rewrite report material
    * automatically; a step records its current view only when the student explicitly asks.

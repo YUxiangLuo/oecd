@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import Field, field_validator
 
-from gvcsim import auth, config
+from gvcsim import auth, config, demo_accounts
 from gvcsim.classroom import db
 from gvcsim.rate_limit import RateLimitExceeded, SlidingWindowRateLimiter
 from gvcsim.request_validation import TextRequest
@@ -59,6 +59,14 @@ class PasswordChangeRequest(TextRequest):
         return value
 
 
+def _initial_password(role: str, auth_version: int, username: str) -> bool:
+    """A teacher still on the password the deployment set (``classroom-init`` or the bootstrap): every password
+    change or reset raises the account's auth version past 1. Demo accounts keep their shared password."""
+    if role != "teacher" or auth_version != 1:
+        return False
+    return not (config.DEMO_MODE and demo_accounts.is_demo_account_username(username))
+
+
 @router.post("/login")
 def login(req: LoginRequest, request: Request):
     _limit_login(request, req.username)
@@ -79,6 +87,7 @@ def login(req: LoginRequest, request: Request):
             "name": user["name"],
             "role": user["role"],
             "account_id": user["account_id"],
+            "initial_password": _initial_password(user["role"], user["auth_version"], user["username"]),
         },
     }
 
@@ -150,6 +159,7 @@ def me(authorization: str | None = Header(default=None)):
         "name": payload["name"],
         "role": payload["role"],
         "account_id": payload.get("aid"),
+        "initial_password": _initial_password(payload["role"], payload["av"], payload["sub"]),
     }
 
 

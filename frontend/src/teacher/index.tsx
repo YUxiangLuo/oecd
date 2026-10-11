@@ -30,7 +30,9 @@ export function teacherDocumentTitle(tab: TabKey): string {
   return `${NAV.find((item) => item.key === tab)!.label} · ${TEACHER_TITLE_SUFFIX}`;
 }
 
-export function TeacherDashboard({ user }: { user: AuthUser }) {
+export const INITIAL_PASSWORD_HINT = "你还在使用部署时设置的初始密码。为保护学生账号和报告，请改成只有你知道的密码。";
+
+export function TeacherDashboard({ user, onChangePassword }: { user: AuthUser; onChangePassword?: () => void }) {
   const [tab, setTab] = useState<TabKey>("students");
   const [reviewBump, setReviewBump] = useState(0);
   // A report opened from the student table: 报告评阅 starts on it, with the table's order for 上一份/下一份.
@@ -105,6 +107,10 @@ export function TeacherDashboard({ user }: { user: AuthUser }) {
           </div>
         </div>
         <div className="teacher-content">
+          {user.initial_password && onChangePassword && <div className="tipbox teacher-first-step" role="note">
+            <span>{INITIAL_PASSWORD_HINT}</span>
+            <button type="button" className="sm" onClick={onChangePassword}>立即修改密码</button>
+          </div>}
           {tab === "semesters" ? <SemestersTab /> : tab === "students" ? (
             <StudentsTab onOpenReport={(accountId, queue) => { setReportRequest({ accountId, queue }); setTab("reports"); }}
               onGoToSemesters={() => setTab("semesters")} />

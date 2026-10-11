@@ -11,6 +11,8 @@ import psycopg
 from dogfood_sync import Browser, request
 from seed_full_journey import seed_full_journey
 
+from gvcsim.classroom.records import _VIEW_ONLY_KEYS
+
 
 def main():
     base = os.environ["GVCSIM_BASE_URL"].rstrip("/")
@@ -102,9 +104,17 @@ def main():
             )
             assert changed["before"][0] != changed["after"][0]
             assert changed["before"][2] != changed["after"][2]
-            current, report = wait_for(
-                lambda s, r: s["steps"]["10"]["data"].get("teaching_industry") == changed["after"][2]
-            )
+            # A submitted report pauses automatic recording: the new example is shown (the view-only
+            # browse_selection may follow it) but not recorded, so neither step 10's material, step 11's estimate
+            # nor the report changes (past the autosave delay).
+            browser.run("wait", "--text", "自动记录已暂停")
+            time.sleep(2)
+            current, report = snapshot()
+
+            def material(data):
+                return {key: value for key, value in data.items() if key not in _VIEW_ONLY_KEYS}
+
+            assert material(current["steps"]["10"]["data"]) == material(original_session["steps"]["10"]["data"])
             assert current["steps"]["11"]["data"]["run"] == original_run and report == original_report
             browser.run("screenshot", str(output / f"display-only-{attempt}.png"))
 
@@ -122,7 +132,12 @@ def main():
                   };
                 })()""",
             )
-            browser.button("重新计算")
+            # The default model's button reads "重新计算贸易流回归"; the workbench below has its own.
+            browser.run(
+                "eval",
+                'Array.from(document.querySelectorAll(".reg-run-card .run-btn")).find(e=>e.textContent.startsWith("重新计算"))'
+                ".click()",
+            )
             browser.run("wait", "--fn", "window.__reportRerunComplete === true")
             current, report = wait_for(
                 lambda s, r: s["steps"]["11"]["data"]["run"]["design"]["method"] == "twfe_intensity"
@@ -142,14 +157,17 @@ def main():
             browser.run(
                 "wait",
                 "--fn",
-                'Array.from(document.querySelectorAll("button")).some(e=>e.textContent==="重新生成并提交")',
+                'Array.from(document.querySelectorAll("button")).some(e=>e.textContent==="更新报告并提交给老师")',
             )
-            browser.button("重新生成并提交")
-            assert "清除现有评分和评语" in browser.run("dialog", "status")
-            browser.run("dialog", "dismiss")
+            # The edited analysis makes the graded report outdated: updating it asks first (an in-page dialog),
+            # and cancelling keeps the report and its grade.
+            browser.button("更新报告并提交给老师")
+            browser.run("wait", "--text", "清除现有评分和评语")
+            browser.button("取消")
             assert snapshot()[1] == original_report
-            browser.button("重新生成并提交")
-            browser.run("dialog", "accept")
+            browser.button("更新报告并提交给老师")
+            browser.run("wait", "--text", "清除现有评分和评语")
+            browser.button("确定重新生成")
             _, report = wait_for(lambda s, r: r[1] == "pending" and marker in r[0])
             assert report[2] is None
             step_runs = [run for run in report[3]["runs"] if run["step"] == 11]
@@ -158,8 +176,8 @@ def main():
             assert latest_report_run["design"] == rerun["design"]
             assert latest_report_run["result"] == rerun["result"]
             comparison = next(line for line in report[0].splitlines() if line.startswith("| 11 |"))
-            assert "关税" in comparison
-            assert "country_industry × tariff × twfe_intensity" in report[0]
+            assert "外国增加值项占比" in comparison
+            assert "| 模型 | 双向固定效应（TWFE） · 国家×行业 · 控制：汇率变动 |" in report[0]
             browser.run("eval", 'document.querySelector(".submit-card")?.scrollIntoView({block:"center"})')
             browser.run("screenshot", str(output / f"regenerated-{attempt}.png"))
             results.append(

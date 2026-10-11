@@ -840,7 +840,10 @@ export function ReportLab({
               <b>这三段是本页的旧文字</b>
               <p>你在别处（另一个标签页或设备）改过这三段：服务器上保存的是较新的文字，报告也按服务器上的记录生成。点“载入服务器版本”，让这里的文字与服务器一致。</p>
               <button type="button" className="secondary" disabled={busy} onClick={() => {
-                if (serverAnswers) state.save({ ...serverAnswers });
+                // The server's text becomes this page's base, not a new edit of it: an edit typed afterwards then
+                // survives an expired login (its kept copy is compared with the server's record, not an older one).
+                if (state.loadServerVersion) void state.loadServerVersion();
+                else if (serverAnswers) state.save({ ...serverAnswers });
                 setServerAnswers(null);
               }}>载入服务器版本</button>
             </div>

@@ -22,7 +22,13 @@ export const PASSWORD_MAX_LENGTH = 256;
 export const PASSWORD_INPUT_PROPS = { type: "password", autoComplete: "new-password" } as const;
 export const VALID_ACTIVITY_HINT = "最近一次保存实验记录、生成或提交报告的时间（仅登录或浏览不计）";
 export const DEMO_PASSWORD_HINT = "演示账号不能修改密码。要演示改密码，请新建一个学生账号。";
-export const RESET_PASSWORD_NOTE = "保存后该学生要用新密码重新登录，请把新密码告诉他。";
+/** A login name that may wrap after its separators ("report-/snapshot-/709020de"), never inside a word. */
+export function breakableUsername(username: string): ReactNode[] {
+  const parts = username.match(/[^-_.]+[-_.]*|[-_.]+/g) ?? [username];
+  return parts.flatMap((part, index) => (index ? [<wbr key={index} />, part] : [part]));
+}
+
+export const RESET_PASSWORD_NOTE = "保存后该学生要用新密码重新登录，请把新密码告诉学生本人。";
 export const FIRST_STEP_HINT = "还没有学期和班级：先到“学期与班级”新建学期和班级，再把学生分进班级。";
 export const STARTED_HINT = "保存过实验记录、生成过报告草稿或完成过步骤、但还没提交报告的学生；完成进度是 0/15 也算已开始";
 export const NOT_STARTED_HINT = "还没有保存过实验记录，也没有生成报告的学生（只登录或浏览不算开始）";
@@ -398,7 +404,7 @@ export function StudentsTab({ onOpenReport, onGoToSemesters }: {
               {students.map((student) => (
                 <tr key={student.id}>
                   <td className="student-name-cell" title={student.display_name}><span className="clamp-2">{student.display_name}</span></td>
-                  <td className="mono">{student.username}</td>
+                  <td className="mono username-cell">{breakableUsername(student.username)}</td>
                   <td className="student-no-cell" title={student.student_no || undefined}>{student.student_no || "—"}</td>
                   <td className="class-memberships">{student.enrollments.length
                     ? student.enrollments.map((item) => { const label = enrollmentLabel(item, semesters); return <span key={item.term_id} title={label}>{label}</span>; })

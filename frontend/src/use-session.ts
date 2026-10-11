@@ -151,6 +151,12 @@ export interface SessionApi {
   /** Keep unconfirmed edits in this tab before leaving on purpose (logout, expired login, password change); the next load puts them back. */
   keepUnsavedEdits: () => boolean;
   resolveSyncConflict: () => Promise<void>;
+  /**
+   * Read the server's record and make it this page's confirmed version, keeping this page's edits the server did
+   * not touch (the rule for edits kept on leaving). Used for a conflict and when step 15 learns that another tab
+   * saved newer answers: the server's text then becomes the base, not a new edit of this page.
+   */
+  loadServerVersion: () => Promise<void>;
   applyReportMutation: (response: ReportMutationResponse) => void;
 }
 
@@ -197,6 +203,11 @@ export class SessionSaveQueue {
 
   hasUnsynced(): boolean {
     return this.pending !== null || this.saving !== null;
+  }
+
+  /** Settles once no save is on its way, whether it went through or not. */
+  async settled(): Promise<void> {
+    await this.saving?.catch(() => {});
   }
 
   discardPending(baseUpdatedAt: string | null) {
@@ -533,15 +544,22 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     return () => window.removeEventListener("online", online);
   }, [drain, enabled, status, unsynced]);
 
-  const resolveSyncConflict = useCallback(async () => {
-    if (!syncConflictRef.current || resolvingConflictRef.current) return;
+  const loadServerVersion = useCallback(async () => {
+    if (resolvingConflictRef.current) return;
     resolvingConflictRef.current = true;
-    const localSnapshot = sessionRef.current;
     let toSave: ExperimentSession | null = null;
     setSyncing(true);
+    // What the page held when the student asked: anything typed after this is kept, not replaced.
+    const localSnapshot = sessionRef.current;
     try {
+      // A save still on its way would answer after this read and put its own record back as the confirmed one.
+      await queue.current?.settled();
       const response = await api.classroom.session();
-      if (sessionRef.current !== localSnapshot) {
+      // Content, not identity: a save that went through meanwhile replaces the page's object with the server's.
+      const current = sessionRef.current;
+      const typedSince = current !== localSnapshot && !sameSessionContent(current, localSnapshot)
+        && !sameSessionContent(current, queue.current?.getConfirmedSession() ?? emptySession());
+      if (typedSince) {
         setSyncError(EDITED_DURING_RELOAD);
         return;
       }
@@ -579,6 +597,11 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     }
   }, [replace]);
 
+  const resolveSyncConflict = useCallback(async () => {
+    if (!syncConflictRef.current) return;
+    await loadServerVersion();
+  }, [loadServerVersion]);
+
   const applyReportMutation = useCallback((response: ReportMutationResponse) => {
     setReport(response.report);
     setCompletion(response.completion);
@@ -599,6 +622,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     loadAttempts: loadAttempt,
     keepUnsavedEdits,
     resolveSyncConflict,
+    loadServerVersion,
     applyReportMutation,
   };
 }

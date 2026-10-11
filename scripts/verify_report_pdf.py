@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 
 SUMMARY_TITLE = "四项回归结果汇总"
-SUMMARY_COLUMNS = ("步骤", "指标", "X每高1个百分点，Y平均相差", "95%区间", "方向")
+SUMMARY_COLUMNS = ("步骤", "指标", "X每高1个百分点，Y两年累计平均相差", "95%区间", "方向")
 
 
 def validate_report_text(text: str) -> None:

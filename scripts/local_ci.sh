@@ -121,6 +121,10 @@ export GVCSIM_DEMO_MODE=1
 export GVCSIM_BOOTSTRAP_PASSWORD=ci-browser-private-password
 export GVCSIM_AUTH_SECRET=ci-browser-auth-secret-at-least-32-bytes
 uv run gvcsim classroom-init --reset
+# The teacher smoke changes its own password, which demo accounts (such as the bootstrap "teacher") may not:
+# it runs as a separately provisioned, non-demo teacher.
+GVCSIM_INITIAL_TEACHER_PASSWORD=ci-teacher-initial-password \
+  uv run gvcsim classroom-init --teacher-username ci-teacher --teacher-name "CI 教师"
 uv run gvcsim preflight
 
 read -r api_port ui_port < <(python3 - <<'PY'
@@ -171,7 +175,8 @@ GVCSIM_E2E_USERNAME=student GVCSIM_E2E_TEACHER_USERNAME=teacher \
 GVCSIM_E2E_NAMESPACE="gvc-course-$$" GVCSIM_E2E_TEACHER_USERNAME=teacher \
   GVCSIM_E2E_TEACHER_PASSWORD="$GVCSIM_BOOTSTRAP_PASSWORD" \
   GVCSIM_E2E_ARTIFACT_DIR="$output_dir/pure-ui-course" uv run python scripts/agent_browser_course_journey.py
-GVCSIM_E2E_USERNAME=teacher GVCSIM_E2E_NEW_PASSWORD=ci-browser-rotated-private-password \
+GVCSIM_E2E_USERNAME=ci-teacher GVCSIM_E2E_PASSWORD=ci-teacher-initial-password \
+  GVCSIM_E2E_NEW_PASSWORD=ci-browser-rotated-private-password \
   GVCSIM_E2E_SESSION=teacher GVCSIM_E2E_ARTIFACT_DIR="$output_dir/teacher" \
   scripts/agent_browser_teacher_smoke.sh
 curl -fsS "http://127.0.0.1:$api_port/health" >"$output_dir/health.json"

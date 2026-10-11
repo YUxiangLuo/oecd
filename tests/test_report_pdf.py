@@ -6,12 +6,12 @@ from scripts.verify_report_pdf import SUMMARY_COLUMNS, SUMMARY_TITLE, validate_r
 
 
 def test_complete_summary_with_wrapped_headers():
-    text = "四项回归结果汇总\n步骤 指标 X 每高 1 个百分点，Y\n平均相差 95%\n区间 方向"
+    text = "四项回归结果汇总\n步骤 指标 X 每高 1 个百分点，Y 两年\n累计平均相差 95%\n区间 方向"
     validate_report_text(text + "\n11\n12\n13\n14\n步骤 11 · 贸易流详情")
 
 
 def test_missing_interval_header_cannot_borrow_from_details():
-    text = "四项回归结果汇总\n步骤 指标 X 每高 1 个百分点，Y 平均相差 方向\n步骤 11 · 贸易流详情\n95% 区间"
+    text = "四项回归结果汇总\n步骤 指标 X 每高 1 个百分点，Y 两年累计平均相差 方向\n步骤 11 · 贸易流详情\n95% 区间"
     with pytest.raises(ValueError, match="截断列: 95%区间"):
         validate_report_text(text)
 
@@ -34,3 +34,15 @@ def test_clipped_summary_cannot_borrow_columns_from_later_sections():
 def test_missing_sections_are_not_a_pass(text):
     with pytest.raises(ValueError, match="缺少"):
         validate_report_text(text)
+
+
+def test_a_generated_report_passes_the_gate(tmp_path, monkeypatch):
+    """The gate reads the report's own summary header: renaming a column fails here, not first in browser CI."""
+    from test_teaching_report import _artifacts, _complete
+
+    from gvcsim import config
+    from gvcsim.teaching_report import build
+
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    validate_report_text(build(_complete(), "同学").markdown)

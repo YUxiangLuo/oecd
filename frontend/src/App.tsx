@@ -99,6 +99,7 @@ function AppContent() {
     syncError: session.syncError,
     syncConflict: session.syncConflict,
     syncNow: () => { void session.syncNow().catch(() => {}); },
+    loadServerVersion: () => session.loadServerVersion().catch(() => {}),
     materialLocked: session.report?.state === "pending" || session.report?.state === "graded",
   };
 
