@@ -195,7 +195,11 @@ def _check_weak_teaching_y(teaching: pd.DataFrame) -> None:
     info = result.to_dict()
     if info.get("status") not in ("ok", "warning"):
         return
-    coef = info.get("cumulative") or info["coefs"][0]
+    coef = info.get("cumulative")
+    # No cumulative relation (an X term was dropped): there is no interval to check, and the other term alone would
+    # check something else; the release's regression QC reports the dropped term.
+    if not isinstance(coef, dict):
+        return
     low, high = coef.get("ci_low"), coef.get("ci_high")
     if low is None or high is None or not (low <= 0 <= high):
         raise ValueError(f"教学弱效应 Y（{key}）的 95% 区间不含 0：[{low}, {high}]；请调整 WEAK_Y_DRAW 后重建")

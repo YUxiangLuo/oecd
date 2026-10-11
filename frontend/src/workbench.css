@@ -64,6 +64,9 @@
 }
 .comparison-summary span, .comparison-summary small { display: block; color: #616b7d; font-size: 10.5px; line-height: 1.4; word-break: keep-all; overflow-wrap: anywhere; }
 .comparison-summary b { display: block; margin: 4px 0 3px; color: #293342; font-size: 13px; line-height: 1.35; word-break: keep-all; overflow-wrap: anywhere; }
+/* The rounding note sits right under the cards it explains, taking the gap the cards leave below them. */
+.comparison-summary:has(+ .trend-rounding-note) { margin-bottom: 6px; }
+.trend-rounding-note { margin: 0 0 18px; font-size: 11px; }
 .comparison-facets { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
 .comparison-facets--stacked { grid-template-columns: minmax(0, 760px); justify-content: center; }
 /* Butterfly bars and the partner diagram need about 440px each: two side by side at 1280, stacked at 1024,
@@ -143,12 +146,15 @@
 .reg-evidence-table td, .reg-evidence-table th {
   padding: 8px 7px; vertical-align: top; white-space: normal; overflow-wrap: anywhere; text-align: left;
 }
-.reg-evidence-table th:nth-child(1), .reg-evidence-table td:nth-child(1) { width: 7%; }
-.reg-evidence-table th:nth-child(2), .reg-evidence-table td:nth-child(2) { width: 13%; }
-.reg-evidence-table th:nth-child(3), .reg-evidence-table td:nth-child(3) { width: 15%; }
-.reg-evidence-table th:nth-child(4), .reg-evidence-table td:nth-child(4) { width: 20%; }
-.reg-evidence-table th:nth-child(5), .reg-evidence-table td:nth-child(5) { width: 20%; }
-.reg-evidence-table th:nth-child(6), .reg-evidence-table td:nth-child(6) { width: 25%; }
+/* Seven columns, summing to 100 %: the last one (解释限制, a sentence per Y) needs its own share, or a fixed layout
+   leaves it 0 px wide and every row grows one character per line. */
+.reg-evidence-table th:nth-child(1), .reg-evidence-table td:nth-child(1) { width: 5%; }
+.reg-evidence-table th:nth-child(2), .reg-evidence-table td:nth-child(2) { width: 11%; }
+.reg-evidence-table th:nth-child(3), .reg-evidence-table td:nth-child(3) { width: 12%; }
+.reg-evidence-table th:nth-child(4), .reg-evidence-table td:nth-child(4) { width: 15%; }
+.reg-evidence-table th:nth-child(5), .reg-evidence-table td:nth-child(5) { width: 14%; }
+.reg-evidence-table th:nth-child(6), .reg-evidence-table td:nth-child(6) { width: 16%; }
+.reg-evidence-table th:nth-child(7), .reg-evidence-table td:nth-child(7) { width: 27%; }
 .reg-evidence-table td span { display: block; margin-top: 3px; color: #646d7d; font-size: 10.5px; }
 .technical-details { margin-top: 2px; }
 .technical-details[open] > summary { margin-bottom: 12px; }
@@ -431,6 +437,12 @@
   border: 1px solid #dfe4ee; border-radius: 10px; box-shadow: 0 4px 12px rgba(35, 39, 60, .12);
 }
 .scope-card:focus { outline: none; box-shadow: 0 0 0 2px #4b47e0; }
+/* In a short window (1024 × 768) the summary keeps to one line, scrolling sideways if it must, so it covers less of
+   the chart under it than when its chips wrap to a second row. */
+@media (max-height: 820px) {
+  .scope-card { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+  .scope-card > * { flex: 0 0 auto; }
+}
 .scope-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .scope-sep { font-style: normal; color: #9aa3b5; }
 .scope-chip {
@@ -568,7 +580,7 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 .reg-custom-choice small { color: #636c7d; font-size: 11px; line-height: 1.45; }
 .reg-custom-included { cursor: default; }
 .reg-custom-included b { color: #636c7d; }
-.reg-custom-control select { margin: -2px 0 6px 22px; font-size: 12px; }
+.reg-custom-control select { min-height: 24px; margin: -2px 0 6px 22px; font-size: 12px; }
 .reg-custom-note { margin: 6px 0 0; font-size: 11px; line-height: 1.5; }
 .reg-custom-equation { margin: 0; padding: 8px 10px; border-radius: 7px; background: #fff; border: 1px dashed #c9cde0; font-family: var(--font-mono, ui-monospace, monospace); font-size: 12.5px; overflow-wrap: anywhere; }
 .reg-custom-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -578,6 +590,12 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 .reg-custom-table td:not(:first-child) { text-align: right; }
 .reg-custom-compare-table td { text-align: right; line-height: 1.35; }
 .reg-custom-compare-table th[scope="row"] { text-align: left; font-weight: 600; }
+/* With many columns the table scrolls sideways: the variable names stay at the left edge, so the highlighted new
+   column (always last) still reads against its rows. */
+.reg-custom-compare-table th[scope="row"], .reg-custom-compare-table thead th:first-child {
+  position: sticky; left: 0; z-index: 1; background: #fff; box-shadow: 1px 0 0 #e6e9f0;
+}
+.reg-custom-compare-table thead th:first-child { background: #fafbfd; }
 .reg-custom-summary-start > * { border-top: 2px solid #c9cde0; }
 .reg-custom-stats { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 0; font-size: 12px; }
 .reg-custom-stats > div { display: flex; gap: 5px; }
@@ -590,7 +608,7 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 .reg-custom-saved-table td { vertical-align: top; }
 .reg-custom-rename { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .reg-custom-row-actions { white-space: nowrap; }
-.reg-custom .link-button { padding: 0 4px; border: 0; background: none; color: #4b47e0; font-size: 12px; cursor: pointer; text-decoration: underline; }
+.reg-custom .link-button { min-height: 24px; padding: 3px 6px; border: 0; background: none; color: #4b47e0; font-size: 12px; cursor: pointer; text-decoration: underline; }
 .reg-custom .link-button.danger { color: #a93f2c; }
 .reg-custom .field-error { color: #a93f2c; font-size: 12px; }
 .reg-custom-compare-head { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }

@@ -13,6 +13,7 @@ import {
   StudentTopbar,
 } from "./app-shell";
 import { IntroOverlay } from "./intro";
+import { StepErrorBoundary } from "./error-boundary";
 import { LabRouter } from "./lab-router";
 import { QuizPanel, type QuizDraftStore } from "./step-quiz";
 import {
@@ -271,6 +272,7 @@ export function StudentWorkspace({
     error: session.syncError,
     conflict: session.syncConflict,
     syncing: session.syncing,
+    autoRetry: session.autoRetry,
     act: () => {
       if (!session.syncConflict) {
         void session.syncNow().catch(() => {});
@@ -309,6 +311,7 @@ export function StudentWorkspace({
             onNavigate={onNavigateStep}
             reportExists={session.report != null}
             reportState={session.report?.state}
+            reportCurrent={session.reportCurrent}
             currentMaterialStatus={materialStatus}
           />
 
@@ -337,6 +340,7 @@ export function StudentWorkspace({
                     materialStatus={materialStatus}
                     reportExists={session.report != null}
                     reportState={session.report?.state}
+                    reportCurrent={session.reportCurrent}
                   />
                   <div
                     id={STEP_PRIMARY_ACTION_ID}
@@ -345,24 +349,27 @@ export function StudentWorkspace({
                     role="region"
                     aria-label={stepPrimaryActionLabel(step)}
                   >
-                    <LabRouter
-                      key={`lab:${step.n}:${session.workspaceGeneration}`}
-                      step={step}
-                      meta={meta}
-                      state={labState}
-                      report={session.report}
-                      sessionUpdatedAt={session.updatedAt}
-                      reportCurrent={session.completion?.steps.find((item) => item.step === 15)?.complete ?? null}
-                      reportGate={session.reportGate}
-                      sessionStatus={session.status}
-                      sessionUnsynced={session.unsynced}
-                      sessionSyncing={session.syncing}
-                      onFlushSession={session.syncNow}
-                      onReportChanged={session.applyReportMutation}
-                      onNavigateStep={onNavigateStep}
-                      getStep={session.getStep}
-                      getConfirmedStep={session.getConfirmedStep}
-                    />
+                    {/* The same key as the step's content: a new step or a reloaded server version draws it afresh. */}
+                    <StepErrorBoundary resetKey={`${step.n}:${session.workspaceGeneration}`}>
+                      <LabRouter
+                        key={`lab:${step.n}:${session.workspaceGeneration}`}
+                        step={step}
+                        meta={meta}
+                        state={labState}
+                        report={session.report}
+                        sessionUpdatedAt={session.updatedAt}
+                        reportCurrent={session.reportCurrent}
+                        reportGate={session.reportGate}
+                        sessionStatus={session.status}
+                        sessionUnsynced={session.unsynced}
+                        sessionSyncing={session.syncing}
+                        onFlushSession={session.syncNow}
+                        onReportChanged={session.applyReportMutation}
+                        onNavigateStep={onNavigateStep}
+                        getStep={session.getStep}
+                        getConfirmedStep={session.getConfirmedStep}
+                      />
+                    </StepErrorBoundary>
                   </div>
                   <QuizPanel
                     key={`quiz:${step.n}:${session.workspaceGeneration}`}
@@ -392,6 +399,8 @@ export function StudentWorkspace({
               stageName={stageName}
               current={current}
               completedSteps={presentationCompletedSteps}
+              materialGate={session.materialGate}
+              currentMaterialStatus={materialStatus}
               onNavigate={(n) => {
                 // The footer sits below the step: after moving on, keyboard focus starts at the new step's top.
                 onNavigateStep(n);

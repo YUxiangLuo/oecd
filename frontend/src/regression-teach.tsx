@@ -1,4 +1,5 @@
 import {
+  displayBaselineLabel,
   FAMILY_STEPS,
   familyDirectionLabel,
   lessonFor,
@@ -201,7 +202,7 @@ export function ReportedCustomModels({ getStep, onNavigateStep }: {
               <thead><tr><th>步骤</th><th>名称</th><th>设定</th><th>X 各项合计（X 每高 1 个百分点）</th><th>同一 Y 的默认模型（两年累计）</th></tr></thead>
               <tbody>
                 {rows.map(({ step, family, outcome, model, run }) => {
-                  const sum = xSum(model.snapshot);
+                  const sum = xSum(model.snapshot, model.spec);
                   // The step's default run when it is on the model's Y; otherwise that Y's row of the course overview.
                   const sameY = run?.design && run.result && run.design.baseline === model.baseline;
                   const stepDefault = sameY ? snapshotOf({ design: run.design!, result: run.result! }) : null;
@@ -217,7 +218,7 @@ export function ReportedCustomModels({ getStep, onNavigateStep }: {
                           ? <button type="button" className="link-button" onClick={() => onNavigateStep(step)}>步骤 {step} · {family}</button>
                           : `步骤 ${step} · ${family}`}
                       </th>
-                      <td><b>{model.name}</b><br /><small className="muted">Y：{model.snapshot.depvar_label}</small></td>
+                      <td><b>{model.name}</b><br /><small className="muted">Y：{displayBaselineLabel(model.snapshot.depvar_label)}</small></td>
                       <td>{options ? specSummary(model.spec, options) : "…"}</td>
                       <td>{sum ? `${perPointReading(outcome, sum, model.snapshot, digits)}（${xSpanLabel(model.spec)}）` : "—"}</td>
                       <td>{defaultSum && defaultSnapshot ? perPointReading(outcome, defaultSum, defaultSnapshot, digits) : sameY || overviewQuery.status !== "loading" ? "—" : "…"}</td>

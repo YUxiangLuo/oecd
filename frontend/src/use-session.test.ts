@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import { api } from "./api";
+import { api, ApiError, RequestTimeoutError } from "./api";
 import { emptySession, readShared, readStep } from "./session-store";
 import type { ExperimentSession, SessionResponse, SessionSaveResponse } from "./types";
 import {
@@ -13,6 +13,8 @@ import {
   mergeKeptEdits,
   patchSessionStep,
   readKeptEdits,
+  SAVE_RETRY_DELAYS_MS,
+  isTransientSaveFailure,
   updateSessionShared,
   useSession,
 } from "./use-session";
@@ -464,5 +466,49 @@ describe("the expired-login notice", () => {
     expect(hasKeptEdits(adapter)).toBe(true);
     expect(expiredLoginNotice(true)).toContain("未保存的修改已在本页保留");
     expect(hasKeptEdits({ getItem: () => { throw new Error("blocked"); } })).toBe(false);
+  });
+});
+
+describe("a save that failed for a passing reason", () => {
+  test("is sent again on its own, and the banner can say so", async () => {
+    // The waits are seconds in the app; the test shortens them (restored below).
+    const delays = [...SAVE_RETRY_DELAYS_MS];
+    SAVE_RETRY_DELAYS_MS.splice(0, SAVE_RETRY_DELAYS_MS.length, 30, 30, 30, 30);
+    const get = spyOn(api.classroom, "session").mockResolvedValue({ ...response(), report: null });
+    const save = spyOn(api.classroom, "saveSession")
+      .mockRejectedValueOnce(new ApiError(502, null, "教学服务暂时不可用"))
+      .mockImplementation(async (body) => response(body.session));
+    try {
+      const { result } = renderHook(() => useSession(true, "student"));
+      await waitFor(() => expect(result.current.status).toBe("ready"));
+      await act(async () => {
+        result.current.patchStep(1, { year: 2020 });
+        await result.current.syncNow().catch(() => {});
+      });
+      expect(result.current.syncError).not.toBeNull();
+      expect(result.current.autoRetry).toBe(true);
+      // No edit and no click: the server is back and the save goes through by itself.
+      await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(result.current.syncError).toBeNull());
+      expect(result.current.autoRetry).toBe(false);
+      expect(result.current.unsynced).toBe(false);
+    } finally {
+      SAVE_RETRY_DELAYS_MS.splice(0, SAVE_RETRY_DELAYS_MS.length, ...delays);
+      get.mockRestore();
+      save.mockRestore();
+    }
+  });
+
+  test("only server and network failures count as passing; a conflict, a refusal or an expired login do not", () => {
+    for (const status of [408, 429, 500, 502, 503, 504]) expect(isTransientSaveFailure(new ApiError(status, null, "x"))).toBe(true);
+    for (const status of [400, 401, 403, 404, 409, 413, 422]) expect(isTransientSaveFailure(new ApiError(status, null, "x"))).toBe(false);
+    // The browser could not reach the server, or the request ran out of time: the same save can get through later.
+    for (const message of ["Failed to fetch", "Load failed", "NetworkError when attempting to fetch resource."]) {
+      expect(isTransientSaveFailure(new TypeError(message))).toBe(true);
+    }
+    expect(isTransientSaveFailure(new RequestTimeoutError("服务器繁忙，请求超时（15 秒），请稍后重试。"))).toBe(true);
+    // A cancelled request (api.ts) or a failure in the page itself would only fail again.
+    expect(isTransientSaveFailure(new Error("请求已取消"))).toBe(false);
+    expect(isTransientSaveFailure(new TypeError("Cannot read properties of undefined (reading 'steps')"))).toBe(false);
   });
 });

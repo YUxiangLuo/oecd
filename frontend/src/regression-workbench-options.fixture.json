@@ -109,7 +109,7 @@
       ]
     }
   ],
-  "no_fixed_effects_note": "都不勾时模型加常数项，表头写“无固定效应”。",
+  "no_fixed_effects_note": "都不勾时模型加常数项，表下的设定写作“无固定效应”。",
   "limits": {
     "saved": 6,
     "in_report": 3,

@@ -4,9 +4,16 @@ import { api, ApiError } from "./api";
 import { emptySession, readStep } from "./session-store";
 import type { ExperimentSession, SessionResponse, SessionSaveResponse } from "./types";
 import {
-  KEPT_EDITS_KEY, clearKeptEdits, keepEdits, mergeKeptEdits, patchSessionStep,
-  readKeptEdits, updateSessionShared,
-  useSession, type SessionApi,
+  clearKeptEdits,
+  keepEdits,
+  KEPT_EDITS_KEY,
+  mergeKeptEdits,
+  patchSessionStep,
+  readKeptEdits,
+  SAVE_RETRY_DELAYS_MS,
+  type SessionApi,
+  updateSessionShared,
+  useSession,
 } from "./use-session";
 
 const RELEASE = "a".repeat(32);
@@ -355,6 +362,33 @@ describe("reconnecting", () => {
       await waitFor(() => expect(hook.result.current.unsynced).toBe(false));
       expect(hook.result.current.syncError).toBeNull();
     } finally { await finish(hook); get.mockRestore(); save.mockRestore(); }
+  });
+
+  test("an unreadable record is read again on its own when the server is back, with no online event", async () => {
+    const delays = [...SAVE_RETRY_DELAYS_MS];
+    SAVE_RETRY_DELAYS_MS.splice(0, SAVE_RETRY_DELAYS_MS.length, 400, 400, 400, 400);
+    const get = spyOn(api.classroom, "session")
+      .mockRejectedValueOnce(new ApiError(502, null, "教学服务暂时不可用"))
+      .mockResolvedValue(response());
+    const statuses: string[] = [];
+    const hook = renderHook(() => {
+      const value = useSession(true, "student");
+      statuses.push(value.status);
+      return value;
+    });
+    try {
+      await waitFor(() => expect(hook.result.current.status).toBe("unavailable"));
+      await waitFor(() => expect(hook.result.current.status).toBe("ready"));
+      expect(get).toHaveBeenCalledTimes(2);
+      // The automatic read runs behind the failure page: no loading state in between, so the page (and the focus
+      // on it) stays until the record is back.
+      const afterFailure = statuses.slice(statuses.indexOf("unavailable"));
+      expect(afterFailure).not.toContain("loading");
+    } finally {
+      SAVE_RETRY_DELAYS_MS.splice(0, SAVE_RETRY_DELAYS_MS.length, ...delays);
+      await finish(hook);
+      get.mockRestore();
+    }
   });
 });
 

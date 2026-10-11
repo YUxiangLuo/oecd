@@ -141,7 +141,7 @@ function QuizPanelBody({
       <div className="quiz-head">
         <div>
           <span className="kicker">理解题</span>
-          <h3 id={`quiz-title-${step.n}`}>答对本步 {quiz.questions.length} 道单选题</h3>
+          <h3 id={`quiz-title-${step.n}`} tabIndex={-1}>答对本步 {quiz.questions.length} 道单选题</h3>
         </div>
         {/* The draft-persistence rule is reference detail, so it lives in the badge's tooltip. */}
         <span className="quiz-note" title="未提交的选择只在本次登录的页面内暂存，切换步骤会保留；刷新或退出登录后不保留。答对并提交后才保存完成状态。">

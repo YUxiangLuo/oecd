@@ -238,4 +238,8 @@ def test_report_generation_charges_the_runs_it_has_to_compute(monkeypatch):
     # A run cached before the release changed is computed again, so it counts again.
     release[0] = "b" * 32
     assert not regression_routes._run_cached(regression_routes._run_key(designs[0]))
+    # A run on the older panel that ends after the swap keeps the release its panel was read under: it never makes
+    # the new release's run look computed (and free).
+    regression_routes._store_payload(object(), regression_routes._run_key(designs[0]), {"late": True}, "a" * 32)
+    assert not regression_routes._run_cached(regression_routes._run_key(designs[0]))
     regression_routes.clear_result_cache()

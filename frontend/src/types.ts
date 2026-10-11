@@ -569,6 +569,8 @@ export interface ReportGateItem {
   step: number;
   title: string;
   missing: string[];
+  /** Only the step's quiz is missing (report_gate.check_gate): its link goes to the quiz. Absent from the material gate. */
+  quiz_only?: boolean;
 }
 
 /** 服务端生成的实验报告:正文与溯源由服务端从会话快照产出；客户端只保存学生原创文字和实验操作。 */
@@ -611,6 +613,8 @@ export interface SessionResponse {
   session: ExperimentSession;
   updated_at?: string | null;
   completion: CompletionSummary;
+  /** Whether the latest report was generated from this record (absent from older servers). */
+  report_current?: boolean;
   report_gate: ReportGateItem[];
   material_gate: ReportGateItem[];
   report: ClassroomReport | null;
@@ -621,6 +625,8 @@ export interface SessionSaveResponse {
   session: ExperimentSession;
   updated_at: string;
   completion: CompletionSummary;
+  /** Whether the latest report was generated from this record (absent from older servers). */
+  report_current?: boolean;
   report_gate: ReportGateItem[];
   material_gate: ReportGateItem[];
 }
@@ -628,6 +634,8 @@ export interface SessionSaveResponse {
 export interface ReportMutationResponse {
   report: ClassroomReport;
   completion: CompletionSummary;
+  /** Whether the latest report was generated from this record (absent from older servers). */
+  report_current?: boolean;
   report_gate: ReportGateItem[];
   material_gate: ReportGateItem[];
 }
@@ -869,6 +877,8 @@ export interface StudentRow {
   last_login_at: string | null;
   created_at: string;
   report_state: "draft" | "pending" | "graded" | null;
+  /** Handed in, then the record changed (the teacher holds the submitted version); absent from older servers. */
+  report_outdated?: boolean;
   score: number | null;
   submitted_at: string | null;
   /** Server-verified completion; never inferred from max_step. */

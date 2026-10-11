@@ -29,7 +29,15 @@ from gvcsim.regression.spec import (
     x_term_label,
 )
 from gvcsim.regression.teaching import selectable_baselines
-from gvcsim.report_common import _depvar_kind, _no_negative_zero, _safe, _signed, estimate_digits, with_count_unit
+from gvcsim.report_common import (
+    _depvar_kind,
+    _no_negative_zero,
+    _safe,
+    _signed,
+    estimate_digits,
+    with_count_unit,
+    y_display,
+)
 from gvcsim.report_saved_run import _STEP_OUTCOMES
 from gvcsim.steps import STEPS
 
@@ -79,12 +87,12 @@ def run_designs(models: list[dict[str, Any]]) -> list[RegressionDesign]:
     ]
 
 
-def _run(panel: Any, outcome: str, baseline: str, spec: ModelSpec) -> dict[str, Any] | str:
+def _run(panel: Any, release: str | None, outcome: str, baseline: str, spec: ModelSpec) -> dict[str, Any] | str:
     """The run's response from the shared run cache (the same numbers the page showed), or why it failed."""
     from gvcsim.regression_routes import cached_run
 
     try:
-        return cached_run(panel, RegressionDesign(outcome, teaching=True, baseline=baseline, spec=spec))
+        return cached_run(panel, RegressionDesign(outcome, teaching=True, baseline=baseline, spec=spec), release)
     except (ValueError, KeyError, np.linalg.LinAlgError, FloatingPointError, OverflowError) as error:
         return str(error) or "计算失败"
 
@@ -93,6 +101,11 @@ def recompute(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """One table per (step, Y): the default model's run, then each reported model's run (or its failure)."""
     if not models:
         return []
+    from gvcsim.regression_routes import current_release
+
+    # Read before the panel: a release swapped in between then tags the runs with the older release (they are charged
+    # again), never the older panel's runs with the newer release.
+    release = current_release()
     try:
         panel = read_csv_artifact(config.PROCESSED_DIR / "panel_teaching.csv")
     except (ArtifactContractError, OSError, ValueError, KeyError, TypeError):
@@ -103,7 +116,7 @@ def recompute(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
         table = next((item for item in tables if (item["step"], item["baseline"]) == key), None)
         if table is None:
             default = (
-                _run(panel, model["outcome"], model["baseline"], DEFAULT_SPEC)
+                _run(panel, release, model["outcome"], model["baseline"], DEFAULT_SPEC)
                 if panel is not None
                 else "课程数据暂时不可用"
             )
@@ -115,7 +128,11 @@ def recompute(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
             tables.append(table)
         spec = ModelSpec.from_dict(model["spec"])
-        run = _run(panel, model["outcome"], model["baseline"], spec) if panel is not None else "课程数据暂时不可用"
+        run = (
+            _run(panel, release, model["outcome"], model["baseline"], spec)
+            if panel is not None
+            else "课程数据暂时不可用"
+        )
         table["columns"].append({"name": model["name"], "spec": spec, "run": run})
     return tables
 
@@ -129,14 +146,19 @@ def _escape(text: str) -> str:
 
 # Any ASCII punctuation may be backslash-escaped in Markdown: escaping all of it in a typed name keeps it from turning
 # into emphasis, strikethrough ("~~…~~") or a table cell break. GFM still reads "www.…", "http://…" and "a@b.cn" as
-# links whatever the escapes, so an invisible word joiner (U+2060) goes before each ".", ":" and "@" of the name.
+# links whatever the escapes, so an invisible word joiner (U+2060) goes where a link would start: before the "." of
+# "www.", the "://" of a scheme and an "@". Elsewhere ("模型1.5", "x.cn") the name copies as typed.
 _ASCII_PUNCTUATION = re.compile(r"([!-/:-@\[-`{-~])")
 _WORD_JOINER = "\u2060"
 
 
 def _name(value: Any) -> str:
-    escaped = _ASCII_PUNCTUATION.sub(r"\\\1", _safe(value))
-    return re.sub(r"(\\[.:@])", _WORD_JOINER + r"\1", escaped)
+    # Not _safe: its "|" → "¦" and "`" → "ʼ" would change the name; escaped, both print as typed (also in tables).
+    text = " ".join(str(value).split())[:240]
+    escaped = _ASCII_PUNCTUATION.sub(r"\\\1", text)
+    escaped = re.sub(r"(?i)(?<=www)(\\\.)", _WORD_JOINER + r"\1", escaped)
+    escaped = escaped.replace("\\:\\/\\/", _WORD_JOINER + "\\:\\/\\/")
+    return escaped.replace("\\@", _WORD_JOINER + "\\@")
 
 
 def _fixed(value: Any, digits: int) -> str:
@@ -203,9 +225,10 @@ def _coefficient_rows(columns: list[dict[str, Any]]) -> list[str]:
     return rows
 
 
-def _x_sum(result: dict[str, Any]) -> dict[str, Any] | None:
-    """A column's X-terms sum: the cumulative relation, or the single X term of a one-term model."""
-    if _x_terms(result) == 1:
+def _x_sum(result: dict[str, Any], spec: ModelSpec) -> dict[str, Any] | None:
+    """A column's X-terms sum: the single X term of a one-term model, else the cumulative relation. None when a term of
+    a several-term model was dropped (the estimate then has no sum), so one coefficient is never called a sum."""
+    if len(spec.x_lags) == 1:
         return next((item for item in result.get("coefs", []) if item.get("name") in X_LAG_COLUMNS.values()), None)
     cumulative = result.get("cumulative")
     return cumulative if isinstance(cumulative, dict) else None
@@ -231,7 +254,7 @@ def _per_point_rows(columns: list[dict[str, Any]]) -> list[str]:
 
     def x_sum(column: dict[str, Any]) -> dict[str, Any] | None:
         run = column["run"]
-        total = _x_sum(run["result"]) if isinstance(run, dict) else None
+        total = _x_sum(run["result"], column["spec"]) if isinstance(run, dict) else None
         return total if total is not None and isinstance(total.get("coef"), (int, float)) else None
 
     first = next((column for column in columns if x_sum(column)), None)
@@ -335,7 +358,7 @@ def custom_model_sections(tables: list[dict[str, Any]]) -> list[str]:
     for table in tables:
         columns = table["columns"]
         first = next((column["run"] for column in columns if isinstance(column["run"], dict)), None)
-        label = first["design"]["depvar_label"] if first else table["baseline"]
+        label = y_display(first["design"]["depvar_label"]) if first else table["baseline"]
         lines += [f"### 步骤 {table['step']} · {_STEP_TITLES.get(table['step'], '')}（Y：{_safe(label)}）", ""]
         header = " | ".join(_name(column["name"]) for column in columns)
         lines += [f"| 变量 | {header} |", "|---|" + "---:|" * len(columns)]

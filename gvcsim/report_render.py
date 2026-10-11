@@ -281,13 +281,16 @@ def _experiment_sections(session: dict[str, Any], scenario: dict[str, Any] | Non
                     return sector_label(text)
                 return text
 
+            # The accounts table's rows are a country × industry with its own accounts, not a supplier (the page
+            # calls them 国家×行业（行）); the Z and Y tables' rows supply the column.
+            accounts = source_slice.get("table") == "accounts"
             selection = "；".join(
                 f"{label}：{_safe(slice_value(key, source_slice[key]))}"
                 for key, label in (
                     ("year", "年份"),
                     ("table", "表"),
-                    ("row_country", "供给国"),
-                    ("row_sector", "供给行业"),
+                    ("row_country", "国家（行）" if accounts else "供给国"),
+                    ("row_sector", "行业（行）" if accounts else "供给行业"),
                     ("col_country", "使用／需求国"),
                     ("col_sector", "使用行业／最终需求"),
                 )
@@ -413,16 +416,18 @@ def _experiment_sections(session: dict[str, Any], scenario: dict[str, Any] | Non
         captured = True
         # The scenario first (who is taxed and why), as at the top of step 10; then the example followed.
         scenario_line = _scenario_line(scenario)
+        # Recorded because the page was shown, not picked (the page saves the flag with the example), as step 1's cell.
+        default_example = "（系统默认例子，学生未另选）" if shock.get("teaching_example_chosen") is False else ""
         lines.extend(
             (
                 f"### 步骤 10 · {_STEP_TITLES.get(10, '')}",
                 "",
                 *([scenario_line] if scenario_line else []),
                 (
-                    f"- 两国趋势示例：{'、'.join(_with_tax_status(str(value), scenario) for value in shock.get('compared', []))} · "
+                    f"- 两国趋势示例{default_example}：{'、'.join(_with_tax_status(str(value), scenario) for value in shock.get('compared', []))} · "
                     f"{_safe(sector_label(str(shock.get('teaching_industry'))))} · 全部可用年份"
                     if isinstance(shock.get("compared"), list) and len(shock["compared"]) == 2
-                    else f"- 查看对象：{_with_tax_status(str(shock.get('teaching_country')), scenario)}"
+                    else f"- 查看对象{default_example}：{_with_tax_status(str(shock.get('teaching_country')), scenario)}"
                     + (
                         f" · {_safe(sector_label(str(shock.get('teaching_industry'))))}"
                         if shock.get("teaching_industry")
@@ -442,7 +447,7 @@ def _experiment_sections(session: dict[str, Any], scenario: dict[str, Any] | Non
             )
             lines.extend(
                 (
-                    f"- 换算用的例子：{_safe(country_label(str(teaching_observation.get('country'))))} · "
+                    f"- 换算用的例子{default_example}：{_safe(country_label(str(teaching_observation.get('country'))))} · "
                     f"{_safe(sector_label(str(teaching_observation.get('industry'))))} · {_safe(teaching_observation.get('year'))}",
                     # X is read in percentage points throughout steps 10–14, so print it the same way here.
                     # Same digits as step 10: w and X to two decimals, more where the product would not check by

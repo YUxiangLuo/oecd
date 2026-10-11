@@ -44,7 +44,7 @@ FIXED_EFFECT_DESCRIPTIONS = {
     "year": "每年一个截距，扣掉所有单位共同的年度变化",
     "country_year": "每个国家每年一个截距，包含国家 FE 和年份 FE；会吸收所有国家层面的控制变量（4 个控制变量都是）",
 }
-NO_FIXED_EFFECTS_NOTE = "都不勾时模型加常数项，表头写“无固定效应”。"
+NO_FIXED_EFFECTS_NOTE = "都不勾时模型加常数项，表下的设定写作“无固定效应”。"
 # "试一试": one change at a time, each a contrast the course data were built to show; questions only, no answers.
 TRIES = (
     "去掉“汇率变动”：X 各项合计变大还是变小？再改用“国家×年份”固定效应呢？",
@@ -111,13 +111,55 @@ def options() -> dict[str, Any]:
 # Invisible or layout characters (control, zero-width, bidi override, line/paragraph separators): a name made of
 # them looks empty or reorders the text around it in the report. The page refuses the same set (nameProblem).
 _NAME_FORBIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Zl", "Zp"})
+# Format characters that build one visible emoji (👩‍💻, 👨‍👩‍👧‍👦 joined by U+200D; tag letters of 🏴 flags).
+_EMOJI_JOINERS = frozenset({"\u200d", *map(chr, range(0xE0020, 0xE0080))})
+_INVISIBLE_ALONE = frozenset({"Cc", "Cf", "Mn", "Me", "Zs", "Zl", "Zp"})
+_ZWJ, _TAG_FLAG, _TAG_END = "\u200d", "\U0001f3f4", "\U000e007f"
+
+
+def _tag_letter(char: str) -> bool:
+    return "\U000e0020" <= char <= "\U000e007e"
+
+
+def _joiner_misplaced(name: str) -> bool:
+    """A joiner outside the emoji it builds: U+200D not between two emoji (a skin tone or U+FE0F may end the first),
+    or tag letters not in a 🏴 flag ending with the cancel tag. Elsewhere it is an invisible mark that makes two
+    identical-looking names differ ("结果1" and "结果1" + U+200D) or carries hidden text. The page checks the same."""
+    index = 0
+    while index < len(name):
+        char = name[index]
+        if char == _ZWJ:
+            before = name[index - 1] if index else ""
+            after = name[index + 1] if index + 1 < len(name) else ""
+            if not (
+                before
+                and after
+                and (unicodedata.category(before) in {"So", "Sk"} or before == "\ufe0f")
+                and unicodedata.category(after) == "So"
+            ):
+                return True
+        elif _tag_letter(char) or char == _TAG_END:
+            start = index
+            while index < len(name) and _tag_letter(name[index]):
+                index += 1
+            if not start or name[start - 1] != _TAG_FLAG or index == start or name[index : index + 1] != _TAG_END:
+                return True
+        index += 1
+    return False
+
+
+def _name_key(name: str) -> str:
+    """A name as it reads: two names differing only in format characters or U+FE0F are the same name."""
+    return "".join(char for char in name if unicodedata.category(char) != "Cf" and char != "\ufe0f")
 
 
 def name_problem(name: Any) -> str | None:
     """Why a saved model's name cannot be stored, or None; the page's ``nameProblem`` gives the same answers."""
-    if not isinstance(name, str) or not name.strip():
+    if not isinstance(name, str) or not any(unicodedata.category(char) not in _INVISIBLE_ALONE for char in name):
         return "请输入名称"
-    if any(unicodedata.category(char) in _NAME_FORBIDDEN_CATEGORIES for char in name):
+    if _joiner_misplaced(name) or any(
+        unicodedata.category(char) in _NAME_FORBIDDEN_CATEGORIES and char not in _EMOJI_JOINERS for char in name
+    ):
         return "名称不能包含不可见字符"
     if name != name.strip() or len(name) > NAME_MAX_LENGTH:
         return f"模型名称应为 1–{NAME_MAX_LENGTH} 个字符，前后不留空格"
@@ -160,9 +202,9 @@ def custom_results_problem(value: Any, outcome: str) -> str | None:
         problem = name_problem(name)
         if problem:
             return problem
-        if name in names:
+        if _name_key(name) in names:
             return f"本步已有名为“{name}”的模型"
-        names.add(name)
+        names.add(_name_key(name))
         if not isinstance(item["outcome"], str) or item["outcome"] != outcome:
             return "已保存模型的结果指标与本步不符"
         if not isinstance(item["baseline"], str) or item["baseline"] not in baselines:

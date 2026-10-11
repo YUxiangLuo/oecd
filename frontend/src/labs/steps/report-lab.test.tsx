@@ -334,6 +334,21 @@ describe("step 15 report states", () => {
     expect(focusReportGateDestination(9, { getElementById: () => null })).toBe(false);
   });
 
+  test("a step missing only its quiz (the server's quiz_only, whatever its message) opens at the quiz", () => {
+    const focused: string[] = [];
+    const root = {
+      getElementById: (id: string) => ({ focus: () => focused.push(id), scrollIntoView: () => {} }),
+    };
+    const frames: (() => void)[] = [];
+    const scheduler = { requestAnimationFrame: (callback: FrameRequestCallback) => { frames.push(() => callback(0)); return 1; } };
+    const navigated: number[] = [];
+    activateReportGateDestination(7, (step) => navigated.push(step), root, scheduler, true);
+    activateReportGateDestination(8, (step) => navigated.push(step), root, scheduler, false);
+    frames.forEach((frame) => frame());
+    expect(navigated).toEqual([7, 8]);
+    expect(focused).toEqual(["quiz-title-7", "step-task-title-8"]);
+  });
+
   test("offers PDF export after a report has been generated", () => {
     const html = renderToStaticMarkup(<ReportLab
       state={{
@@ -838,11 +853,19 @@ test("a draft or pending report prints no grade block", () => {
   }
 });
 
-test("analysis length counts what a reader sees as one character: an emoji, even a family emoji, is one", () => {
+test("analysis length counts visible code points as the server does; invisible characters count nothing", () => {
   expect(reflectionLength("  贸易 😀\n\n分析  ")).toBe(7);
   expect(reflectionLength("😀😀")).toBe(2);
-  expect(reflectionLength("👨‍👩‍👧")).toBe(1);
-  expect(reflectionLength("é")).toBe(1);
+  // The server's rule (report_gate.reflection_length): the joiners of a family emoji are invisible, its people
+  // count; a flag is two regional-indicator code points; a combining accent adds nothing.
+  expect(reflectionLength("👨‍👩‍👧")).toBe(3);
+  expect(reflectionLength("🇨🇳")).toBe(2);
+  expect(reflectionLength("e\u0301")).toBe(1);
+  // Zero-width spaces and bidi controls alone are an empty answer.
+  expect(reflectionLength("\u200b".repeat(40))).toBe(0);
+  expect(reflectionLength("\u202e结果\u202c")).toBe(2);
+  // Python's whitespace: U+001F splits words like a space.
+  expect(reflectionLength("甲\u001f乙")).toBe(3);
 });
 
 describe("the 2,400 limit shortens only the inserted text", () => {

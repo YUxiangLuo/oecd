@@ -6,7 +6,7 @@ import { isDemoStudentUsername } from "./login";
 import { TeacherDashboard } from "./teacher";
 import { TeacherReviewGuardProvider, useTeacherReviewGuard } from "./teacher/review-guard";
 import { showToast, ToastHost } from "./toast";
-import { materialStatusForStep, reportStatusLabel, stepMaterialStatusText, stepShowsDone } from "./step-task-card";
+import { materialStatusForStep, reportStatusLabel, stepMaterialStatusText } from "./step-task-card";
 import { revealOutlineStep } from "./step-navigation";
 import type {
   AuthUser,
@@ -23,11 +23,12 @@ const STUDENT_MANUAL_URL = new URL("../../实验手册.pdf", import.meta.url).hr
 
 const DEMO_PASSWORD_NOTE = "演示账号不能修改密码";
 
-export const NARROW_WINDOW_NOTICE = "窗口较窄，部分内容需要横向滚动；请放宽窗口或缩小浏览器缩放";
+// Short enough for one line at phone width; the full advice is also its title.
+export const NARROW_WINDOW_NOTICE = "窗口较窄：请左右滚动，或放宽窗口、缩小浏览器缩放";
 
 /** Shown by CSS only below the supported width (course-shell.css), on every page including login. */
 export function NarrowWindowNotice() {
-  return <div className="narrow-window-notice" role="note">{NARROW_WINDOW_NOTICE}</div>;
+  return <div className="narrow-window-notice" role="note" title={NARROW_WINDOW_NOTICE}>{NARROW_WINDOW_NOTICE}</div>;
 }
 
 export function AppBootSkeleton() {
@@ -209,6 +210,22 @@ export function StudentTopbar({
   );
 }
 
+type MaterialStatus = ReturnType<typeof materialStatusForStep>;
+
+/** A step's report-material status: the current step's as its task card shows it (unsaved/saving included). */
+function stepMaterialStatus(
+  step: number, current: number, materialGate: ReportGateItem[] | null, currentMaterialStatus?: MaterialStatus,
+): MaterialStatus {
+  return step === current && currentMaterialStatus ? currentMaterialStatus : materialStatusForStep(step, materialGate);
+}
+
+/** A step's mark, alike in the outline and the footer dots: done, or partial when the quiz is passed but the step's
+ * report material is still missing (amber, so a step that still needs something does not read as finished). */
+export function stepProgress(step: Pick<Step, "lab">, done: boolean, materialStatus: MaterialStatus): "done" | "partial" | null {
+  if (!done) return null;
+  return step.lab !== "rep" && materialStatus === "missing" ? "partial" : "done";
+}
+
 interface CourseSidebarProps {
   stepsData: StepsResponse;
   current: number;
@@ -218,21 +235,21 @@ interface CourseSidebarProps {
   /** Whether a report has been generated, even if it no longer matches the saved records. */
   reportExists?: boolean;
   reportState?: "draft" | "pending" | "graded" | null;
+  /** Whether the latest report matches the saved record (server report_current). */
+  reportCurrent?: boolean | null;
   /** The current step's material status as its task card shows it (includes unsaved/saving). */
-  currentMaterialStatus?: ReturnType<typeof materialStatusForStep>;
+  currentMaterialStatus?: MaterialStatus;
 }
 
-export function CourseSidebar({ stepsData, current, completion, materialGate, onNavigate, reportExists = false, reportState, currentMaterialStatus }: CourseSidebarProps) {
+export function CourseSidebar({ stepsData, current, completion, materialGate, onNavigate, reportExists = false, reportState, reportCurrent, currentMaterialStatus }: CourseSidebarProps) {
   const steps = stepsData.steps;
   const outlineRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => { revealOutlineStep(outlineRef.current); }, [current, steps]);
   const totalSteps = steps.length;
   const stages = [...new Set(steps.map((step) => step.stage))];
   const completedSteps = new Set(completion?.completed ?? []);
-  // A draft report is not finished work: the count follows the step 15 badge (and the teacher's table).
-  const reportStep = steps.find((step) => step.lab === "rep")?.n;
-  const draftCounted = reportState === "draft" && reportStep != null && completedSteps.has(reportStep);
-  const doneCount = (completion?.completed_count ?? 0) - (draftCounted ? 1 : 0);
+  // The server counts step 15 only once the report is handed in (records.report_handed_in), as the teacher's table.
+  const doneCount = completion?.completed_count ?? 0;
   return (
     <aside className="sidebar" aria-label="课程大纲">
       <div className="sidebar-head">
@@ -278,17 +295,13 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
             </div>
             {steps.filter((step) => step.stage === stage).map((step) => {
               const done = completedSteps.has(step.n);
-              const materialStatus = step.n === current && currentMaterialStatus
-                ? currentMaterialStatus
-                : materialStatusForStep(step.n, materialGate);
+              const materialStatus = stepMaterialStatus(step.n, current, materialGate, currentMaterialStatus);
               // One vocabulary with the task card: 检查中 / 保存中 / 未保存 / 已齐全 / 未齐全, and for step 15
               // 你的分析 已完成 / 未完成 (it counts the analysis answers, not report material).
               const material = stepMaterialStatusText(step, materialStatus);
               const materialLabel = `${material.name}${material.value}`;
-              // The badge agrees with the task card: a draft report is not yet a finished step.
-              const shownDone = stepShowsDone(step, done, reportState);
-              const state = shownDone ? "done" : step.n === current ? "cur" : "future";
-              const completionLabel = step.lab === "rep" ? `报告${reportStatusLabel(done, reportExists, reportState)}` : (done ? "理解题已完成" : "理解题未完成");
+              const state = stepProgress(step, done, materialStatus) ?? (step.n === current ? "cur" : "future");
+              const completionLabel = step.lab === "rep" ? `报告${reportStatusLabel(reportCurrent, reportExists, reportState)}` : (done ? "理解题已完成" : "理解题未完成");
               const accessibleName = [
                 `步骤 ${step.n}：${step.title}`,
                 step.n === current ? "当前步骤" : null,
@@ -305,7 +318,7 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
                   onClick={() => onNavigate(step.n)}
                   title={`步骤 ${step.n}：${step.title}（${completionLabel}）`}
                 >
-                  <span className={`step-badge ${state}`} aria-hidden="true">{shownDone ? "✓" : step.n}</span>
+                  <span className={`step-badge ${state}`} aria-hidden="true">{done ? "✓" : step.n}</span>
                   <span className="step-row-copy" aria-hidden="true">
                     <span className="step-row-title">{step.title}</span>
                     <span className="step-row-status">
@@ -344,9 +357,10 @@ export function StepHeader({ step, previous, next, stageName, totalSteps, onNavi
       </div>
       <div className="nav-btns">
         <button disabled={!previous} onClick={() => previous && onNavigate(previous.n)}>← 上一步</button>
+        {/* The last step keeps a (disabled) button in the same place: arriving there with 下一步 leaves focus on it. */}
         {next
           ? <button className="primary" onClick={() => onNavigate(next.n)}>下一步 →</button>
-          : <span className="muted">已到最后一步</span>}
+          : <button type="button" className="nav-last" aria-disabled="true">已到最后一步</button>}
       </div>
     </div>
   );
@@ -359,6 +373,9 @@ interface StepFooterProps {
   stageName: string;
   current: number;
   completedSteps: Set<number>;
+  /** As the sidebar's, so a dot is amber where its outline tick is. */
+  materialGate?: ReportGateItem[] | null;
+  currentMaterialStatus?: MaterialStatus;
   onNavigate: (step: number) => void;
 }
 
@@ -369,28 +386,35 @@ export function StepFooter({
   stageName,
   current,
   completedSteps,
+  materialGate = null,
+  currentMaterialStatus,
   onNavigate,
 }: StepFooterProps) {
   return (
     <footer className="stepfooter">
       <div className="footer-loc">{stageName} · {step.title}</div>
       <div className="footer-dots">
-        {steps.map((item) => (
-          <button
-            type="button"
-            key={item.n}
-            onClick={() => onNavigate(item.n)}
-            aria-label={`前往步骤 ${item.n}：${item.title}`}
-            title={`步骤 ${item.n}：${item.title}`}
-            aria-current={item.n === current ? "step" : undefined}
-            className={`fdot${item.n === current ? " on" : completedSteps.has(item.n) ? " done" : ""}`}
-          />
-        ))}
+        {steps.map((item) => {
+          const state = item.n === current
+            ? "on"
+            : stepProgress(item, completedSteps.has(item.n), stepMaterialStatus(item.n, current, materialGate, currentMaterialStatus));
+          return (
+            <button
+              type="button"
+              key={item.n}
+              onClick={() => onNavigate(item.n)}
+              aria-label={`前往步骤 ${item.n}：${item.title}`}
+              title={`步骤 ${item.n}：${item.title}`}
+              aria-current={item.n === current ? "step" : undefined}
+              className={`fdot${state ? ` ${state}` : ""}`}
+            />
+          );
+        })}
       </div>
       {/* It reads like a link, so it is one: a button to the next step. */}
       {next
         ? <button type="button" className="footer-next" onClick={() => onNavigate(next.n)}>下一步 · {next.title}</button>
-        : <div className="footer-next">已到最后一步</div>}
+        : <button type="button" className="footer-next footer-next--last" aria-disabled="true">已到最后一步</button>}
     </footer>
   );
 }

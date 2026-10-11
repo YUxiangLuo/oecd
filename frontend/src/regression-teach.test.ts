@@ -267,3 +267,13 @@ describe("ReportedCustomModels", () => {
     expect(html).not.toContain("<table");
   });
 });
+
+test("the step-15 summary table gives each of its seven columns a share of the width", async () => {
+  // With table-layout: fixed, a column left out of the shares gets 0 px and wraps one character per line.
+  const css = await Bun.file(new URL("./workbench.css", import.meta.url)).text();
+  const widths = [...css.matchAll(/\.reg-evidence-table th:nth-child\((\d)\)[^{]*\{ width: (\d+)%; \}/g)]
+    .map((match) => [Number(match[1]), Number(match[2])] as const);
+  expect(widths.map(([column]) => column)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  expect(widths.reduce((total, [, width]) => total + width, 0)).toBe(100);
+  expect(widths.every(([, width]) => width > 0)).toBe(true);
+});

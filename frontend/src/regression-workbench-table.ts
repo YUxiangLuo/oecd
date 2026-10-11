@@ -80,14 +80,21 @@ export function specSummary(spec: ModelSpec, options: WorkbenchOptions): string 
 /** "Y = β₁·X + β₂·L1.X + γ₁·汇率变动 + 国家×行业 FE + 年份 FE + ε" (the server's ModelSpec.equation). */
 export function equationPreview(spec: ModelSpec, options: WorkbenchOptions): string {
   const canonical = canonicalSpec(spec, options);
+  // Every control is a country-level yearly value, so country × year effects absorb them all (the form's note says
+  // so): the preview leaves them out of the model and names them, rather than showing terms that will not be estimated.
+  const absorbed = canonical.fixed_effects.includes("country_year") ? canonical.controls : [];
+  const controls = canonical.controls.filter((item) => !absorbed.includes(item));
   const terms = [
     ...canonical.x_lags.map((lag, index) => `β${subscript(index + 1)}·${xTermLabel(lag)}`),
-    ...canonical.controls.map((item, index) => `γ${subscript(index + 1)}·${controlLabel(options, item.name, item.lag)}`),
+    ...controls.map((item, index) => `γ${subscript(index + 1)}·${controlLabel(options, item.name, item.lag)}`),
     ...(canonical.fixed_effects.length
       ? canonical.fixed_effects.map((key) => options.fixed_effects.find((item) => item.key === key)?.label ?? key)
       : ["常数项"]),
   ];
-  return `Y = ${terms.join(" + ")} + ε`;
+  const note = absorbed.length
+    ? `（${absorbed.map((item) => controlLabel(options, item.name, item.lag)).join("、")}会被国家×年份 FE 吸收，不会估计）`
+    : "";
+  return `Y = ${terms.join(" + ")} + ε${note}`;
 }
 
 /** A term's name in the tables: "X", "L1.X", "汇率变动", "L1.GDP（取对数）", "X 各项合计（累计效应）", "常数项". */
@@ -238,9 +245,10 @@ export function perPointReading(
   return withCountUnit(signed(value, digits ?? estimateDigits(kind, value, bounds)), kind);
 }
 
-/** A column's X-terms sum (the single X term of a one-term model). */
-export function xSum(snapshot: CustomResultSnapshot): CoefStat | null {
-  if (xTerms(snapshot) === 1) return snapshot.result.coefs.find((item) => Object.values(X_COLUMNS).includes(item.name)) ?? null;
+/** A column's X-terms sum: the single X term of a one-term model, else the estimated sum. Null when a term of a
+ * several-term model was dropped (the server then gives no sum), so one coefficient is never called a sum. */
+export function xSum(snapshot: CustomResultSnapshot, spec: Pick<ModelSpec, "x_lags">): CoefStat | null {
+  if (spec.x_lags.length === 1) return snapshot.result.coefs.find((item) => Object.values(X_COLUMNS).includes(item.name)) ?? null;
   return snapshot.result.cumulative ?? null;
 }
 
@@ -249,14 +257,14 @@ export function xSum(snapshot: CustomResultSnapshot): CoefStat | null {
  * so the row compares like with like, each saying which years it covers ("（两年累计）", "（仅当年）").
  */
 export function perPointRow(columns: TableColumn[], outcome: RegressionOutcome): SummaryRow | null {
-  const first = columns.find(({ snapshot }) => xSum(snapshot));
+  const first = columns.find(({ snapshot, spec }) => xSum(snapshot, spec));
   if (!first) return null;
-  const digits = perPointDigits(outcome, xSum(first.snapshot)!, first.snapshot);
+  const digits = perPointDigits(outcome, xSum(first.snapshot, first.spec)!, first.snapshot);
   return {
     key: "per_point",
     label: "合计：X 每高 1 个百分点",
     cells: columns.map(({ spec, snapshot }) => {
-      const sum = xSum(snapshot);
+      const sum = xSum(snapshot, spec);
       return sum ? `${perPointReading(outcome, sum, snapshot, digits)}（${xSpanLabel(spec)}）` : "";
     }),
   };
@@ -325,17 +333,44 @@ export function nextResultName(saved: readonly Pick<CustomResult, "name">[]): st
   return `结果${next}`;
 }
 
+const isTagLetter = (char: string | undefined) => char != null && /[\u{E0020}-\u{E007E}]/u.test(char);
+
+/** A joiner outside the emoji it builds: U+200D not between two emoji (a skin tone or U+FE0F may end the first), or
+ * tag letters not in a 🏴 flag ending with the cancel tag; elsewhere it is an invisible mark that makes two
+ * identical-looking names differ ("结果1" and "结果1" + U+200D). The server checks the same (workbench._joiner_misplaced). */
+function joinerMisplaced(name: string): boolean {
+  const chars = [...name];
+  for (let index = 0; index < chars.length; index += 1) {
+    const char = chars[index];
+    if (char === "\u200d") {
+      const before = chars[index - 1];
+      const after = chars[index + 1];
+      if (!(before && after && /[\p{So}\p{Sk}\uFE0F]/u.test(before) && /\p{So}/u.test(after))) return true;
+    } else if (isTagLetter(char) || char === "\u{E007F}") {
+      const start = index;
+      while (isTagLetter(chars[index])) index += 1;
+      if (!start || chars[start - 1] !== "\u{1F3F4}" || index === start || chars[index] !== "\u{E007F}") return true;
+    }
+  }
+  return false;
+}
+
+/** A name as it reads: names differing only in format characters or U+FE0F are the same (workbench._name_key). */
+const nameKey = (name: string) => name.replace(/[\p{Cf}\uFE0F]/gu, "");
+
 /** Why a name cannot be used (empty, too long, taken in this step), or null. */
 export function nameProblem(
   name: string, saved: readonly Pick<CustomResult, "id" | "name">[], limit: number, selfId?: string,
 ): string | null {
   const trimmed = name.trim();
-  if (!trimmed) return "请输入名称";
-  // Control, zero-width, bidi and line-separator characters, as the server refuses them (workbench.name_problem):
-  // with them gone, JavaScript's trim and Python's strip agree on the rest.
-  if (/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(trimmed)) return "名称不能包含不可见字符";
+  // Something visible is needed (a name of zero-width or joining characters alone looks empty).
+  if (!/[^\p{Cc}\p{Cf}\p{Mn}\p{Me}\p{Z}]/u.test(trimmed)) return "请输入名称";
+  // Control, zero-width, bidi and line-separator characters, as the server refuses them (workbench.name_problem),
+  // except the joiners inside one emoji (👩‍💻 U+200D, the tag letters of 🏴 flags). With them gone, JavaScript's
+  // trim and Python's strip agree on the rest.
+  if (joinerMisplaced(trimmed) || /(?![\u200d\u{E0020}-\u{E007F}])[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(trimmed)) return "名称不能包含不可见字符";
   if ([...trimmed].length > limit) return `名称最多 ${limit} 个字符`;
-  if (saved.some((item) => item.name === trimmed && item.id !== selfId)) return `本步已有名为“${trimmed}”的模型`;
+  if (saved.some((item) => nameKey(item.name) === nameKey(trimmed) && item.id !== selfId)) return `本步已有名为“${trimmed}”的模型`;
   return null;
 }
 

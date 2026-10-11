@@ -113,7 +113,7 @@ export function TeacherDashboard({ user, onChangePassword }: { user: AuthUser; o
           </div>}
           {tab === "semesters" ? <SemestersTab /> : tab === "students" ? (
             <StudentsTab onOpenReport={(accountId, queue) => { setReportRequest({ accountId, queue }); setTab("reports"); }}
-              onGoToSemesters={() => setTab("semesters")} />
+              onGoToSemesters={() => setTab("semesters")} onRefresh={() => setReviewBump((value) => value + 1)} />
           ) : (
             <ReportsTab user={user} initialReview={reportRequest ?? undefined}
               onGraded={() => setReviewBump((value) => value + 1)}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { api } from "./api";
+import { api, ApiError } from "./api";
 import { Modal } from "./teacher/ui";
 import { userFacingRequestError } from "./user-facing-error";
 
@@ -12,8 +12,10 @@ export function passwordChangeProblem(
   confirmation: string,
 ): { field: PasswordField; message: string } | null {
   if (!currentPassword) return { field: "current", message: "请输入当前密码" };
-  if (newPassword.length < 12) return { field: "new", message: "密码至少 12 个字符" };
-  if (newPassword.length > 256) return { field: "new", message: "新密码不能超过 256 个字符" };
+  // Characters as the server counts them (code points): an emoji is one, not the two UTF-16 units of .length.
+  const length = [...newPassword].length;
+  if (length < 12) return { field: "new", message: "密码至少 12 个字符" };
+  if (length > 256) return { field: "new", message: "新密码不能超过 256 个字符" };
   if (!newPassword.trim()) return { field: "new", message: "新密码不能全是空格" };
   if (newPassword === currentPassword) return { field: "new", message: "新密码不能与当前密码相同" };
   if (newPassword !== confirmation) return { field: "confirm", message: "两次输入的新密码不一致" };
@@ -86,6 +88,8 @@ export function AccountPasswordModal({
       onChanged();
     } catch (cause) {
       setError(userFacingRequestError(cause, "修改失败"));
+      // The server's one answer about a field: the current password was wrong.
+      if (cause instanceof ApiError && cause.status === 400 && cause.message.includes("当前密码")) setInvalidField("current");
       setBusy(false);
     }
   };

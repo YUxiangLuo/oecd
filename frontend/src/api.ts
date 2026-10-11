@@ -110,6 +110,11 @@ function retryAfterSeconds(resp: Response): number | undefined {
 const GET_TIMEOUT_MS = 30_000;
 const MUTATION_TIMEOUT_MS = 120_000;
 
+/** A request that ran out of time: the server may still answer the same request later (a save is retried). */
+export class RequestTimeoutError extends Error {
+  name = "RequestTimeoutError";
+}
+
 async function withRequestTimeout<T>(
   _url: string,
   timeoutMs: number,
@@ -131,7 +136,7 @@ async function withRequestTimeout<T>(
   try {
     return await Promise.race([operation(controller.signal), aborted]);
   } catch (cause) {
-    if (timedOut) throw new Error(`服务器繁忙，请求超时（${timeoutMs / 1000} 秒），请稍后重试。`);
+    if (timedOut) throw new RequestTimeoutError(`服务器繁忙，请求超时（${timeoutMs / 1000} 秒），请稍后重试。`);
     throw cause;
   } finally {
     globalThis.clearTimeout(timeout);

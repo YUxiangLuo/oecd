@@ -6,6 +6,11 @@ function rawErrorMessage(cause: unknown): string {
   return String(cause ?? "").trim();
 }
 
+/** The browser could not reach the server at all (fetch's own failure, worded per browser). */
+export function isNetworkFailure(cause: unknown): boolean {
+  return NETWORK_FAILURE.test(rawErrorMessage(cause));
+}
+
 /** Turn browser transport errors into actionable Chinese copy while preserving server detail. */
 export function userFacingRequestError(cause: unknown, context: string): string {
   const raw = rawErrorMessage(cause);

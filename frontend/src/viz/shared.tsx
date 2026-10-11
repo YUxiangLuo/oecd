@@ -181,8 +181,10 @@ export function useTip() {
     let x = e.clientX - r.left + 14, y = e.clientY - r.top + 12;
     if (x + width > r.width) x = Math.max(0, e.clientX - r.left - width - 14);
     if (anchor) {
+      // Above the focused element whenever the window has room, even over the chart's own legend or title (the
+      // top row of a bar chart has no room inside the chart, and below it the tip would cover the next bars).
       const above = anchor.top - r.top - box.offsetHeight - 6;
-      y = above >= 0 ? above : anchor.bottom - r.top + 6;
+      y = above >= 0 || anchor.top - box.offsetHeight - 6 >= 0 ? above : anchor.bottom - r.top + 6;
     }
     box.style.left = `${x}px`; box.style.top = `${y}px`; box.style.opacity = "1";
   };

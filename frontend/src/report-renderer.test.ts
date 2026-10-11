@@ -20,12 +20,15 @@ describe("report tables", () => {
   });
 
   test("a typed name with GFM strikethrough, a web address or an e-mail stays plain text (all ASCII punctuation escaped)", () => {
-    // As the report writes such a name (report_workbench._name): punctuation escaped, a word joiner before . : @.
+    // As the report writes such a name (report_workbench._name): punctuation escaped, a word joiner only where GFM
+    // would start a link (the "." of "www.", "://" and "@"); "x.cn" and "模型1.5" need none and copy as typed.
     const wj = "\u2060";
-    const markdown = `| 变量 | 默认模型 | \\~\\~删\\~\\~www${wj}\\.ab${wj}\\.cn | a${wj}\\@b${wj}\\.cn | http${wj}\\:\\/\\/x${wj}\\.y |\n|---|---:|---:|---:|---:|\n| X | 1 | 2 | 3 | 4 |`;
+    const markdown = `| 变量 | 默认模型 | \\~\\~删\\~\\~www${wj}\\.ab\\.cn | a${wj}\\@b\\.cn | http${wj}\\:\\/\\/x\\.y | x\\.cn | 模型1\\.5 |\n|---|---:|---:|---:|---:|---:|---:|\n| X | 1 | 2 | 3 | 4 | 5 | 6 |`;
     const element = document.createElement("div");
     element.innerHTML = renderToStaticMarkup(createElement(ReportMarkdown, { markdown }));
-    expect([...element.querySelectorAll("th")].map((cell) => cell.textContent!.replaceAll(wj, ""))).toEqual(["变量", "默认模型", "~~删~~www.ab.cn", "a@b.cn", "http://x.y"]);
+    const headers = [...element.querySelectorAll("th")].map((cell) => cell.textContent!);
+    expect(headers.map((text) => text.replaceAll(wj, ""))).toEqual(["变量", "默认模型", "~~删~~www.ab.cn", "a@b.cn", "http://x.y", "x.cn", "模型1.5"]);
+    expect(headers.slice(5)).toEqual(["x.cn", "模型1.5"]);
     expect(element.querySelector("del, a")).toBeNull();
   });
 

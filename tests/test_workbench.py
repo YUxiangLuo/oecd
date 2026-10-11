@@ -232,9 +232,18 @@ def test_saved_models_are_checked_before_the_session_is_stored():
         ([_saved("一" * 21)], "1–20 个字符"),
         ([_saved(" 结果1")], "1–20 个字符"),
         ([_saved("")], "请输入名称"),
-        ([_saved("\u200b")], "不可见字符"),
+        ([_saved("\u200b")], "请输入名称"),
+        ([_saved("结果\u200b")], "不可见字符"),
+        ([_saved("\u200d")], "请输入名称"),
         ([_saved("结果\u202e1")], "不可见字符"),
         ([_saved("结果\u001f")], "不可见字符"),
+        # A joiner outside an emoji is an invisible mark: "结果1" + U+200D would look like "结果1".
+        ([_saved("结果1\u200d")], "不可见字符"),
+        ([_saved("结\u200d果")], "不可见字符"),
+        ([_saved("结果\U000e0041")], "不可见字符"),
+        ([_saved("🏴\U000e0067")], "不可见字符"),
+        # Names that differ only in format characters or U+FE0F read the same: one name.
+        ([_saved("🏳️\u200d🌈"), _saved("🏳\u200d🌈", id="other")], "已有名为"),
         ([_saved(name=["结果1"])], "请输入名称"),
         ([_saved(spec=DEFAULT_SPEC)], "默认模型"),
         ([_saved("结果1"), _saved("结果2")], "这个设定已保存为“结果1”"),
@@ -276,6 +285,16 @@ def test_saved_models_are_checked_before_the_session_is_stored():
     stored = {**with_rate, "controls": [{"lag": 0, "name": EXCHANGE_RATE_COLUMN}]}
     assert json.dumps(stored) != json.dumps(with_rate)
     assert workbench.custom_results_problem([_saved(spec=None) | {"spec": stored}], "trade") is None
+    # Emoji joined by U+200D are one visible character each, not invisible text.
+    for name in (
+        "家👨\u200d👩\u200d👧\u200d👦",
+        "👩\u200d💻",
+        "🏳️\u200d🌈",
+        "👩🏽\u200d💻",
+        "🏃\u200d♂️",
+        "🏴\U000e0067\U000e0062\U000e0073\U000e0063\U000e0074\U000e007f",
+    ):
+        assert workbench.custom_results_problem([_saved(name)], "trade") is None, name
     # The same model on another Y is a different saved model.
     assert workbench.custom_results_problem([_saved("结果1"), _saved("结果2", baseline="DVAex_share")], "trade") is None
 

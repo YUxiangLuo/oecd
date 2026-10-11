@@ -9,6 +9,8 @@ from typing import Any
 
 import psycopg
 
+from gvcsim.steps import STEPS
+
 
 class _DatabaseProxy:
     def __getattr__(self, name: str) -> Any:
@@ -59,7 +61,7 @@ _VIEW_ONLY_KEYS = frozenset(
 
 
 # Only the regression steps have the workbench; the report reads saved models nowhere else.
-_WORKBENCH_STEPS = frozenset({"11", "12", "13", "14"})
+_WORKBENCH_STEPS = frozenset(str(item["n"]) for item in STEPS if item.get("regression_outcome"))
 
 
 def _report_data(step: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -89,6 +91,13 @@ def report_fingerprint(session: dict[str, Any]) -> str:
         for key, value in steps.items()
     }
     return _session_fingerprint({**session, "steps": projected_steps})
+
+
+def report_handed_in(report: dict[str, Any] | None) -> bool:
+    """Whether the student has submitted a report (waiting for grading or graded): step 15 counts as done from then
+    on, also after later edits to the record (the report then reads as out of date instead, and the teacher keeps
+    the submitted version). A draft is not finished work."""
+    return report is not None and report.get("state") in {"pending", "graded"}
 
 
 def report_matches_session(session: dict[str, Any], report: dict[str, Any] | None) -> bool:

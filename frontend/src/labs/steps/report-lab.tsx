@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, isApiErrorStatus } from "../../api";
 import { RegressionEvidenceMatrix, RegressionSummaryBars, ReportedCustomModels, type SiblingStepData } from "../../regression-teach";
-import { scrollIntoCourseContent } from "../../content-scroll";
+import { revealFocusedWhileSettling, scrollIntoCourseContent } from "../../content-scroll";
 import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-lazy";
 import { ReportOutro } from "../../report-outro";
 import { clearToasts, showToast } from "../../toast";
@@ -22,16 +22,30 @@ interface ReportReflectionState extends Record<string, unknown> {
 
 export const REFLECTION_MAX_LENGTH = 2400;
 
+/** What a cut at the limit kept: nothing or part of the new text, and whether a selection was pasted over. */
+export function pasteCutMessage(cut: { wide: boolean; replaced?: boolean; none?: boolean }): string {
+  const limit = `超过 ${REFLECTION_MAX_LENGTH} 字上限：`;
+  if (cut.wide) return `${limit}这个表情按实际字符计算占多个字，剩余字数不够，没有保留；${cut.replaced ? "选中的原文已被替换" : "原有文字没有改动"}。`;
+  const kept = cut.none ? "刚粘贴或输入的文字没有保留" : "刚粘贴或输入的文字有一部分没有保留";
+  return `${limit}${kept}，${cut.replaced ? "选中的原文已被替换" : "原有文字没有改动"}。请精简后再补充。`;
+}
+
 /** `atLimit`: the field is full by the server's count (code points, every space and line break included), which
  * emoji or blank lines can reach before the shown count does. The limit is not moved to the shown count: the
  * server's report gate counts code points and would then refuse the text. Instead, a field full before the shown
  * count reaches the limit says why, rather than "已写 2380 / 2400 字 · 已达上限". */
-export function reflectionCountLabel(length: number, min: number, max = REFLECTION_MAX_LENGTH, atLimit = false): string {
+export function reflectionCountLabel(
+  length: number, min: number, max = REFLECTION_MAX_LENGTH, atLimit = false, stored = length,
+): string {
   if (atLimit && length < max) return `已写 ${length} 字 · 已达 ${max} 字上限（空格、换行和表情符号按实际字符计，可能占多个字）`;
   if (length >= max || atLimit) return `已写 ${Math.min(length, max)} / ${max} 字 · 已达上限`;
+  // Spaces, line breaks and invisible characters take room under the limit without counting as written: once
+  // the room left is less than the counter suggests, say how much is left.
+  const left = max - stored;
+  const room = left < max - length && left < 200 ? ` · 还能再写 ${left} 字（空格和换行也占位置）` : "";
   return length >= min
-    ? `已写 ${length} / ${max} 字 · 已达最低 ${min} 字`
-    : `已写 ${length} / ${max} 字 · 最低 ${min} 字`;
+    ? `已写 ${length} / ${max} 字 · 已达最低 ${min} 字${room}`
+    : `已写 ${length} / ${max} 字 · 最低 ${min} 字${room}`;
 }
 
 const REFLECTION_FIELDS: {
@@ -60,7 +74,7 @@ export const REPORT_REFLECTION_TITLE_ID = "report-reflection-title";
 export const REPORT_REFLECTION_INCOMPLETE_SELECTOR = "textarea[data-report-reflection-incomplete='true']:not(:disabled)";
 
 type ReportGateFocusRoot = {
-  getElementById(id: string): Pick<HTMLElement, "focus"> | null;
+  getElementById(id: string): (Pick<HTMLElement, "focus"> & Partial<Pick<HTMLElement, "scrollIntoView">>) | null;
   querySelector?(selectors: string): Element | null;
 };
 
@@ -70,7 +84,17 @@ type AnimationFrameScheduler = Pick<Window, "requestAnimationFrame">;
 export function focusReportGateDestination(
   step: number,
   root: ReportGateFocusRoot = document,
+  quizOnly = false,
 ): boolean {
+  // Only the quiz is missing: go to the quiz, not the top of the step. The step's data loads after this frame and
+  // grows the page above the quiz, so the quiz is kept in view until the page settles (or the student moves on).
+  const quiz = quizOnly ? root.getElementById(`quiz-title-${step}`) : null;
+  if (quiz) {
+    quiz.focus({ preventScroll: true });
+    if (quiz instanceof HTMLElement) revealFocusedWhileSettling(quiz);
+    else quiz.scrollIntoView?.({ block: "start" });
+    return true;
+  }
   const target = root.getElementById(stepTaskTitleId(step));
   if (!target) return false;
   target.focus({ preventScroll: true });
@@ -91,11 +115,12 @@ export function activateReportGateDestination(
   onNavigateStep: (step: number) => void,
   root: ReportGateFocusRoot = document,
   scheduler: AnimationFrameScheduler = window,
+  quizOnly = false,
 ): boolean {
   if (step <= 0) return false;
   if (step === 15) return focusReportReflection(root);
   onNavigateStep(step);
-  scheduler.requestAnimationFrame(() => { focusReportGateDestination(step, root); });
+  scheduler.requestAnimationFrame(() => { focusReportGateDestination(step, root, quizOnly); });
   return true;
 }
 
@@ -160,7 +185,9 @@ export function GateCard({ blocked, onNavigateStep, flash = 0, verb = "生成" }
   const overview = summarizeReportGate(blocked);
   const next = overview.next;
   if (!next) return null;
-  const goToStep = (step: number) => { activateReportGateDestination(step, onNavigateStep); };
+  const goToStep = (item: Pick<ReportGateItem, "step" | "quiz_only">) => {
+    activateReportGateDestination(item.step, onNavigateStep, document, window, Boolean(item.quiz_only));
+  };
   return (
     // The key restarts the highlight animation on every new flash.
     <section key={flash} className={flash ? "report-gate-panel report-gate-flash" : "report-gate-panel"} aria-labelledby="report-gate-title">
@@ -171,7 +198,7 @@ export function GateCard({ blocked, onNavigateStep, flash = 0, verb = "生成" }
           <span>{overview.summary}</span>
         </div>
         {next.step > 0 && (
-          <button type="button" className="primary report-gate-next-button" onClick={() => goToStep(next.step)}>
+          <button type="button" className="primary report-gate-next-button" onClick={() => goToStep(next)}>
             {next.step === 15 ? "去写你的分析" : `继续步骤 ${next.step}`}
           </button>
         )}
@@ -186,12 +213,13 @@ export function GateCard({ blocked, onNavigateStep, flash = 0, verb = "生成" }
         <div className="report-gate-groups">
           {overview.groups.map((group, groupIndex) => (
             <section key={group.label} aria-labelledby={`report-gate-group-${groupIndex}`}>
-              <h4 id={`report-gate-group-${groupIndex}`}>{group.label}<span>{group.items.length}</span></h4>
+              {/* Items, as the summary above counts them (a step can miss several). */}
+              <h4 id={`report-gate-group-${groupIndex}`}>{group.label}<span>{group.items.reduce((count, item) => count + item.missing.length, 0)} 项</span></h4>
               <ul>
                 {group.items.map((item, itemIndex) => (
                   <li key={`${item.step}-${itemIndex}`}>
                     {item.step > 0 ? (
-                      <button type="button" className="gate-link" onClick={() => goToStep(item.step)}>
+                      <button type="button" className="gate-link" onClick={() => goToStep(item)}>
                         步骤 {item.step} · {item.title}
                       </button>
                     ) : <b>{item.title}</b>}
@@ -278,11 +306,17 @@ export function codePointLength(text: string): number {
   return count;
 }
 
-/** The written length shown and checked against the minimum: whitespace runs count as one space, and each
- * visible character (a family emoji included) counts as one. The server counts code points, which is never
- * fewer, so a field the page counts as long enough is long enough on the server too. */
+// Python's str.split() whitespace (the server's rule in report_gate.reflection_length), so both sides count alike.
+const SERVER_WHITESPACE = /[\t\n\v\f\r \x1c-\x1f\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+/;
+// Code points that show nothing by themselves: control, format (zero-width, bidi), combining marks.
+const INVISIBLE = /[\p{Cc}\p{Cf}\p{Mn}\p{Me}]/gu;
+
+/** The written length the minimums are checked against, as the server counts it: visible code points, each run of
+ *  spaces or line breaks between words counting as one. Invisible characters do not count, so a field of
+ *  zero-width spaces is empty; an emoji counts its code points (a flag is 2), as the limit note says. */
 export function reflectionLength(text: string): number {
-  return graphemes(text.trim().split(/\s+/).join(" ")).length;
+  const words = text.split(SERVER_WHITESPACE).map((word) => word.replace(INVISIBLE, "")).filter(Boolean);
+  return codePointLength(words.join(" "));
 }
 
 const isLowSurrogate = (code: number) => code >= 0xdc00 && code <= 0xdfff;
@@ -299,7 +333,7 @@ export function limitInsertion(
   next: string,
   caret: number | null,
   max = REFLECTION_MAX_LENGTH,
-): { value: string; caret: number; cut: boolean; wide?: boolean } {
+): { value: string; caret: number; cut: boolean; wide?: boolean; replaced?: boolean; none?: boolean } {
   const end = caret ?? next.length;
   if (codePointLength(next) <= max) return { value: next, caret: end, cut: false };
   // Split the new value into unchanged head, insertion and unchanged tail, for a given tail length.
@@ -321,6 +355,8 @@ export function limitInsertion(
     if (byCaret.removed <= chosen.removed) chosen = byCaret;
   }
   let { prefix, suffix } = chosen;
+  // The change replaced some of the old text (a selection pasted over): that part is gone, as the student meant.
+  const replaced = chosen.removed > 0;
   // Never split a surrogate pair between the kept text and the insertion.
   while (prefix > 0 && isLowSurrogate(next.charCodeAt(prefix))) prefix -= 1;
   while (suffix > 0 && isLowSurrogate(next.charCodeAt(next.length - suffix))) suffix -= 1;
@@ -341,7 +377,10 @@ export function limitInsertion(
   }
   // A field already over the limit (saved elsewhere) may still lose characters: that is not a cut.
   const cut = kept.length !== inserted.length;
-  return { value: before + kept + after, caret: before.length + kept.length, cut, ...(cut ? { wide } : {}) };
+  return {
+    value: before + kept + after, caret: before.length + kept.length, cut,
+    ...(cut ? { wide, replaced, none: kept.length === 0 } : {}),
+  };
 }
 
 /**
@@ -534,7 +573,7 @@ export function ReportLab({
   const reflection = (state.data ?? {}) as ReportReflectionState;
   const writtenCount = REFLECTION_FIELDS.filter((field) => reflectionLength(String(reflection[field.key] ?? "")) >= field.min).length;
   // A paste beyond the limit is cut by the browser; say so instead of losing the end silently.
-  const [pasteCut, setPasteCut] = useState<{ key: string; wide: boolean } | null>(null);
+  const [pasteCut, setPasteCut] = useState<{ key: string; wide: boolean; replaced?: boolean; none?: boolean } | null>(null);
   // A new report was generated from the text as it stands: the earlier paste's cut warning no longer applies.
   const generatedAt = report?.generated_at;
   useEffect(() => { setPasteCut(null); }, [generatedAt]);
@@ -864,7 +903,7 @@ export function ReportLab({
             const short = length < field.min;
             return (
               <label key={field.key}>
-                <span><b>{index + 1}. {field.label}</b><small id={countId}>{reflectionCountLabel(length, field.min, REFLECTION_MAX_LENGTH, codePointLength(value) >= REFLECTION_MAX_LENGTH)}</small></span>
+                <span><b>{index + 1}. {field.label}</b><small id={countId}>{reflectionCountLabel(length, field.min, REFLECTION_MAX_LENGTH, codePointLength(value) >= REFLECTION_MAX_LENGTH, codePointLength(value))}</small></span>
                 <small id={`report-hint-${field.key}`} className="report-writing-hint">{field.prompt}</small>
                 <textarea
                   aria-label={field.label}
@@ -885,7 +924,7 @@ export function ReportLab({
                     if (limited.cut) {
                       caretAfterCut.current = { key: field.key, value: limited.value, caret: limited.caret };
                       state.save({ [field.key]: limited.value });
-                      setPasteCut({ key: field.key, wide: Boolean(limited.wide) });
+                      setPasteCut({ key: field.key, wide: Boolean(limited.wide), replaced: Boolean(limited.replaced), none: Boolean(limited.none) });
                       return;
                     }
                     // The cut warning belongs to the paste that caused it: the next edit of any field clears it.
@@ -895,9 +934,7 @@ export function ReportLab({
                 />
                 {pasteCut?.key === field.key && (
                   <small id={`report-paste-${field.key}`} className="report-writing-hint" role="status">
-                    {pasteCut.wide
-                      ? `超过 ${REFLECTION_MAX_LENGTH} 字上限：这个表情按实际字符计算占多个字，剩余字数不够，没有保留；原有文字没有改动。`
-                      : `超过 ${REFLECTION_MAX_LENGTH} 字上限：刚粘贴或输入的文字有一部分没有保留，原有文字没有改动。请精简后再补充。`}
+                    {pasteCutMessage(pasteCut)}
                   </small>
                 )}
               </label>

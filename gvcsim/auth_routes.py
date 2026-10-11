@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Header, HTTPException, Request
 import threading
 import time
+import unicodedata
 from typing import Any
 
 from pydantic import Field, field_validator
@@ -43,8 +44,11 @@ class LoginRequest(TextRequest):
     @field_validator("username", mode="before")
     @classmethod
     def trimmed_username(cls, value: Any) -> Any:
-        # Usernames cannot contain whitespace; a name pasted from a roster often carries some around it.
-        return value.strip().strip("\ufeff\u200b\u200c\u200d\u2060").strip() if isinstance(value, str) else value
+        # Usernames cannot contain whitespace; a name pasted from a roster often carries some around it. They are
+        # ASCII, so full-width input from a Chinese IME ("００２６００２") is read as its ASCII form (NFKC).
+        if not isinstance(value, str):
+            return value
+        return unicodedata.normalize("NFKC", value.strip().strip("\ufeff\u200b\u200c\u200d\u2060").strip())
 
 
 class PasswordChangeRequest(TextRequest):

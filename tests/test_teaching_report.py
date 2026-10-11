@@ -3098,6 +3098,45 @@ def test_report_appendix_reads_each_x_sum_per_percentage_point():
     assert _per_point_rows([columns[2]]) == []
 
 
+def test_report_appendix_never_calls_one_coefficient_a_sum():
+    """L1.X dropped from a two-term model: the estimate has no sum, so the cell stays empty rather than printing the
+    remaining X term as 两年累计."""
+    from gvcsim.regression.spec import DEFAULT_SPEC, X_LAG_COLUMNS
+    from gvcsim.report_workbench import _per_point_rows
+
+    design = {"outcome": "length", "depvar_kind": "length"}
+    x = {"name": X_COLUMN, "coef": -1.1, "ci_low": -1.2, "ci_high": -1.0}
+    lag = {"name": X_LAG_COLUMNS[1], "coef": -0.7234, "ci_low": -0.8, "ci_high": -0.65}
+    cumulative = {"coef": -1.8234, "ci_low": -1.8952, "ci_high": -1.7516}
+    columns = [
+        {
+            "name": "默认模型",
+            "spec": DEFAULT_SPEC,
+            "run": {"design": design, "result": {"coefs": [x, lag], "cumulative": cumulative}},
+        },
+        {
+            "name": "L1.X 被剔除",
+            "spec": DEFAULT_SPEC,
+            "run": {"design": design, "result": {"coefs": [x], "cumulative": None}},
+        },
+    ]
+    assert _per_point_rows(columns) == ["| 合计：X 每高 1 个百分点 | -0.0182 个长度单位（两年累计） |  |"]
+
+
+def test_gate_marks_the_steps_where_only_the_quiz_is_missing(monkeypatch):
+    """The page's gate link goes to the quiz when nothing else of the step is missing, whichever quiz message it is."""
+    from gvcsim import report_gate
+
+    monkeypatch.setattr(
+        report_gate, "check_material_gate", lambda session: [{"step": 2, "title": "指标", "missing": ["记录两个国家"]}]
+    )
+    # Step 1's quiz was saved for an older version; step 3's was never answered; step 2 also lacks its material.
+    session = {"steps": {"1": {"data": {"quiz": {"version": "old", "answers": {}}}}}}
+    gate = {item["step"]: item for item in report_gate.check_gate(session)}
+    assert gate[1]["quiz_only"] is True and gate[3]["quiz_only"] is True
+    assert gate[2]["quiz_only"] is False
+
+
 def test_report_technical_appendix_writes_the_v10_formula():
     from gvcsim.regression.spec import DEFAULT_SPEC
     from gvcsim.report_render import _formula_line
@@ -3112,9 +3151,14 @@ def test_report_prints_typed_model_names_literally():
     from gvcsim.report_workbench import _name
 
     joiner = "\u2060"
-    assert _name("~~删~~www.ab.cn") == f"\\~\\~删\\~\\~www{joiner}\\.ab{joiner}\\.cn"
-    assert _name("a@b.cn") == f"a{joiner}\\@b{joiner}\\.cn"
-    assert _name("http://x.y") == f"http{joiner}\\:\\/\\/x{joiner}\\.y"
+    # The joiner goes only where GFM would start a link: "www.", "://" and "@".
+    assert _name("~~删~~www.ab.cn") == f"\\~\\~删\\~\\~www{joiner}\\.ab\\.cn"
+    assert _name("WWW.A.CN") == f"WWW{joiner}\\.A\\.CN"
+    assert _name("a@b.cn") == f"a{joiner}\\@b\\.cn"
+    assert _name("http://x.y") == f"http{joiner}\\:\\/\\/x\\.y"
+    # Elsewhere a name copies as typed: no invisible characters in "模型1.5" or "x.cn".
+    assert _name("模型1.5") == "模型1\\.5"
+    assert _name("x.cn") == "x\\.cn"
     assert _name("国家×年份") == "国家×年份"
     assert _name("C+I+Y") == "C\\+I\\+Y"
 
@@ -3166,3 +3210,54 @@ def test_a_tiny_estimate_and_its_interval_share_decimals():
     digits = estimate_digits("share", 0.0048, (-0.0072, 0.0168))
     assert [_signed(value, digits) for value in (0.0048, -0.0072, 0.0168)] == ["+0.0048", "-0.0072", "+0.0168"]
     assert estimate_digits("share", 0.00752, (-0.0112, 0.0262)) == 3
+
+
+def test_step_15_answers_count_visible_characters_as_the_page_does():
+    """report_gate.reflection_length and the page's reflectionLength give the same counts (report-lab.test.tsx)."""
+    from gvcsim.report_gate import reflection_length
+
+    assert reflection_length("  贸易 😀\n\n分析  ") == 7
+    assert reflection_length("😀😀") == 2
+    assert reflection_length("👨‍👩‍👧") == 3
+    assert reflection_length("🇨🇳") == 2
+    assert reflection_length("é") == 1
+    assert reflection_length("​" * 40) == 0
+    assert reflection_length("‮结果‬") == 2
+    assert reflection_length("甲\x1f乙") == 3
+
+
+def test_invisible_answers_do_not_pass_the_gate(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    session["steps"]["15"]["data"].update(
+        {"research_question": "​" * 12, "evidence_interpretation": "​" * 40, "limitations": "​" * 30}
+    )
+    blocked = [item for item in check_gate(session) if item["step"] == 15]
+    assert blocked and len(blocked[0]["missing"]) == 3
+
+
+def test_report_prints_the_analysis_without_bidi_overrides_or_runs_of_blank_lines():
+    from gvcsim.report_observed import _reflection_value
+
+    block = _reflection_value("第一段\n\n\n\n   \n" + "\n" * 2000 + "第二段‮反过来‬")
+    assert block.splitlines()[1:-1] == ["第一段", "", "第二段反过来"]
+
+
+def test_report_marks_a_default_step_10_example_and_names_accounts_rows(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    session["steps"]["10"]["data"]["teaching_example_chosen"] = False
+    markdown = build(session, "同学").markdown
+    assert "换算用的例子（系统默认例子，学生未另选）" in markdown
+    session["steps"]["10"]["data"]["teaching_example_chosen"] = True
+    assert "系统默认例子" not in build(session, "同学").markdown
+    # An accounts-table cell: its row is a country × industry with its own accounts, not a supplier.
+    session["steps"]["1"]["data"]["observation"].update(
+        {"table": "accounts", "row_country": "BRN", "row_sector": "C29"}
+    )
+    markdown = build(session, "同学").markdown
+    assert (
+        "国家（行）：BRN" in markdown and "供给国" not in markdown.split("### 步骤 1", 1)[1].split("### 步骤 2", 1)[0]
+    )

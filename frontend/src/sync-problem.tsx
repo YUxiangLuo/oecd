@@ -4,6 +4,8 @@ export interface SyncProblem {
   error: string | null;
   conflict: boolean;
   syncing: boolean;
+  /** The save will be sent again on its own (the server or network was briefly unreachable). */
+  autoRetry?: boolean;
   /** Retry the save, or load the server version after a conflict. */
   act: () => void;
 }
@@ -29,7 +31,7 @@ export function SyncProblemBanner({ problem, compact = false }: { problem: SyncP
         <p>
           {problem.conflict
             ? conflictNote
-            : `${problem.error} 本页内容还在，可以直接重试；关闭标签页可能丢失未保存的修改。`}
+            : `${problem.error} 本页内容还在，${problem.autoRetry ? "系统会自动重试，也可以现在重试" : "可以直接重试"}；关闭标签页可能丢失未保存的修改。`}
         </p>
       )}
       {compact && <span>{problem.conflict && problem.error !== EDITED_DURING_RELOAD ? "本页的修改暂未保存，退出全屏可查看说明。" : problem.error}</span>}

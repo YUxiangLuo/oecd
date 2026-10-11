@@ -335,6 +335,20 @@ export function ShockLab({ meta, step: _step, state }: {
     const starts = taxedStarts.length ? taxedStarts : countryStarts;
     return starts.length ? Math.min(...starts) : policyYear ?? undefined;
   })();
+  // Each taxed country's own start, so a first-wave and a second-wave example show both jumps (as the 先看数据
+  // charts of steps 11–14 do); one start keeps the single "N 年起加税" line.
+  const exampleMarks = (() => {
+    const taxedRows = lastRows.filter((row) => row.teaching_tariff_rate_tau > 0);
+    const waveStarts = [...new Map(taxedRows.flatMap((row) => {
+      const item = overview?.countries.find((entry) => entry.country === row.country);
+      return item?.start_year != null && item.wave ? [[item.start_year, item.wave] as const] : [];
+    })).entries()].sort(([a], [b]) => a - b);
+    if (waveStarts.length > 1) {
+      return waveStarts.map(([year, wave]) => ({ year, label: `${year} 年${WAVE_NAMES[wave] ?? `第 ${wave} 批`}加税` }));
+    }
+    if (!exampleStart) return undefined;
+    return { year: exampleStart, label: isService(shownIndustry) ? `${exampleStart} 年起对货物加税` : `${exampleStart} 年起加税` };
+  })();
   // One note under the selects for a selection outside the regression sample (the imposer, or an industry with
   // no first-year data), and what is shown instead.
   const boundaryNote = (() => {
@@ -506,7 +520,7 @@ export function ShockLab({ meta, step: _step, state }: {
             metric="teaching_tariff_exposure"
             label="关税暴露 X"
             unit="个百分点"
-            markYear={exampleStart ? { year: exampleStart, label: isService(shownIndustry) ? `${exampleStart} 年起对货物加税` : `${exampleStart} 年起加税` } : undefined}
+            markYear={exampleMarks}
             stepped
             gapNote={lastRows.length === 2 && isService(shownIndustry) && !lastRows.some((row) => isImposer(row.country))
               ? "服务业不加税：两国这个行业的 X 都为 0，没有差距"

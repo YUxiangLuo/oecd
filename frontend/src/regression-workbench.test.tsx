@@ -99,9 +99,21 @@ describe("names", () => {
     expect(nameProblem("结果1", list, 20)).toBe("本步已有名为“结果1”的模型");
     expect(nameProblem("结果1", list, 20, "a")).toBeNull();
     // Invisible characters: the server refuses them, and JavaScript's trim would keep some Python strips (U+001F).
-    for (const name of ["\u200b", "结果\u202e1", "结果\u001f", "结\u2028果"]) {
+    for (const name of ["结果\u200b", "结果\u202e1", "结果\u001f", "结\u2028果"]) {
       expect(nameProblem(name, list, 20)).toBe("名称不能包含不可见字符");
     }
+    // Nothing visible at all reads as no name; the joiners inside one emoji are part of it.
+    expect(nameProblem("\u200b", list, 20)).toBe("请输入名称");
+    expect(nameProblem("\u200d", list, 20)).toBe("请输入名称");
+    for (const name of ["家👨‍👩‍👧‍👦", "👩‍💻", "🏳️‍🌈", "👩🏽‍💻", "🏃‍♂️", "🏴\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}"]) {
+      expect(nameProblem(name, list, 20)).toBeNull();
+    }
+    // The same cases as the server's (test_workbench): a joiner outside an emoji is an invisible mark.
+    for (const name of ["结果1\u200d", "结\u200d果", "\u200d结果", "结果\u{E0041}", "🏴\u{E0067}", "\u{E007F}结果"]) {
+      expect(nameProblem(name, list, 20)).toBe("名称不能包含不可见字符");
+    }
+    // Names differing only in format characters or U+FE0F read the same: one name.
+    expect(nameProblem("🏳\u200d🌈", [{ id: "b", name: "🏳️\u200d🌈" }], 20)).toBe("本步已有名为“🏳\u200d🌈”的模型");
   });
 });
 
@@ -168,6 +180,12 @@ describe("tables", () => {
       { name: "c", spec: { ...DEFAULT, x_lags: [0, 1, 2] }, snapshot: snapshotOf(lag2) },
     ], "trade")!;
     expect(mixed.cells).toEqual(["-0.55 个百分点（两年累计）", "-0.55 个百分点（两年累计）", "-0.46 个百分点（仅当年）", "-0.54 个百分点（三年累计）"]);
+    // L1.X dropped from a two-term model: no sum, so the remaining X term is not printed as 两年累计.
+    const dropped = response(NO_RATE, { teaching_tariff_exposure: -0.46 }, {
+      cumulative: null, omitted: [{ name: "teaching_tariff_exposure_lag1", reason: "collinear", by: null }],
+    });
+    expect(perPointRow([columns[0], { name: "d", spec: NO_RATE, snapshot: snapshotOf(dropped) }], "trade")!.cells)
+      .toEqual(["-0.55 个百分点（两年累计）", ""]);
   });
 
   test("in the CSV the per-point row sits under the X-terms sum, before a constant, as on the page", () => {
@@ -239,9 +257,12 @@ describe("report notice", () => {
   });
 });
 
-function Harness({ initial, onSave, onView, locked = false, defaultResponse = DEFAULT_RUN }: {
+function Harness({ initial, onSave, onView, locked = false, defaultResponse = DEFAULT_RUN, reported, outdated }: {
   initial?: WorkbenchStepState; onSave?: (patch: Partial<WorkbenchStepState>) => void; locked?: boolean;
   onView?: (patch: Partial<WorkbenchStepState>) => void;
+  /** The submitted report's models and whether the report is out of date (step 15's signals). */
+  reported?: { step: number; name: string; outcome: string; baseline: string; spec: ModelSpec }[];
+  outdated?: boolean;
   /** The step's saved default run (a bar click on the step can change its Y). */
   defaultResponse?: RegressionResponse;
 }) {
@@ -252,7 +273,8 @@ function Harness({ initial, onSave, onView, locked = false, defaultResponse = DE
     saveView: (patch) => { onView?.(patch); setData((current) => ({ ...current, ...patch })); },
     complete: false, syncing: false, syncError: null, syncNow: () => {}, materialLocked: locked,
   };
-  return <RegressionModelWorkbench stepNumber={11} outcome="trade" defaultResponse={defaultResponse} state={state} />;
+  return <RegressionModelWorkbench stepNumber={11} outcome="trade" defaultResponse={defaultResponse} state={state}
+    reportCustomResults={reported as never} reportOutdated={outdated} />;
 }
 
 const checkbox = (label: RegExp) => screen.getByRole("checkbox", { name: label });
@@ -373,6 +395,17 @@ describe("the workbench", () => {
       URL.createObjectURL = created;
       URL.revokeObjectURL = revoked;
     }
+  });
+
+  test("deleting the last model of a submitted report still says the report changed", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    const only = saved("去掉汇率", NO_RATE, NO_RATE_RUN, { in_report: true });
+    const reported = [{ step: 11, name: "去掉汇率", outcome: "trade", baseline: "FVA_share", spec: NO_RATE }];
+    render(<Harness initial={{ custom_results: [only] }} locked reported={reported} outdated />);
+    fireEvent.click(await screen.findByRole("button", { name: "删除" }));
+    fireEvent.click((await screen.findAllByRole("button", { name: "删除" })).at(-1)!);
+    await waitFor(() => expect(screen.queryByText(/已保存的模型/)).toBeNull());
+    expect(screen.getByText("放入报告的模型与已提交报告里的不同；请到步骤 15 更新报告并重新提交给老师。")).toBeTruthy();
   });
 
   test("leaving the step stops a calculation still running", async () => {

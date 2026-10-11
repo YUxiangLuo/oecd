@@ -23,7 +23,7 @@ import {
   shownPerPoint,
   type BarEstimate,
 } from "./regression-verdict";
-import { workedNumbers } from "./labs/steps/shock-lab";
+import { exampleWasChosen, workedNumbers } from "./labs/steps/shock-lab";
 import type {
   ClassroomReport,
   DepvarKind,
@@ -214,12 +214,14 @@ const BADGE_COLORS = { negative: NEGATIVE, positive: POSITIVE, insufficient: UNC
  * The selected Y's reading, under the bar chart: one headline, a 方向明确／方向不确定 badge with the interval in
  * words, then three one-liners (the step 10 example, what not to claim, the generated-data note).
  */
-export function RegressionResultCard({ outcome, response, examples = [], exampleSaved = true, exampleYear }: {
+export function RegressionResultCard({ outcome, response, examples = [], exampleSaved = true, exampleChosen = true, exampleYear }: {
   outcome: RegressionOutcome;
   response: RegressionResponse;
   examples?: RegressionExample[];
   /** False when step 10 has not saved an example yet: the conversion uses the default example. */
   exampleSaved?: boolean;
+  /** The saved example was picked by the student, not the default recorded because step 10 was shown. */
+  exampleChosen?: boolean;
   /** The year whose X the conversion uses (the last year of the data). */
   exampleYear?: number;
 }) {
@@ -273,7 +275,7 @@ export function RegressionResultCard({ outcome, response, examples = [], example
           const noConversion = converted.length === 0;
           const unexposedTaxed = examples.some((example) => !example.imposer && example.x <= 0 && (example.tau ?? 0) > 0);
           const zeroNote = noConversion ? "" : "，X = 0，按估计没有与 X 相关的差异";
-          return <li className="reg-example-effect">{exampleSaved ? "按你在步骤 10 选的例子" : "按默认例子（步骤 10 还没有保存你的例子）"}换算{exampleYear ? `（用 ${exampleYear} 年的 X）` : ""}：{examples.map((example, index) => {
+          return <li className="reg-example-effect">{!exampleSaved ? "按默认例子（步骤 10 还没有保存你的例子）" : exampleChosen ? "按你在步骤 10 选的例子" : "按步骤 10 的默认例子（你没有另选）"}换算{exampleYear ? `（用 ${exampleYear} 年的 X）` : ""}：{examples.map((example, index) => {
             const coef = verdict.coefficient!.coef;
             // An association, not a tariff effect: the difference in Y that goes with the example's X. With X = 0
             // the estimate implies no X-related difference (Y still moves with the shared yearly changes).
@@ -622,6 +624,8 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
   const stepTen = getStep?.<TeachingExampleSelection & { teaching_observation?: unknown }>(10);
   const example = teachingExample(meta, stepTen);
   const exampleSaved = Boolean(stepTen?.teaching_observation);
+  // As step 10 records it (exampleWasChosen): the default saved because the page was shown is not the student's pick.
+  const exampleChosen = exampleWasChosen(stepTen, teachingExample(meta, undefined));
   const exampleCountries = [example.first, example.second].filter(Boolean);
   const exampleKey = `teaching-example:${exampleCountries.join(",")}:${example.industry}`;
   const exampleQuery = useAsync<TeachingPanelResponse>(
@@ -949,7 +953,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
             ) : overviewQuery.status === "error" && overviewQuery.error
               ? <RegressionRequestError label="条形图" error={overviewQuery.error} onRetry={overviewQuery.retry} />
               : overviewQuery.status === "loading" && <div className="reg-request-state muted" role="status" aria-busy="true">正在绘制本类各 Y 的条形图…</div>}
-            <RegressionResultCard outcome={outcome} response={result} examples={examples} exampleSaved={exampleSaved} exampleYear={lastYear} />
+            <RegressionResultCard outcome={outcome} response={result} examples={examples} exampleSaved={exampleSaved} exampleChosen={exampleChosen} exampleYear={lastYear} />
           </div>
         </div>
       )}

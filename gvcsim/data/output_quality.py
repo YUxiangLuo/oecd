@@ -779,6 +779,7 @@ def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict
         X_COLUMN,
         X_LAG_COLUMNS,
         Y_COLUMNS,
+        _is_goods_sector,
         wave_start_years,
     )
 
@@ -826,7 +827,7 @@ def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict
     # the panel still has its lags checked, as the generator writes them.
     if unique_years:
         starts = numeric[WAVE_COLUMN].map(wave_start_years(int(unique_years[0])))
-        goods = frame["industry"].astype(str).str[0].isin(["A", "B", "C"])
+        goods = _is_goods_sector(frame["industry"])
 
         def scheduled(at: pd.Series) -> pd.Series:
             return TARIFF_RATE * (goods & starts.notna() & at.ge(starts)).astype(float)

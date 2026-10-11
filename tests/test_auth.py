@@ -347,3 +347,9 @@ def test_demo_student_suggestion_does_not_exist_outside_demo_mode(teaching_db, m
 
     monkeypatch.setattr(config, "DEMO_MODE", False)
     assert TestClient(app).get("/api/auth/demo-student").status_code == 404
+
+
+def test_login_reads_a_full_width_username_as_ascii(teaching_db):
+    client = TestClient(app)
+    login = client.post("/api/auth/login", json={"username": "　ｓｔｕｄｅｎｔ ", "password": "gvclab2026"})
+    assert login.status_code == 200

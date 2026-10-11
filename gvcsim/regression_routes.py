@@ -273,8 +273,9 @@ def _estimate_overview(panel: Any) -> dict:
             design = RegressionDesign(outcome, teaching=True, baseline=baseline.key)
             result, _ = run_design_with_benchmark(panel, design)
             info = result.to_dict()
-            # The headline of a run is the X terms' cumulative relation (the course model has X and L1.X).
-            coef = info.get("cumulative") or (info.get("coefs") or [{}])[0]
+            # The headline of a run is the X terms' cumulative relation (the course model has X and L1.X). With a term
+            # dropped there is none, and the other term alone is not shown in its place.
+            coef = info.get("cumulative") or {}
             raw_support = info.get("support")
             support = raw_support if isinstance(raw_support, dict) else {}
             items.append(
@@ -365,13 +366,14 @@ def _run_payload(design: RegressionDesign, result: Any, benchmark: dict[str, Any
 # the workbench models is synchronous). Keyed on the panel object: the artifact cache returns the same DataFrame
 # until the release changes, and a new panel starts an empty cache. Stored dicts are shared: never changed.
 # The release the cache was started under is kept with it, so a run cached before a release swap is not taken for
-# one the new release already computed (and let past the student's limit).
+# one the new release already computed (and let past the student's limit). That release is read before the panel
+# (a run that ends after a swap still carries the release its panel came from).
 _RUN_CACHE: list[tuple[Any, str | None, "OrderedDict[str, dict[str, Any]]"]] = []
 _RUN_LOCK = threading.Lock()
 _RUN_CACHE_SIZE = 256
 
 
-def _current_release() -> str | None:
+def current_release() -> str | None:
     try:
         return artifacts.release_identity()
     except (artifacts.ArtifactContractError, OSError, ValueError):
@@ -379,7 +381,7 @@ def _current_release() -> str | None:
 
 
 def _run_cached(key: str, release: str | None = None) -> bool:
-    release = release if release is not None else _current_release()
+    release = release if release is not None else current_release()
     with _RUN_LOCK:
         return bool(_RUN_CACHE) and release is not None and _RUN_CACHE[0][1] == release and key in _RUN_CACHE[0][2]
 
@@ -394,10 +396,12 @@ def _cached_payload(panel: Any, key: str) -> dict[str, Any] | None:
         return results.get(key)
 
 
-def _store_payload(panel: Any, key: str, payload: dict[str, Any]) -> None:
+def _store_payload(panel: Any, key: str, payload: dict[str, Any], release: str | None = None) -> None:
+    """Keep a run; `release` is the one read before `panel` was (by default, now)."""
+    release = release if release is not None else current_release()
     with _RUN_LOCK:
         if not _RUN_CACHE or _RUN_CACHE[0][0] is not panel:
-            _RUN_CACHE[:] = [(panel, _current_release(), OrderedDict())]
+            _RUN_CACHE[:] = [(panel, release, OrderedDict())]
         results = _RUN_CACHE[0][2]
         results[key] = payload
         results.move_to_end(key)
@@ -411,7 +415,7 @@ def charge_report_runs(account_id: Any, designs: list[RegressionDesign]) -> None
     Refused as a whole before anything is computed, so a report is never printed with a model left out."""
     if isinstance(account_id, bool) or not isinstance(account_id, int):
         return
-    release = _current_release()
+    release = current_release()
     missing = len({key for key in map(_run_key, designs) if not _run_cached(key, release)})
     if not missing:
         return
@@ -428,16 +432,17 @@ def charge_report_runs(account_id: Any, designs: list[RegressionDesign]) -> None
         ) from error
 
 
-def cached_run(panel: Any, design: RegressionDesign) -> dict[str, Any]:
+def cached_run(panel: Any, design: RegressionDesign, release: str | None = None) -> dict[str, Any]:
     """One run's response on the current panel, computed at most once per release (LRU of 256): the report's
-    recalculation of a model the page already ran reads the same numbers."""
+    recalculation of a model the page already ran reads the same numbers. `release`: read before the panel was."""
+    release = release if release is not None else current_release()
     key = _run_key(design)
     cached = _cached_payload(panel, key)
     if cached is not None:
         return cached
     _require_y(panel, design)
     payload = _run_payload(design, *run_design_with_benchmark(panel, design))
-    _store_payload(panel, key, payload)
+    _store_payload(panel, key, payload, release)
     return payload
 
 
@@ -464,7 +469,8 @@ async def regression_run(req: RegressionRequest, request: Request):
             raise HTTPException(status_code=409, detail=str(error)) from error
         result, benchmark = await concurrency.run_cpu_bound(run_design_with_benchmark, panel, design)
         payload = _run_payload(design, result, benchmark)
-        _store_payload(panel, run_key, payload)
+        # key[0] was read before the panel, at the request's start.
+        _store_payload(panel, run_key, payload, key[0])
         return payload
 
     def admit() -> None:

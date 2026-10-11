@@ -195,11 +195,18 @@ export function ReportStateCell({ student, onOpen }: { student: StudentRow; onOp
   const pill = state === "graded" ? <StatusPill tone="ok">已评阅</StatusPill>
     : state === "pending" ? <StatusPill tone="warn">待评阅</StatusPill>
       : state === "draft" ? <StatusPill tone="muted">草稿（未提交）</StatusPill> : <StatusPill tone="muted">未生成</StatusPill>;
+  // Handed in, then the record changed: the teacher still has the submitted version, which is what they grade.
+  const outdated = student.report_outdated && (state === "pending" || state === "graded")
+    ? <small className="report-outdated-note">学生之后改过记录，未重新提交</small>
+    : null;
   if (!onOpen || (state !== "pending" && state !== "graded")) return pill;
   const visible = state === "pending" ? "待评阅" : "已评阅";
   return (
-    <button type="button" className="pill-button" title="在“报告评阅”中打开" onClick={onOpen}
-      aria-label={`${visible}，打开报告：${student.display_name}（${student.username}）`}>{pill}</button>
+    <>
+      <button type="button" className="pill-button" title="在“报告评阅”中打开" onClick={onOpen}
+        aria-label={`${visible}${outdated ? "（学生之后改过记录，未重新提交）" : ""}，打开报告：${student.display_name}（${student.username}）`}>{pill}</button>
+      {outdated}
+    </>
   );
 }
 
@@ -305,11 +312,13 @@ export function enrollmentToast(student: StudentRow, semesters: readonly Academi
   return `已把 ${student.display_name} 分到“${semester!.name} · ${group.name}”`;
 }
 
-export function StudentsTab({ onOpenReport, onGoToSemesters }: {
+export function StudentsTab({ onOpenReport, onGoToSemesters, onRefresh }: {
   /** Open a submitted report in 报告评阅; `queue` is the table's submitted reports in their current order. */
   onOpenReport?: (accountId: number, queue: number[]) => void;
   /** Switch to 学期与班级, where the first semester and classes are made. */
   onGoToSemesters?: () => void;
+  /** 刷新列表 was pressed: the sidebar's 待评阅 badge is recounted with the table. */
+  onRefresh?: () => void;
 } = {}) {
   const activityHintId = useId();
   const [refresh, setRefresh] = useState(0);
@@ -383,7 +392,7 @@ export function StudentsTab({ onOpenReport, onGoToSemesters }: {
           onClassChange={setClassId}
         />
         <div className="toolbar-actions">
-          <button type="button" onClick={() => setRefresh((value) => value + 1)}>刷新列表</button>
+          <button type="button" onClick={() => { setRefresh((value) => value + 1); onRefresh?.(); }}>刷新列表</button>
           <button type="button" onClick={() => setModal({ type: "batch" })}>批量导入学生</button>
           <button className="primary" onClick={() => setModal({ type: "student" })}>+ 添加学生</button>
         </div>

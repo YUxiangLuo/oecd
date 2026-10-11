@@ -57,10 +57,12 @@ def _workspace(username: str) -> tuple[dict[str, Any], dict[str, Any] | None, di
     return row["session"] if row else session_model.empty_session(), report, row
 
 
-def _learning_state(session: dict[str, Any], *, report_current: bool) -> dict[str, Any]:
-    """Authoritative quiz completion and report-material readiness for one snapshot."""
+def _learning_state(session: dict[str, Any], *, report: dict[str, Any] | None) -> dict[str, Any]:
+    """Authoritative quiz completion and report-material readiness for one snapshot, and whether the latest report
+    was generated from it (``report_current``: the page's "报告需更新" signal, separate from step 15's completion)."""
     return {
-        "completion": evidence.completion_summary(session, report_exists=report_current),
+        "completion": evidence.completion_summary(session, report_exists=records.report_handed_in(report)),
+        "report_current": records.report_matches_session(session, report),
         "report_gate": teaching_report.check_gate(session),
         "material_gate": teaching_report.check_material_gate(session),
     }
@@ -73,7 +75,7 @@ def get_session(user: dict = Depends(require_student)):
         "release_id": user["rid"],
         "session": session,
         "updated_at": row["updated_at"] if row else None,
-        **_learning_state(session, report_current=records.report_matches_session(session, report)),
+        **_learning_state(session, report=report),
         "report": report,
     }
 
@@ -129,9 +131,10 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
                 detail="步骤 10 记录的例子已过期：请回到步骤 10，等关税数据加载完成后再继续。",
             )
     # Only steps 11–14 have the workbench: saved models anywhere else are never shown or printed, so not stored.
+    workbench_steps = {str(step) for step in _STEP_OUTCOMES}
     for key, value in payload.get("steps", {}).items():
         data = value.get("data") if isinstance(value, dict) else None
-        if isinstance(data, dict) and "custom_results" in data and key not in {str(step) for step in _STEP_OUTCOMES}:
+        if isinstance(data, dict) and "custom_results" in data and key not in workbench_steps:
             raise HTTPException(status_code=422, detail=f"步骤 {key} 没有“自己设计模型”，不能保存模型。")
     # A stale DID or renamed-column snapshot may remain visible to the student,
     # but it must never be silently persisted as completion evidence for v1.
@@ -171,17 +174,22 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
     return {
         "session": payload,
         "updated_at": saved["updated_at"],
-        **_learning_state(payload, report_current=records.report_matches_session(payload, report)),
+        **_learning_state(payload, report=report),
     }
 
 
 async def _prepare_report(user: dict) -> tuple[dict[str, Any], teaching_report.TeachingReport, datetime]:
     # PostgreSQL pool/row-lock waits must not block unrelated requests on the event loop.
     session, _report, row = await concurrency.run_sync(_workspace, user["sub"])
+
     # The appendix recomputes the workbench models marked 放入报告: a run not computed yet counts against the student's
-    # calculations of the minute, as on the page (checked once the gate passes, before anything is computed).
-    if not check_gate(session):
-        charge_report_runs(user.get("aid"), report_workbench.run_designs(report_workbench.reported_models(session)))
+    # calculations of the minute, as on the page (checked once the gate passes, before anything is computed). The gate
+    # grades every quiz and the charge reads the release: off the event loop, as the reads above.
+    def charge() -> None:
+        if not check_gate(session):
+            charge_report_runs(user.get("aid"), report_workbench.run_designs(report_workbench.reported_models(session)))
+
+    await concurrency.run_sync(charge)
     try:
         generated = await concurrency.run_cpu_bound(teaching_report.build, session, user.get("name") or user["sub"])
     except teaching_report.ReportGateError as error:
@@ -236,9 +244,7 @@ async def generate_report(
     if saved is None:
         raise HTTPException(status_code=404, detail="学生账号不存在")
     saved["suggested_filename"] = generated.suggested_filename
-    learning_state = await concurrency.run_sync(
-        lambda: _learning_state(session, report_current=records.report_matches_session(session, saved))
-    )
+    learning_state = await concurrency.run_sync(lambda: _learning_state(session, report=saved))
     return {"report": saved, **learning_state}
 
 
@@ -274,7 +280,7 @@ def submit_report(user: dict = Depends(require_student)):
     session, _existing, _row = _workspace(user["sub"])
     return {
         "report": report,
-        **_learning_state(session, report_current=records.report_matches_session(session, report)),
+        **_learning_state(session, report=report),
     }
 
 
