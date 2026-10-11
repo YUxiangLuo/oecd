@@ -2,17 +2,32 @@
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
 
 
 class StrictContract(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class SpecControl(StrictContract):
+    name: StrictStr
+    lag: StrictInt
+
+
+class ModelSpecPayload(StrictContract):
+    """A workbench model (gvcsim.regression.spec.ModelSpec.to_dict()); the whitelist is checked by ModelSpec."""
+
+    x_lags: list[StrictInt] = Field(max_length=3)
+    controls: list[SpecControl] = Field(max_length=4)
+    fixed_effects: list[StrictStr] = Field(max_length=5)
+
+
 class RegressionRequest(StrictContract):
     outcome: str
     # Same-family generation baseline for Y; omitted means the family's fixed default.
     baseline: str | None = None
+    # The model a student designs in the workbench (steps 11–14); omitted means the course default model.
+    spec: ModelSpecPayload | None = None
 
 
 class EquationPart(StrictContract):
@@ -55,6 +70,8 @@ class RegressionDesignResponse(StrictContract):
     entity: str
     cluster: str
     weight_mode: str
+    # The model: X lags, controls and fixed effects (gvcsim.regression.spec.ModelSpec.to_dict()).
+    spec: dict[str, Any] | None = None
 
 
 class RegressionPreflightCheck(StrictContract):

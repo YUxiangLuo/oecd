@@ -26,9 +26,16 @@ ab=(agent-browser --namespace "$browser_namespace" --session "$browser_session")
 temporary_a11y_report=
 har_started=0
 
+# A HAR of a login or password flow carries passwords and bearer tokens: keep it only once they are stripped.
+keep_redacted_har() {
+  [[ -f "$1" ]] || return 0
+  uv run python scripts/redact_har.py "$1" || { rm -f "$1"; echo "HAR redaction failed; removed $1" >&2; }
+}
+
 cleanup() {
   if [[ "$har_started" -eq 1 && -n "$artifact_dir" ]]; then
     "${ab[@]}" network har stop "$artifact_dir/teacher-password-flow.har" >/dev/null 2>&1 || true
+    keep_redacted_har "$artifact_dir/teacher-password-flow.har"
   fi
   "${ab[@]}" close >/dev/null 2>&1 || true
   [[ -z "$temporary_a11y_report" ]] || rm -f "$temporary_a11y_report"
@@ -125,6 +132,7 @@ if [[ -n "$artifact_dir" ]]; then
   "${ab[@]}" screenshot "$artifact_dir/teacher-password-relogin.png" --full
   "${ab[@]}" network har stop "$artifact_dir/teacher-password-flow.har"
   har_started=0
+  keep_redacted_har "$artifact_dir/teacher-password-flow.har"
 fi
 
 page_errors=$("${ab[@]}" errors)

@@ -3,6 +3,14 @@ export function stripNegativeZero(formatted: string): string {
   return /^-0([.,]0+)?%?$/.test(formatted) ? formatted.slice(1) : formatted;
 }
 
+/**
+ * A number with fixed decimals and thousands separators: 1382.4 → "1,382" (0 digits), -12.5 → "-12.50" (2); a value
+ * that rounds to zero reads "0.00", never "-0.00".
+ */
+export function groupedFixed(value: number, digits: number): string {
+  return stripNegativeZero(value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits }));
+}
+
 /** 指标表格与图表共用的数值格式（与步骤 6–9 的读数和报告同一规则），避免同一指标在不同页面精度不一致：
  *  份额三位小数；百万美元金额 ≥1 取整、<1 三位小数；整数计数不带小数；其余无量纲指标三位小数（≥100 取整）。 */
 export function formatMetric(value: number, format?: string): string {

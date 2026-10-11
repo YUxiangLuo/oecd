@@ -52,6 +52,8 @@ export interface AuthUser {
   username: string;
   name: string;
   role: string;
+  /** A teacher still on the password the deployment set (never changed or reset): the workspace asks them to change it. */
+  initial_password?: boolean;
 }
 
 export interface LoginResponse {
@@ -261,6 +263,14 @@ export interface TeachingPanelResponse {
 
 export interface TeachingGroupPoint { year: number; change: number }
 
+/** Each group's mean change of a Y: `taxed` pools both waves; `first`/`second` are the waves (teaching data v10). */
+export interface TeachingGroupSeries {
+  taxed: TeachingGroupPoint[];
+  untaxed: TeachingGroupPoint[];
+  first?: TeachingGroupPoint[];
+  second?: TeachingGroupPoint[];
+}
+
 /** Taxed vs untaxed mean change of each simulated Y, relative to each group's pre-policy mean. */
 /** Step 10: every sample country's exposure X in the last year (the imposing market is not in the sample). */
 export interface TeachingCountriesResponse {
@@ -273,7 +283,14 @@ export interface TeachingCountriesResponse {
   untaxed_countries: number;
   /** The data rule that picks the taxed countries: a goods trade surplus with the market of at least
    * `min_million_usd` (million USD) in `year`. Servers before teaching data v7 omit it. */
-  taxed_rule?: { basis?: string; min_million_usd: number; year?: number; scope?: string } | null;
+  taxed_rule?: {
+    basis?: string; min_million_usd: number; year?: number; scope?: string; rate?: number;
+    /** Teaching data v10: the tariff starts in waves, by the size of the goods surplus. */
+    waves?: { wave: number; min_million_usd: number; start_year_offset: number }[];
+  } | null;
+  /** Teaching data v10: the start year of each wave present (the first is `policy_year`). */
+  policy_years?: number[];
+  waves?: { wave: number; start_year: number; min_million_usd: number; countries: number }[];
   entities: number;
   /** Sorted from the highest mean exposure down; X is a fraction (0.23 = 23 percentage points). */
   countries: {
@@ -289,6 +306,9 @@ export interface TeachingCountriesResponse {
     exposed_industries: number;
     /** Goods trade balance with the market in the rule's year, million USD (negative = deficit); absent before v7. */
     market_goods_surplus?: number | null;
+    /** Teaching data v10: 0 untaxed, 1 first wave, 2 second wave; and the year its tariff starts. */
+    wave?: number;
+    start_year?: number | null;
   }[];
 }
 
@@ -322,6 +342,8 @@ export interface TeachingGroupsResponse {
   version: string;
   years: number[];
   policy_year: number;
+  /** Teaching data v10: the start year of each tariff wave. */
+  policy_years?: number[];
   sample: {
     rows: number;
     entities: number;
@@ -329,16 +351,18 @@ export interface TeachingGroupsResponse {
     industries: number;
     taxed_countries: number;
     untaxed_countries: number;
+    first_wave_countries?: number;
+    second_wave_countries?: number;
   };
   /** Industries with at least one unit in the teaching panel (older servers omit it). */
   industries?: string[];
   /** Mean X of taxed-country units in the policy years (a proportion); β × it is the implied group gap. */
   mean_exposure_taxed?: number;
-  outcomes: Record<RegressionOutcome, { taxed: TeachingGroupPoint[]; untaxed: TeachingGroupPoint[] }>;
+  outcomes: Record<RegressionOutcome, TeachingGroupSeries>;
   /** Same-family Y choices per step (the default first); older servers omit it. */
   baselines?: Record<RegressionOutcome, TeachingBaselineOption[]>;
   /** Group trends of every baseline's Y, keyed by outcome then baseline key. */
-  series?: Record<RegressionOutcome, Record<string, { taxed: TeachingGroupPoint[]; untaxed: TeachingGroupPoint[] }>>;
+  series?: Record<RegressionOutcome, Record<string, TeachingGroupSeries>>;
 }
 
 export interface TeachingBaselineOption {
@@ -508,6 +532,12 @@ export interface StepStateApi<T = Record<string, unknown>> {
   syncConflict?: boolean;
   syncNow: () => void;
   /**
+   * Adopt the server's record as this page's base (another tab saved newer content), keeping this page's edits the
+   * server did not touch. Step 15 uses it for "这三段是本页的旧文字 → 载入服务器版本".
+   */
+  /** Resolves true once the server's record is this page's; false when it did not load (the notice stays). */
+  loadServerVersion?: () => Promise<boolean>;
+  /**
    * The report has been submitted (or graded): browsing must no longer rewrite report material
    * automatically; a step records its current view only when the student explicitly asks.
    */
@@ -539,6 +569,8 @@ export interface ReportGateItem {
   step: number;
   title: string;
   missing: string[];
+  /** Only the step's quiz is missing (report_gate.check_gate): its link goes to the quiz. Absent from the material gate. */
+  quiz_only?: boolean;
 }
 
 /** 服务端生成的实验报告:正文与溯源由服务端从会话快照产出；客户端只保存学生原创文字和实验操作。 */
@@ -554,6 +586,8 @@ export interface ClassroomReport {
     years: number[];
     session_fingerprint: string;
     runs: ReportRun[];
+    /** The workbench models the report printed (自己设计模型 marked 放入报告); absent on older reports. */
+    custom_results?: ReportedCustomResult[];
   };
   state: "draft" | "pending" | "graded";
   score: number | null;
@@ -579,6 +613,8 @@ export interface SessionResponse {
   session: ExperimentSession;
   updated_at?: string | null;
   completion: CompletionSummary;
+  /** Whether the latest report was generated from this record (absent from older servers). */
+  report_current?: boolean;
   report_gate: ReportGateItem[];
   material_gate: ReportGateItem[];
   report: ClassroomReport | null;
@@ -589,6 +625,8 @@ export interface SessionSaveResponse {
   session: ExperimentSession;
   updated_at: string;
   completion: CompletionSummary;
+  /** Whether the latest report was generated from this record (absent from older servers). */
+  report_current?: boolean;
   report_gate: ReportGateItem[];
   material_gate: ReportGateItem[];
 }
@@ -596,6 +634,8 @@ export interface SessionSaveResponse {
 export interface ReportMutationResponse {
   report: ClassroomReport;
   completion: CompletionSummary;
+  /** Whether the latest report was generated from this record (absent from older servers). */
+  report_current?: boolean;
   report_gate: ReportGateItem[];
   material_gate: ReportGateItem[];
 }
@@ -670,6 +710,8 @@ export interface RegressionDesignInfo {
   control_labels: Record<string, string>;
   equation: string;
   equation_parts: EquationPart[];
+  /** The model: X lags, controls (with lags) and fixed effects (teaching data v10; absent on older runs). */
+  spec?: ModelSpec | null;
   panel_file: string;
   entity: string;
   cluster: string;
@@ -692,6 +734,8 @@ export interface RegressionSampleFlow {
   missing_by_field_counts_overlap: boolean;
   // Mutually exclusive: ROW first, then first missing field in Y, X, treated order.
   dropped_by_reason: { code: string; field: string; rows: number }[];
+  /** First and last year in the sample (a model's spec; a lagged control starts it a year later). */
+  years?: [number, number];
 }
 
 export interface RegressionPreflight {
@@ -726,6 +770,17 @@ export interface RegressionResponse {
     sample_flow?: RegressionSampleFlow | null;
     /** Binned scatter of the within-transformed Y against X; absent on older saved runs. */
     binscatter?: { bins: { x: number; y: number; n: number }[]; slope: number; transform: string } | null;
+    /** The X terms' summed coefficient (X + L1.X in the course model, teaching data v10): the step's headline. */
+    cumulative?: CoefStat | null;
+    /** The constant of a model without fixed effects. */
+    constant?: CoefStat | null;
+    /** Regressors left out: absorbed by a fixed effect, duplicating another, or all zero. */
+    omitted?: { name: string; reason: string; by: string | null }[];
+    r2?: number | null;
+    r2_adj?: number | null;
+    f_stat?: number | null;
+    f_df?: number[] | null;
+    f_p?: number | null;
   };
   benchmark: {
     backend: string;
@@ -822,6 +877,8 @@ export interface StudentRow {
   last_login_at: string | null;
   created_at: string;
   report_state: "draft" | "pending" | "graded" | null;
+  /** Handed in, then the record changed (the teacher holds the submitted version); absent from older servers. */
+  report_outdated?: boolean;
   score: number | null;
   submitted_at: string | null;
   /** Server-verified completion; never inferred from max_step. */
@@ -840,4 +897,63 @@ export interface TeacherReport extends ClassroomReport {
   display_name: string;
   student_no: string;
   enrollments: ClassEnrollment[];
+}
+
+/** A regression model: which X terms (lags of X), which controls at which lag, which fixed effects. */
+export interface ModelSpec {
+  x_lags: number[];
+  controls: { name: string; lag: number }[];
+  fixed_effects: string[];
+}
+
+/** GET /api/regression/options: what the workbench (自己设计模型) offers, in page order. */
+export interface WorkbenchOptions {
+  version: string;
+  default_spec: ModelSpec;
+  x_lags: { lag: number; label: string; description: string }[];
+  x_lag_note: string;
+  controls: { name: string; label: string; definition: string; source: string }[];
+  control_lags: { lag: number; label: string }[];
+  control_lag_note: string;
+  fixed_effects: { key: string; label: string; description: string; includes: string[] }[];
+  no_fixed_effects_note: string;
+  limits: { saved: number; in_report: number; compared: number; name_length: number; runs_per_minute: number };
+  /** "试一试": one change at a time, each a contrast the course data were built to show. */
+  tries: string[];
+  hints: string[];
+  footnote: string;
+  sample_differs_note: string;
+  suppressed_note: string;
+}
+
+/** What a saved model keeps to show its table again (the report recomputes it from the spec). */
+export interface CustomResultSnapshot {
+  depvar_label: string;
+  depvar_kind: string;
+  result: Pick<RegressionResponse["result"],
+    "coefs" | "cumulative" | "constant" | "omitted" | "r2" | "r2_adj" | "r2_within" | "f_stat" | "f_df" | "f_p"
+    | "n_obs" | "n_entities" | "n_times" | "n_clusters" | "status"> & {
+    years: [number, number] | null;
+    suppressed: boolean;
+  };
+}
+
+/** steps[11–14].data.custom_results[]: one saved workbench model. */
+export interface CustomResult {
+  id: string;
+  name: string;
+  outcome: RegressionOutcome;
+  baseline: string;
+  spec: ModelSpec;
+  in_report: boolean;
+  saved_at: string;
+  snapshot: CustomResultSnapshot;
+}
+
+export interface ReportedCustomResult {
+  step: number;
+  name: string;
+  outcome: string;
+  baseline: string;
+  spec: ModelSpec;
 }

@@ -68,6 +68,11 @@ SECTORS = (
     "K",
 )
 FINAL_DEMAND = ("HFCE", "NPISH", "GGFC", "GFCF", "INVNT", "DPABR")
+# Every flow is multiplied by this (millions of USD), which leaves shares, lengths and paths unchanged. At this size
+# the course's tariff rule (2016 goods surplus with the USA ≥ 1,000; ≥ 10,000 taxed in the first wave) taxes both
+# waves — nine economies first, CHN/DEU/VNM second — while AUS stays the never-taxed control, so CI exercises the
+# regressions of steps 11–14 instead of a release in which X is zero everywhere.
+FLOW_SCALE = 100.0
 
 
 def _require_empty_ci_workspace() -> None:
@@ -172,8 +177,9 @@ def _final_demand(z_matrix: np.ndarray, year: int) -> np.ndarray:
 def _write_oecd_csv(year: int) -> Path:
     labels = [f"{country}_{sector}" for country in COUNTRIES for sector in SECTORS]
     demand_labels = [f"{country}_{category}" for country in COUNTRIES for category in FINAL_DEMAND]
-    z_matrix = _z_matrix(year)
-    final_demand = _final_demand(z_matrix, year)
+    unscaled = _z_matrix(year)
+    z_matrix = unscaled * FLOW_SCALE
+    final_demand = _final_demand(unscaled, year) * FLOW_SCALE
     output = z_matrix.sum(axis=1) + final_demand.sum(axis=1)
     primary_input = output - z_matrix.sum(axis=0)
     if np.any(primary_input <= 0):

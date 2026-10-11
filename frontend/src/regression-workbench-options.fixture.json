@@ -1,0 +1,133 @@
+{
+  "version": "step10-tariff-teaching-v10",
+  "default_spec": {
+    "x_lags": [
+      0,
+      1
+    ],
+    "controls": [
+      {
+        "name": "teaching_exchange_rate_change",
+        "lag": 0
+      }
+    ],
+    "fixed_effects": [
+      "country_industry",
+      "year"
+    ]
+  },
+  "x_lags": [
+    {
+      "lag": 0,
+      "label": "X",
+      "description": "当期：今年的 X"
+    },
+    {
+      "lag": 1,
+      "label": "L1.X",
+      "description": "滞后 1 期：上一年的 X"
+    },
+    {
+      "lag": 2,
+      "label": "L2.X",
+      "description": "滞后 2 期：两年前的 X"
+    }
+  ],
+  "x_lag_note": "数据只到 2020 年、2018 年起加税，滞后 3 期在样本内全为 0，无法估计。",
+  "controls": [
+    {
+      "name": "teaching_exchange_rate_change",
+      "label": "汇率变动",
+      "definition": "本币兑美元的年变动（百分点，负为贬值）",
+      "source": "课程生成"
+    },
+    {
+      "name": "log_gdp_proxy",
+      "label": "GDP（取对数）",
+      "definition": "ln（国家增加值总额，百万美元）",
+      "source": "按 ICIO 计算"
+    },
+    {
+      "name": "export_intensity",
+      "label": "贸易开放度",
+      "definition": "总出口 / 增加值总额",
+      "source": "按 ICIO 计算"
+    },
+    {
+      "name": "manufacturing_va_share",
+      "label": "制造业占比",
+      "definition": "制造业增加值 / 增加值总额",
+      "source": "按 ICIO 计算"
+    }
+  ],
+  "control_lags": [
+    {
+      "lag": 0,
+      "label": "当期"
+    },
+    {
+      "lag": 1,
+      "label": "滞后 1 期"
+    }
+  ],
+  "control_lag_note": "控制变量没有 2015 年的数据，选滞后 1 期时样本从 2017 年开始（少一年的记录）。",
+  "fixed_effects": [
+    {
+      "key": "country",
+      "label": "国家 FE",
+      "description": "每个国家一个截距",
+      "includes": []
+    },
+    {
+      "key": "industry",
+      "label": "行业 FE",
+      "description": "每个行业一个截距",
+      "includes": []
+    },
+    {
+      "key": "country_industry",
+      "label": "国家×行业 FE",
+      "description": "每个国家的每个行业一个截距，包含国家 FE 和行业 FE",
+      "includes": [
+        "country",
+        "industry"
+      ]
+    },
+    {
+      "key": "year",
+      "label": "年份 FE",
+      "description": "每年一个截距，扣掉所有单位共同的年度变化",
+      "includes": []
+    },
+    {
+      "key": "country_year",
+      "label": "国家×年份 FE",
+      "description": "每个国家每年一个截距，包含国家 FE 和年份 FE；会吸收所有国家层面的控制变量（4 个控制变量都是）",
+      "includes": [
+        "country",
+        "year"
+      ]
+    }
+  ],
+  "no_fixed_effects_note": "都不勾时模型加常数项，表下的设定写作“无固定效应”。",
+  "limits": {
+    "saved": 6,
+    "in_report": 3,
+    "compared": 4,
+    "name_length": 20,
+    "runs_per_minute": 20
+  },
+  "tries": [
+    "去掉“汇率变动”：X 各项合计变大还是变小？再改用“国家×年份”固定效应呢？",
+    "只放当期 X（去掉 L1.X）：合计和默认模型相差多少？",
+    "固定效应改成“国家 + 行业 + 年份”（不勾“国家×行业”）：结果怎样变？",
+    "加上 L2.X，或加上 GDP、贸易开放度：结论变了吗？"
+  ],
+  "hints": [
+    "每次只改一处设定，与第一列的默认模型比较：X 各项的系数和合计变了多少？观测值和年份是否相同？",
+    "与 Y 无关的变量在 10% 水平上大约每 10 次也会出现一次 *，不要只凭一颗星下结论。"
+  ],
+  "footnote": "注：括号内为按国家聚类的标准误。*** p<0.01, ** p<0.05, * p<0.1。系数为原单位，X 以份额计（0.25 = 25%），X 增加 1 个百分点时 Y 的变化 = 系数 × 0.01。2018 年以前没有关税，X 的滞后在加税前按 0 处理。",
+  "sample_differs_note": "这几列的样本不同，差异有一部分来自样本，而不只是设定。",
+  "suppressed_note": "未通过估计检查，已隐藏推断结果（p 值、星号与区间）。"
+}

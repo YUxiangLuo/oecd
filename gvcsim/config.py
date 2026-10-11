@@ -48,7 +48,7 @@ PG_DSN = os.environ.get("GVCSIM_PG_DSN", "").strip()
 THREAD_TOKENS = _positive_int_setting("GVCSIM_THREAD_TOKENS", 16)
 LOGIN_ATTEMPTS_PER_MINUTE = _positive_int_setting("GVCSIM_LOGIN_ATTEMPTS_PER_MINUTE", 10)
 LOGIN_SOURCE_ATTEMPTS_PER_MINUTE = _positive_int_setting("GVCSIM_LOGIN_SOURCE_ATTEMPTS_PER_MINUTE", 120)
-REGRESSION_RUNS_PER_MINUTE = _positive_int_setting("GVCSIM_REGRESSION_RUNS_PER_MINUTE", 12)
+REGRESSION_RUNS_PER_MINUTE = _positive_int_setting("GVCSIM_REGRESSION_RUNS_PER_MINUTE", 20)
 
 # 课程内容发布边界；数据库 schema 可保持不变，但学习记录不能跨学期复用。
 COURSE_RELEASE = "2026-fall-15-step-economics-v2"

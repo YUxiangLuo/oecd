@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { TeachingCountriesResponse } from "../../types";
 import { countryIndustryLines, countryIndustryNote, CountryExposureChart, countryTipLines, goodsBalanceText, ruleYiUsd, taxedRuleText, yiUsd } from "./country-exposure";
-import { TAXED } from "./palette";
+import { TAXED, TAXED_LATER } from "./palette";
 
 const row = (country: string, mean: number, taxed = mean > 0, exposed = taxed ? 44 : 0, industries = 44) => ({
   country, taxed, mean_exposure: mean, max_exposure: mean * 2, industries, exposed_industries: exposed,
@@ -59,8 +59,13 @@ test("taxed bars are sorted, orange and scaled; untaxed countries form one group
     // The USA is the imposer: never a bar or a code (the policy line above the chart says so, not the chart).
     expect(document.querySelector('[data-country="USA"]')).toBeNull();
     expect(document.querySelector(".country-exposure-note")!.textContent).toBe("悬停或用方向键查看每个国家的 X。");
-    // All countries are listed in the collapsed table.
+    // All countries are listed in the collapsed table, which scrolls in its own box: a wave column wider than a
+    // 1024px window must not push the whole step sideways.
     expect(document.querySelectorAll(".country-exposure-table tbody tr")).toHaveLength(8);
+    const region = document.querySelector(".country-exposure-table [role=region]")!;
+    expect(region.getAttribute("aria-label")).toBe("8 国读数表，可滚动");
+    expect(region.className).toContain("table-wrap");
+    expect(region.querySelector("table")).not.toBeNull();
   } finally {
     cleanup();
   }
@@ -268,6 +273,43 @@ test("keyboard focus in the lower half puts the readout above the item, clear of
     expect(Number.parseFloat(tip.style.top)).toBeGreaterThanOrEqual(37);
     const css = await Bun.file(new URL("../../workbench.css", import.meta.url)).text();
     expect(css).toContain(".country-exposure-table { margin-top: 10px; }");
+  } finally {
+    cleanup();
+  }
+});
+
+
+test("teaching data v10: a taxed country's readout says its wave and when its tariff starts", () => {
+  const row = {
+    country: "CAN", taxed: true, mean_exposure: 0.2, max_exposure: 0.4, industries: 44, goods_industries: 34,
+    exposed_industries: 34, market_goods_surplus: 47400, wave: 1, start_year: 2018,
+  };
+  expect(countryTipLines(row, 2020)).toContainEqual(["加税", "第一批，2018 年起"]);
+  expect(countryTipLines({ ...row, taxed: false, wave: 0, start_year: null }, 2020).some(([label]) => label === "加税")).toBe(false);
+});
+
+test("teaching data v10: the two waves have their own colour and legend entry, and each bar's label names its wave", () => {
+  const waveOf: Record<string, [number, number]> = { CAN: [1, 2018], CRI: [2, 2019], COL: [2, 2019], PER: [2, 2019], LUX: [1, 2018] };
+  const data = {
+    ...countriesFixture,
+    countries: countriesFixture.countries.map((item) => ({
+      ...item, wave: waveOf[item.country]?.[0] ?? 0, start_year: waveOf[item.country]?.[1] ?? null,
+    })),
+  };
+  try {
+    render(<CountryExposureChart data={data} />);
+    const bars = [...document.querySelectorAll("g.country-exposure-bar")];
+    const fill = (country: string) => bars.find((bar) => bar.getAttribute("data-country") === country)!.querySelectorAll("rect")[1].getAttribute("fill");
+    expect(fill("CAN")).toBe(TAXED);
+    expect(fill("CRI")).toBe(TAXED_LATER);
+    expect([...document.querySelectorAll(".country-exposure-legend span")].map((item) => item.textContent)).toEqual([
+      "第一批被加税（2 国，2018 年起）", "第二批被加税（3 国，2019 年起）", "未被加税（3 国，X = 0，列在图下）",
+    ]);
+    expect(bars.find((bar) => bar.getAttribute("data-country") === "CRI")!.getAttribute("aria-label")).toStartWith("CRI 哥斯达黎加：第二批，2019 年起加税，2020 年各货物行业平均 X");
+    // The folded 75 国读数表 says the wave too.
+    const cells = [...document.querySelectorAll("table tbody tr")].map((tr) => [...tr.children].map((cell) => cell.textContent));
+    expect(cells.find((cells) => cells[0] === "CRI 哥斯达黎加")?.[1]).toBe("被加税（第二批，2019 年起）");
+    expect(cells.find((cells) => cells[0] === "AUT 奥地利")?.[1]).toBe("未被加税");
   } finally {
     cleanup();
   }

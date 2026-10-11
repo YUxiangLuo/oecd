@@ -422,7 +422,8 @@ describe("indicator explorer with automatic report material", () => {
     const view = setup(LengthVizStep);
     const legend = await waitFor(() => { const found = view.container.querySelector('[data-legend="CHN"]'); expect(found).toBeTruthy(); return found!; });
     expect(legend.textContent).toBe("CHN 中国 · 无轨迹");
-    expect(view.getByRole("note", { name: "" }).textContent ?? "").toContain("CHN 中国没有轨迹");
+    // The trajectory note, not the rounding note under the other chart's trend cards.
+    expect(view.getAllByRole("note").filter((note) => note.textContent?.includes("CHN 中国没有轨迹"))).toHaveLength(1);
     await waitFor(() => expect(view.container.textContent).toContain("暂不能读出期间变化"));
     // The trend chart's reading says it; the note below the charts does not repeat it.
     const material = view.getByRole("region", { name: "报告材料" }).textContent ?? "";

@@ -251,6 +251,10 @@ def estimate_digits(kind: str, value: float, bounds: tuple[float, float] | None)
         if kind in ("position", "length")
         else _share_digits(value)
     )
+    # A nonzero value that rounds to 0 prints with 2 significant digits (_signed: "+0.0048"); its interval ends then
+    # get the same decimals ("[-0.0072, +0.0168]", not "[-0.01, +0.02]").
+    if value != 0 and math.isfinite(value) and float(f"{value:.{base}f}") == 0:
+        base = max(base, 1 - math.floor(math.log10(abs(value))))
     return distinct_digits(base, value, bounds)
 
 
@@ -301,23 +305,36 @@ def _setting_value(key: str, value: Any) -> str:
 
 
 def _model_summary(design: dict[str, Any]) -> str:
-    """The saved model in plain words: "双向固定效应（TWFE） · 国家×行业 · 不加控制变量"."""
+    """The saved model in plain words: "双向固定效应（TWFE） · 国家×行业 · 控制：汇率变动"."""
+
+    def value(key: str) -> str:
+        # A model with controls names them (the design's own label), not the generic mode.
+        if key == "control_mode" and design.get(key) != "none" and isinstance(design.get("control_mode_label"), str):
+            return _safe(design["control_mode_label"])
+        return _setting_value(key, design.get(key))
+
     return " · ".join(
-        _setting_value(key, design.get(key))
-        for key in ("method", "granularity", "control_mode")
-        if design.get(key) not in (None, "")
+        value(key) for key in ("method", "granularity", "control_mode") if design.get(key) not in (None, "")
     )
 
 
 def _coefficient_label(name: Any, design: dict[str, Any]) -> str:
+    from gvcsim.regression.spec import CONTROL_LAGS, CONTROLS, X_LAG_COLUMNS, control_column, control_term_label
+
     raw = str(name)
-    if raw == X_COLUMN:
-        # The page's name for X (steps 10–14 and their coefficient tables).
-        return "关税暴露 X"
-    return _safe(raw)
+    # The page's names for X and its lags (steps 10–14 and their coefficient tables), the controls and the sum.
+    labels = {column: "关税暴露 " + ("X" if lag == 0 else f"L{lag}.X") for lag, column in X_LAG_COLUMNS.items()}
+    labels |= {control_column(key, lag): control_term_label(key, lag) for key in CONTROLS for lag in CONTROL_LAGS}
+    labels["cumulative"] = "X 各项合计（累计效应）"
+    return labels.get(raw, _safe(raw))
 
 
 def _primary_coefficient(design: dict[str, Any], result: dict[str, Any]) -> dict[str, Any] | None:
+    """The step's headline estimate: the X terms' cumulative relation (the course model has X and L1.X), or, for a
+    result without it, the single X coefficient."""
+    cumulative = result.get("cumulative")
+    if isinstance(cumulative, dict) and isinstance(cumulative.get("coef"), (int, float)):
+        return cumulative
     candidates = [
         item for item in _list_values(result.get("coefs")) if isinstance(item, dict) and item.get("name") == X_COLUMN
     ]
@@ -375,7 +392,7 @@ def _natural_effect(
         else None
     )
     # An association (after each unit's own mean and each year's common change), as on the step pages.
-    effect_label = "关税暴露 X 每高 1 个百分点，Y 平均相差"
+    effect_label = "关税暴露 X 每高 1 个百分点，Y 两年累计平均相差"
     kind = _depvar_kind(outcome, design)
     if kind == "share":
         share_digits = estimate_digits(kind, effect * 100, (ci[0], ci[1]) if ci else None)
@@ -465,9 +482,11 @@ def _association(outcome: str, design: dict[str, Any] | None, coefficient: dict[
     long_short = _depvar_kind(outcome, design or {}) == "length"
     more, less = ("长", "短") if long_short else ("高", "低")
     word = less if negative else more
+    # The course model (teaching data v10): X and L1.X with the exchange-rate control; the number is the two-year sum.
     return (
-        f"扣掉各国家×行业自身的平均水平和每年的共同变化后，关税暴露 X 越高，{_y_label(outcome, design)}平均越{word}"
-        f"（X 每高 1 个百分点，约{word} {_effect_size(outcome, design, coefficient)}）。"
+        f"扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动后，关税暴露 X 越高，"
+        f"{_y_label(outcome, design)}两年累计平均越{word}"
+        f"（X 每高 1 个百分点，两年累计约{word} {_effect_size(outcome, design, coefficient)}）。"
     )
 
 

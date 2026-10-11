@@ -47,6 +47,7 @@ from gvcsim.report_render import (
     _run_sections,
 )
 from gvcsim.report_saved_run import _saved_runs
+from gvcsim.report_workbench import custom_model_sections, recompute, reported_models
 
 
 def _regression_overview() -> dict[str, Any] | None:
@@ -148,9 +149,21 @@ def _teaching_scenario(session: dict[str, Any]) -> tuple[dict[str, Any] | None, 
         return None, recorded
     scenario = {
         key: overview.get(key)
-        for key in ("market", "policy_year", "tariff_rate", "taxed_rule", "taxed_countries", "untaxed_countries")
+        for key in (
+            "market",
+            "policy_year",
+            "tariff_rate",
+            "taxed_rule",
+            "taxed_countries",
+            "untaxed_countries",
+            "waves",
+        )
     }
     scenario["taxed"] = {str(item["country"]): bool(item["taxed"]) for item in overview.get("countries", [])}
+    # Teaching data v10: when each taxed country's tariff starts (two waves).
+    scenario["start_year"] = {
+        str(item["country"]): item.get("start_year") for item in overview.get("countries", []) if item.get("start_year")
+    }
     compared = step_ten.get("compared")
     if observation is None or not isinstance(compared, list) or len(compared) != 2:
         return scenario, recorded
@@ -194,6 +207,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
     if not years:
         raise ReportGateError([{"step": 0, "title": "数据不可用", "missing": ["课程数据暂时不可用，请联系老师。"]}])
     runs = _saved_runs(session)
+    custom_models = reported_models(session)
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     # The pages show server-local wall-clock time (PostgreSQL now()) as "YYYY-MM-DD HH:MM"; the report says the same,
     # without the "+09:00" offset an ISO time carries.
@@ -243,6 +257,8 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
             }
             for run in runs
         ],
+        # The workbench models the report prints (自己设计模型, marked 放入报告); their numbers are recomputed below.
+        "custom_results": custom_models,
         "algorithm": "WWZ/TLS and WWYZ observed indicators; separate seeded tariff simulation; entity/year fixed effects with country-clustered standard errors",
         "simulation_contract": metadata.get("simulation_contract"),
         "network_algorithm": network_algorithm,
@@ -276,8 +292,9 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "",
         f"> **关税回归部分（步骤 10–14）**：{GENERATED_DATA_NOTE}X = 首年对美出口份额 w × 加征税率 τ（单位：个百分点）。",
         "",
-        "> 步骤 11–14 用同一个模型：扣掉每个国家×行业自己的平均水平和每年的共同变化后，看 X 每高 1 个百分点，Y 平均相差多少"
-        "（双向固定效应，TWFE），不加控制变量。估计值和区间描述的是 X 与 Y 的关联；四个 Y 单位不同，原始数值不能直接比较；汇总图将其统一换算为标准差后并列展示。",
+        "> 步骤 11–14 用同一个模型：扣掉每个国家×行业自己的平均水平和每年的共同变化，并控制同期的汇率变动后，看 X 每高 1 个百分点，"
+        "Y 当年与次年合计平均相差多少（双向固定效应，TWFE），控制：汇率变动。模型同时放入当年的 X 和上一年的 X（L1.X），两者系数之和是累计效应。"
+        "估计值和区间描述的是 X 与 Y 的关联；四个 Y 单位不同，原始数值不能直接比较；汇总图将其统一换算为标准差后并列展示。",
         "",
         *_reflection_section(session),
         *_observed_evidence_section(session),
@@ -286,10 +303,12 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
             metadata["simulation_contract"]["source_filter_disclosure"],
             teaching_examples,
             _regression_overview() if runs else None,
+            custom_models,
         ),
         *_quiz_sections(session),
         *_experiment_sections(session, scenario),
         *_run_sections(runs),
+        *custom_model_sections(recompute(custom_models)),
         *_qc_disclosure_section(qc_summary, integrity_metadata),
         "## 数据与方法说明",
         "",
@@ -300,18 +319,22 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "- 介数（只看连接、不看金额）把很小的正流量和大额流量当作同样的一条连接，所以高介数只表示在连接网络的最短路线上处于中转位置，"
         "不自动等于经济规模、关键瓶颈或不可替代。",
         "- 网络的读法：先用加权总度看流量规模，再用介数看连接结构上的位置并比较排序。本报告没有检验去掉很小的流量后，最短路线和排序会不会改变。",
-        "- 关税回归：四个 Y 各自单独回归，都用同一个 X；模型固定扣掉每个国家×行业和每年的平均水平，不加控制变量和交互项。",
-        "- 关税范围与 X：美国只对被加税国家的货物行业（ICIO 行业 A–C）加税，服务业 τ = 0；X 只计该国家×行业直接出口到美国的份额"
+        "- 关税回归：四个 Y 各自单独回归，都用同一个 X；模型放入当年的 X、上一年的 X（L1.X，加税前为 0）和汇率变动，"
+        "扣掉每个国家×行业和每年的平均水平，不加交互项；主结果是 X 与 L1.X 的系数之和（累计效应）。",
+        "- 关税范围与 X：美国分两批对被加税国家的货物行业（ICIO 行业 A–C）加税（对美货物顺差最大的一批 2018 年起，其余 2019 年起），"
+        "服务业 τ = 0；X 只计该国家×行业直接出口到美国的份额"
         "（分母是它的出口总额），不含经第三国或作为中间品间接进入美国的部分。",
-        "- 识别前提：双向固定效应把未被加税（X = 0）的国家×行业当作对照，前提是没有关税时两组的 Y 会平行变化。"
+        "- 识别前提：双向固定效应把未被加税（X = 0）的国家×行业当作对照，前提是没有关税时两组的 Y 会平行变化（控制同期的汇率变动之后）。"
         "加税前只有 2016、2017 两年，能检验这一前提的证据有限；被加税名单按对美货物顺差确定，不是随机分配。"
-        "本课程的 Y 按设定生成，这一前提由设计保证；用真实数据时需要单独检验。",
+        "本课程的 Y 按设定生成，控制汇率变动后这一前提由设计保证；用真实数据时需要单独检验。",
         "- 标准差：“个标准差”用扣掉各国家×行业平均水平和每年共同变化后 Y 的标准差换算（即模型实际使用的变化），"
         "不是全部记录的总标准差。",
         "- 多个结果：每个 95% 区间只针对它自己那一项；p 值小也不代表因果关系。",
-        "- 不加控制变量的原因：同一时期的其他指标本身也可能受关税影响，纳入回归反而可能导致估计偏误。",
+        "- 控制汇率的原因：同期的汇率变动与加税对象有共同原因（对美顺差大的出口型经济体），又与 Y 有关；不控制它，会把汇率的作用算到关税头上。"
+        "本身受关税影响的变量不应作为控制变量。",
         "- 回归结果来自你在步骤 11–14 保存的计算，生成报告时不会重算；各步图中其余 Y 的条形是课程用同一份数据、"
-        "同一个模型算出的结果。",
+        "同一个模型算出的结果。"
+        + ("“学生设计的模型”附录中的模型则按你保存的设定在生成报告时重新计算。" if custom_models else ""),
         f"- 生成时间：{generated_local}。",
         "",
         "## 方法参考文献",

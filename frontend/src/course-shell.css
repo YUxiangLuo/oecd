@@ -85,17 +85,19 @@
 button.footer-next { border: 0; background: none; padding: 4px 6px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 11.5px; color: #4b47e0; }
 button.footer-next:hover { text-decoration: underline; }
 .footer-dots { flex: 1; display: flex; align-items: center; justify-content: center; gap: 0; }
-/* The dot looks 7px but its target is 19px: padding outside a content-box background. */
+/* The dot looks 7px but its target is 24px (WCAG 2.5.8): padding outside a content-box background. */
 .fdot {
   width: 7px; height: 7px; border-radius: 99px; background: #dfe2ea;
   cursor: pointer; transition: all 0.25s;
-  border: 0; padding: 6px; box-sizing: content-box; background-clip: content-box;
+  border: 0; padding: 8.5px; box-sizing: content-box; background-clip: content-box;
 }
 .fdot.past { background: #d7dae3; }
 .fdot.done { background: #12a150; }
+/* The sidebar's amber tick (quiz passed, report material missing), as a dot. */
+.fdot.partial { background: #e3b54a; }
 .fdot.on { width: 22px; background: #4b47e0; }
 /* The state rules above use the background shorthand, which resets the clip: keep the 7px look. */
-.fdot, .fdot.on, .fdot.done, .fdot.past { background-clip: content-box; }
+.fdot, .fdot.on, .fdot.done, .fdot.partial, .fdot.past { background-clip: content-box; }
 
 .step-row:focus-visible, .fdot:focus-visible,
 .funnel-point:focus-visible {
@@ -410,6 +412,17 @@ button.footer-next:hover { text-decoration: underline; }
     font-size: 12.5px; font-weight: 600; line-height: 31px; white-space: nowrap; text-overflow: ellipsis;
   }
   .layout { height: calc(100vh - 32px); }
+  /* Full-screen layers (intro and receipt, dialogs, fullscreen panels) are drawn at the 1000 px frame width too; as
+     fixed layers they would not move with the sideways scroll, leaving their right side out of reach. The page
+     itself never scrolls vertically (the layout scrolls inside), so absolute layers still cover the window.
+     `body` outranks the layers' own rules, some of which load after this file (teacher.css's .modal-scrim). */
+  body :is(.intro-overlay, .intro-skip, .intro-footer, .modal-scrim, .network-fullscreen-scrim),
+  body .fullscreen-panel.fullscreen-panel--expanded { position: absolute; }
 }
 /* An info toast explains why nothing happened; it must not read as a success. */
 .toast-item--info { background: #3d4458; }
+/* The last step's 下一步 place: a disabled button, so focus stays when arriving there. */
+/* button.footer-next--last outranks button.footer-next's link colour and pointer. */
+.nav-btns .nav-last, button.footer-next--last { color: var(--text-muted); cursor: default; }
+.nav-btns .nav-last { background: transparent; border-color: transparent; box-shadow: none; }
+button.footer-next--last:hover { text-decoration: none; }

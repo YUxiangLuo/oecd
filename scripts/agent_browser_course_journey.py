@@ -13,25 +13,26 @@ from pathlib import Path
 import psycopg
 
 from dogfood_sync import Browser
+from gvcsim import quizzes
+from gvcsim.regression.spec import DEFAULT_SPEC, EXCHANGE_RATE_COLUMN, X_LAG_COLUMNS
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
+from gvcsim.regression.teaching import X_COLUMN
 
-# Choices derived from the question wording and the rendered course explanations.
-QUIZ_CHOICES = {
-    1: "a",
-    2: "b",
-    3: "c",
-    4: "a",
-    5: "b",
-    6: "b",
-    7: "b",
-    8: "a",
-    9: "b",
-    10: "aa",
-    11: "ba",
-    12: "bb",
-    13: "aa",
-    14: "ab",
+# The answers are clicked in the page; the server's bank only says which option is right, so a revised question
+# bank cannot leave this journey answering the previous one.
+QUIZ_ANSWERS = {
+    step: {question["id"]: question["correct"] for question in quizzes.STEP_QUIZZES[step]} for step in range(1, 15)
 }
+# The default model's terms: X, L1.X and the exchange-rate control.
+DEFAULT_TERMS = {X_LAG_COLUMNS[lag] for lag in DEFAULT_SPEC.x_lags} | {EXCHANGE_RATE_COLUMN}
+
+
+def choose(browser, name, value):
+    """Pick a quiz option by element, not by screen position: right after step 1's fullscreen table closes the page is
+    still settling, and a coordinate click can land on the neighbouring option."""
+    selector = f'input[name="{name}"][value="{value}"]'
+    browser.run("eval", f"document.querySelector({json.dumps(selector)}).click()")
+    browser.run("wait", "--fn", f"document.querySelector({json.dumps(selector)}).checked")
 
 
 def main():
@@ -99,12 +100,16 @@ def main():
                 student.run("click", "tbody tr:first-child td:first-of-type button")
                 student.run("wait", '[role="dialog"]')
                 student.run("press", "Escape")
+                # The table returns from fullscreen and the recorded cell is shown: let the page settle before the quiz.
+                student.run("wait", "--fn", "!document.querySelector('[role=\"dialog\"]')")
+                student.run("wait", "--load", "networkidle")
             elif 2 <= step <= 5:
-                # The comparison is recorded automatically once the step's data loads.
+                # Steps 2–5 take apart one country; its reading is recorded automatically once the data loads.
                 wait_saved(
                     step,
                     lambda row: (
-                        {"CHN", "USA"}.issubset(row.get("compared", []))
+                        "CHN" in row.get("compared", [])
+                        and bool(row.get("observations"))
                         and all(
                             item.get("source") == "auto-indicator-comparison" for item in row.get("observations", [])
                         )
@@ -149,13 +154,22 @@ def main():
                     ),
                 )
             elif step == 10:
-                # The two example rows are visible; the yearly table sits in a folded <details>, so it is checked in the DOM.
+                # The two example rows and their year table (5 years each; X, L1.X and the exchange-rate change).
                 student.run("wait", ".teaching-example-summary li")
                 student.run("wait", "--fn", 'document.querySelectorAll(".teaching-example-summary li").length === 2')
-                student.run("wait", "--fn", 'document.querySelectorAll(".bounded-data-table tbody tr").length === 10')
+                student.run(
+                    "wait",
+                    "--fn",
+                    "document.querySelectorAll('[aria-label=\"所选例子的逐年变量表\"] tbody tr').length === 10",
+                )
                 wait_saved(step, lambda row: bool(row.get("teaching_observation")))
             else:
-                student.run("find", "role", "button", "click", "--name", "算出这个差距")
+                # The default model's run button ("计算贸易流回归（用全部 16,000 条记录）"), not the workbench's.
+                student.run(
+                    "eval",
+                    'Array.from(document.querySelectorAll(".reg-run-card .run-btn")).find(e=>e.textContent.startsWith("计算"))'
+                    ".click()",
+                )
                 student.run("wait", "--text", "重新计算")
                 wait_saved(step, lambda row: bool(row.get("run")), timeout=30)
             names = json.loads(
@@ -164,19 +178,26 @@ def main():
                     'Array.from(document.querySelectorAll(".quiz-question")).map(e=>e.querySelector("input").name)',
                 )
             )
-            assert len(names) == len(QUIZ_CHOICES[step]), (step, names)
+            answers = QUIZ_ANSWERS[step]
+            # Each radio group is named quiz-<step>-<question id>.
+            question_ids = [name.removeprefix(f"quiz-{step}-") for name in names]
+            assert sorted(question_ids) == sorted(answers), (step, names)
             if step == 1:
-                student.run("click", f'input[name="{names[0]}"][value="c"]')
+                question = quizzes.STEP_QUIZZES[1][0]
+                wrong = next(option["id"] for option in question["options"] if option["id"] != question["correct"])
+                choose(student, names[0], wrong)
                 student.button("提交答案")
                 student.run("wait", "--text", "回答有误")
-            for name, choice in zip(names, QUIZ_CHOICES[step], strict=True):
-                student.run("click", f'input[name="{name}"][value="{choice}"]')
+            for name, question_id in zip(names, question_ids, strict=True):
+                choose(student, name, answers[question_id])
             student.button("提交答案")
             student.run("wait", ".quiz-complete")
             row = saved()["steps"][str(step)]["data"]
-            assert row["quiz"]["version"] == ("course-quiz-v9" if step in (11, 14) else "course-quiz-v8")
+            assert row["quiz"]["version"] == quizzes.quiz_version(step)
             if step == 1:
                 assert row["observation"]["row"].startswith("CHN_")
+            elif step <= 5:
+                assert "CHN" in row["compared"], (step, row)
             elif step <= 9:
                 assert {"CHN", "USA"}.issubset(row["compared"]), (step, row)
                 if step == 9:
@@ -195,8 +216,8 @@ def main():
                 support = result["support"]
                 assert result["status"] == support["status"]
                 assert result["diagnostics"]["study_contract"] == "economics-v2"
-                assert len(result["coefs"]) == 1
-                coefficient = result["coefs"][0]
+                assert {item["name"] for item in result["coefs"]} == DEFAULT_TERMS, result["coefs"]
+                coefficient = next(item for item in result["coefs"] if item["name"] == X_COLUMN)
                 if result["status"] == "insufficient":
                     # Small CI panels must stop inference without blocking the course.
                     assert not row.get("qualified_run")
@@ -225,9 +246,9 @@ def main():
         student.run(
             "wait",
             "--fn",
-            'Array.from(document.querySelectorAll("button")).some(e=>e.textContent==="根据实验记录生成报告" && !e.disabled)',
+            'Array.from(document.querySelectorAll("button")).some(e=>e.textContent==="只生成草稿（不提交）" && !e.disabled)',
         )
-        student.button("根据实验记录生成报告")
+        student.button("只生成草稿（不提交）")
         student.run("wait", "--text", "草稿 · 尚未提交")
         student.run("screenshot", str(output / "report-draft.png"))
         student.button("提交报告给老师")
@@ -244,7 +265,8 @@ def main():
         # The student's still-open pending view must not erase the teacher's new grade.
         student.button("查看已提交报告")
         student.button("重新生成并提交")
-        student.run("wait", "--text", "报告或评分已更新，请刷新页面核对后再确认重新生成")
+        # The page refuses with the reason it found (the teacher's new grade) and shows the latest state.
+        student.run("wait", "--text", "老师刚刚评阅了这份报告")
         student.run("reload")
         student.run("wait", "--text", "93")
         student.run("eval", 'document.querySelector(".submit-card")?.scrollIntoView({block:"center"})')

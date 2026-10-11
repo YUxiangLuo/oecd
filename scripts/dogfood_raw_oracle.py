@@ -155,14 +155,15 @@ def main():
         assert observation["value"] == zero and observation["row"] == "CHN_A01_02" and observation["year"] == 2020
         browser.run("screenshot", str(output / "zero-cell.png"))
         browser.run("open", base + "/?step=15")
-        browser.run("wait", "--text", "根据实验记录生成报告")
-        browser.button("根据实验记录生成报告")
+        browser.run("wait", "--text", "只生成草稿（不提交）")
+        browser.button("只生成草稿（不提交）")
         browser.run("wait", "--text", "草稿 · 尚未提交")
         with psycopg.connect(os.environ["GVCSIM_PG_DSN"]) as connection:
             markdown = connection.execute(
                 "SELECT markdown FROM reports WHERE account_id=%s", (account["id"],)
             ).fetchone()[0]
-        assert "CHN_A01_02(行·供给方) → USA_A03(列·使用方) = 0" in markdown
+        # The report names both ends with their country and industry labels (an exact zero stays "0").
+        assert "CHN 中国·A01_02 农林牧业（行·供给方） → USA 美国·A03 渔业（列·使用方） = 0 百万美元" in markdown
         results.append({"case": "DATA-01-zero-raw-api-browser-report", "passed": True})
         print(json.dumps(results[-1]), flush=True)
     finally:

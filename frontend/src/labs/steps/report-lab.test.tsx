@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { api, ApiError } from "../../api";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -334,6 +334,21 @@ describe("step 15 report states", () => {
     expect(focusReportGateDestination(9, { getElementById: () => null })).toBe(false);
   });
 
+  test("a step missing only its quiz (the server's quiz_only, whatever its message) opens at the quiz", () => {
+    const focused: string[] = [];
+    const root = {
+      getElementById: (id: string) => ({ focus: () => focused.push(id), scrollIntoView: () => {} }),
+    };
+    const frames: (() => void)[] = [];
+    const scheduler = { requestAnimationFrame: (callback: FrameRequestCallback) => { frames.push(() => callback(0)); return 1; } };
+    const navigated: number[] = [];
+    activateReportGateDestination(7, (step) => navigated.push(step), root, scheduler, true);
+    activateReportGateDestination(8, (step) => navigated.push(step), root, scheduler, false);
+    frames.forEach((frame) => frame());
+    expect(navigated).toEqual([7, 8]);
+    expect(focused).toEqual(["quiz-title-7", "step-task-title-8"]);
+  });
+
   test("offers PDF export after a report has been generated", () => {
     const html = renderToStaticMarkup(<ReportLab
       state={{
@@ -488,6 +503,33 @@ test("a stale tab whose answers were changed elsewhere says so and loads the ser
     fireEvent.click(screen.getByRole("button", { name: "载入服务器版本" }));
     expect(saved.at(-1)).toEqual(newer);
     expect((screen.getByRole("textbox", { name: "局限与反思" }) as HTMLTextAreaElement).value).toBe("新的局限");
+    expect(screen.queryByText("这三段是本页的旧文字")).toBeNull();
+  } finally { generate.mockRestore(); session.mockRestore(); }
+});
+
+test("in the app, 载入服务器版本 adopts the server's record as the base instead of saving its text as an edit", async () => {
+  const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new ApiError(409, "报告或评分已更新，请刷新页面核对后再确认重新生成", "Conflict"));
+  const latest = mutation("pending");
+  const newer = { research_question: "新的研究问题", evidence_interpretation: "新的结果解释", limitations: "新的局限" };
+  const session = spyOn(api.classroom, "session").mockResolvedValue({
+    release_id: "a".repeat(32), updated_at: null, ...latest,
+    session: { version: "experiment-session-simple-v3", steps: { "15": { data: newer } }, shared: {} } as never,
+  });
+  const saved: Record<string, unknown>[] = [];
+  // The first load does not go through (another one was running, or it failed): the notice stays for another try.
+  const outcomes = [false, true];
+  const loadServerVersion = mock(() => Promise.resolve(outcomes.shift()!));
+  const data = { research_question: "旧的研究问题", evidence_interpretation: "旧的结果解释", limitations: "旧的局限" };
+  try {
+    render(<ReportLab {...finishProps} state={{ ...finishProps.state, data, save: (patch) => { saved.push(patch); }, loadServerVersion }} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "只生成草稿（不提交）" })); });
+    expect(screen.getByText("这三段是本页的旧文字")).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "载入服务器版本" })); });
+    expect(loadServerVersion).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("这三段是本页的旧文字")).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "载入服务器版本" })); });
+    expect(loadServerVersion).toHaveBeenCalledTimes(2);
+    expect(saved).not.toContainEqual(newer);
     expect(screen.queryByText("这三段是本页的旧文字")).toBeNull();
   } finally { generate.mockRestore(); session.mockRestore(); }
 });
@@ -811,11 +853,19 @@ test("a draft or pending report prints no grade block", () => {
   }
 });
 
-test("analysis length counts what a reader sees as one character: an emoji, even a family emoji, is one", () => {
+test("analysis length counts visible code points as the server does; invisible characters count nothing", () => {
   expect(reflectionLength("  贸易 😀\n\n分析  ")).toBe(7);
   expect(reflectionLength("😀😀")).toBe(2);
-  expect(reflectionLength("👨‍👩‍👧")).toBe(1);
-  expect(reflectionLength("é")).toBe(1);
+  // The server's rule (report_gate.reflection_length): the joiners of a family emoji are invisible, its people
+  // count; a flag is two regional-indicator code points; a combining accent adds nothing.
+  expect(reflectionLength("👨‍👩‍👧")).toBe(3);
+  expect(reflectionLength("🇨🇳")).toBe(2);
+  expect(reflectionLength("e\u0301")).toBe(1);
+  // Zero-width spaces and bidi controls alone are an empty answer.
+  expect(reflectionLength("\u200b".repeat(40))).toBe(0);
+  expect(reflectionLength("\u202e结果\u202c")).toBe(2);
+  // Python's whitespace: U+001F splits words like a space.
+  expect(reflectionLength("甲\u001f乙")).toBe(3);
 });
 
 describe("the 2,400 limit shortens only the inserted text", () => {

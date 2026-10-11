@@ -50,9 +50,10 @@ test("navigation reveals the active outline row but saving progress does not und
 
 test("a draft report is not shown as a finished step 15, a submitted one is", () => {
   const steps = { ...stepsData, steps: stepsData.steps.map((step) => step.n === 15 ? { ...step, lab: "rep" as const } : step) };
-  const completed = Array.from({ length: 15 }, (_, index) => index + 1);
+  // As the server sends them: step 15 is complete only once the report is handed in.
+  const completed = (reportState: "draft" | "pending") => Array.from({ length: reportState === "draft" ? 14 : 15 }, (_, index) => index + 1);
   const view = (reportState: "draft" | "pending") => <CourseSidebar stepsData={steps} current={1}
-    completion={{ steps: [], completed, completed_count: 15, total: 15 }}
+    completion={{ steps: [], completed: completed(reportState), completed_count: completed(reportState).length, total: 15 }}
     materialGate={null} onNavigate={() => {}} reportExists reportState={reportState} />;
   const { container, rerender } = render(view("draft"));
   const badge = () => container.querySelector('[aria-label^="步骤 15："] .step-badge')!;
@@ -102,6 +103,18 @@ test("header and footer name steps as 步骤 n, and every footer dot has a visib
   expect(dots[2].title).toBe("步骤 3：步骤3");
 });
 
+test("a footer dot is amber where the sidebar's tick is: the quiz passed, the step's material missing", () => {
+  const steps = stepsData.steps;
+  const props = { stepsData, completion: { steps: [], completed: [1, 3], completed_count: 2, total: 15 }, materialGate: [{ step: 3, title: "", missing: ["记录"] }], onNavigate: () => {} };
+  const { container } = render(<>
+    <CourseSidebar {...props} current={2} />
+    <StepFooter steps={steps} step={steps[1]} next={steps[2]} stageName="测试阶段" current={2} completedSteps={new Set([1, 3])} materialGate={props.materialGate} onNavigate={() => {}} />
+  </>);
+  const dots = [...container.querySelectorAll<HTMLButtonElement>(".fdot")];
+  expect(dots.slice(0, 4).map((dot) => dot.className)).toEqual(["fdot done", "fdot on", "fdot partial", "fdot"]);
+  expect(container.querySelector('[aria-label^="步骤 3："] .step-badge')!.className).toContain("partial");
+});
+
 test("a demo student's password button keeps its name and explains why it cannot be used", () => {
   const previous = process.env.VITE_DEMO_MODE;
   process.env.VITE_DEMO_MODE = "1";
@@ -122,5 +135,5 @@ test("a demo student's password button keeps its name and explains why it cannot
 
 test("the narrow-window notice says what to do in one line", () => {
   render(<NarrowWindowNotice />);
-  expect(screen.getByRole("note").textContent).toBe("窗口较窄，部分内容需要横向滚动；请放宽窗口或缩小浏览器缩放");
+  expect(screen.getByRole("note").textContent).toBe("窗口较窄：请左右滚动，或放宽窗口、缩小浏览器缩放");
 });

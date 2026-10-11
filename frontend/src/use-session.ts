@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, AUTH_TOKEN_KEY, fitsKeepalive, getActiveAuthToken, isApiErrorStatus } from "./api";
+import { api, ApiError, AUTH_TOKEN_KEY, fitsKeepalive, getActiveAuthToken, isApiErrorStatus, RequestTimeoutError } from "./api";
 import { emptySession, isValidSession, patchStep as patchStoredStep, readShared, readStep, sameJsonValue, sameSessionContent, writeShared } from "./session-store";
 import type {
   ClassroomReport,
@@ -11,7 +11,7 @@ import type {
   SharedSessionKey,
 } from "./types";
 
-import { userFacingRequestError } from "./user-facing-error";
+import { isNetworkFailure, userFacingRequestError } from "./user-facing-error";
 import { EDITED_DURING_RELOAD } from "./sync-problem";
 
 const SYNC_DEBOUNCE_MS = 800;
@@ -120,6 +120,17 @@ export function mergeKeptEdits(server: ExperimentSession, kept: Pick<KeptEdits, 
 
 export type SessionStatus = "loading" | "ready" | "unavailable";
 
+/** Waits before a failed save is sent again on its own: soon at first, then once a minute. */
+export const SAVE_RETRY_DELAYS_MS = [5_000, 15_000, 30_000, 60_000];
+
+/** A failure the same save can get past later (the server or the network briefly unreachable, a timeout, a busy
+ *  server); a conflict, an expired login or a refused record needs the student instead, and a cancelled request or a
+ *  failure in the page itself would only fail again. */
+export function isTransientSaveFailure(cause: unknown): boolean {
+  if (cause instanceof ApiError) return [408, 429, 500, 502, 503, 504].includes(cause.status);
+  return cause instanceof RequestTimeoutError || isNetworkFailure(cause);
+}
+
 export interface SessionApi {
   status: SessionStatus;
   session: ExperimentSession;
@@ -128,8 +139,13 @@ export interface SessionApi {
   syncing: boolean;
   syncError: string | null;
   syncConflict: boolean;
+  /** The failed save will be sent again on its own (a passing failure); the student may still retry now. */
+  autoRetry?: boolean;
   unsynced: boolean;
   completion: CompletionSummary | null;
+  /** Whether the latest report was generated from this record (server ``report_current``); step 15's completion
+   *  says whether a report was handed in, which stays true after later edits. */
+  reportCurrent: boolean | null;
   /** Combined quiz and material gate used by report generation. */
   reportGate: ReportGateItem[] | null;
   /** Server-confirmed missing evidence/actions, independently of quizzes. */
@@ -151,6 +167,13 @@ export interface SessionApi {
   /** Keep unconfirmed edits in this tab before leaving on purpose (logout, expired login, password change); the next load puts them back. */
   keepUnsavedEdits: () => boolean;
   resolveSyncConflict: () => Promise<void>;
+  /**
+   * Read the server's record and make it this page's confirmed version, keeping this page's edits the server did
+   * not touch (the rule for edits kept on leaving). Used for a conflict and when step 15 learns that another tab
+   * saved newer answers: the server's text then becomes the base, not a new edit of this page. Resolves false when
+   * nothing was loaded (another load was running, or the student typed meanwhile); rejects when the read failed.
+   */
+  loadServerVersion: () => Promise<boolean>;
   applyReportMutation: (response: ReportMutationResponse) => void;
 }
 
@@ -197,6 +220,11 @@ export class SessionSaveQueue {
 
   hasUnsynced(): boolean {
     return this.pending !== null || this.saving !== null;
+  }
+
+  /** Settles once no save is on its way, whether it went through or not. */
+  async settled(): Promise<void> {
+    await this.saving?.catch(() => {});
   }
 
   discardPending(baseUpdatedAt: string | null) {
@@ -267,6 +295,8 @@ export function updateSessionShared<T>(session: ExperimentSession, key: SharedSe
 export function useSession(enabled: boolean, username?: string): SessionApi {
   const [status, setStatus] = useState<SessionStatus>(enabled ? "loading" : "unavailable");
   const [loadAttempt, setLoadAttempt] = useState(0);
+  // An automatic retry reads again behind the failure page (no loading state): the page, its focus and its alert stay.
+  const quietLoadRef = useRef(false);
   const [session, setSession] = useState<ExperimentSession>(emptySession);
   const sessionRef = useRef(session);
   const releaseIdRef = useRef<string | null>(null);
@@ -274,6 +304,8 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [report, setReport] = useState<ClassroomReport | null>(null);
   const [completion, setCompletion] = useState<CompletionSummary | null>(null);
+  // Whether the latest report was generated from this record (the "报告需更新" signal); null before the first answer.
+  const [reportCurrent, setReportCurrent] = useState<boolean | null>(null);
   const [reportGate, setReportGate] = useState<ReportGateItem[] | null>(null);
   const [materialGate, setMaterialGate] = useState<ReportGateItem[] | null>(null);
   const [workspaceGeneration, setWorkspaceGeneration] = useState(0);
@@ -281,6 +313,9 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncConflict, setSyncConflict] = useState(false);
+  // When the failed save is sent again on its own (null: not scheduled), and how many times it has been.
+  const [retryAt, setRetryAt] = useState<number | null>(null);
+  const retryAttemptRef = useRef(0);
   const syncConflictRef = useRef(false);
   const resolvingConflictRef = useRef(false);
   const [unsynced, setUnsynced] = useState(false);
@@ -314,6 +349,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
               session: latest.session,
               updated_at: latest.updated_at,
               completion: latest.completion,
+              report_current: latest.report_current,
               report_gate: latest.report_gate,
               material_gate: latest.material_gate,
             };
@@ -332,16 +368,28 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
             setSession(response.session);
           }
           setCompletion(response.completion);
+          setReportCurrent(response.report_current ?? null);
           setReportGate(response.report_gate);
           setMaterialGate(response.material_gate);
           setSyncError(null);
           saveFailedRef.current = false;
           syncConflictRef.current = false;
           setSyncConflict(false);
+          retryAttemptRef.current = 0;
+          setRetryAt(null);
         },
         onError: (cause) => {
           saveFailedRef.current = true;
           const conflict = isApiErrorStatus(cause, 409);
+          // The server or network may be back in a moment, even with the browser online all along (no "online"
+          // event then): send the save again on its own, less often each time.
+          if (!conflict && isTransientSaveFailure(cause)) {
+            const delay = SAVE_RETRY_DELAYS_MS[Math.min(retryAttemptRef.current, SAVE_RETRY_DELAYS_MS.length - 1)];
+            retryAttemptRef.current += 1;
+            setRetryAt(Date.now() + delay);
+          } else {
+            setRetryAt(null);
+          }
           syncConflictRef.current = conflict;
           if (conflict && timer.current != null) {
             window.clearTimeout(timer.current);
@@ -364,7 +412,8 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   useEffect(() => {
     if (!enabled) return;
     let live = true;
-    setStatus("loading");
+    if (quietLoadRef.current) quietLoadRef.current = false;
+    else setStatus("loading");
     api.classroom.session().then(
       (response) => {
         if (!live) return;
@@ -379,6 +428,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         setConfirmedSession(response.session);
         setUpdatedAt(response.updated_at ?? null);
         setCompletion(response.completion);
+        setReportCurrent(response.report_current ?? null);
         setReportGate(response.report_gate);
         setMaterialGate(response.material_gate);
         setReport(response.report);
@@ -514,15 +564,34 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     };
   }, [enabled, username, keepCopy]);
 
-  // An unreadable record is read again as soon as the browser reports the network back.
+  // An unreadable record is read again as soon as the browser reports the network back, and on a timer (a server
+  // that was down comes back without an "online" event).
   useEffect(() => {
     if (!enabled || status !== "unavailable") return;
-    const online = () => setLoadAttempt((value) => value + 1);
-    window.addEventListener("online", online);
-    return () => window.removeEventListener("online", online);
-  }, [enabled, status]);
+    const retry = () => {
+      quietLoadRef.current = true;
+      setLoadAttempt((value) => value + 1);
+    };
+    const timer = window.setTimeout(retry, SAVE_RETRY_DELAYS_MS[Math.min(loadAttempt, SAVE_RETRY_DELAYS_MS.length - 1)]);
+    window.addEventListener("online", retry);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("online", retry);
+    };
+  }, [enabled, loadAttempt, status]);
 
-  // A failed save waits for the next edit or a click on 重试保存; when the browser reports the network back,
+  // A save that failed for a passing reason is sent again when its wait is over (never through a conflict, which
+  // needs the student's decision); the next edit or a click on 重试保存 sends it sooner.
+  useEffect(() => {
+    if (retryAt == null || !enabled || status !== "ready") return;
+    const id = window.setTimeout(() => {
+      setRetryAt(null);
+      if (!syncConflictRef.current && queue.current?.hasUnsynced()) void drain().catch(() => {});
+    }, Math.max(0, retryAt - Date.now()));
+    return () => window.clearTimeout(id);
+  }, [drain, enabled, retryAt, status]);
+
+  // A failed save also waits for the next edit or a click on 重试保存; when the browser reports the network back,
   // retry on its own (never through a conflict, which needs the student's decision).
   useEffect(() => {
     if (!enabled || status !== "ready" || !unsynced) return;
@@ -533,17 +602,25 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     return () => window.removeEventListener("online", online);
   }, [drain, enabled, status, unsynced]);
 
-  const resolveSyncConflict = useCallback(async () => {
-    if (!syncConflictRef.current || resolvingConflictRef.current) return;
+  /** Whether the server's record became this page's (false: another load was running, or edits were typed meanwhile). */
+  const loadServerVersion = useCallback(async (): Promise<boolean> => {
+    if (resolvingConflictRef.current) return false;
     resolvingConflictRef.current = true;
-    const localSnapshot = sessionRef.current;
     let toSave: ExperimentSession | null = null;
     setSyncing(true);
+    // What the page held when the student asked: anything typed after this is kept, not replaced.
+    const localSnapshot = sessionRef.current;
     try {
+      // A save still on its way would answer after this read and put its own record back as the confirmed one.
+      await queue.current?.settled();
       const response = await api.classroom.session();
-      if (sessionRef.current !== localSnapshot) {
+      // Content, not identity: a save that went through meanwhile replaces the page's object with the server's.
+      const current = sessionRef.current;
+      const typedSince = current !== localSnapshot && !sameSessionContent(current, localSnapshot)
+        && !sameSessionContent(current, queue.current?.getConfirmedSession() ?? emptySession());
+      if (typedSince) {
         setSyncError(EDITED_DURING_RELOAD);
-        return;
+        return false;
       }
       // Keep this page's edits the other page did not touch: the same rule as edits kept on leaving.
       const sameRelease = response.release_id === releaseIdRef.current;
@@ -556,6 +633,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       setConfirmedSession(response.session);
       setUpdatedAt(response.updated_at ?? null);
       setCompletion(response.completion);
+      setReportCurrent(response.report_current ?? null);
       setReportGate(response.report_gate);
       setMaterialGate(response.material_gate);
       setReport(response.report);
@@ -567,7 +645,8 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       setStatus("ready");
       if (!sameSessionContent(merged, response.session)) toSave = merged;
     } catch (cause) {
-      setSyncError(userFacingRequestError(cause, "保存失败"));
+      // A read, not a save: the message says which one failed.
+      setSyncError(userFacingRequestError(cause, "载入服务器版本失败"));
       throw cause;
     } finally {
       resolvingConflictRef.current = false;
@@ -577,18 +656,25 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       queue.current?.enqueue(toSave);
       await queue.current?.drain().catch(() => {});
     }
+    return true;
   }, [replace]);
+
+  const resolveSyncConflict = useCallback(async () => {
+    if (!syncConflictRef.current) return;
+    await loadServerVersion();
+  }, [loadServerVersion]);
 
   const applyReportMutation = useCallback((response: ReportMutationResponse) => {
     setReport(response.report);
     setCompletion(response.completion);
+    setReportCurrent(response.report_current ?? null);
     setReportGate(response.report_gate);
     setMaterialGate(response.material_gate);
   }, []);
 
   return {
-    status, session, report, updatedAt, syncing, syncError, syncConflict, unsynced,
-    completion, reportGate, materialGate, workspaceGeneration, restoredEdits,
+    status, session, report, updatedAt, syncing, syncError, syncConflict, unsynced, autoRetry: retryAt != null,
+    completion, reportCurrent, reportGate, materialGate, workspaceGeneration, restoredEdits,
     getStep: useCallback(<T,>(step: number) => readStep<T>(session, step), [session]),
     getConfirmedStep: useCallback(<T,>(step: number) => readStep<T>(confirmedSession, step), [confirmedSession]),
     patchStep: useCallback(<T extends object,>(step: number, patch: Partial<T>) => update((value) => patchStoredStep(value, step, patch)), [update]),
@@ -599,6 +685,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     loadAttempts: loadAttempt,
     keepUnsavedEdits,
     resolveSyncConflict,
+    loadServerVersion,
     applyReportMutation,
   };
 }

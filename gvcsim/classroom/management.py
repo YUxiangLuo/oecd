@@ -335,14 +335,10 @@ def _learning_status(
     from gvcsim import evidence
 
     session_payload = session["session"] if session else {"steps": {}}
-    # Step 15 counts once the report is handed in (and still current): a draft is not finished work, the same
-    # rule as the student's own progress count.
-    summary = evidence.completion_summary(
-        session_payload,
-        report_exists=records.report_matches_session(session_payload, report)
-        and report is not None
-        and report.get("state") != "draft",
-    )
+    # Step 15 counts once the report is handed in, as in the student's own progress count (records.report_handed_in);
+    # a record changed since then is said separately (report_outdated), the teacher still holding the submitted one.
+    handed_in = records.report_handed_in(report)
+    summary = evidence.completion_summary(session_payload, report_exists=handed_in)
     # Only the student's own actions count; grading also bumps reports.updated_at.
     timestamps = [
         value
@@ -360,6 +356,7 @@ def _learning_status(
         "completion_missing": [item["step"] for item in summary["steps"] if not item["complete"]],
         "last_valid_activity": max(timestamps) if timestamps else None,
         "report_state": report["state"] if report else None,
+        "report_outdated": handed_in and not records.report_matches_session(session_payload, report),
         "score": report["score"] if report else None,
         "generated_at": report["generated_at"] if report else None,
         "submitted_at": report["submitted_at"] if report else None,

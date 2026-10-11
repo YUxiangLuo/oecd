@@ -227,6 +227,10 @@ def test_blank_password_is_a_field_error_in_batch_preview_and_self_service(teach
         ("2026​秋", "2026秋"),
         ("﻿ ２０２６秋 ⁠", "2026秋"),
         ("Ａ班\t\n二组", "A班 二组"),
+        # Full-width punctuation is how Chinese is written: kept, while the digits beside it still fold.
+        ("王五（转专业）", "王五（转专业）"),
+        ("国贸１班：（二）！", "国贸1班：（二）！"),
+        ("e\u0301（备注）", "é（备注）"),
     ],
 )
 def test_normalize_label_folds_lookalike_text(raw, expected):

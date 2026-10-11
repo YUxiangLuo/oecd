@@ -28,9 +28,20 @@ from gvcsim.report_reference import country_reference, industry_reference
 from gvcsim.shocks import events_metadata
 
 
+# Bidi embedding/override/isolate controls reorder the text around them on the teacher's screen; dropped.
+_BIDI_CONTROLS = re.compile("[\u202a-\u202e\u2066-\u2069]")
+# Two or more blank lines (lines of spaces count as blank) are one blank line in the report: within the 2400
+# limit, thousands of line breaks would otherwise print dozens of empty PDF pages.
+_BLANK_LINES = re.compile(r"\n[^\S\n]*(?:\n[^\S\n]*){2,}")
+
+
+def _reflection_text(text: str) -> str:
+    return _BLANK_LINES.sub("\n\n", _BIDI_CONTROLS.sub("", text))
+
+
 def _reflection_value(value: Any) -> str:
     """Preserve prose inside a literal block that cannot consume later sections."""
-    text = value if isinstance(value, str) else "—"
+    text = _reflection_text(value) if isinstance(value, str) else "—"
     fence = "`" * max(3, 1 + max((len(run) for run in re.findall(r"`+", text)), default=0))
     return f"{fence}gvcsim-reflection\n{text}\n{fence}"
 

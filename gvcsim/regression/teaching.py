@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TypeVar, cast
+from typing import Any, TypeVar, cast
 
 import numpy as np
 import pandas as pd
@@ -28,28 +28,65 @@ import pandas as pd
 # v8 (2026-10-10): the tariff falls on goods only. In a taxed country τ is 25% for its goods industries (ICIO
 # sectors A, B and C) and 0 for its service industries, so a service industry's X is 0 whatever its exports to the
 # market; the taxed list, w and the noise draws are unchanged from v7.
-VERSION = "step10-tariff-teaching-v8"
+# v10 (2026-10-10, docs/regression-refactor-20261010.md): designed so each choice in the steps 11–14 model workbench
+# shows a result. The tariff falls in two waves (first-year goods surplus with the market ≥ 10 bn USD from the third
+# year, 1–10 bn from the fourth; the 2020 X is v8's); a tariff's relation shows 60% in its year and 40% the next
+# (β is the cumulative relation, v8's values); a generated exchange-rate change (first-wave economies depreciate from
+# the third year) moves every Y in the tariff's direction, so a model that leaves it out overstates the relation.
+# Lags of X are written from the schedule (exact zeros before the first tariff). The generated domestic-VA export
+# share is calibrated lower so it and the FVA share stay within gross exports, and in/out degree higher so weighted
+# degree stays non-negative with the exchange-rate term. The noise draws are v8's. (v9 was an abandoned attempt.)
+VERSION = "step10-tariff-teaching-v10"
 # Seeds the noise draws only (policy assignment is a data rule since v7); changing it would redraw every Y.
 RANDOMIZATION_VERSION = "step10-tariff-teaching-v1"
 X_COLUMN = "teaching_tariff_exposure"
+# Lags of X by year: w × τ(t − k), from the tariff schedule.
+X_LAG_COLUMNS = {0: X_COLUMN, 1: f"{X_COLUMN}_lag1", 2: f"{X_COLUMN}_lag2"}
 OUTCOMES = ("trade", "production", "length", "network")
 SEED = 20260913
 MARKET = "USA"
-TARIFF_PATH = (0.0, 0.0, 0.25, 0.25, 0.25)
-# First-year goods trade surplus with the market, in ICIO units (million USD), from which a country is taxed.
+TARIFF_RATE = 0.25
+# First-year goods trade surplus with the market, in ICIO units (million USD), from which a country is taxed, and
+# from which it is in the first wave.
 TAXED_SURPLUS_MIN = 1000.0
+FIRST_WAVE_SURPLUS_MIN = 10000.0
 SURPLUS_COLUMN = "teaching_market_goods_surplus"
+# 0 untaxed, 1 first wave, 2 second wave.
+WAVE_COLUMN = "teaching_tariff_wave"
+# Start of each wave as an offset from the first release year (2018 and 2019 for the 2016–2020 release).
+WAVE_START_OFFSETS = {1: 2, 2: 3}
 TAXED_RULE = {
     "basis": "first-year goods trade surplus with the market (ICIO sectors A-C)",
     "min_million_usd": TAXED_SURPLUS_MIN,
     "scope": "goods industries (ICIO sectors A-C)",
+    "rate": TARIFF_RATE,
+    "waves": [
+        {"wave": 1, "min_million_usd": FIRST_WAVE_SURPLUS_MIN, "start_year_offset": WAVE_START_OFFSETS[1]},
+        {"wave": 2, "min_million_usd": TAXED_SURPLUS_MIN, "start_year_offset": WAVE_START_OFFSETS[2]},
+    ],
 }
-DISCLAIMER = "课程关税实验数据集：X 与四个 Y 按课程数据契约生成，不是 OECD 发布结果。"
+# Share of a tariff's relation that shows in its year and in the next; the cumulative relation is β.
+LAG_SHARES = (0.6, 0.4)
+EXCHANGE_RATE_COLUMN = "teaching_exchange_rate_change"
+# Exchange-rate change in percentage points (negative = depreciation): country × year uniform noise with this SD,
+# plus this depreciation for first-wave economies from the first wave's start. Each Y moves by factor × β per point,
+# in the tariff's direction (depreciation makes imported inputs dearer), so leaving it out overstates the relation.
+EXCHANGE_RATE_NOISE_SD = 1.0
+EXCHANGE_RATE_DEPRECIATION = -6.0
+EXCHANGE_RATE_GAMMA_FACTOR = -0.0095
+EXCHANGE_RATE = {
+    "column": EXCHANGE_RATE_COLUMN,
+    "unit": "percentage points; negative = depreciation",
+    "noise_sd": EXCHANGE_RATE_NOISE_SD,
+    "first_wave_depreciation": EXCHANGE_RATE_DEPRECIATION,
+    "gamma_factor": EXCHANGE_RATE_GAMMA_FACTOR,
+}
+DISCLAIMER = "课程关税实验数据集：X、汇率变动与各 Y 按课程数据契约生成，不是 OECD 发布结果。"
 # What students and readers see (step 10, the step 11–14 result card and the report); DISCLAIMER above is
-# the release contract value and stays unchanged. The frontend keeps the same sentence in regression-lessons.ts.
+# the release contract value. The frontend keeps the same sentence in regression-lessons.ts.
 GENERATED_DATA_NOTE = (
-    "关税情景与步骤 11–14 的四个 Y 由课程按设定生成（参照真实指标的量级），"
-    "用于练习读回归，不是真实关税或 OECD 发布的结果。"
+    "关税情景、汇率变动与步骤 11–14 的 Y 由课程按设定生成（参照真实指标的量级），"
+    "用于练习读回归，不是真实关税、汇率或 OECD 发布的结果。"
 )
 # Display kinds: shares are shown in percentage points, the others in their own raw units.
 T = TypeVar("T")
@@ -72,6 +109,8 @@ class Baseline:
     ``combine`` makes the Y an exact linear combination of other Ys of the same family,
     constant + Σ coefficient × Y[key], instead of a drawn one, so an accounting identity holds row by row and
     the estimates add up exactly; ``beta`` is then the implied relation and ``calibration`` is unused.
+    A ``derived`` numerator may be several release columns, summed. A ``hidden`` baseline is a drawn part of an
+    identity only: the panel carries it, but it is not a Y a page or a regression may choose.
     """
 
     key: str
@@ -80,8 +119,20 @@ class Baseline:
     beta: float
     calibration: tuple[float, float, float]
     source: str | None = None
-    derived: tuple[str, str] | None = None
+    derived: tuple[str | tuple[str, ...], str] | None = None
     combine: tuple[float, tuple[tuple[str, float], ...]] | None = None
+    hidden: bool = False
+    # A source that is a signed account (it can be slightly negative) is only ranked, so any finite value is valid;
+    # the generated Y keeps its kind's domain.
+    signed_source: bool = False
+
+    @property
+    def derived_columns(self) -> tuple[str, ...]:
+        """Release columns a derived share is computed from (numerator parts, then the denominator)."""
+        if not self.derived:
+            return ()
+        numerator, denominator = self.derived
+        return (*((numerator,) if isinstance(numerator, str) else numerator), denominator)
 
     @property
     def column(self) -> str:
@@ -90,6 +141,12 @@ class Baseline:
     @property
     def unit(self) -> str:
         return KIND_UNITS[self.kind]
+
+    def source_valid(self, values: pd.Series) -> pd.Series:
+        """Whether a source value may calibrate this Y (its kind's domain, or any finite value if signed)."""
+        if self.signed_source:
+            return pd.Series(np.isfinite(values.to_numpy(dtype=float)), index=values.index)
+        return self.in_domain(values)
 
     def in_domain(self, values: pd.Series) -> pd.Series:
         finite = np.isfinite(values.to_numpy(dtype=float))
@@ -108,10 +165,29 @@ class Baseline:
 # magnitudes are set so the preset effect is about two to three within-unit standard deviations and are
 # evaluated by scripts/benchmark_teaching_design.py.
 BASELINES: dict[str, tuple[Baseline, ...]] = {
+    # v10: the domestic-VA export share is 1 − FVA share − the other parts' share (returned domestic VA, double
+    # counting, taxes), so the two shares never exceed gross exports; its relation is the FVA share's, reversed.
     "trade": (
         Baseline("FVA_share", "外国增加值项占比", "share", -0.55, (0.25, 0.30, 0.006)),
         Baseline(
-            "DVAex_share", "国内增加值出口占比", "share", 0.55, (0.55, 0.30, 0.006), derived=("DVAex", "gross_exports")
+            "DVAex_share",
+            "国内增加值出口占比",
+            "share",
+            0.55,
+            (0.0, 0.0, 0.0),
+            derived=("DVAex", "gross_exports"),
+            combine=(1.0, (("FVA_share", -1.0), ("trade_rest_share", -1.0))),
+        ),
+        Baseline(
+            "trade_rest_share",
+            "出口中的其余项占比（返回国内、重复计算与产品税）",
+            "share",
+            0.0,
+            (0.02, 0.12, 0.002),
+            derived=(("DVArt", "DDC", "FDC", "taxsub"), "gross_exports"),
+            hidden=True,
+            # taxsub is signed, so a few units' other-parts share is slightly negative: still a valid ranking.
+            signed_source=True,
         ),
     ),
     # Forward shares: 3a, 3b and RT are drawn; the GVC total and the pure-domestic share follow from them, so
@@ -181,10 +257,10 @@ BASELINES: dict[str, tuple[Baseline, ...]] = {
             combine=(0.0, (("weighted_indegree", 1.0), ("weighted_outdegree", 1.0))),
         ),
         Baseline(
-            "weighted_indegree", "加权入度", "network", -2000.0, (500.0, 1500.0, 20.0), source="weighted indegree"
+            "weighted_indegree", "加权入度", "network", -2000.0, (650.0, 1500.0, 20.0), source="weighted indegree"
         ),
         Baseline(
-            "weighted_outdegree", "加权出度", "network", -2000.0, (500.0, 1500.0, 20.0), source="weighted outdegree"
+            "weighted_outdegree", "加权出度", "network", -2000.0, (650.0, 1500.0, 20.0), source="weighted outdegree"
         ),
         Baseline("betweenesscentrality", "网络介数（全正边二值）", "network", -6000.0, (2000.0, 2000.0, 60.0)),
         Baseline("closnesscentrality", "接近中心性", "network", -0.50, (0.30, 0.40, 0.005)),
@@ -198,31 +274,37 @@ def default_baseline(outcome: str) -> Baseline:
     return BASELINES[outcome][0]
 
 
-def baseline(outcome: str, key: str | None = None) -> Baseline:
-    """The baseline ``key`` of ``outcome``'s family (its default when ``key`` is None)."""
+def selectable_baselines(outcome: str) -> tuple[Baseline, ...]:
+    """The family's Ys a page or a regression may choose (hidden parts of identities left out)."""
+    return tuple(item for item in BASELINES.get(outcome, ()) if not item.hidden)
+
+
+def baseline(outcome: str, key: str | None = None, *, allow_hidden: bool = False) -> Baseline:
+    """The baseline ``key`` of ``outcome``'s family (its default when ``key`` is None); a hidden part of an identity
+    only with ``allow_hidden``."""
     if key is None:
         return default_baseline(outcome)
     for item in BASELINES.get(outcome, ()):
-        if item.key == key:
+        if item.key == key and (allow_hidden or not item.hidden):
             return item
     raise ValueError(f"{outcome} 没有名为 {key} 的生成基线")
 
 
 def y_column(outcome: str, key: str | None = None) -> str:
-    item = baseline(outcome, key)
+    item = baseline(outcome, key, allow_hidden=True)
     return f"teaching_y_{outcome}" if item is default_baseline(outcome) else f"teaching_y_{outcome}_{item.key}"
 
 
 def sources_present(item: Baseline, columns) -> bool:
     """Whether a release panel carries what this baseline is calibrated from."""
     names = set(columns)
-    return set(item.derived).issubset(names) if item.derived else item.column in names
+    return set(item.derived_columns).issubset(names) if item.derived else item.column in names
 
 
 def available_baselines(outcome: str, columns) -> list[Baseline]:
-    """The family's default plus every alternative whose generated Y column is in ``columns``."""
+    """The family's default plus every alternative whose generated Y column is in ``columns`` (hidden parts aside)."""
     names = set(columns)
-    return [item for item in BASELINES[outcome] if y_column(outcome, item.key) in names]
+    return [item for item in BASELINES[outcome] if not item.hidden and y_column(outcome, item.key) in names]
 
 
 def baseline_options(outcome: str, columns=None) -> list[dict[str, object]]:
@@ -230,7 +312,11 @@ def baseline_options(outcome: str, columns=None) -> list[dict[str, object]]:
 
     With ``columns`` (a teaching panel's columns) only the baselines that panel carries are listed.
     """
-    items = BASELINES[outcome] if columns is None else tuple(available_baselines(outcome, columns))
+    items = (
+        tuple(item for item in BASELINES[outcome] if not item.hidden)
+        if columns is None
+        else tuple(available_baselines(outcome, columns))
+    )
     return [
         {
             "key": item.key,
@@ -254,7 +340,10 @@ def baseline_parameters() -> dict[str, list[dict[str, object]]]:
                 "label": item.label,
                 "kind": item.kind,
                 "source": item.column,
-                "derived": list(item.derived) if item.derived else None,
+                "derived": [list(part) if isinstance(part, tuple) else part for part in item.derived]
+                if item.derived
+                else None,
+                "hidden": item.hidden,
                 "beta": item.beta,
                 "calibration": list(item.calibration),
                 "combine": (
@@ -275,6 +364,7 @@ def baseline_snapshots(builder: Callable[[str, str], T]) -> dict[str, T]:
         f"{outcome}:{item.key}": builder(outcome, item.key)
         for outcome, items in BASELINES.items()
         for item in items[1:]
+        if not item.hidden
     }
 
 
@@ -282,6 +372,20 @@ Y_COLUMNS = {outcome: y_column(outcome) for outcome in OUTCOMES}
 BETAS = {outcome: default_baseline(outcome).beta for outcome in OUTCOMES}
 CALIBRATION = {outcome: default_baseline(outcome).calibration for outcome in OUTCOMES}
 UNITS = {outcome: default_baseline(outcome).unit for outcome in OUTCOMES}
+
+
+def simulation_parameters() -> dict:
+    """The generator's parameters as a release's ``simulation_contract.parameters`` records them (JSON form)."""
+    return {
+        "market": MARKET,
+        "tariff_rate": TARIFF_RATE,
+        "lag_shares": list(LAG_SHARES),
+        "exchange_rate": EXCHANGE_RATE,
+        "taxed_rule": TAXED_RULE,
+        "betas": BETAS,
+        "calibration": {name: list(values) for name, values in CALIBRATION.items()},
+        "baselines": baseline_parameters(),
+    }
 
 
 def _unit_number(value: str, salt: str, seed: int = SEED) -> float:
@@ -321,6 +425,19 @@ def market_goods_surplus(exposure: pd.DataFrame, year: int) -> pd.Series:
     to_market = rows.loc[rows.imposer.eq(MARKET) & rows.country.ne(MARKET)].groupby("country").bilateral_exports.sum()
     from_market = rows.loc[rows.country.eq(MARKET) & rows.imposer.ne(MARKET)].groupby("imposer").bilateral_exports.sum()
     return to_market.sub(from_market, fill_value=0.0).astype(float)
+
+
+def tariff_wave(surplus: pd.Series) -> pd.Series:
+    """0 untaxed, 1 first wave (surplus ≥ FIRST_WAVE_SURPLUS_MIN), 2 second wave (≥ TAXED_SURPLUS_MIN)."""
+    return pd.Series(
+        np.where(surplus.ge(FIRST_WAVE_SURPLUS_MIN), 1, np.where(surplus.ge(TAXED_SURPLUS_MIN), 2, 0)),
+        index=surplus.index,
+        dtype=int,
+    )
+
+
+def wave_start_years(first_year: int) -> dict[int, int]:
+    return {wave: first_year + offset for wave, offset in WAVE_START_OFFSETS.items()}
 
 
 def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *, seed: int = SEED) -> pd.DataFrame:
@@ -380,19 +497,21 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
     ].copy()
     base = base.merge(weights, on=["country", "industry"], how="inner", validate="one_to_one")
     for _, item in all_baselines:
-        if item.derived:
-            numerator, denominator = item.derived
-            base[item.column] = (base[numerator] / base[denominator]).where(base[denominator] > 0)
+        if item.derived and item.combine is None:
+            *numerator, denominator = item.derived_columns
+            base[item.column] = (base[numerator].sum(axis=1, min_count=len(numerator)) / base[denominator]).where(
+                base[denominator] > 0
+            )
     default_columns = [default_baseline(outcome).column for outcome in OUTCOMES]
     finite = np.isfinite(base[default_columns].to_numpy(dtype=float)).all(axis=1)
     eligible = finite & base.teaching_export_share_w.between(0, 1)
     for outcome in OUTCOMES:
         item = default_baseline(outcome)
-        eligible &= item.in_domain(base[item.column])
+        eligible &= item.source_valid(base[item.column])
     # A default computed from parts needs every part valid, or the default Y would be missing for that unit.
     for outcome, key in required_parts:
-        part = baseline(outcome, key)
-        eligible &= part.in_domain(base[part.column])
+        part = baseline(outcome, key, allow_hidden=True)
+        eligible &= part.source_valid(base[part.column])
     base = base.loc[eligible].copy()
     if base.empty:
         raise ValueError("无有效冲击前指标与目的地份额，无法生成教学面板")
@@ -401,7 +520,7 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
         if item.combine is not None:
             continue
         low, span, _ = item.calibration
-        values = base[item.column].where(item.in_domain(base[item.column]))
+        values = base[item.column].where(item.source_valid(base[item.column]))
         # Percentile ranks among the units whose source value is valid; invalid units stay missing.
         base[_baseline_column(outcome, item)] = low + span * values.rank(method="average", pct=True)
         baseline_columns.append(_baseline_column(outcome, item))
@@ -413,16 +532,29 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
     )
     out = out.sort_values(["country", "industry", "year"]).reset_index(drop=True)
     entities = out.entity_id.astype(str)
-    # Taxed = a first-year goods surplus with the market of at least TAXED_SURPLUS_MIN (a data rule, not a draw);
-    # the tariff falls on the taxed countries' goods industries only (services keep τ = 0).
+    # Taxed = a first-year goods surplus with the market of at least TAXED_SURPLUS_MIN (a data rule, not a draw), in
+    # two waves by the size of that surplus; the tariff falls on the taxed countries' goods industries only.
     surplus = market_goods_surplus(exposure, years[0])
     out[SURPLUS_COLUMN] = out.country.map(surplus).fillna(0.0).astype(float)
-    exposed = out[SURPLUS_COLUMN].ge(TAXED_SURPLUS_MIN) & _is_goods_sector(out.industry)
-    out["teaching_tariff_rate_tau"] = out.year.map(dict(zip(years, TARIFF_PATH, strict=True))) * exposed
-    out[X_COLUMN] = out.teaching_export_share_w * out.teaching_tariff_rate_tau
+    out[WAVE_COLUMN] = tariff_wave(out[SURPLUS_COLUMN])
+    start = out[WAVE_COLUMN].map(wave_start_years(years[0]))
+    goods = _is_goods_sector(out.industry)
+
+    def rate(year: pd.Series) -> pd.Series:
+        """τ in ``year`` (rows whose wave has not started, services and untaxed countries: 0)."""
+        return TARIFF_RATE * (goods & start.notna() & year.ge(start)).astype(float)
+
+    out["teaching_tariff_rate_tau"] = rate(out.year)
+    for lag, column in X_LAG_COLUMNS.items():
+        out[column] = out.teaching_export_share_w * rate(out.year - lag)
     out["teaching_treated"] = out[X_COLUMN].gt(0).astype(int)
     individual = entities + "|" + out.year.astype(str)
     cluster = out.country.astype(str) + "|" + out.year.astype(str)
+    first_wave_start = wave_start_years(years[0])[1]
+    out[EXCHANGE_RATE_COLUMN] = cluster.map(
+        lambda value: (2 * _unit_number(value, "exchange-rate", seed) - 1) * EXCHANGE_RATE_NOISE_SD * 3**0.5
+    ) + EXCHANGE_RATE_DEPRECIATION * (out[WAVE_COLUMN].eq(1) & out.year.ge(first_wave_start))
+    effect = LAG_SHARES[0] * out[X_LAG_COLUMNS[0]] + LAG_SHARES[1] * out[X_LAG_COLUMNS[1]]
     trend = out.year.map(dict(zip(years, (-0.4, -0.2, 0.0, 0.2, 0.4), strict=True)))
     generated: dict[str, pd.Series] = {}
     for outcome, item in all_baselines:
@@ -435,7 +567,10 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
         noise += cluster.map(lambda value, salt=salt: 2 * _unit_number(value, f"cluster-{salt}", seed) - 1)
         target = y_column(outcome, item.key)
         generated[target] = (
-            out[_baseline_column(outcome, item)] + item.beta * out[X_COLUMN] + noise_scale * (noise + trend)
+            out[_baseline_column(outcome, item)]
+            + item.beta * effect
+            + EXCHANGE_RATE_GAMMA_FACTOR * item.beta * out[EXCHANGE_RATE_COLUMN]
+            + noise_scale * (noise + trend)
         )
     # Identity Ys are computed from the drawn ones, row by row (missing when any part is missing).
     for outcome, item in all_baselines:
@@ -459,22 +594,39 @@ def _combine_text(outcome: str, item: Baseline) -> str:
     constant, terms = item.combine
     parts = [f"{constant:g}"] if constant else []
     for key, coefficient in terms:
-        label = baseline(outcome, key).label
+        label = baseline(outcome, key, allow_hidden=True).label
         sign = "+" if coefficient > 0 else "−"
         parts.append(f"{sign} {label}" if parts else (label if coefficient > 0 else f"−{label}"))
     return " ".join(parts)
 
 
-def variable_catalog(outcome: str, baseline_key: str | None = None) -> list[dict[str, str]]:
+def variable_catalog(outcome: str, baseline_key: str | None = None, spec: Any = None) -> list[dict[str, str]]:
+    """The variables of a model (``spec``: a ModelSpec; None is the course default): its X terms, controls and Y."""
+    from gvcsim.regression.spec import CONTROLS, DEFAULT_SPEC, control_column, control_term_label
+
     item = baseline(outcome, baseline_key)
-    return [
+    model = (spec or DEFAULT_SPEC).canonical()
+    entries: list[dict[str, str]] = [
         {
-            "name": X_COLUMN,
-            "label": "关税暴露强度",
+            "name": X_LAG_COLUMNS[lag],
+            "label": "关税暴露强度" if lag == 0 else f"关税暴露强度（滞后 {lag} 期）",
             "unit": "比例（展示为百分点）",
-            "source": "首年销往美国的 ICIO 出口份额 × 课程税率路径",
+            "source": "首年销往美国的 ICIO 出口份额 × 课程税率（两批加征）",
             "role": "X",
-        },
+        }
+        for lag in model.x_lags
+    ]
+    entries += [
+        {
+            "name": control_column(key, lag),
+            "label": control_term_label(key, lag),
+            "unit": CONTROLS[key].definition,
+            "source": "课程生成" if CONTROLS[key].source == "generated" else "按 ICIO 计算",
+            "role": "control",
+        }
+        for key, lag in model.controls
+    ]
+    entries.append(
         {
             "name": y_column(outcome, item.key),
             "label": item.label,
@@ -486,16 +638,32 @@ def variable_catalog(outcome: str, baseline_key: str | None = None) -> list[dict
             ),
             "role": "Y",
             "baseline": item.key,
-        },
-    ]
+        }
+    )
+    return entries
 
 
-def model_snapshot(outcome: str, baseline_key: str | None = None) -> dict:
+# How a model's fixed effects are named in its snapshot (the classic pair keeps its column names).
+_SNAPSHOT_EFFECTS = {
+    "country": "country",
+    "industry": "industry",
+    "country_industry": "entity_id",
+    "year": "year",
+    "country_year": "country_year",
+}
+
+
+def model_snapshot(outcome: str, baseline_key: str | None = None, spec: Any = None) -> dict:
+    """The published model of a run (``spec``: a ModelSpec; None is the course default) and the generator's
+    parameters, so a saved run can be checked against the release it came from."""
+    from gvcsim.regression.spec import DEFAULT_SPEC
+
     item = baseline(outcome, baseline_key)
+    model = (spec or DEFAULT_SPEC).canonical()
     return {
         "version": VERSION,
         "randomization_version": RANDOMIZATION_VERSION,
-        "x_columns": [X_COLUMN],
+        "x_columns": model.x_columns,
         "y_column": y_column(outcome, item.key),
         "baseline": item.key,
         "baseline_label": item.label,
@@ -503,17 +671,44 @@ def model_snapshot(outcome: str, baseline_key: str | None = None) -> dict:
         "baseline_kind": item.kind,
         "entity": "entity_id",
         "time": "year",
-        "fixed_effects": ["entity_id", "year"],
-        "controls": [],
+        "fixed_effects": [_SNAPSHOT_EFFECTS[key] for key in model.fixed_effects],
+        "controls": model.control_columns,
         "interactions": [],
+        "spec": model.to_dict(),
         "seed": SEED,
         "beta": item.beta,
-        "tariff_path": list(TARIFF_PATH),
+        "lag_shares": list(LAG_SHARES),
+        "tariff_rate": TARIFF_RATE,
         "market": MARKET,
         "taxed_rule": TAXED_RULE,
+        "exchange_rate": EXCHANGE_RATE,
         "calibration": item.calibration,
         "disclaimer": DISCLAIMER,
     }
+
+
+def generated_problems(panel: pd.DataFrame) -> list[str]:
+    """Rows where a generated Y leaves its domain, or the two trade shares exceed gross exports (release build check).
+
+    Shares must lie in [0, 1], lengths be positive, network values non-negative; FVA + DVAex shares ≤ 1.
+    """
+    problems = []
+    for outcome, items in BASELINES.items():
+        for item in items:
+            column = y_column(outcome, item.key)
+            if column not in panel:
+                continue
+            values = panel[column].dropna()
+            bad = int((~item.in_domain(values)).sum())
+            if bad:
+                problems.append(f"{column}: {bad} 行越出定义域（{item.unit}）")
+    fva, dva = y_column("trade"), y_column("trade", "DVAex_share")
+    if fva in panel and dva in panel:
+        total = (panel[fva] + panel[dva]).dropna()
+        over = int(total.gt(1 + 1e-12).sum())
+        if over:
+            problems.append(f"外国增加值项占比 + 国内增加值出口占比：{over} 行超过 1（最大 {float(total.max()):.4f}）")
+    return problems
 
 
 def _taxed_countries(panel: pd.DataFrame) -> pd.Series:
@@ -525,47 +720,82 @@ def _taxed_countries(panel: pd.DataFrame) -> pd.Series:
     return panel.groupby("country")["teaching_tariff_rate_tau"].transform("max").gt(0)
 
 
+def _waves(panel: pd.DataFrame) -> pd.Series:
+    """Per row, its country's tariff wave (0 untaxed). A panel without the wave column (before v10) had one wave."""
+    if WAVE_COLUMN in panel.columns:
+        return panel[WAVE_COLUMN].astype(int)
+    return _taxed_countries(panel).astype(int)
+
+
+def _wave_starts_present(panel: pd.DataFrame, years: list[int]) -> tuple[pd.Series, dict[int, int], list[int]]:
+    waves = _waves(panel)
+    starts = wave_start_years(years[0])
+    present = sorted({starts[int(wave)] for wave in waves.unique() if int(wave) in starts})
+    return waves, starts, present
+
+
 def country_exposure_overview(panel: pd.DataFrame) -> dict:
     """Every sample country's tariff exposure in the last year: what step 10 shows before any single example.
 
     The tariff falls on goods (v8), so ``mean_exposure`` and ``max_exposure`` are over the country's goods
-    industries in the sample (``goods_industries``; one flat τ, so mean X = mean w × τ; untaxed countries are 0);
-    ``industries`` counts all its industries in the sample, services included (their X is always 0);
+    industries in the sample (``goods_industries``; one flat τ in the last year, so mean X = mean w × τ; untaxed
+    countries are 0); ``industries`` counts all its industries in the sample, services included (their X is always 0);
     ``exposed_industries`` counts the industries with X > 0 (a taxed goods industry with w = 0 has X = 0).
-    The imposing market is not in the sample and is reported separately.
+    ``wave``/``start_year`` say when the country's tariff starts (v10: two waves). The imposing market is not in the
+    sample and is reported separately.
     """
     years = sorted(int(year) for year in panel["year"].unique())
     last = years[-1]
     rows = panel.loc[panel["year"].eq(last)]
     taxed = _taxed_countries(panel).groupby(panel["country"]).max()
+    waves, starts, present = _wave_starts_present(panel, years)
+    country_wave = waves.groupby(panel["country"]).max()
     goods = rows.loc[_is_goods_sector(rows["industry"])].groupby("country")[X_COLUMN]
     goods_values = {str(country): values for country, values in goods}
     empty = pd.Series(dtype=float)
     grouped = rows.groupby("country")[X_COLUMN]
-    countries = [
-        {
-            "country": str(country),
-            "taxed": bool(taxed.get(country, False)),
-            "mean_exposure": float(goods_values.get(str(country), empty).mean()) if str(country) in goods_values else 0.0,
-            "max_exposure": float(goods_values.get(str(country), empty).max()) if str(country) in goods_values else 0.0,
-            "industries": int(values.size),
-            "goods_industries": int(goods_values.get(str(country), empty).size),
-            "exposed_industries": int(values.gt(0).sum()),
-            "market_goods_surplus": (
-                float(rows.loc[rows.country.eq(country), SURPLUS_COLUMN].iloc[0]) if SURPLUS_COLUMN in rows else None
-            ),
-        }
-        for country, values in grouped
-    ]
+    countries = []
+    for country, values in grouped:
+        wave = int(country_wave.get(country, 0))
+        countries.append(
+            {
+                "country": str(country),
+                "taxed": bool(taxed.get(country, False)),
+                "wave": wave,
+                "start_year": starts.get(wave),
+                "mean_exposure": float(goods_values.get(str(country), empty).mean())
+                if str(country) in goods_values
+                else 0.0,
+                "max_exposure": float(goods_values.get(str(country), empty).max())
+                if str(country) in goods_values
+                else 0.0,
+                "industries": int(values.size),
+                "goods_industries": int(goods_values.get(str(country), empty).size),
+                "exposed_industries": int(values.gt(0).sum()),
+                "market_goods_surplus": (
+                    float(rows.loc[rows.country.eq(country), SURPLUS_COLUMN].iloc[0])
+                    if SURPLUS_COLUMN in rows
+                    else None
+                ),
+            }
+        )
     countries.sort(key=lambda item: (-float(cast(float, item["mean_exposure"])), str(item["country"])))
-    rates = panel.groupby("year")["teaching_tariff_rate_tau"].max()
-    policy_years = [year for year in years if rates.get(year, 0) > 0]
     return {
         "version": VERSION,
         "year": last,
         "market": MARKET,
-        "tariff_rate": float(max(TARIFF_PATH)),
-        "policy_year": policy_years[0] if policy_years else None,
+        "tariff_rate": TARIFF_RATE,
+        "policy_year": present[0] if present else None,
+        "policy_years": present,
+        "waves": [
+            {
+                "wave": wave,
+                "start_year": starts[wave],
+                "min_million_usd": FIRST_WAVE_SURPLUS_MIN if wave == 1 else TAXED_SURPLUS_MIN,
+                "countries": sum(1 for item in countries if item["wave"] == wave),
+            }
+            for wave in sorted(starts)
+        ],
         "taxed_rule": {**TAXED_RULE, "year": years[0]},
         "taxed_countries": sum(1 for item in countries if item["taxed"]),
         "untaxed_countries": sum(1 for item in countries if not item["taxed"]),
@@ -575,32 +805,35 @@ def country_exposure_overview(panel: pd.DataFrame) -> dict:
 
 
 def group_trends(panel: pd.DataFrame) -> dict:
-    """Mean change of each simulated Y for taxed vs untaxed countries, relative to the pre-policy years.
+    """Mean change of each simulated Y for the first wave, the second wave and the untaxed countries, each relative
+    to its own mean before the first tariff year (so different baseline levels do not hide the gaps).
 
-    This is the descriptive comparison behind the TWFE estimate: after the fictional tariff
-    starts, does the taxed group's Y move away from the untaxed group's Y? Countries are grouped by
-    whether their simulated tariff is ever positive; each group's line is its yearly mean minus its
-    own pre-policy mean, so different baseline levels do not hide the post-policy gap.
-    ``outcomes`` holds each family's default Y; ``series`` holds every baseline of every family.
+    This is the descriptive comparison behind the estimate: after a wave's tariff starts, does its Y move away from
+    the untaxed group's Y? ``taxed`` pools both waves (the two-line chart before v10). ``outcomes`` holds each
+    family's default Y; ``series`` holds every baseline of every family.
     """
     years = sorted(int(year) for year in panel["year"].unique())
-    rates = panel.groupby("year")["teaching_tariff_rate_tau"].max()
-    policy_years = [year for year in years if rates.get(year, 0) > 0]
-    if not policy_years:
+    waves, _, present = _wave_starts_present(panel, years)
+    if not present:
         raise ValueError("关税面板没有加税年份")
-    policy_year = policy_years[0]
+    policy_year = present[0]
     pre_years = [year for year in years if year < policy_year]
     taxed_country = _taxed_countries(panel)
-    group = np.where(taxed_country, "taxed", "untaxed")
+    by_wave = np.select([waves.eq(1), waves.eq(2)], ["first", "second"], "untaxed")
+    pooled = np.where(taxed_country, "taxed", "untaxed")
 
     def trend_of(column: str) -> dict[str, list[dict[str, float | int]]]:
-        means = panel.groupby([group, "year"])[column].mean()
+        means = {
+            "waves": panel.groupby([by_wave, "year"])[column].mean(),
+            "pooled": panel.groupby([pooled, "year"])[column].mean(),
+        }
         series: dict[str, list[dict[str, float | int]]] = {}
-        for name in ("taxed", "untaxed"):
-            if name not in means.index.get_level_values(0):
+        for name, source in (("first", "waves"), ("second", "waves"), ("untaxed", "waves"), ("taxed", "pooled")):
+            frame = means[source]
+            if name not in frame.index.get_level_values(0):
                 series[name] = []
                 continue
-            values = means.loc[name]
+            values = frame.loc[name]
             base = float(values.loc[pre_years].mean())
             series[name] = [{"year": int(year), "change": float(values.loc[year] - base)} for year in years]
         return series
@@ -613,14 +846,14 @@ def group_trends(panel: pd.DataFrame) -> dict:
         for outcome in OUTCOMES
     }
     countries = panel.loc[taxed_country, "country"].nunique(), panel.loc[~taxed_country, "country"].nunique()
-    # Mean exposure of taxed-country units in the policy years: β × this is the gap the regression implies
-    # between the two group lines, which the page draws back onto the chart after the run.
-    policy_rows = panel.loc[taxed_country & panel["year"].isin(policy_years), X_COLUMN]
+    # Mean exposure of taxed-country units in the tariff years (kept for the two-line chart before v10).
+    policy_rows = panel.loc[taxed_country & panel["year"].ge(policy_year), X_COLUMN]
     mean_exposure_taxed = float(policy_rows.mean()) if len(policy_rows) else 0.0
     return {
         "version": VERSION,
         "years": years,
         "policy_year": policy_year,
+        "policy_years": present,
         "sample": {
             "rows": int(len(panel)),
             "entities": int(panel["entity_id"].nunique()),
@@ -628,6 +861,8 @@ def group_trends(panel: pd.DataFrame) -> dict:
             "industries": int(panel["industry"].nunique()),
             "taxed_countries": int(countries[0]),
             "untaxed_countries": int(countries[1]),
+            "first_wave_countries": int(panel.loc[waves.eq(1), "country"].nunique()),
+            "second_wave_countries": int(panel.loc[waves.eq(2), "country"].nunique()),
         },
         # Industries with at least one retained unit: step 10 offers only these as examples.
         "industries": sorted(str(code) for code in panel["industry"].unique()),

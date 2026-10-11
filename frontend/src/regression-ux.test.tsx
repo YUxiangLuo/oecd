@@ -4,14 +4,15 @@ import { useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api";
 import {
-  degreeIdentity, exampleEffect, parallelTrendsNote, familyBarRows, forwardShareIdentity, gapLabel, groupedFixed, INTERRUPTED_RUN_NOTE, networkDigits, RegressionRequestError,
-  RegressionRunLab, scrollRegressionVerdict, stepMaterialChanged, TEACHING_MODEL_VERSION,
+  degreeIdentity, exampleEffect, parallelTrendsNote, familyBarRows, forwardShareIdentity, GROUP_CHART_CAPTION, groupedFixed, groupLines, INTERRUPTED_RUN_NOTE, lagSplit, waveMarkers, networkDigits, RegressionRequestError,
+  equationSymbol, RegressionResultCard, RegressionRunLab, scrollRegressionVerdict, stepMaterialChanged, TEACHING_MODEL_VERSION,
 } from "./regression";
 import type {
   RegressionOutcome, Step, StepStateApi, TeachingEstimate, TeachingGroupsResponse, TeachingOverviewResponse, TeachingPanelResponse,
 } from "./types";
 import { GENERATED_DATA_NOTE, GENERATED_Y_DISCLOSURE } from "./regression-lessons";
 import { shownPerPoint } from "./regression-verdict";
+import workbenchOptions from "./regression-workbench-options.fixture.json";
 
 afterEach(() => { cleanup(); mock.restore(); });
 
@@ -24,15 +25,22 @@ const state: StepStateApi = {
   data: undefined, save: () => {}, complete: false, syncing: false, syncError: null, syncNow: () => {},
 };
 const meta = { countries: ["CAN", "MEX", "USA"], sectors: ["C29"] };
-const series = (taxed: number) => [2016, 2017, 2018, 2019, 2020].map((year, index) => ({ year, change: index < 2 ? 0 : taxed }));
+const series = (taxed: number, from = 2) => [2016, 2017, 2018, 2019, 2020].map((year, index) => ({ year, change: index < from ? 0 : taxed }));
+// Teaching data v10: two waves (2018, 2019) and the untaxed; `taxed` pools the waves.
+const waves = (taxed: number, untaxed: number) => ({
+  taxed: series(taxed), first: series(taxed), second: series(taxed / 2, 3), untaxed: series(untaxed),
+});
 const groups: TeachingGroupsResponse = {
-  version: "v", years: [2016, 2017, 2018, 2019, 2020], policy_year: 2018, mean_exposure_taxed: 0.03,
-  sample: { rows: 16220, entities: 3244, countries: 76, industries: 44, taxed_countries: 44, untaxed_countries: 32 },
+  version: "v", years: [2016, 2017, 2018, 2019, 2020], policy_year: 2018, policy_years: [2018, 2019], mean_exposure_taxed: 0.03,
+  sample: {
+    rows: 16000, entities: 3200, countries: 75, industries: 44, taxed_countries: 37, untaxed_countries: 38,
+    first_wave_countries: 14, second_wave_countries: 23,
+  },
   outcomes: {
-    trade: { taxed: series(-0.004), untaxed: series(0.003) },
-    production: { taxed: series(-0.003), untaxed: series(0.002) },
-    length: { taxed: series(-0.01), untaxed: series(0.01) },
-    network: { taxed: series(-40), untaxed: series(30) },
+    trade: waves(-0.004, 0.003),
+    production: waves(-0.003, 0.002),
+    length: waves(-0.01, 0.01),
+    network: waves(-40, 30),
   },
   baselines: {
     trade: [
@@ -42,7 +50,7 @@ const groups: TeachingGroupsResponse = {
     production: [], length: [], network: [],
   },
   series: {
-    trade: { FVA_share: { taxed: series(-0.004), untaxed: series(0.003) }, DVAex_share: { taxed: series(0.004), untaxed: series(-0.003) } },
+    trade: { FVA_share: waves(-0.004, 0.003), DVAex_share: waves(0.004, -0.003) },
     production: {}, length: {}, network: {},
   },
 };
@@ -100,6 +108,9 @@ function LockedLab({ initial, outdated = true }: { initial: ReturnType<typeof FV
 const benchmark = { backend: "x", policy_coefs: [], max_abs_coef_diff: 0, max_abs_se_diff: 0, coef_check_passed: true, se_check_mode: "x", notes: [] };
 const mockApis = () => {
   spyOn(api, "teachingGroups").mockResolvedValue(groups);
+  // The default model is shown before the run (the server's design) and the change-the-model section is open.
+  spyOn(api, "regressionDesign").mockImplementation(async () => FVA().design as never);
+  spyOn(api, "regressionOptions").mockResolvedValue(workbenchOptions as never);
   spyOn(api, "teachingSeries").mockResolvedValue({ version: "v", disclaimer: "", rows: [], total: 0, years: [] } as TeachingPanelResponse);
   return spyOn(api, "teachingOverview").mockResolvedValue(overview);
 };
@@ -122,11 +133,12 @@ describe("simple regression workbench", () => {
   test("shows the taxed vs untaxed comparison before the run and names the full sample on the button", async () => {
     const overviewCall = mockApis();
     render(<RegressionRunLab step={step} meta={meta} state={state} />);
-    const figure = await screen.findByRole("img", { name: /加税前后：两组外国增加值项占比的平均变化/ });
-    expect(figure.getAttribute("aria-label")).toContain("2018 年起加税");
-    expect(figure.textContent).toContain("被加税国家组");
-    expect(figure.textContent).toContain("未被加税国家组");
-    await waitFor(() => expect(screen.getByRole("button", { name: "计算贸易流回归（用全部 16,220 条记录）" })).toBeTruthy());
+    const figure = await screen.findByRole("img", { name: /加税前后：各组外国增加值项占比的平均变化/ });
+    expect(figure.getAttribute("aria-label")).toContain("2018 年第一批加税，2019 年第二批加税");
+    expect(figure.textContent).toContain("第一批被加税");
+    expect(figure.textContent).toContain("第二批被加税");
+    expect(figure.textContent).toContain("未被加税");
+    await waitFor(() => expect(screen.getByRole("button", { name: "计算贸易流回归（用全部 16,000 条记录）" })).toBeTruthy());
     expect(api.teachingSeries).toHaveBeenCalledWith(["CAN", "MEX"], "C29");
     // No bars and no reading cards before the run; the generated-data note is said already.
     expect(overviewCall).not.toHaveBeenCalled();
@@ -154,17 +166,20 @@ describe("simple regression workbench", () => {
     const card = document.querySelector(".verdict-card")!;
     expect(card.firstElementChild?.textContent).toBe(GENERATED_Y_DISCLOSURE);
     expect(card.textContent?.split(GENERATED_DATA_NOTE)).toHaveLength(1);
-    expect(screen.getByRole("group", { name: /X 每高 1 个百分点，Y 平均相差（个百分点）/ })).toBeTruthy();
-    // Model and numbers are folded away.
-    // (The 加税前后 chart's per-year table is folded under the chart.)
-    expect([...document.querySelectorAll("details > summary")].map((node) => node.textContent)).toEqual(["两组逐年读数", "模型设定", "详细数字（可选）"]);
+    expect(screen.getByRole("group", { name: /X 每高 1 个百分点，Y 两年累计平均相差（个百分点）/ })).toBeTruthy();
+    // Three sections: the data, the default model (said above its run button), then the open change-the-model one.
+    expect([...document.querySelectorAll(".reg-workbench > section > .reg-section-step")].map((node) => node.textContent))
+      .toEqual(["先看数据", "默认模型", "改模型、对比（选做）"]);
+    // Folded: the chart's per-year table, the model's data facts, and one column's full numbers.
+    await waitFor(() => expect([...document.querySelectorAll("details > summary")].map((node) => node.textContent))
+      .toEqual(["各组逐年读数", "数据、样本和区间的算法", "某一列的完整数字（区间、t 值、p 值）"]));
     fireEvent.click(screen.getByRole("button", { name: DVA_BAR }));
     await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高 0.56 个百分点"));
     expect(run.mock.calls[1][2]).toBe("DVAex_share");
     expect((saves[1].run as { design: { baseline: string } }).design.baseline).toBe("DVAex_share");
     expect(screen.getByRole("button", { pressed: true }).getAttribute("aria-label")).toBe(`${DVA_BAR}，已保存`);
     // The trend chart and the question follow the saved Y.
-    expect(screen.getByRole("img", { name: /加税前后：两组国内增加值出口占比的平均变化/ })).toBeTruthy();
+    expect(screen.getByRole("img", { name: /加税前后：各组国内增加值出口占比的平均变化/ })).toBeTruthy();
     expect(screen.getByRole("heading", { name: /国内增加值出口占比（Y）/ })).toBeTruthy();
     // Clicking the saved bar again does not run.
     fireEvent.click(screen.getByRole("button", { pressed: true }));
@@ -225,21 +240,29 @@ describe("simple regression workbench", () => {
     expect(run.mock.calls[0][2]).toBeNull();
   });
 
-  test("the detailed-numbers notes match the table: no <0.0001 note without such a p, and rounding is named", async () => {
+  test("the default model is said above the run button before any result, and the change-the-model section opens after it", async () => {
     mockApis();
-    const run = savedRun("DVAex_share", "国内增加值出口占比");
-    const { unmount } = render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run } as never }} />);
-    await waitFor(() => expect(document.querySelectorAll(".technical-details")).toHaveLength(2));
-    const details = () => document.querySelectorAll(".technical-details")[1]!.textContent ?? "";
-    expect(details()).not.toContain("很小的 p 值");
-    expect(details()).toContain("两列是同一个数，左列按页面精度四舍五入");
-    // The model settings hold the formula and the design, folded.
-    expect(document.querySelectorAll(".technical-details")[0]!.textContent).toContain("双向固定效应");
-    unmount();
-    const tiny = { ...run, result: { ...run.result, coefs: [{ ...run.result.coefs[0], p: 0.00001 }] } };
-    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: tiny } as never }} />);
-    await waitFor(() => expect(document.querySelectorAll(".technical-details")).toHaveLength(2));
-    expect(details()).toContain("很小的 p 值显示为 <0.0001");
+    // The server's v10 design: X, L1.X and the exchange rate.
+    spyOn(api, "regressionDesign").mockResolvedValue({
+      ...FVA().design,
+      spec: { x_lags: [0, 1], controls: [{ name: "teaching_exchange_rate_change", lag: 0 }], fixed_effects: ["country_industry", "year"] },
+      control_labels: { teaching_exchange_rate_change: "汇率变动" },
+    } as never);
+    render(<RegressionRunLab step={step} meta={meta} state={state} />);
+    const model = await screen.findByRole("group", { name: "本步计算的公式" });
+    const section = model.closest("section")!;
+    expect(section.querySelector(".reg-section-step")?.textContent).toBe("默认模型");
+    expect(section.querySelector(".model-eq-terms")?.textContent).toContain("两者之和是两年累计关联");
+    expect(section.querySelector(".model-eq-terms")?.textContent).toContain("γ·汇率变动");
+    // The model comes before its run button, and nothing of the change-the-model section shows before a result.
+    expect(model.compareDocumentPosition(screen.getByRole("button", { name: /计算贸易流回归/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(document.querySelector(".reg-custom-section")).toBeNull();
+    cleanup();
+    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
+    await screen.findByText("换一种模型试试：每次改一处，和默认模型比较");
+    expect(document.querySelector(".reg-custom-section details")?.hasAttribute("open")).toBe(false);
+    expect(await screen.findByRole("button", { name: "计算这个模型" })).toBeTruthy();
+    expect([...document.querySelectorAll(".reg-custom-compare-table thead th")].map((cell) => cell.textContent)).toEqual(["变量", "默认模型"]);
   });
 
   test("a saved result makes recalculating secondary, and a failed recalculation labels the old result", async () => {
@@ -368,28 +391,35 @@ describe("simple regression workbench", () => {
     expect(stepMaterialChanged(12, { run: FVA() } as never, reported)).toBe(true);
   });
 
-  test("the 加税前后 chart says what its dashed gap is, and the gap reads with a space", async () => {
+  test("the 加税前后 chart draws the two waves and the untaxed, marks both tariff years and has no estimate bracket", async () => {
     mockApis();
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
-    await waitFor(() => expect(document.querySelector("[data-estimate-label]")).not.toBeNull());
-    // -0.5493 × 0.03 × 100 = -1.65 points.
-    expect(document.querySelector("[data-estimate-label]")?.textContent).toBe("回归估计的差距 -1.65 个百分点");
-    expect(document.querySelector(".reg-gap-caption")?.textContent)
-      .toBe("虚线标出的差距 = 估计值 × 被加税组平均 X（3.00 个百分点；被加税国家的服务业不加税，X = 0，也计入这个平均），即按回归估计，加税后被加税组与未被加税组平均相差多少；"
-        + "它与两条线的实际距离接近但不必相同（回归按每个国家×行业自己的 X 计算，并扣掉各自的平均水平）。");
-    // Under the chart, in its figure; association words only.
-    expect(document.querySelector(".reg-group-figure .reg-gap-caption")).not.toBeNull();
-    expect(document.querySelector(".reg-gap-caption")?.textContent).not.toMatch(/导致|影响|应拉开/);
+    await screen.findByRole("img", { name: /加税前后/ });
+    expect([...document.querySelectorAll("[data-line]")].map((node) => node.getAttribute("data-line"))).toEqual(["first", "second", "untaxed"]);
+    expect([...document.querySelectorAll("[data-marker] text")].map((node) => node.textContent)).toEqual(["2018 年第一批加税", "2019 年第二批加税"]);
+    // The raw gaps mix the tariff with what else changed: no bracket claims the regression's gap on the chart.
+    expect(document.querySelector("[data-estimate-label]")).toBeNull();
+    expect(document.querySelector(".reg-group-figure .reg-gap-caption")?.textContent).toStartWith(GROUP_CHART_CAPTION);
+    expect(GROUP_CHART_CAPTION).not.toMatch(/高估|低估|汇率.*(高|低)/);
   });
 
-  test("no gap, no caption: before the run the chart has neither", async () => {
+  test("before the run the chart and its caption are there too, with the premise for every group", async () => {
     mockApis();
     render(<RegressionRunLab step={step} meta={meta} state={state} />);
     await screen.findByRole("img", { name: /加税前后/ });
-    expect(document.querySelector("[data-estimate-label]")).toBeNull();
-    expect(document.querySelector(".reg-gap-caption")).toBeNull();
-    // The premise is said with or without a run.
-    expect(document.querySelector(".reg-parallel-note")?.textContent).toContain("如果没有关税，两组的走势应大致平行");
+    // One note under the chart: what it mixes in, then the premise.
+    expect(document.querySelector(".reg-gap-caption")?.textContent).toStartWith(GROUP_CHART_CAPTION);
+    expect(document.querySelector(".reg-gap-caption")?.textContent).toContain("如果没有关税，扣掉汇率等同期变化后，各组的走势应大致平行");
+    expect(document.querySelector(".reg-parallel-note")).toBeNull();
+  });
+
+  test("a server before v10 still gets its two lines and one marker", () => {
+    const lines = groupLines({ taxed: series(-1), untaxed: series(1) });
+    expect(lines.map((line) => line.label)).toEqual(["被加税国家组", "未被加税国家组"]);
+    expect(waveMarkers([2018])).toEqual([{ year: 2018, label: "2018 年起加税" }]);
+    expect(waveMarkers([2018, 2019]).map((marker) => marker.label)).toEqual(["2018 年第一批加税", "2019 年第二批加税"]);
+    // The second wave is drawn dashed, so the two waves never differ by colour alone.
+    expect(groupLines(waves(-1, 1)).find((line) => line.key === "second")?.dashed).toBe(true);
   });
 
   test("the saved bar's tooltip says it is saved; the others say what a click does", async () => {
@@ -422,15 +452,6 @@ describe("simple regression workbench", () => {
     expect(note?.previousElementSibling?.tagName.toLowerCase()).toBe("svg");
   });
 
-  test("the detailed numbers table wraps its headers and narrows its cells so step 14's numbers fit", async () => {
-    mockApis();
-    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
-    await waitFor(() => expect(document.querySelector("table.reg-coef-table")).not.toBeNull());
-    const css = await Bun.file(new URL("./workbench.css", import.meta.url)).text();
-    expect(css).toMatch(/\.data-table\.reg-coef-table th \{[^}]*white-space: normal;[^}]*padding: 8px 8px;/);
-    expect(css).toMatch(/\.data-table\.reg-coef-table td \{[^}]*padding-left: 8px; padding-right: 8px;/);
-  });
-
   test("falls back to the default Y when the saved baseline is not offered by the release", async () => {
     mockApis();
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: savedRun("FDC_share", "外国重复计算项占比") } as never }} />);
@@ -450,7 +471,7 @@ describe("simple regression workbench", () => {
       estimate("3b_FGY_GVC_C_share", "后向复杂 GVC 生产份额", 0.00752, -0.0112, 0.0262),
     ];
     const { rows, unitTitle } = familyBarRows("production", items, "3b_VA_GVC_C_share");
-    expect(unitTitle).toBe("X 每高 1 个百分点，Y 平均相差（个百分点）");
+    expect(unitTitle).toBe("X 每高 1 个百分点，Y 两年累计平均相差（个百分点）");
     const weak = rows.find((row) => row.key === "3b_FGY_GVC_C_share")!;
     expect([weak.uncertain, weak.valueLabel, weak.intervalLabel]).toEqual([true, "+0.008", "[-0.011, +0.026] 个百分点"]);
     expect(rows.filter((row) => row.uncertain)).toHaveLength(1);
@@ -471,7 +492,7 @@ describe("simple regression workbench", () => {
       estimate("PLv_GVC", "前向 GVC 段长度", -1.8143, -1.9, -1.7, { kind: "length", default: true, depvar_within_std: 0.4 }),
       estimate("GVCPs", "GVC 位置指数", -0.0768, -0.09, -0.06, { kind: "position", depvar_within_std: 0.05 }),
     ], "PLv_GVC");
-    expect(length.unitTitle).toBe("X 每高 1 个百分点，Y 平均相差（个标准差）");
+    expect(length.unitTitle).toBe("X 每高 1 个百分点，Y 两年累计平均相差（个标准差）");
     expect(length.rows.map((row) => [row.sublabel, row.valueLabel])).toEqual([
       // Each bar in its own headline's digits.
       ["长度单位", "-0.0181（-0.045 个标准差）"],
@@ -539,7 +560,7 @@ describe("simple regression workbench", () => {
 
   test("the 加税前后 chart states the parallel-trends premise and its two pre-tariff years", () => {
     expect(parallelTrendsNote([2016, 2017, 2018, 2019, 2020], 2018)).toBe(
-      "这张图也用来看回归的前提：如果没有关税，两组的走势应大致平行。加税前只有 2016、2017 两年可看，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，这一前提由设计保证。",
+      "这张图也用来看回归的前提：如果没有关税，扣掉汇率等同期变化后，两组的走势应大致平行。加税前只有 2016、2017 两年可看，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，控制汇率变动后这一前提由设计保证。",
     );
   });
 
@@ -562,14 +583,43 @@ describe("simple regression workbench", () => {
     expect(groupedFixed(-0.0004, 2)).toBe("0.00");
   });
 
-  test("the 加税前后 bracket uses the headline's digits for every network Y", () => {
-    // Weighted degree read "-147" and weighted out-degree "-73.8": decimals by size.
-    expect(gapLabel("network", -147.1234)).toBe("回归估计的差距 -147.12 个中心性原始单位");
-    expect(gapLabel("network", -73.8)).toBe("回归估计的差距 -73.80 个中心性原始单位");
-    expect(gapLabel("network", -1147.1234)).toBe("回归估计的差距 -1,147.12 个中心性原始单位");
-    expect(gapLabel("network", -0.00491)).toBe("回归估计的差距 -0.0049 个中心性原始单位");
-    expect(gapLabel("share", -1.6512)).toBe("回归估计的差距 -1.65 个百分点");
-    expect(gapLabel("length", 0.0164)).toBe("回归估计的差距 +0.0164 个长度单位");
+  test("the course model's headline is the cumulative relation, split into the tariff's year and the next", () => {
+    const run = FVA();
+    const twoYear = {
+      ...run,
+      result: {
+        ...run.result,
+        coefs: [
+          { ...run.result.coefs[0], coef: -0.33, ci_low: -0.35, ci_high: -0.31 },
+          { ...run.result.coefs[0], name: "teaching_tariff_exposure_lag1", coef: -0.22, ci_low: -0.24, ci_high: -0.2 },
+          { ...run.result.coefs[0], name: "teaching_exchange_rate_change", coef: -0.005, ci_low: -0.006, ci_high: -0.004 },
+        ],
+        cumulative: { ...run.result.coefs[0], name: "cumulative", coef: -0.55, ci_low: -0.57, ci_high: -0.53 },
+      },
+    };
+    expect(lagSplit("trade", twoYear as never)).toBe("其中当年 -0.33 个百分点，次年再 -0.22 个百分点。");
+    expect(lagSplit("trade", run as never)).toBeNull();
+    render(<RegressionResultCard outcome="trade" response={{ ...twoYear, benchmark } as never} />);
+    expect(screen.getByRole("heading", { level: 3 }).textContent).toContain("两年累计平均低 0.55 个百分点");
+    expect(document.querySelector(".reg-lag-split")?.textContent).toContain("其中当年 -0.33 个百分点");
+    cleanup();
+    // The parts take the headline's decimals: a sum read to 3 decimals splits to 3 decimals, not 2.
+    const small = {
+      ...twoYear,
+      result: {
+        ...twoYear.result,
+        coefs: [
+          { ...twoYear.result.coefs[0], coef: 0.0412 },
+          { ...twoYear.result.coefs[1], coef: 0.0331 },
+          twoYear.result.coefs[2],
+        ],
+        cumulative: { ...twoYear.result.cumulative, coef: 0.0743, ci_low: 0.061, ci_high: 0.0876 },
+      },
+    };
+    expect(lagSplit("trade", small as never)).toBe("其中当年 +0.041 个百分点，次年再 +0.033 个百分点。");
+    // "两年累计" is said for X + L1.X only: a sum of other terms is not over the tariff's year and the next.
+    render(<RegressionResultCard outcome="trade" response={{ ...twoYear, design: { ...twoYear.design, spec: { x_lags: [0, 2], controls: [], fixed_effects: ["year"] } }, benchmark } as never} />);
+    expect(screen.getByRole("heading", { level: 3 }).textContent).not.toContain("两年累计");
   });
 
   test("step 14 says weighted degree is in + out once all three are in the family", () => {
@@ -656,4 +706,14 @@ describe("saving another Y from the bars", () => {
     render(<RegressionRunLab step={step} meta={meta} state={state} />);
     expect(screen.queryByText(INTERRUPTED_RUN_NOTE)).toBeNull();
   });
+});
+
+test("the model's equation reads its lagged X and its controls as symbols, not column names", () => {
+  expect(equationSymbol({ text: "teaching_y_trade_ijt", term: "dependent" })).toBe("Y_ijt");
+  expect(equationSymbol({ text: "β₁·teaching_tariff_exposure_ijt", term: "policy" })).toBe("β₁·X_ijt");
+  expect(equationSymbol({ text: "β₂·teaching_tariff_exposure_lag1_ijt", term: "policy" })).toBe("β₂·L1.X_ijt");
+  expect(equationSymbol({ text: "γ₁·teaching_exchange_rate_change_it", term: "control" })).toBe("γ₁·汇率_it");
+  expect(equationSymbol({ text: "γ₂·log_gdp_proxy__lag1_it", term: "control" })).toBe("γ₂·L1.GDP_it");
+  // The single-X model's wording is unchanged.
+  expect(equationSymbol({ text: "β·teaching_tariff_exposure_ijt", term: "policy" })).toBe("β·X_ijt");
 });

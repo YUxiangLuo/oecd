@@ -7,7 +7,15 @@ import pytest
 
 from gvcsim.regression.design import RegressionDesign
 from gvcsim.regression.panel import run_design_with_benchmark
-from gvcsim.regression.teaching import BASELINES, X_COLUMN, build_teaching_panel, model_snapshot, variable_catalog
+from gvcsim.regression.teaching import (
+    BASELINES,
+    X_COLUMN,
+    X_LAG_COLUMNS,
+    build_teaching_panel,
+    model_snapshot,
+    selectable_baselines,
+    variable_catalog,
+)
 from gvcsim.regression_routes import _design_info, _estimate_overview
 from gvcsim.report_common import _natural_effect, standardized_digits, _signed
 from gvcsim.report_regression_chart import family_chart, summary_chart
@@ -71,8 +79,9 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
     sections = _step_sections(markdown)
     for run in runs:
         step, outcome, design, result = run["step"], run["outcome"], run["design"], run["result"]
-        coefficient = result["coefs"][0]
-        assert coefficient["name"] == X_COLUMN
+        # The headline is the X terms' cumulative relation (the course model has X and L1.X).
+        assert [item["name"] for item in result["coefs"]][:2] == [X_COLUMN, X_LAG_COLUMNS[1]]
+        coefficient = result["cumulative"]
         # The same data and computation: the course's bar for this Y is the saved run's estimate.
         row = next(item for item in overview["outcomes"][outcome] if item["key"] == design["baseline"])
         for key in ("coef", "ci_low", "ci_high"):
@@ -86,11 +95,11 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
         (chart,) = [json.loads(block) for block in CHART.findall(section)]
         assert chart["type"] == "diverging-bar"
         # One bar per Y of the family, in the family's order; exactly the saved one is marked.
-        assert len(chart["items"]) == len(BASELINES[outcome])
+        assert len(chart["items"]) == len(selectable_baselines(outcome))
         saved = [item for item in chart["items"] if item.get("saved")]
         assert len(saved) == 1
         (bar,) = saved
-        assert chart["items"].index(bar) == [b.key for b in BASELINES[outcome]].index(design["baseline"])
+        assert chart["items"].index(bar) == [b.key for b in selectable_baselines(outcome)].index(design["baseline"])
         # Its numbers are the table's numbers: the native value printed in the table's precision.
         _label, effect, _interval = _natural_effect(outcome, design, result, coefficient)
         table = section.split("| 项目 | 结果 |", 1)[1]
@@ -147,7 +156,8 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
             shown = "0.00" if abs(total) < 0.005 else _signed(total, 2)
             assert (
                 f"- 纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（{shown}）；"
-                "前向 GVC 生产总份额 = 简单 + 复杂（按未取整的原值精确相加，图中取整后的数字可能相差末位 1）。" in section
+                "前向 GVC 生产总份额 = 简单 + 复杂（按未取整的原值精确相加，图中取整后的数字可能相差末位 1）。"
+                in section
             )
         else:
             assert "四项份额合计 100%" not in section
@@ -181,7 +191,7 @@ def test_summary_chart_has_one_standardized_bar_per_saved_run(panel, overview):
     # The position index (step 13's saved Y here) is a ratio: its amount is a bare number.
     units = {"trade": " 个百分点", "production": " 个百分点", "length": "", "network": " 个中心性原始单位"}
     for item, run in zip(chart["items"], runs):
-        coefficient, std = run["result"]["coefs"][0], run["result"]["depvar_within_std"]
+        coefficient, std = run["result"]["cumulative"], run["result"]["depvar_within_std"]
         point = coefficient["coef"] * 0.01 / std
         bounds = (coefficient["ci_low"] * 0.01 / std, coefficient["ci_high"] * 0.01 / std)
         assert item["value"] == pytest.approx(point, rel=1e-3)
@@ -243,7 +253,12 @@ def test_uncertain_and_suppressed_bars_and_a_missing_overview():
     assert not any("其余 Y" in line for line in alone)
     length = _design_info(RegressionDesign("length", teaching=True))
     length_coefficient = {"name": X_COLUMN, "coef": -1.8143, "ci_low": -1.9155, "ci_high": -1.7132}
-    length_result = {"status": "ok", "support": {"status": "ok"}, "depvar_within_std": 0.5819, "coefs": [length_coefficient]}
+    length_result = {
+        "status": "ok",
+        "support": {"status": "ok"},
+        "depvar_within_std": 0.5819,
+        "coefs": [length_coefficient],
+    }
     (bar,) = json.loads(family_chart(13, "length", length, length_result, length_coefficient, None)[1])["items"]
     assert bar["text"] == "-0.0181（-0.031 个标准差）"
     assert bar["sub"] == "长度单位"

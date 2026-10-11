@@ -546,3 +546,10 @@ test("the rubric names the control group generically: with 38 untaxed countries 
   expect(boundary).toContain("对照组的大小与可比性");
   expect(boundary).not.toContain("对照组少");
 });
+
+test("the rubric words the generated data as the student pages do, not as a simulation", () => {
+  const boundary = GRADE_RUBRIC.find(([title]) => title.startsWith("识别与边界"))?.[1] ?? "";
+  expect(boundary).toContain("由课程按设定生成");
+  expect(boundary).toContain("汇率变动");
+  expect(boundary).not.toContain("模拟");
+});

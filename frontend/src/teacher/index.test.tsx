@@ -1,8 +1,8 @@
-import { afterEach, expect, spyOn, test } from "bun:test";
+import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api } from "../api";
 import type { AcademicSemester, StudentRow } from "../types";
-import { TeacherDashboard, teacherDocumentTitle } from "./index";
+import { INITIAL_PASSWORD_HINT, TeacherDashboard, teacherDocumentTitle } from "./index";
 import { FIRST_STEP_HINT, STARTED_HINT, VALID_ACTIVITY_HINT } from "./students";
 import { TeacherReviewGuardProvider } from "./review-guard";
 
@@ -94,6 +94,32 @@ test("调整班级 confirms the move in a toast; the first-step hint is gone onc
     expect(api.classroom.setEnrollment).toHaveBeenCalledWith(student.id, 3, 7);
   } finally {
     window.removeEventListener("gvcsim-toast", listener);
+    spies.forEach((spy) => spy.mockRestore());
+  }
+});
+
+test("a teacher still on the deployment's initial password is asked to change it, on every tab", async () => {
+  const spies = [
+    spyOn(api.classroom, "reports").mockResolvedValue({ reports: [] }),
+    spyOn(api.classroom, "students").mockResolvedValue({ students: [row] }),
+    spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] }),
+  ];
+  const onChangePassword = mock(() => {});
+  try {
+    const user = { username: "teacher", name: "老师", role: "teacher", initial_password: true };
+    const view = render(<TeacherReviewGuardProvider><TeacherDashboard user={user} onChangePassword={onChangePassword} /></TeacherReviewGuardProvider>);
+    const note = await screen.findByText(INITIAL_PASSWORD_HINT);
+    fireEvent.click(screen.getByRole("button", { name: /^学期与班级/ }));
+    expect(screen.getByText(INITIAL_PASSWORD_HINT)).toBe(note);
+    // Its own name: the top bar's 修改密码 stays the only button of that name.
+    fireEvent.click(screen.getByRole("button", { name: "立即修改密码" }));
+    expect(onChangePassword).toHaveBeenCalledTimes(1);
+    // Once changed (the next login says so), or for the demo teacher (no handler), nothing is shown.
+    view.rerender(<TeacherReviewGuardProvider><TeacherDashboard user={{ ...user, initial_password: false }} onChangePassword={onChangePassword} /></TeacherReviewGuardProvider>);
+    expect(screen.queryByText(INITIAL_PASSWORD_HINT)).toBeNull();
+    view.rerender(<TeacherReviewGuardProvider><TeacherDashboard user={user} /></TeacherReviewGuardProvider>);
+    expect(screen.queryByText(INITIAL_PASSWORD_HINT)).toBeNull();
+  } finally {
     spies.forEach((spy) => spy.mockRestore());
   }
 });

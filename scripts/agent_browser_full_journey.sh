@@ -54,7 +54,7 @@ until "${student[@]}" eval '(() => { const b = document.querySelector("button[ar
 done
 "${student[@]}" wait --fn '!document.querySelector(".intro-overlay")'
 "${student[@]}" wait --text '生成实验报告'
-"${student[@]}" find role button click --name '根据实验记录生成报告' --exact
+"${student[@]}" find role button click --name '只生成草稿（不提交）' --exact
 "${student[@]}" wait --text '草稿 · 尚未提交'
 "${student[@]}" find role button click --name '提交报告给老师' --exact
 "${student[@]}" wait --text '等待教师评阅'
@@ -88,7 +88,7 @@ fi
 "${teacher[@]}" find role button click --name '报告评阅'
 "${teacher[@]}" wait --text "$GVCSIM_E2E_USERNAME"
 "${teacher[@]}" click '.data-table tbody tr button.primary'
-"${teacher[@]}" wait --text '四项评分锚点'
+"${teacher[@]}" wait --text '评分参考（四项各 25 分）'
 "${teacher[@]}" fill 'input[type="number"]' '92'
 "${teacher[@]}" fill '.grade-field textarea' '自动化完整旅程：报告生成、提交与评阅均通过。'
 "${teacher[@]}" find role button click --name '提交评阅' --exact

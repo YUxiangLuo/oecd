@@ -6,8 +6,9 @@
  *   MANUAL_GATE_STUDENT / _PASSWORD  a student with an incomplete course (material-gate image),
  *                                    whose Step 12 regression has not been run (pre-run image)
  *   MANUAL_TEACHER / _PASSWORD  grades the report for the "graded" image
- *   MANUAL_ONLY_REG=1           re-shoot only figures 10–14 (steps 10–14); the report images are kept
- * The script generates and submits MANUAL_STUDENT's report and grades it, so use a test account.
+ *   MANUAL_ONLY_REG=1           re-shoot only figures 13–16 (steps 10–12); the report images are kept
+ * The script saves a step-11 workbench model (放入报告), generates and submits MANUAL_STUDENT's report and grades
+ * it, so use a test account.
  */
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -26,7 +27,7 @@ const need = (name: string) => {
  *  no teacher, no report generated. For releases where only the visualization steps changed. */
 const onlyViz = process.env.MANUAL_ONLY_VIZ === "1";
 const student = { username: need("MANUAL_STUDENT"), password: need("MANUAL_STUDENT_PASSWORD") };
-/** MANUAL_ONLY_REG=1 re-shoots only figures 13–15 (steps 10–12) for MANUAL_STUDENT and MANUAL_GATE_STUDENT:
+/** MANUAL_ONLY_REG=1 re-shoots only figures 13–16 (steps 10–12) for MANUAL_STUDENT and MANUAL_GATE_STUDENT:
  *  no login page, no steps 1–9, no report generated. */
 const onlyReg = process.env.MANUAL_ONLY_REG === "1";
 const gate = onlyViz ? student : { username: need("MANUAL_GATE_STUDENT"), password: need("MANUAL_GATE_STUDENT_PASSWORD") };
@@ -59,6 +60,10 @@ const helpers = (token: string | null) => `
   window.__select = (el, value) => {
     Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(el, value);
     el.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  window.__type = (el, value) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, value);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
   };
 `;
 
@@ -186,12 +191,31 @@ try {
     window.__select(s[0], "CAN"); window.__select(s[1], "CRI"); window.__select(s[2], "C29"); return true; })()`);
   await page.waitFor(`window.__find("CRI 哥斯达黎加 · C29") && document.querySelector(".teaching-example-summary")`);
   await Bun.sleep(2500);
-  await scrollTo(page, `document.querySelector(".teaching-scenario")`, 8);
-  await save("10-shocks.png", await page.screenshot(), student.username, "Step 10 top: US-centred scenario, tiles and the 75-country exposure chart (example Canada vs Costa Rica, motor vehicles).");
+  await scrollTo(page, `[...document.querySelectorAll(".shock-workbench h4")].find((h) => h.textContent.trim() === "逐年表")`, 8);
+  await save("10-shocks.png", await page.screenshot(), student.username, "Step 10 year table (Canada vs Costa Rica, motor vehicles: w, τ, X, L1.X and the exchange-rate change) above the two-wave ranking of the 37 taxed countries.");
 
   await open(page, 11, `document.querySelector(".diverging-bars svg") && document.querySelector(".reg-example-effect")`);
   await scrollTo(page, `document.querySelector(".reg-family-bars") ?? document.querySelector(".diverging-bars")`, 12);
-  await save("11-regression-result.png", await page.screenshot(), student.username, "Step 11 after the run: group trends, one bar per Y and the headline.");
+  await save("11-regression-result.png", await page.screenshot(), student.username, "Step 11 after the run: one bar per Y and the two-year headline with its current-year and next-year parts.");
+
+  // 改模型、对比: drop the exchange-rate control, compute, and show the unsaved column beside the default model.
+  await page.eval(`(() => {
+    const section = document.querySelector(".reg-custom-section");
+    [...section.querySelectorAll("input[type=checkbox]")].find((box) => box.closest("label")?.textContent.includes("汇率变动")).click();
+    return true; })()`);
+  await Bun.sleep(300);
+  await page.eval(`(() => { [...document.querySelectorAll(".reg-custom-section button")].find((b) => b.textContent.trim() === "计算这个模型").click(); return true; })()`);
+  await page.waitFor(`[...document.querySelectorAll(".reg-custom-compare-table thead th")].some((th) => th.textContent.includes("本次计算（未保存）"))`, 60_000);
+  await settled(page);
+  await scrollTo(page, `[...document.querySelectorAll(".reg-custom-section h4")].find((h) => h.textContent.startsWith("回归结果表"))`, 120);
+  await save("11-regression-workbench.png", await page.screenshot(), student.username, "Step 11 改模型、对比: the model without the exchange-rate control (unsaved, highlighted) beside the default model.");
+  // Save it and put it in the report, so the generated report carries the appendix 学生设计的模型.
+  await page.eval(`(() => { window.__type(document.querySelector(".reg-custom-save input"), "去掉汇率变动");
+    [...document.querySelectorAll(".reg-custom-save button")].find((b) => b.textContent.trim() === "保存").click(); return true; })()`);
+  await page.waitFor(`document.querySelector('input[aria-label="把 去掉汇率变动 放入报告"]')`, 20_000);
+  await page.eval(`(() => { document.querySelector('input[aria-label="把 去掉汇率变动 放入报告"]').click(); return true; })()`);
+  await page.waitFor(`document.querySelector('input[aria-label="把 去掉汇率变动 放入报告"]').checked`, 20_000);
+  await settled(page);
   if (onlyReg) {
     await page.close();
     throw new DoneEarly();

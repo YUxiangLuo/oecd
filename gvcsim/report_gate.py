@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import unicodedata
 from typing import Any, cast
 
 from gvcsim import evidence
@@ -348,7 +349,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
     ):
         minimum = _REFLECTION_MIN_LENGTHS[key]
         value = reflection.get(key)
-        if not isinstance(value, str) or len(" ".join(value.split())) < minimum:
+        if not isinstance(value, str) or reflection_length(value) < minimum:
             reflection_missing.append(f"请用自己的话填写{label}（至少 {minimum} 字）")
         if isinstance(value, str) and len(value) > REFLECTION_TEXT_LIMIT:
             reflection_missing.append(f"{label}不能超过 {REFLECTION_TEXT_LIMIT} 字")
@@ -357,12 +358,33 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
     return _merge_gate_blocks(blocked)
 
 
+# Code points that show nothing by themselves: control, format (zero-width, bidi), combining marks.
+_INVISIBLE_CATEGORIES = frozenset({"Cc", "Cf", "Mn", "Me"})
+
+
+def reflection_length(value: str) -> int:
+    """The written length of a step-15 answer (frontend ``reflectionLength``): visible code points, each run of
+    whitespace between words counting as one; a field of zero-width spaces is empty."""
+    words = (
+        "".join(char for char in word if unicodedata.category(char) not in _INVISIBLE_CATEGORIES)
+        for word in value.split()
+    )
+    return len(" ".join(word for word in words if word))
+
+
 def check_gate(session: dict[str, Any], **_unused: Any) -> list[dict[str, Any]]:
-    """Return the combined quiz and report-material gate used for generation."""
+    """Return the combined quiz and report-material gate used for generation. ``quiz_only``: the step's material is
+    complete and only its quiz is not (never answered, answered wrong, or saved for an older version), so the page's
+    link goes to the quiz rather than the top of the step."""
     blocked: list[dict[str, Any]] = []
+    quiz_missing: dict[int, list[str]] = {}
     for step in GATE_STEPS:
         result = evidence.evaluate_step(step, session)
         if not result.complete:
             blocked.append({"step": step, "title": _STEP_TITLES.get(step, ""), "missing": result.missing})
+            quiz_missing[step] = list(result.missing)
     blocked.extend(check_material_gate(session))
-    return _merge_gate_blocks(blocked)
+    return [
+        {**item, "quiz_only": item["missing"] == quiz_missing.get(int(item["step"]))}
+        for item in _merge_gate_blocks(blocked)
+    ]

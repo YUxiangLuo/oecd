@@ -17,8 +17,23 @@ from gvcsim.steps import STEPS
 def _run(outcome: str, *, version: str = VERSION, coefficient: str = X_COLUMN) -> dict:
     snapshot = json.loads(json.dumps(model_snapshot(outcome)))
     snapshot["version"] = version
+    design = RegressionDesign(outcome, teaching=True)
+    critical = stats.t.ppf(0.975, 3)
+
+    def estimate(name: str, coef: float, se: float = 0.2) -> dict:
+        return {
+            "name": name,
+            "coef": coef,
+            "se": se,
+            "t": coef / se,
+            "p": float(2 * stats.t.sf(abs(coef / se), 3)),
+            "ci_low": float(coef - critical * se),
+            "ci_high": float(coef + critical * se),
+        }
+
+    names = [coefficient, *design.regressors[1:], *design.controls]
     return {
-        "design": _design_info(RegressionDesign(outcome, teaching=True)),
+        "design": _design_info(design),
         "result": {
             "status": "ok",
             "n_obs": 20,
@@ -27,17 +42,8 @@ def _run(outcome: str, *, version: str = VERSION, coefficient: str = X_COLUMN) -
             "n_clusters": 4,
             "support": {"status": "ok", "suppress_inference": False, "reasons": []},
             "diagnostics": {"study_contract": "economics-v2"},
-            "coefs": [
-                {
-                    "name": coefficient,
-                    "coef": 1.0,
-                    "se": 0.2,
-                    "t": 5.0,
-                    "p": float(2 * stats.t.sf(5, 3)),
-                    "ci_low": float(1 - stats.t.ppf(0.975, 3) * 0.2),
-                    "ci_high": float(1 + stats.t.ppf(0.975, 3) * 0.2),
-                }
-            ],
+            "coefs": [estimate(name, coef) for name, coef in zip(names, (0.6, 0.4, 0.1), strict=True)],
+            "cumulative": estimate("cumulative", 1.0, 0.2),
         },
         "model_snapshot": snapshot,
         "variable_catalog": variable_catalog(outcome),
@@ -117,11 +123,12 @@ def test_step10_gate_requires_complete_current_panel_state():
 
 def test_regression_stage_task_goals_match_the_beginner_workflow():
     by_number = {step["n"]: step for step in STEPS}
-    # Step 10 leads with the US tariff and every country's X; one example is the optional last task.
-    assert "美国加征关税" in by_number[10]["tasks"][0] and "被加税与未被加税" in by_number[10]["tasks"][0]
-    assert "一个国家和一个行业" in by_number[10]["tasks"][2]
-    assert "对照国家" in by_number[10]["tasks"][2]
-    assert "年份" not in by_number[10]["tasks"][2]
+    # Step 10 leads with the US tariff (two waves), then the example that shows X, L1.X and the exchange rate year by
+    # year, then every country's X.
+    assert "美国加征关税" in by_number[10]["tasks"][0] and "两批" in by_number[10]["tasks"][0]
+    assert "一个国家和一个行业" in by_number[10]["tasks"][1] and "对照国家" in by_number[10]["tasks"][1]
+    assert "上一年的 X" in by_number[10]["tasks"][1] and "汇率变动" in by_number[10]["tasks"][1]
+    assert "从高到低" in by_number[10]["tasks"][2]
     assert "前向 GVC 段长度" in by_number[13]["goal"]
     assert "网络指标" in by_number[14]["goal"]
     for step in (13, 14):

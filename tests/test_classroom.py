@@ -286,12 +286,16 @@ def test_student_list_uses_verified_completion_and_report_state(teaching_db):
     assert 15 not in row["verified_completed_steps"]
     assert "verified_completed_count" in row and "last_valid_activity" in row
     db.submit_report("student")
-    assert 15 in db.list_students("teacher")[0]["verified_completed_steps"]
+    row = db.list_students("teacher")[0]
+    assert 15 in row["verified_completed_steps"] and row["report_outdated"] is False
 
+    # Edited after handing in: still handed in (the teacher holds the submitted report), said as out of date.
     changed = empty_session()
     changed["steps"]["1"] = make_record({"value": "changed after report generation"})
     db.save_session("student", changed)
-    assert 15 not in db.list_students("teacher")[0]["verified_completed_steps"]
+    row = db.list_students("teacher")[0]
+    assert 15 in row["verified_completed_steps"]
+    assert row["report_outdated"] is True
 
 
 def test_grading_does_not_count_as_student_activity(teaching_db):
@@ -384,3 +388,23 @@ def test_teacher_progress_counts_step_15_only_for_a_handed_in_report():
     assert 15 in draft["completion_missing"]
     submitted = management._learning_status(None, {**report, "state": "pending"})
     assert 15 not in submitted["completion_missing"]
+
+
+def test_step_15_counts_once_handed_in_and_currentness_is_said_separately():
+    from gvcsim.classroom import records
+    from gvcsim.classroom import routes as classroom_routes
+
+    session = empty_session()
+    fingerprint = {"report_fingerprint": records.report_fingerprint(session)}
+    draft = {"state": "draft", "provenance": fingerprint}
+    state = classroom_routes._learning_state(session, report=draft)
+    assert 15 not in state["completion"]["completed"] and state["report_current"] is True
+    for handed_in in ("pending", "graded"):
+        state = classroom_routes._learning_state(session, report={**draft, "state": handed_in})
+        assert 15 in state["completion"]["completed"] and state["report_current"] is True
+    # The record changed after handing in: step 15 stays done, the report reads as out of date.
+    changed = empty_session()
+    changed["steps"]["1"] = make_record({"value": "edited"})
+    state = classroom_routes._learning_state(changed, report={**draft, "state": "graded"})
+    assert 15 in state["completion"]["completed"] and state["report_current"] is False
+    assert classroom_routes._learning_state(session, report=None)["report_current"] is False

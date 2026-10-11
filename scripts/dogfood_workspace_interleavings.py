@@ -33,7 +33,8 @@ def main():
                 "SELECT session FROM experiment_sessions s JOIN accounts a ON a.id=s.account_id WHERE username=%s",
                 (username,),
             ).fetchone()
-        return row[0]["steps"]["15"]["data"]["research_question"] if row else None
+        # An account may have saved other steps (step 1 records a cell on its first visit) before step 15.
+        return row[0].get("steps", {}).get("15", {}).get("data", {}).get("research_question") if row else None
 
     def wait_stored(username, value):
         deadline = time.monotonic() + 15
@@ -113,9 +114,23 @@ def main():
                 == 200
             )
             browser.run("tab", "t2")
-            browser.button("退出")
+            # Coming back to t2 re-checks its session: the reset password may already have signed it out, or it
+            # still shows the workspace until its next request. Log out if it is still in (one page evaluation, so
+            # the button cannot vanish between finding and clicking it); either way it then signs in as the other
+            # account.
+            browser.run(
+                "eval",
+                'Array.from(document.querySelectorAll("button")).find(e=>e.textContent.trim()==="退出登录")?.click()',
+            )
             browser.run("wait", "#login-user")
-            browser.login(base, second, password)
+            # Another account signing in where the first one left does not inherit its step: it opens step 1, so
+            # go to step 15 explicitly.
+            browser.run("fill", "#login-user", second)
+            browser.run("fill", "#login-pass", password)
+            browser.run("click", 'button[type="submit"]')
+            browser.dismiss_intro()
+            browser.run("open", base + "/?step=15")
+            browser.run("wait", "textarea")
             request(proxy, "POST", "/__fault/release", {})
             deadline = time.monotonic() + 10
             while request(proxy, "GET", "/__fault/status")[1]["phase"] != "done" and time.monotonic() < deadline:

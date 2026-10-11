@@ -208,7 +208,8 @@ export function Pager({ page, pages, total, onChange }: {
     onChange(next);
   };
   const commit = () => {
-    const parsed = Number.parseInt(draft, 10);
+    // Full-width digits from a Chinese IME ("２") are the same number.
+    const parsed = Number.parseInt(draft.normalize("NFKC"), 10);
     const next = Number.isFinite(parsed) ? Math.min(safePages, Math.max(1, parsed)) : page;
     setDraft(String(next));
     if (next !== page) {

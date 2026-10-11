@@ -52,9 +52,30 @@ class RegressionResult:
     # The SD of Y after removing each entity's level and each year's common change (the variation the two-way
     # model uses): the scale of every "个标准差" conversion. depvar_std stays the pooled SD, a descriptive only.
     depvar_within_std: float | None = None
+    # Overall R² (with the fixed effects' explanatory power), adjusted R² (k regressors + fixed-effect rank) and the
+    # country-clustered Wald F of every regressor except the constant, with its (q, G − 1) degrees of freedom.
+    r2: float | None = None
+    r2_adj: float | None = None
+    f_stat: float | None = None
+    f_df: list[int] | None = None
+    f_p: float | None = None
+    # The constant of a model without fixed effects (absent when fixed effects absorb it).
+    constant: CoefStat | None = None
+    # Sum of the X terms' coefficients (X, L1.X, L2.X): the cumulative relation, with its own clustered SE.
+    cumulative: CoefStat | None = None
+    # Regressors left out because a fixed effect absorbs them or another regressor duplicates them.
+    omitted: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        return {**self.__dict__, "coefs": [{**c.__dict__, "stars": c.stars} for c in self.coefs]}
+        def coef(c: CoefStat | None) -> dict | None:
+            return None if c is None else {**c.__dict__, "stars": c.stars}
+
+        return {
+            **self.__dict__,
+            "coefs": [coef(c) for c in self.coefs],
+            "constant": coef(self.constant),
+            "cumulative": coef(self.cumulative),
+        }
 
 
 @dataclass
@@ -69,6 +90,15 @@ class PreparedModel:
     notes: list[str]
     support: TreatmentSupport | None = None
     sample_flow: dict | None = None
+    # Columns whose groups are absorbed as fixed effects; None is the classic (entity, time) pair, () is none at all
+    # (the model then carries a constant).
+    fe_columns: tuple[str, ...] | None = None
+    # Filled by estimation: regressors left out, each {name, reason ("absorbed" / "collinear" / "zero"), by}.
+    omitted: list[dict] = field(default_factory=list)
+
+    @property
+    def effect_columns(self) -> tuple[str, ...]:
+        return (self.entity, self.time) if self.fe_columns is None else self.fe_columns
 
 
 @dataclass
@@ -95,8 +125,30 @@ def freeze_treatment_timing(
 
 
 def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
-    """Validate and prepare the one-regressor nominal clean teaching model."""
-    columns = [design.depvar, design.shock_col, design.entity, "year", design.cluster]
+    """Validate and prepare a model: the design's X terms and controls, its fixed effects, the ROW exclusion.
+
+    A teaching design carries a ``ModelSpec`` (X lags read from the panel's lag columns, controls lagged by year key,
+    any set of fixed effects); an observed-panel design is the classic one-regressor (entity, year) model.
+    """
+    spec = getattr(design, "spec", None)
+    if spec is not None:
+        from gvcsim.regression.spec import FIXED_EFFECT_COLUMNS, control_column
+
+        x_columns = spec.x_columns
+        base_controls = [key for key, _ in spec.controls]
+        lagged_controls = [(key, lag, control_column(key, lag)) for key, lag in spec.controls if lag]
+        regressors = [*x_columns, *spec.control_columns]
+        fe_columns: tuple[str, ...] | None = tuple(spec.fixed_effect_columns)
+        effect_sources = [
+            source
+            for key in spec.fixed_effects
+            for source in (("country", "year") if key == "country_year" else (FIXED_EFFECT_COLUMNS[key],))
+        ]
+    else:
+        x_columns = [design.shock_col]
+        base_controls, lagged_controls, regressors, fe_columns, effect_sources = [], [], [design.shock_col], None, []
+    columns = list(dict.fromkeys([design.depvar, *x_columns, *base_controls, design.entity, "year", design.cluster]))
+    columns += [column for column in effect_sources if column not in columns]
     has_treated = design.treated_col in df
     if has_treated:
         columns.append(design.treated_col)
@@ -110,7 +162,8 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
         if invalid.any():
             raise ValueError(f"回归标识变量 {column} 含缺失或空白值")
 
-    for column in [design.depvar, design.shock_col, "year", *([design.treated_col] if has_treated else [])]:
+    numeric = [design.depvar, *x_columns, *base_controls, "year", *([design.treated_col] if has_treated else [])]
+    for column in dict.fromkeys(numeric):
         invalid = data[column].notna() & ~data[column].map(
             lambda value: (
                 isinstance(value, Real) and not isinstance(value, (bool, np.bool_)) and math.isfinite(float(value))
@@ -130,22 +183,35 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
         if has_treated
         else None
     )
+    # A lagged control is the same unit's value k years earlier, matched on the year (not on row position), so a
+    # missing year leaves the lag missing instead of borrowing an older value. The match needs one row per unit and
+    # year: a duplicated panel gets the course's message here instead of pandas' MergeError.
+    if lagged_controls and data.duplicated([design.entity, "year"]).any():
+        raise ValueError("最终回归样本要求 entity-time 唯一")
+    for key, lag, column in lagged_controls:
+        earlier = data[[design.entity, "year", key]].assign(year=data["year"] + lag).rename(columns={key: column})
+        data = data.merge(earlier, on=[design.entity, "year"], how="left", validate="one_to_one")
+    if spec is not None and "country_year" in spec.fixed_effects:
+        data["_fe_country_year"] = data["country"].astype(str) + "|" + data["year"].astype(int).astype(str)
     input_rows = len(df)
     complete_case_input_rows = len(data)
     row_excluded_rows = input_rows - complete_case_input_rows
-    missing_fields = [design.depvar, design.shock_col, *([design.treated_col] if has_treated else [])]
+    missing_fields = [design.depvar, *regressors, *([design.treated_col] if has_treated else [])]
     missing_by = {column: int(data[column].isna().sum()) for column in missing_fields}
     reasons = [{"code": "excluded_row", "field": "country", "rows": row_excluded_rows}] if row_excluded_rows else []
+    lag_columns = {column for _, _, column in lagged_controls}
     # Field counts overlap; reason counts do not. Attribute each incomplete row
-    # to its first missing field in Y, X, treated order, after excluding ROW.
+    # to its first missing field in Y, X, controls, treated order, after excluding ROW.
     remaining = pd.Series(True, index=data.index)
     for column in missing_fields:
         missing_mask = data[column].isna()
         count = int((remaining & missing_mask).sum())
         if count:
-            reasons.append({"code": "missing", "field": column, "rows": count})
+            reasons.append({"code": "lag" if column in lag_columns else "missing", "field": column, "rows": count})
         remaining &= ~missing_mask
-    data = data.dropna(subset=columns).copy()
+    # A control used only at a lag needs its earlier value, not the current one.
+    required = [column for column in columns if column not in base_controls or column in regressors]
+    data = data.dropna(subset=list(dict.fromkeys([*required, *regressors]))).copy()
     flow = {
         "input_rows": input_rows,
         "row_excluded_rows": row_excluded_rows,
@@ -156,6 +222,9 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
         "missing_by_field_counts_overlap": True,
         "dropped_by_reason": reasons,
     }
+    if spec is not None and len(data):
+        # The sample's first and last year (a lagged control drops the first year): the workbench table's 年份 row.
+        flow["years"] = [int(data["year"].min()), int(data["year"].max())]
     duplicate = data.duplicated([design.entity, "year"], keep=False)
     if duplicate.any():
         raise ValueError("最终回归样本要求 entity-time 唯一")
@@ -177,12 +246,13 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
     return PreparedModel(
         data=data,
         depvar=design.depvar,
-        xcols=[design.shock_col],
-        policy_xcols=[design.shock_col],
+        xcols=list(regressors),
+        policy_xcols=list(x_columns),
         entity=design.entity,
         time="year",
         cluster=design.cluster,
         notes=["关税暴露 X 以连续强度直接进入方程，不分组、不设阈值"],
         support=support,
         sample_flow=flow,
+        fe_columns=fe_columns,
     )

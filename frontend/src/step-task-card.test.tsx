@@ -123,20 +123,26 @@ describe("shared step task card", () => {
     expect(html).toContain("报告：未生成");
     expect(html).not.toContain("理解题：未完成");
     const generated = renderToStaticMarkup(<StepTaskCard
-      step={reportStep} complete materialStatus="ready"
+      step={reportStep} complete materialStatus="ready" reportExists reportCurrent
     />);
     expect(generated).toContain("报告：已生成");
     expect(generated).not.toContain("报告：已完成");
     expect(generated).not.toContain("已提交");
     // A report that no longer matches the saved records (e.g. after browsing on) needs updating, not generating.
     const outdated = renderToStaticMarkup(<StepTaskCard
-      step={reportStep} complete={false} materialStatus="ready" reportExists
+      step={reportStep} complete={false} materialStatus="ready" reportExists reportCurrent={false}
     />);
     expect(outdated).toContain("报告：需更新");
     expect(outdated).not.toContain("未生成");
+    // Handed in, then the record changed: the step still counts as done (green), and the report reads 需更新.
+    const handedInOutdated = renderToStaticMarkup(<StepTaskCard
+      step={reportStep} complete materialStatus="ready" reportExists reportState="graded" reportCurrent={false}
+    />);
+    expect(handedInOutdated).toContain('class="done">报告：需更新');
     // A current report says where it stands with the teacher: generating is not submitting.
+    // As the server sends it, a draft is not complete.
     const label = (reportState: "draft" | "pending" | "graded") => renderToStaticMarkup(<StepTaskCard
-      step={reportStep} complete materialStatus="ready" reportExists reportState={reportState}
+      step={reportStep} complete={reportState !== "draft"} materialStatus="ready" reportExists reportState={reportState}
     />);
     expect(label("draft")).toContain('class="todo">报告：草稿（未提交）');
     expect(label("pending")).toContain('class="done">报告：待评阅');

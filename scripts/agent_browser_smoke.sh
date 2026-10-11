@@ -24,7 +24,19 @@ temporary_a11y_report=
 # 只能实测几何。行头 th[scope=row] 在表头最后一行没有对应格，配对时先摘掉。
 read -r -d '' table_align_probe <<'JS' || true
 (() => {
-  const textRect = (el) => { const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect(); };
+  // Visible text only: a screen-reader description (.sr-only, clipped to 1px but laid out at full length) would
+  // otherwise stretch a header's text box far past what the eye aligns.
+  const textRect = (el) => {
+    const rects = [];
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.textContent.trim() || node.parentElement.closest(".sr-only")) continue;
+      const range = document.createRange(); range.selectNodeContents(node);
+      for (const rect of range.getClientRects()) if (rect.width > 0) rects.push(rect);
+    }
+    if (!rects.length) { const range = document.createRange(); range.selectNodeContents(el); return range.getBoundingClientRect(); }
+    return { left: Math.min(...rects.map((r) => r.left)), right: Math.max(...rects.map((r) => r.right)) };
+  };
   const expanded = (row) => {
     const out = [];
     for (const cell of row.children) {
@@ -132,7 +144,7 @@ for step in $(seq 1 15); do
 done
 
 # ---------------------------------------------------------------- 表格对齐门禁
-# 覆盖本次修过的三处：步骤 1 三个页签的数值列、步骤 5 最短路径明细的行标签、
+# 覆盖本次修过的三处：步骤 1 三个页签的数值列、步骤 5 最短路线明细的行标签、
 # 步骤 9 行业热力表（折叠在“行业排名”视角里的“全部指标表”）。
 "${ab[@]}" open "$GVCSIM_BASE_URL/?step=1"
 "${ab[@]}" wait --load networkidle
@@ -147,12 +159,12 @@ done
 "${ab[@]}" wait --load networkidle
 # 小网络演示默认折叠，先展开
 "${ab[@]}" eval '(() => { const d=document.querySelector("details.method-demo"); if (d) d.open = true; return true; })()' >/dev/null
-"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>/显示接近中心性/.test(b.getAttribute("aria-label")||""))?.click()' >/dev/null
+"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>/接近中心性的算法/.test(b.getAttribute("aria-label")||""))?.click()' >/dev/null
 sleep 1
 "${ab[@]}" eval 'document.querySelector(".net-demo-node")?.dispatchEvent(new MouseEvent("click",{bubbles:true}))' >/dev/null
 sleep 1
-# 最短路径明细表只在接近中心性 + 选中节点后出现，必须确认它真的渲染了
-"${ab[@]}" wait --fn 'Array.from(document.querySelectorAll("main table")).some(t=>/最短路径明细/.test(t.textContent))'
+# 最短路线明细表只在接近中心性 + 选中节点后出现，必须确认它真的渲染了
+"${ab[@]}" wait --fn 'Array.from(document.querySelectorAll("main table")).some(t=>/最短路线明细/.test(t.textContent))'
 assert_table_alignment
 
 "${ab[@]}" open "$GVCSIM_BASE_URL/?step=9"
@@ -182,6 +194,9 @@ if [[ -n "$artifact_dir" ]]; then
   "${ab[@]}" reload
   "${ab[@]}" wait --load networkidle
   "${ab[@]}" network har stop "$artifact_dir/student-step15.har"
+  # The recorded requests carry the student's bearer token: keep the HAR only with it stripped.
+  uv run python scripts/redact_har.py "$artifact_dir/student-step15.har" \
+    || { rm -f "$artifact_dir/student-step15.har"; echo "HAR redaction failed; removed it" >&2; exit 1; }
 else
   temporary_a11y_report=$(mktemp)
   a11y_report=$temporary_a11y_report

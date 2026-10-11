@@ -9,6 +9,8 @@ from typing import Any
 
 import psycopg
 
+from gvcsim.steps import STEPS
+
 
 class _DatabaseProxy:
     def __getattr__(self, name: str) -> Any:
@@ -41,9 +43,38 @@ def _session_fingerprint(session: dict[str, Any]) -> str:
 # submitted report look out of date (the report prints recorded material, never these view settings).
 # `browse_selection` (steps 6–8) and `network_browse` (step 9) keep the countries and view a student left an
 # exploration-only chart on; the recorded material is `compared` / `indicator_selection` / `observations`.
+# `custom_draft` (steps 11–14) is the workbench form a student left half-filled.
 _VIEW_ONLY_KEYS = frozenset(
-    {"slice", "year", "country", "chart", "drill", "heat_sort", "heat_coverage", "browse_selection", "network_browse"}
+    {
+        "slice",
+        "year",
+        "country",
+        "chart",
+        "drill",
+        "heat_sort",
+        "heat_coverage",
+        "browse_selection",
+        "network_browse",
+        "custom_draft",
+    }
 )
+
+
+# Only the regression steps have the workbench; the report reads saved models nowhere else.
+_WORKBENCH_STEPS = frozenset(str(item["n"]) for item in STEPS if item.get("regression_outcome"))
+
+
+def _report_data(step: str, data: dict[str, Any]) -> dict[str, Any]:
+    """A step's data as the report reads it. The workbench's saved models count only by what the report prints of
+    them (name, Y and model of those marked 放入报告); with none marked, the key is left out, so a session that never
+    used the workbench keeps the fingerprint it had before."""
+    from gvcsim.regression.workbench import reported_custom_results
+
+    projected = {k: v for k, v in data.items() if k not in _VIEW_ONLY_KEYS and k != "custom_results"}
+    reported = reported_custom_results(data.get("custom_results")) if step in _WORKBENCH_STEPS else []
+    if reported:
+        projected["custom_results"] = reported
+    return projected
 
 
 def report_fingerprint(session: dict[str, Any]) -> str:
@@ -53,13 +84,20 @@ def report_fingerprint(session: dict[str, Any]) -> str:
         return _session_fingerprint(session)
     projected_steps = {
         key: (
-            {**value, "data": {k: v for k, v in value["data"].items() if k not in _VIEW_ONLY_KEYS}}
+            {**value, "data": _report_data(str(key), value["data"])}
             if isinstance(value, dict) and isinstance(value.get("data"), dict)
             else value
         )
         for key, value in steps.items()
     }
     return _session_fingerprint({**session, "steps": projected_steps})
+
+
+def report_handed_in(report: dict[str, Any] | None) -> bool:
+    """Whether the student has submitted a report (waiting for grading or graded): step 15 counts as done from then
+    on, also after later edits to the record (the report then reads as out of date instead, and the teacher keeps
+    the submitted version). A draft is not finished work."""
+    return report is not None and report.get("state") in {"pending", "graded"}
 
 
 def report_matches_session(session: dict[str, Any], report: dict[str, Any] | None) -> bool:

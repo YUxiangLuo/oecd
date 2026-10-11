@@ -168,17 +168,14 @@ def test_panelols_standard_error_gate_checks_each_policy_term(small_se, passed):
     assert benchmark["benchmark_passed"] is passed
 
 
-@pytest.mark.parametrize("missing_from", ["own", "reference"])
-def test_panelols_gate_requires_every_policy_term(missing_from):
+def test_panelols_gate_requires_every_policy_term():
     model, own = _benchmark_inputs()
-    reference = replace(own)
-    if missing_from == "own":
-        own = replace(own, coefs=own.coefs[:1])
-    else:
-        reference = replace(reference, coefs=reference.coefs[:1])
-
     with pytest.raises(ValueError, match="缺少政策系数"):
-        panel._summarize_benchmark(model, own, reference)
+        panel._summarize_benchmark(model, replace(own, coefs=own.coefs[:1]), own)
+    # A term the library dropped is not compared, so the gate fails (the run's inference is then suppressed).
+    benchmark = panel._summarize_benchmark(model, own, replace(own, coefs=own.coefs[:1]))
+    assert benchmark["missing_in_reference"] == [own.coefs[1].name]
+    assert benchmark["coef_check_passed"] is False and benchmark["benchmark_passed"] is False
 
 
 @pytest.mark.parametrize(("field", "value"), [("coef", np.nan), ("se", np.inf)])

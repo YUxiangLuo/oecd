@@ -140,6 +140,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 /* done = 服务端按答题结果判定的真实完成,独占成功绿。
    past = 只是到过(导航信息),中性灰蓝——到过不是做过。 */
 .step-badge.done { background: var(--text-success); color: #fff; }
+.step-badge.partial { background: #fff4d8; color: #8a5a00; box-shadow: inset 0 0 0 1.5px #e3b54a; }
 .step-badge.past { background: #d7dae3; color: #4a5162; }
 .step-badge.cur { background: #4b47e0; color: #fff; box-shadow: 0 0 0 4px #ded9fb; }
 .step-badge.future { background: #eef0f5; color: var(--text-muted); }
@@ -1015,3 +1016,7 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
 /* Error boxes receive focus so the reason is read out; a soft ring instead of the heavy browser outline. */
 .error-box:focus { outline: none; }
 .error-box:focus-visible { box-shadow: 0 0 0 2px #e8a3a3; }
+
+/* The ⓘ in a table header stays one character wide, but its target reaches 24 × 24 (WCAG 2.5.8). */
+.column-info { position: relative; }
+.column-info::after { content: ""; position: absolute; inset: -6px -5px; }

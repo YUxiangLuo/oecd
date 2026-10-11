@@ -1,11 +1,12 @@
 import { useRef, useState, type KeyboardEvent } from "react";
+import { ScrollableRegion } from "../../a11y";
 import { percentagePoints } from "../../format";
 import type { TeachingCountriesResponse } from "../../types";
 import { useMeasuredWidth } from "../../table-aids";
 import { useHoverTip, type TipLine } from "../hover";
 import { niceDomain } from "../nice-ticks";
 import { countryLabel } from "../shared";
-import { TAXED, UNTAXED, ZERO_LINE } from "./palette";
+import { TAXED, TAXED_LATER, UNTAXED, ZERO_LINE } from "./palette";
 
 type CountryRow = TeachingCountriesResponse["countries"][number];
 
@@ -86,11 +87,22 @@ export function countryTipLines(row: CountryRow, year: number, rule?: TeachingCo
   const balance = goodsBalance(row, rule);
   return [
     ["", countryLabel(row.country)],
-    [`${year} 年货物行业平均 X`, `${points(row.mean_exposure)} 个百分点`, row.taxed ? TAXED : UNTAXED],
+    [`${year} 年货物行业平均 X`, `${points(row.mean_exposure)} 个百分点`, row.taxed ? waveColor(row) : UNTAXED],
     ...countryIndustryLines(row),
+    // Teaching data v10 taxes in two waves: when this country's tariff starts.
+    ...(waveText(row) ? [["加税", waveText(row)] as TipLine] : []),
     ...(balance ? [balance as TipLine] : []),
   ];
 }
+
+const WAVE_NAMES: Record<number, string> = { 1: "第一批", 2: "第二批" };
+
+/** The bar colour of a taxed country: the second wave in dark amber, as on the steps 11–14 group chart. */
+const waveColor = (row: Pick<CountryRow, "wave">) => (row.wave === 2 ? TAXED_LATER : TAXED);
+
+/** "第二批，2019 年起" for a taxed country of teaching data v10; empty before v10. */
+const waveText = (row: Pick<CountryRow, "taxed" | "wave" | "start_year">) =>
+  row.taxed && row.wave && row.start_year ? `${WAVE_NAMES[row.wave] ?? `第 ${row.wave} 批`}，${row.start_year} 年起` : "";
 
 /** About how tall the readout is (a 12px padding, about 19px a line), to place it above a focused item. */
 export function focusTipHeight(lines: readonly TipLine[]): number {
@@ -111,6 +123,12 @@ export function CountryExposureChart({ data }: { data: TeachingCountriesResponse
   const [focused, setFocused] = useState<number | null>(null);
   const nodeRefs = useRef<(Element & { focus: () => void } | null)[]>([]);
   const taxed = data.countries.filter((row) => row.taxed);
+  // The waves present in the ranking, in order, with their size and start year (one entry before v10).
+  const waves = [...new Set(taxed.map((row) => row.wave).filter((wave): wave is number => Boolean(wave)))].sort().map((wave) => ({
+    wave,
+    count: taxed.filter((row) => row.wave === wave).length,
+    start: taxed.find((row) => row.wave === wave)?.start_year,
+  }));
   const untaxed = data.countries.filter((row) => !row.taxed);
   // Keyboard order: the taxed bars from the top, then the untaxed codes.
   const order = [...taxed, ...untaxed];
@@ -159,7 +177,7 @@ export function CountryExposureChart({ data }: { data: TeachingCountriesResponse
   };
   const itemProps = (row: CountryRow, index: number) => ({
     tabIndex: index === activeIndex ? 0 : -1,
-    "aria-label": `${countryLabel(row.country)}：${data.year} 年各货物行业平均 X = ${points(row.mean_exposure)} 个百分点，${countryIndustryNote(row)}${balanceText(row)}；方向键切换国家`,
+    "aria-label": `${countryLabel(row.country)}：${waveText(row) ? `${waveText(row)}加税，` : ""}${data.year} 年各货物行业平均 X = ${points(row.mean_exposure)} 个百分点，${countryIndustryNote(row)}${balanceText(row)}；方向键切换国家`,
     onMouseMove: (event: { clientX: number; clientY: number }) => show(event, countryTipLines(row, data.year, rule)),
     onMouseLeave: hide,
     onKeyDown: (event: KeyboardEvent) => onKeyDown(event, index),
@@ -182,7 +200,7 @@ export function CountryExposureChart({ data }: { data: TeachingCountriesResponse
         <rect x={0} y={y} width={width} height={rowH} rx={4}
           fill="transparent" stroke={focused === index ? "#4b47e0" : "none"} strokeWidth={1.5} />
         <text x={labelW - 6} y={y + rowH / 2 + 3.8} textAnchor="end" fontSize={11} fontWeight={500} fill="#3a4050">{countryLabel(row.country)}</text>
-        <rect x={labelW} y={y + (rowH - barH) / 2} width={Math.max(scale(pp), 1.5)} height={barH} rx={2} fill={TAXED} />
+        <rect x={labelW} y={y + (rowH - barH) / 2} width={Math.max(scale(pp), 1.5)} height={barH} rx={2} fill={waveColor(row)} data-wave={row.wave ?? undefined} />
         <text x={labelW + scale(pp) + 4} y={y + rowH / 2 + 3.6} fontSize={10.5} fill="#3a4050"
           style={{ fontVariantNumeric: "tabular-nums" }}>{points(row.mean_exposure)}</text>
       </g>
@@ -210,7 +228,12 @@ export function CountryExposureChart({ data }: { data: TeachingCountriesResponse
   return (
     <div ref={wrapRef} className="hover-wrap country-exposure">
       <div className="country-exposure-legend" aria-hidden="true">
-        <span><i style={{ background: TAXED }} />被加税（{taxed.length} 国，按 X 从高到低）</span>
+        {waves.length > 1
+          // Two waves (teaching data v10): one colour each, both in one ranking.
+          ? waves.map((wave) => (
+            <span key={wave.wave}><i style={{ background: wave.wave === 2 ? TAXED_LATER : TAXED }} />{WAVE_NAMES[wave.wave] ?? `第 ${wave.wave} 批`}被加税（{wave.count} 国，{wave.start} 年起）</span>
+          ))
+          : <span><i style={{ background: TAXED }} />被加税（{taxed.length} 国，按 X 从高到低）</span>}
         <span><i className="line" style={{ background: UNTAXED }} />未被加税（{untaxed.length} 国，X = 0，列在图下）</span>
       </div>
       {taxed.length > 0 && (
@@ -243,14 +266,16 @@ export function CountryExposureChart({ data }: { data: TeachingCountriesResponse
       <p className="country-exposure-note">悬停或用方向键查看每个国家的 X{ruleText ? " 与对美货物顺差" : ""}。</p>
       <details className="country-exposure-table">
         <summary>{data.countries.length} 国读数表</summary>
-        <table className="data-table">
-          <thead><tr><th>国家</th><th>是否被加税</th><th>{data.year} 年各货物行业平均 X（个百分点）</th><th>X &gt; 0 的行业</th>{showBalance && <th>{ruleYear(rule)}对美货物顺差（负数为逆差）</th>}</tr></thead>
-          <tbody>{data.countries.map((row) => <tr key={row.country}>
-            <td>{countryLabel(row.country)}</td><td>{row.taxed ? "被加税" : "未被加税"}</td>
-            <td>{points(row.mean_exposure)}</td><td>{row.exposed_industries}/{row.industries}</td>
-            {showBalance && <td>{typeof row.market_goods_surplus === "number" && Number.isFinite(row.market_goods_surplus) ? yiUsd(row.market_goods_surplus) : "—"}</td>}
-          </tr>)}</tbody>
-        </table>
+        <ScrollableRegion className="table-wrap bounded-data-table" label={`${data.countries.length} 国读数表，可滚动`}>
+          <table className="data-table">
+            <thead><tr><th>国家</th><th className="text-col">是否被加税</th><th>{data.year} 年各货物行业平均 X（个百分点）</th><th>X &gt; 0 的行业</th>{showBalance && <th>{ruleYear(rule)}对美货物顺差（负数为逆差）</th>}</tr></thead>
+            <tbody>{data.countries.map((row) => <tr key={row.country}>
+              <td>{countryLabel(row.country)}</td><td className="text-col">{row.taxed ? (waveText(row) ? `被加税（${waveText(row)}）` : "被加税") : "未被加税"}</td>
+              <td>{points(row.mean_exposure)}</td><td>{row.exposed_industries}/{row.industries}</td>
+              {showBalance && <td>{typeof row.market_goods_surplus === "number" && Number.isFinite(row.market_goods_surplus) ? yiUsd(row.market_goods_surplus) : "—"}</td>}
+            </tr>)}</tbody>
+          </table>
+        </ScrollableRegion>
       </details>
       {Tip}
     </div>

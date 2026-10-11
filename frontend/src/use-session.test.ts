@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import { api } from "./api";
+import { api, ApiError, RequestTimeoutError } from "./api";
 import { emptySession, readShared, readStep } from "./session-store";
 import type { ExperimentSession, SessionResponse, SessionSaveResponse } from "./types";
 import {
@@ -13,6 +13,8 @@ import {
   mergeKeptEdits,
   patchSessionStep,
   readKeptEdits,
+  SAVE_RETRY_DELAYS_MS,
+  isTransientSaveFailure,
   updateSessionShared,
   useSession,
 } from "./use-session";
@@ -74,6 +76,153 @@ describe("session conflict recovery", () => {
       expect(result.current.syncConflict).toBe(false);
       expect(result.current.unsynced).toBe(false);
       expect(result.current.getStep<{ research_question: string }>(15)?.research_question).toBe("server version");
+    } finally {
+      get.mockRestore();
+      save.mockRestore();
+    }
+  });
+});
+
+describe("edits kept after a conflict was resolved", () => {
+  test("the kept copy's base is the server version the page loaded, so a later expired login restores the edit", async () => {
+    const conflict = await (async () => {
+      const fetchMock = spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ detail: "session changed" }), {
+        status: 409, headers: { "Content-Type": "application/json" },
+      }));
+      try {
+        return await api.classroom.saveSession({ session: emptySession(), base_updated_at: null }).catch((error) => error);
+      } finally {
+        fetchMock.mockRestore();
+      }
+    })();
+    const first = patchSessionStep(emptySession(), 15, { research_question: "first committed" });
+    const third = patchSessionStep(emptySession(), 15, { research_question: "third committed" });
+    const get = spyOn(api.classroom, "session").mockResolvedValueOnce({ ...response(), report: null })
+      .mockResolvedValue({ ...response(third), report: null });
+    const pending = deferred<SessionSaveResponse>();
+    const save = spyOn(api.classroom, "saveSession")
+      .mockResolvedValueOnce(response(first))
+      .mockRejectedValueOnce(conflict)
+      .mockImplementationOnce(() => pending.promise);
+    sessionStorage.clear();
+    try {
+      const { result } = renderHook(() => useSession(true, "student"));
+      await waitFor(() => expect(result.current.status).toBe("ready"));
+      await act(async () => {
+        result.current.patchStep(15, { research_question: "first committed" });
+        await result.current.syncNow();
+      });
+      await act(async () => {
+        result.current.patchStep(15, { research_question: "first stale again" });
+        await result.current.syncNow().catch(() => {});
+      });
+      expect(result.current.syncConflict).toBe(true);
+      await act(async () => { await result.current.resolveSyncConflict(); });
+      expect(result.current.getStep<{ research_question: string }>(15)?.research_question).toBe("third committed");
+      act(() => {
+        result.current.patchStep(15, { research_question: "pending old account" });
+        void result.current.syncNow().catch(() => {});
+      });
+      // The login expires while that save is on its way: the page keeps its edit for the next login.
+      act(() => { expect(result.current.keepUnsavedEdits()).toBe(true); });
+      const kept = readKeptEdits(sessionStorage, "student", RELEASE_A);
+      expect(readStep<{ research_question: string }>(kept!.base, 15)?.research_question).toBe("third committed");
+      expect(readStep<{ research_question: string }>(kept!.session, 15)?.research_question).toBe("pending old account");
+      // Put back on the server's record, the edit survives (the server did not change that field since).
+      const restored = mergeKeptEdits(third, kept!);
+      expect(readStep<{ research_question: string }>(restored, 15)?.research_question).toBe("pending old account");
+    } finally {
+      pending.reject(new Error("test over"));
+      sessionStorage.clear();
+      get.mockRestore();
+      save.mockRestore();
+    }
+  });
+});
+
+describe("loading the server version without a conflict", () => {
+  test("step 15's newer answers from another tab become the base, so an edit typed afterwards survives an expired login", async () => {
+    const first = patchSessionStep(emptySession(), 15, { research_question: "first committed" });
+    const third = patchSessionStep(emptySession(), 15, { research_question: "third committed" });
+    const get = spyOn(api.classroom, "session").mockResolvedValueOnce({ ...response(), report: null })
+      .mockResolvedValue({ ...response(third), report: null });
+    const pending = deferred<SessionSaveResponse>();
+    const save = spyOn(api.classroom, "saveSession")
+      .mockResolvedValueOnce(response(first))
+      .mockImplementationOnce(() => pending.promise);
+    sessionStorage.clear();
+    try {
+      const { result } = renderHook(() => useSession(true, "student"));
+      await waitFor(() => expect(result.current.status).toBe("ready"));
+      await act(async () => {
+        result.current.patchStep(15, { research_question: "first committed" });
+        await result.current.syncNow();
+      });
+      // Another tab saved newer answers; this page has no conflict, it only learns of them (step 15's notice).
+      let loaded = false;
+      await act(async () => { loaded = await result.current.loadServerVersion(); });
+      expect(loaded).toBe(true);
+      expect(result.current.getStep<{ research_question: string }>(15)?.research_question).toBe("third committed");
+      expect(result.current.unsynced).toBe(false);
+      expect(save).toHaveBeenCalledTimes(1);
+      act(() => {
+        result.current.patchStep(15, { research_question: "pending old account" });
+        void result.current.syncNow().catch(() => {});
+      });
+      act(() => { expect(result.current.keepUnsavedEdits()).toBe(true); });
+      const kept = readKeptEdits(sessionStorage, "student", RELEASE_A)!;
+      expect(readStep<{ research_question: string }>(kept.base, 15)?.research_question).toBe("third committed");
+      expect(readStep<{ research_question: string }>(mergeKeptEdits(third, kept), 15)?.research_question).toBe("pending old account");
+    } finally {
+      pending.reject(new Error("test over"));
+      sessionStorage.clear();
+      get.mockRestore();
+      save.mockRestore();
+    }
+  });
+
+  test("a failed load says it was the load that failed, not a save", async () => {
+    const get = spyOn(api.classroom, "session").mockResolvedValueOnce({ ...response(), report: null })
+      .mockRejectedValue(new Error("network down"));
+    try {
+      const { result } = renderHook(() => useSession(true, "student"));
+      await waitFor(() => expect(result.current.status).toBe("ready"));
+      await act(async () => { await result.current.loadServerVersion().catch(() => {}); });
+      expect(result.current.syncError).toContain("载入服务器版本失败");
+      expect(result.current.syncError).not.toContain("保存失败");
+    } finally {
+      get.mockRestore();
+    }
+  });
+
+  test("waits for a save still on its way, so its answer cannot put an older record back as the base", async () => {
+    const mine = patchSessionStep(emptySession(), 1, { year: 2020 });
+    const server = patchSessionStep(mine, 15, { research_question: "other tab" });
+    const get = spyOn(api.classroom, "session").mockResolvedValueOnce({ ...response(), report: null })
+      .mockResolvedValue({ ...response(server), report: null });
+    const inFlight = deferred<SessionSaveResponse>();
+    const save = spyOn(api.classroom, "saveSession").mockImplementationOnce(() => inFlight.promise);
+    try {
+      const { result } = renderHook(() => useSession(true, "student"));
+      await waitFor(() => expect(result.current.status).toBe("ready"));
+      act(() => {
+        result.current.patchStep(1, { year: 2020 });
+        void result.current.syncNow().catch(() => {});
+      });
+      let loading!: Promise<boolean>;
+      act(() => { loading = result.current.loadServerVersion(); });
+      expect(get).toHaveBeenCalledTimes(1); // the first load only: the read waits for the save
+      // A second press while this one runs does nothing, and says so.
+      let again: boolean | undefined;
+      await act(async () => { again = await result.current.loadServerVersion(); });
+      expect(again).toBe(false);
+      await act(async () => {
+        inFlight.resolve(response(mine));
+        await loading;
+      });
+      expect(get).toHaveBeenCalledTimes(2);
+      expect(result.current.getStep<{ research_question: string }>(15)?.research_question).toBe("other tab");
+      expect(result.current.getStep<{ year: number }>(1)?.year).toBe(2020);
     } finally {
       get.mockRestore();
       save.mockRestore();
@@ -317,5 +466,49 @@ describe("the expired-login notice", () => {
     expect(hasKeptEdits(adapter)).toBe(true);
     expect(expiredLoginNotice(true)).toContain("未保存的修改已在本页保留");
     expect(hasKeptEdits({ getItem: () => { throw new Error("blocked"); } })).toBe(false);
+  });
+});
+
+describe("a save that failed for a passing reason", () => {
+  test("is sent again on its own, and the banner can say so", async () => {
+    // The waits are seconds in the app; the test shortens them (restored below).
+    const delays = [...SAVE_RETRY_DELAYS_MS];
+    SAVE_RETRY_DELAYS_MS.splice(0, SAVE_RETRY_DELAYS_MS.length, 30, 30, 30, 30);
+    const get = spyOn(api.classroom, "session").mockResolvedValue({ ...response(), report: null });
+    const save = spyOn(api.classroom, "saveSession")
+      .mockRejectedValueOnce(new ApiError(502, null, "教学服务暂时不可用"))
+      .mockImplementation(async (body) => response(body.session));
+    try {
+      const { result } = renderHook(() => useSession(true, "student"));
+      await waitFor(() => expect(result.current.status).toBe("ready"));
+      await act(async () => {
+        result.current.patchStep(1, { year: 2020 });
+        await result.current.syncNow().catch(() => {});
+      });
+      expect(result.current.syncError).not.toBeNull();
+      expect(result.current.autoRetry).toBe(true);
+      // No edit and no click: the server is back and the save goes through by itself.
+      await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(result.current.syncError).toBeNull());
+      expect(result.current.autoRetry).toBe(false);
+      expect(result.current.unsynced).toBe(false);
+    } finally {
+      SAVE_RETRY_DELAYS_MS.splice(0, SAVE_RETRY_DELAYS_MS.length, ...delays);
+      get.mockRestore();
+      save.mockRestore();
+    }
+  });
+
+  test("only server and network failures count as passing; a conflict, a refusal or an expired login do not", () => {
+    for (const status of [408, 429, 500, 502, 503, 504]) expect(isTransientSaveFailure(new ApiError(status, null, "x"))).toBe(true);
+    for (const status of [400, 401, 403, 404, 409, 413, 422]) expect(isTransientSaveFailure(new ApiError(status, null, "x"))).toBe(false);
+    // The browser could not reach the server, or the request ran out of time: the same save can get through later.
+    for (const message of ["Failed to fetch", "Load failed", "NetworkError when attempting to fetch resource."]) {
+      expect(isTransientSaveFailure(new TypeError(message))).toBe(true);
+    }
+    expect(isTransientSaveFailure(new RequestTimeoutError("服务器繁忙，请求超时（15 秒），请稍后重试。"))).toBe(true);
+    // A cancelled request (api.ts) or a failure in the page itself would only fail again.
+    expect(isTransientSaveFailure(new Error("请求已取消"))).toBe(false);
+    expect(isTransientSaveFailure(new TypeError("Cannot read properties of undefined (reading 'steps')"))).toBe(false);
   });
 });

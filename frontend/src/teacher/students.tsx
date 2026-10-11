@@ -6,7 +6,7 @@ import type { AcademicSemester, StudentRow } from "../types";
 import { userFacingRequestError } from "../user-facing-error";
 import { AcademicFilters, matchesAcademicFilter, enrollmentLabel, UNASSIGNED_CLASS } from "./academic-filter";
 import { batchClassOptions, StudentBatchModal } from "./student-batch";
-import { normalizeLabel, stripInvisibleEdges } from "./text";
+import { normalizeLabel, searchKey, stripInvisibleEdges } from "./text";
 import { showToast } from "../toast";
 import { EmptyState, LoadFailure, Modal, SearchInput, StatusPill, Toolbar, useFieldErrorFocus, useModalErrorFocus, useRefetchOnVisible } from "./ui";
 
@@ -22,7 +22,13 @@ export const PASSWORD_MAX_LENGTH = 256;
 export const PASSWORD_INPUT_PROPS = { type: "password", autoComplete: "new-password" } as const;
 export const VALID_ACTIVITY_HINT = "最近一次保存实验记录、生成或提交报告的时间（仅登录或浏览不计）";
 export const DEMO_PASSWORD_HINT = "演示账号不能修改密码。要演示改密码，请新建一个学生账号。";
-export const RESET_PASSWORD_NOTE = "保存后该学生要用新密码重新登录，请把新密码告诉他。";
+/** A login name that may wrap after its separators ("report-/snapshot-/709020de"), never inside a word. */
+export function breakableUsername(username: string): ReactNode[] {
+  const parts = username.match(/[^-_.]+[-_.]*|[-_.]+/g) ?? [username];
+  return parts.flatMap((part, index) => (index ? [<wbr key={index} />, part] : [part]));
+}
+
+export const RESET_PASSWORD_NOTE = "保存后该学生要用新密码重新登录，请把新密码告诉学生本人。";
 export const FIRST_STEP_HINT = "还没有学期和班级：先到“学期与班级”新建学期和班级，再把学生分进班级。";
 export const STARTED_HINT = "保存过实验记录、生成过报告草稿或完成过步骤、但还没提交报告的学生；完成进度是 0/15 也算已开始";
 export const NOT_STARTED_HINT = "还没有保存过实验记录，也没有生成报告的学生（只登录或浏览不算开始）";
@@ -189,11 +195,18 @@ export function ReportStateCell({ student, onOpen }: { student: StudentRow; onOp
   const pill = state === "graded" ? <StatusPill tone="ok">已评阅</StatusPill>
     : state === "pending" ? <StatusPill tone="warn">待评阅</StatusPill>
       : state === "draft" ? <StatusPill tone="muted">草稿（未提交）</StatusPill> : <StatusPill tone="muted">未生成</StatusPill>;
+  // Handed in, then the record changed: the teacher still has the submitted version, which is what they grade.
+  const outdated = student.report_outdated && (state === "pending" || state === "graded")
+    ? <small className="report-outdated-note">学生之后改过记录，未重新提交</small>
+    : null;
   if (!onOpen || (state !== "pending" && state !== "graded")) return pill;
   const visible = state === "pending" ? "待评阅" : "已评阅";
   return (
-    <button type="button" className="pill-button" title="在“报告评阅”中打开" onClick={onOpen}
-      aria-label={`${visible}，打开报告：${student.display_name}（${student.username}）`}>{pill}</button>
+    <>
+      <button type="button" className="pill-button" title="在“报告评阅”中打开" onClick={onOpen}
+        aria-label={`${visible}${outdated ? "（学生之后改过记录，未重新提交）" : ""}，打开报告：${student.display_name}（${student.username}）`}>{pill}</button>
+      {outdated}
+    </>
   );
 }
 
@@ -299,11 +312,13 @@ export function enrollmentToast(student: StudentRow, semesters: readonly Academi
   return `已把 ${student.display_name} 分到“${semester!.name} · ${group.name}”`;
 }
 
-export function StudentsTab({ onOpenReport, onGoToSemesters }: {
+export function StudentsTab({ onOpenReport, onGoToSemesters, onRefresh }: {
   /** Open a submitted report in 报告评阅; `queue` is the table's submitted reports in their current order. */
   onOpenReport?: (accountId: number, queue: number[]) => void;
   /** Switch to 学期与班级, where the first semester and classes are made. */
   onGoToSemesters?: () => void;
+  /** 刷新列表 was pressed: the sidebar's 待评阅 badge is recounted with the table. */
+  onRefresh?: () => void;
 } = {}) {
   const activityHintId = useId();
   const [refresh, setRefresh] = useState(0);
@@ -348,12 +363,12 @@ export function StudentsTab({ onOpenReport, onGoToSemesters }: {
   }
   const all = data?.students ?? [];
   const semesters = academic?.semesters ?? [];
-  // Normalized like stored names (full-width letters/digits, zero-width characters), then case-folded.
-  const needle = normalizeLabel(query).toLowerCase();
+  // Compared with full-width punctuation folded too (names stored before it was kept as typed have ASCII).
+  const needle = searchKey(query);
   const students = sortStudents(all
     .filter((student) => matchesAcademicFilter(student.enrollments, semesterId, classId))
     .filter((student) => !needle || [student.display_name, student.username, student.student_no]
-      .some((value) => normalizeLabel(value ?? "").toLowerCase().includes(needle))), sort);
+      .some((value) => searchKey(value ?? "").includes(needle))), sort);
   const submitted = students.filter((student) => student.report_state === "pending" || student.report_state === "graded").map((student) => student.id);
   // The batch import starts in the class being looked at, when it can still take students.
   const batchClassId = classId != null && classId !== UNASSIGNED_CLASS && batchClassOptions(semesters).some((option) => option.id === classId) ? classId : null;
@@ -377,7 +392,7 @@ export function StudentsTab({ onOpenReport, onGoToSemesters }: {
           onClassChange={setClassId}
         />
         <div className="toolbar-actions">
-          <button type="button" onClick={() => setRefresh((value) => value + 1)}>刷新列表</button>
+          <button type="button" onClick={() => { setRefresh((value) => value + 1); onRefresh?.(); }}>刷新列表</button>
           <button type="button" onClick={() => setModal({ type: "batch" })}>批量导入学生</button>
           <button className="primary" onClick={() => setModal({ type: "student" })}>+ 添加学生</button>
         </div>
@@ -398,7 +413,7 @@ export function StudentsTab({ onOpenReport, onGoToSemesters }: {
               {students.map((student) => (
                 <tr key={student.id}>
                   <td className="student-name-cell" title={student.display_name}><span className="clamp-2">{student.display_name}</span></td>
-                  <td className="mono">{student.username}</td>
+                  <td className="mono username-cell">{breakableUsername(student.username)}</td>
                   <td className="student-no-cell" title={student.student_no || undefined}>{student.student_no || "—"}</td>
                   <td className="class-memberships">{student.enrollments.length
                     ? student.enrollments.map((item) => { const label = enrollmentLabel(item, semesters); return <span key={item.term_id} title={label}>{label}</span>; })

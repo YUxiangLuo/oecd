@@ -56,6 +56,9 @@ const magnitudeReading = (value: number, unit: string, digits?: number) => {
   return /^0(\.0+)?( |$)/.test(reading) ? null : reading;
 };
 
+/** Under the trend cards, as the report says it (report_observed): a change is the unrounded difference, so it can
+ *  differ in the last digit from the two readings shown under it (“+0.524” beside “16.743% → 17.266%”). */
+export const CHANGE_ROUNDING_NOTE = "变化按未取整的原值计算，可能与两端读数之差相差末位 1。";
 const REFERENCE_FILL = "#9aa3b5";
 const REFERENCE_LINE = "#6b7385";
 
@@ -175,6 +178,7 @@ export function TrendSummary({
     );
   });
   return (
+    <>
     <div className="comparison-summary" role="group" aria-label="趋势读数">
       <div>
         <span>{scopeLabel(first, industry)} · {metricLabel ? `${metricLabel} · ` : ""}{firstYear}→{lastYear}</span>
@@ -209,12 +213,15 @@ export function TrendSummary({
       {startRef && endRef && (
         <div>
           <span>{sameIndustry ? "同行业全球中位数" : "全球中位数"} · {firstYear}→{lastYear}</span>
-          <b>{changeReading(startRef.median, endRef.median, unit)}</b>
+          {/* The change at the decimals of the two medians under it ("+1" beside "3,528 → 3,529", not "+1.000"). */}
+          <b>{changeReading(startRef.median, endRef.median, unit, Math.max(...[startRef.median, endRef.median].map((value) => smallAmountDigits(value, unit) ?? readingDigits(value, unit))))}</b>
           <small>{fixedIndicatorNumber(startRef.median, unit, smallAmountDigits(startRef.median, unit))} → {fixedIndicatorNumber(endRef.median, unit, smallAmountDigits(endRef.median, unit))}</small>
         </div>
       )}
       {gapCards}
     </div>
+    <p className="muted trend-rounding-note" role="note">{CHANGE_ROUNDING_NOTE}</p>
+    </>
   );
 }
 
@@ -272,6 +279,11 @@ export function ComparisonSummary({
       : gapChange > 0
         ? `差距扩大 ${gapMagnitude}`
         : `差距缩小 ${gapMagnitude}`;
+  const shownEnd = (index: number) => {
+    const value = ends[index];
+    const places = countryDigits?.[countries[index]];
+    return value == null || places == null ? value : Number(value.toFixed(places));
+  };
   return (
     <div className="comparison-summary" role="group" aria-label="两国趋势结论">
       {countries.map((country, index) => (
@@ -283,7 +295,8 @@ export function ComparisonSummary({
       ))}
       <div>
         <span>{lastYear} 年两国之差</span>
-        <b>{changeReading(ends[1], ends[0], unit, digits)}</b>
+        {/* From the two values as their cards show them, so the difference checks by hand (1.845 − 5.82 = −3.975). */}
+        <b>{changeReading(shownEnd(1), shownEnd(0), unit, digits)}</b>
         <small>{countryLabel(countries[0])} 相对 {countryLabel(countries[1])}</small>
       </div>
       <div>
@@ -318,7 +331,10 @@ export function IndicatorTrendChart({
   emptyStatus,
   reasonFor,
   industry,
+  cards = true,
 }: {
+  /** Pair mode: the per-country and gap cards under the chart (step 10's exchange-rate chart has none). */
+  cards?: boolean;
   /** Context mode: the industry the rows belong to, named on the observed country's card. */
   industry?: string;
   /** Replaces "缺失" in the readout where a value is undefined rather than missing (step 9: no outgoing links). */
@@ -341,7 +357,8 @@ export function IndicatorTrendChart({
   /** Step 9: the reference is the same industry in every economy. */
   sameIndustry?: boolean;
   /** Step 10: a dashed line just before this year, e.g. the year the simulated tariff starts. */
-  markYear?: { year: number; label: string };
+  /** One marked year, or several (two tariff waves): later labels sit low, clear of the earlier jump. */
+  markYear?: { year: number; label: string } | { year: number; label: string }[];
   /** Step 10: annual values that jump in one year are drawn as steps, changing halfway between two years, where
    *  the `markYear` line sits (between the years, as on steps 11–14). */
   stepped?: boolean;
@@ -515,16 +532,19 @@ export function IndicatorTrendChart({
             </text>
           </g>
         ))}
-        {markYear && years.includes(markYear.year) && markYear.year > years[0] && (
-          <g data-mark-year={markYear.year}>
-            <line x1={x(markYear.year - 0.5)} x2={x(markYear.year - 0.5)} y1={34} y2={250} stroke="#4b5563" strokeDasharray="5 4" />
-            {/* Left of the line and halfway up: before the marked year the step 10 X is 0 for every country, so that
-                area is empty. To the right the taxed line jumps up; at the top-left it touched the jump when X
-                reached the top of the axis. */}
-            <text x={x(markYear.year - 0.5) - 10} y={149} textAnchor="end" fontSize={12} fill="#374151"
-              stroke="#fff" strokeWidth={3} strokeLinejoin="round" paintOrder="stroke">{markYear.label}</text>
-          </g>
-        )}
+        {(Array.isArray(markYear) ? markYear : markYear ? [markYear] : [])
+          .filter((mark) => years.includes(mark.year) && mark.year > years[0])
+          .map((mark, index) => (
+            <g key={mark.year} data-mark-year={mark.year}>
+              <line x1={x(mark.year - 0.5)} x2={x(mark.year - 0.5)} y1={34} y2={250} stroke="#4b5563" strokeDasharray="5 4" />
+              {/* Left of the line and halfway up: before the marked year the step 10 X is 0 for every country, so that
+                  area is empty. To the right the taxed line jumps up; at the top-left it touched the jump when X
+                  reached the top of the axis. A later wave's label sits low: left of its line the earlier wave has
+                  already jumped up, while the later one is still at 0 below. */}
+              <text x={x(mark.year - 0.5) - 10} y={index === 0 ? 149 : 228} textAnchor="end" fontSize={12} fill="#374151"
+                stroke="#fff" strokeWidth={3} strokeLinejoin="round" paintOrder="stroke">{mark.label}</text>
+            </g>
+          ))}
         {bandPath && <path d={bandPath} fill={REFERENCE_FILL} fillOpacity={0.22} stroke="none" />}
         {band.length >= 2 && (
           <polyline
@@ -633,7 +653,7 @@ export function IndicatorTrendChart({
       )}
       {context
         ? <TrendSummary readings={readings} countries={countries} years={years} unit={unit} distribution={band} sameIndustry={sameIndustry} digits={digits} industry={industry} reasonFor={reasonFor} />
-        : <ComparisonSummary
+        : cards && <ComparisonSummary
           readings={readings}
           countries={countries}
           years={years.filter((_, i) => series.every((points) => points[i].value !== null))}

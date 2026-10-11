@@ -284,9 +284,15 @@ describe("DivergingBarChart", () => {
     fireEvent.focus(last);
     // The row starts 200px into the card: the 80px tip ends 6px above it.
     expect(tip.style.top).toBe(`${200 - 80 - 6}px`);
-    // No room above the first row: below it instead (over the next row, never under the chart).
+    // The first row has no room above it inside the chart, but the window does: above it still, over the chart's
+    // own legend, not over the next bars.
     first.getBoundingClientRect = () => rect(150, 190);
     fireEvent.focus(first);
-    expect(tip.style.top).toBe(`${190 - 100 + 6}px`);
+    expect(tip.style.top).toBe(`${150 - 100 - 80 - 6}px`);
+    // No room in the window either (the chart at the very top): below the row.
+    wrap.getBoundingClientRect = () => rect(0, 300);
+    first.getBoundingClientRect = () => rect(20, 60);
+    fireEvent.focus(first);
+    expect(tip.style.top).toBe(`${60 + 6}px`);
   });
 });

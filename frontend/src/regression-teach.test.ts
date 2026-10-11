@@ -1,12 +1,16 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { cleanup, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   RegressionEvidenceMatrix,
   RegressionSummaryBars,
+  ReportedCustomModels,
   familyVerdict,
   regressionSummaryRows,
 } from "./regression-teach";
+import { api } from "./api";
+import { snapshotOf } from "./regression-workbench-table";
 import type { CoefStat, RegressionOutcome, RegressionResponse } from "./types";
 
 const coefficient = (coef: number, low: number, high: number): CoefStat => ({
@@ -101,7 +105,25 @@ describe("student-first regression reading", () => {
     expect(html).toContain("-0.020 个百分点");
     expect(html).not.toContain("</b><span>百分点</span>");
     // The column names the association, as the step pages do.
-    expect(html).toContain("<th>X 每高 1 个百分点，Y 平均相差</th>");
+    expect(html).toContain("<th>X 每高 1 个百分点，Y 两年累计平均相差</th><th>其中当年 / 次年</th>");
+  });
+
+  test("a saved run of the course model shows its cumulative relation and its split over the two years", () => {
+    // Teaching data v10: X and L1.X; the headline is their sum.
+    const run = response("trade", coefficient(-0.33, -0.35, -0.31));
+    run.result.coefs = [
+      { ...run.result.coefs[0] },
+      { ...run.result.coefs[0], name: "teaching_tariff_exposure_lag1", coef: -0.22, ci_low: -0.24, ci_high: -0.2 },
+    ];
+    run.result.cumulative = { ...run.result.coefs[0], name: "cumulative", coef: -0.55, ci_low: -0.57, ci_high: -0.53 };
+    const html = renderToStaticMarkup(createElement(RegressionEvidenceMatrix, {
+      getStep: (step: number) => step === 11 ? { run: { design: run.design, result: run.result } } : undefined,
+    }));
+    const dom = new DOMParser().parseFromString(html, "text/html");
+    const cells = [...[...dom.querySelectorAll("tbody tr")][0].querySelectorAll("td")].map((cell) => cell.textContent);
+    expect(cells[2]).toBe("-0.55 个百分点");
+    expect(cells[3]).toBe("-0.33 个百分点 / -0.22 个百分点");
+    expect(cells[4]).toBe("[-0.57, -0.53] 个百分点");
   });
 
   test("a weak Y whose interval includes 0 reads 方向不确定 with its signed estimate and interval", () => {
@@ -119,7 +141,9 @@ describe("student-first regression reading", () => {
     expect(cells[0]).toContain("后向复杂 GVC 生产份额");
     expect(cells[1]).toBe("方向不确定");
     expect(cells[2]).toBe("+0.30 个百分点");
-    expect(cells[3]).toBe("[-1.20, +1.80] 个百分点");
+    // A single-X run has no year split.
+    expect(cells[3]).toBe("—");
+    expect(cells[4]).toBe("[-1.20, +1.80] 个百分点");
     expect(html).not.toMatch(/方向明确|平均高|平均低/);
   });
 
@@ -140,7 +164,7 @@ describe("student-first regression reading", () => {
     // At 3 decimals the interval's upper end would read as the estimate ("-0.018" in "[-0.019, -0.018]"): one more.
     expect(effect("13")).toBe("-0.0184 个长度单位（幅度约 0.032 个标准差）");
     expect([...dom.querySelectorAll("tbody tr")].find((item) => item.querySelector("th")?.textContent === "13")!
-      .querySelectorAll("td")[3].textContent).toMatch(/^\[-0\.0192, -0\.0176\] 个长度单位/);
+      .querySelectorAll("td")[4].textContent).toMatch(/^\[-0\.0192, -0\.0176\] 个长度单位/);
     expect(effect("14")).toBe("-40.11 个中心性原始单位（幅度约 0.047 个标准差）");
     expect(html).not.toContain("样本均值");
     expect(html.match(/标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏/g)).toHaveLength(1);
@@ -173,7 +197,95 @@ describe("RegressionSummaryBars", () => {
     const dom = new DOMParser().parseFromString(html, "text/html");
     expect(dom.querySelectorAll("[data-bar]")).toHaveLength(2);
     expect(dom.querySelector("svg")?.getAttribute("role")).toBe("img");
-    expect(html).toContain("X 每高 1 个百分点，Y 平均相差（个标准差）");
+    expect(html).toContain("X 每高 1 个百分点，Y 两年累计平均相差（个标准差）");
     expect(dom.querySelector(".reg-family-missing")?.textContent).toBe("步骤 12 · 生产、步骤 14 · 网络：还没计算");
   });
+
+  test("a course-model run without its two-year sum (L1.X dropped) has no estimate, not its X alone", () => {
+    const trade = response("trade", coefficient(-0.33, -0.35, -0.31));
+    trade.design.spec = { x_lags: [0, 1], controls: [], fixed_effects: ["country_industry", "year"] };
+    trade.result.cumulative = null;
+    const { rows } = regressionSummaryRows((step: number) => step === 11 ? { run: { design: trade.design, result: trade.result } } : undefined);
+    expect(rows.map((row) => row.valueLabel)).toEqual(["没算出估计值"]);
+    // A single-X model keeps its X as the headline.
+    trade.design.spec = { x_lags: [0], controls: [], fixed_effects: ["country_industry", "year"] };
+    expect(regressionSummaryRows((step: number) => step === 11 ? { run: { design: trade.design, result: trade.result } } : undefined)
+      .rows.map((row) => row.valueLabel)).toEqual(["-0.33 个百分点（-0.0017 个标准差）"]);
+  });
+});
+
+describe("ReportedCustomModels", () => {
+  const withSum = (value: number, low: number, high: number) => {
+    const run = response("trade", coefficient(value, low, high));
+    run.design.baseline = "FVA_share";
+    run.design.depvar_kind = "share";
+    run.result.cumulative = { ...coefficient(value, low, high), name: "cumulative" };
+    return run;
+  };
+
+  test("lists each model marked for the report with its sum next to the step's default model", () => {
+    const defaultRun = withSum(-0.55, -0.57, -0.53);
+    const noRate = withSum(-0.70, -0.75, -0.65);
+    const model = (name: string, inReport: boolean) => ({
+      id: name, name, outcome: "trade" as const, baseline: "FVA_share", in_report: inReport, saved_at: "2026-10-11",
+      spec: { x_lags: [0, 1], controls: [], fixed_effects: ["country_industry", "year"] }, snapshot: snapshotOf(noRate),
+    });
+    const html = renderToStaticMarkup(createElement(ReportedCustomModels, {
+      getStep: (step: number) => step === 11
+        ? { run: { design: defaultRun.design, result: defaultRun.result }, custom_results: [model("去掉汇率", true), model("没放入", false)] }
+        : undefined,
+    }));
+    const dom = new DOMParser().parseFromString(html, "text/html");
+    const rows = [...dom.querySelectorAll("tbody tr")].map((row) => [...row.children].map((cell) => cell.textContent));
+    expect(rows).toHaveLength(1);
+    expect(rows[0][0]).toBe("步骤 11 · 贸易流");
+    expect(rows[0][1]).toContain("去掉汇率");
+    // The model's sum says which years it covers; both read at the default's decimals.
+    expect(rows[0][3]).toBe("-0.70 个百分点（两年累计）");
+    expect(rows[0][4]).toBe("-0.55 个百分点");
+  });
+
+  test("a model on another Y than the step's saved run is compared with the course default on that Y", async () => {
+    const saved = withSum(-0.55, -0.57, -0.53); // the step's run is on FVA_share
+    const dvaex = withSum(0.7057, 0.6566, 0.7548);
+    const estimate = (key: string, coef: number, low: number, high: number) => ({
+      key, label: key, kind: "share", default: key === "FVA_share", coef, ci_low: low, ci_high: high, p: 0.001, status: "ok",
+      suppress_inference: false, depvar_std: 1, depvar_within_std: 1, depvar_mean: 1, n_obs: 10,
+    });
+    const overview = spyOn(api, "teachingOverview").mockResolvedValue({
+      version: "v10", disclaimer: "",
+      outcomes: { trade: [estimate("FVA_share", -0.5504, -0.567, -0.534), estimate("DVAex_share", 0.549, 0.533, 0.565)], production: [], length: [], network: [] },
+    });
+    const model = {
+      id: "m", name: "去掉汇率", outcome: "trade" as const, baseline: "DVAex_share", in_report: true, saved_at: "2026-10-11",
+      spec: { x_lags: [0, 1], controls: [], fixed_effects: ["country_industry", "year"] }, snapshot: snapshotOf(dvaex),
+    };
+    try {
+      const view = render(createElement(ReportedCustomModels, {
+        getStep: (step: number) => step === 11 ? { run: { design: saved.design, result: saved.result }, custom_results: [model] } : undefined,
+      }));
+      await waitFor(() => expect(view.container.querySelector("tbody tr td:last-child")?.textContent).toBe("+0.55 个百分点"));
+      // The model reads at that default's decimals, as on the workbench's table.
+      expect(view.container.querySelectorAll("tbody tr td")[2].textContent).toBe("+0.71 个百分点（两年累计）");
+    } finally {
+      overview.mockRestore();
+      cleanup();
+    }
+  });
+
+  test("says how to add one when none is marked", () => {
+    const html = renderToStaticMarkup(createElement(ReportedCustomModels, { getStep: () => undefined }));
+    expect(html).toContain("还没有放入报告的自选模型（选做）");
+    expect(html).not.toContain("<table");
+  });
+});
+
+test("the step-15 summary table gives each of its seven columns a share of the width", async () => {
+  // With table-layout: fixed, a column left out of the shares gets 0 px and wraps one character per line.
+  const css = await Bun.file(new URL("./workbench.css", import.meta.url)).text();
+  const widths = [...css.matchAll(/\.reg-evidence-table th:nth-child\((\d)\)[^{]*\{ width: (\d+)%; \}/g)]
+    .map((match) => [Number(match[1]), Number(match[2])] as const);
+  expect(widths.map(([column]) => column)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  expect(widths.reduce((total, [, width]) => total + width, 0)).toBe(100);
+  expect(widths.every(([, width]) => width > 0)).toBe(true);
 });

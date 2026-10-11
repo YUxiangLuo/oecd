@@ -135,7 +135,10 @@ def test_report_appendix_counts_taxed_records_by_x_without_causal_wording():
 
     support = {"treated_entities": 1854, "treated_clusters": 44, "untreated_entities": 1346, "untreated_clusters": 31}
     text = "\n".join(_technical_support_lines({}, {}, support))
-    assert "加税情况：X 大于 0 的国家×行业 1,854 个（来自 44 个国家）；X 始终为 0 的 1,346 个（含 31 个国家的全部行业）。" in text
+    assert (
+        "加税情况：X 大于 0 的国家×行业 1,854 个（来自 44 个国家）；X 始终为 0 的 1,346 个（含 31 个国家的全部行业）。"
+        in text
+    )
     assert "受关税影响" not in text and "没受影响" not in text
 
 
@@ -507,14 +510,7 @@ def _artifacts(path: Path, *, disclosure: bool = False):
         "simulation_contract": {
             "version": teaching.VERSION,
             "seed": teaching.SEED,
-            "parameters": {
-                "market": teaching.MARKET,
-                "tariff_path": list(teaching.TARIFF_PATH),
-                "taxed_rule": teaching.TAXED_RULE,
-                "betas": teaching.BETAS,
-                "calibration": teaching.CALIBRATION,
-                "baselines": teaching.baseline_parameters(),
-            },
+            "parameters": teaching.simulation_parameters(),
             "model_snapshots": {name: teaching.model_snapshot(name) for name in teaching.BETAS},
             "variable_catalogs": {name: teaching.variable_catalog(name) for name in teaching.BETAS},
             "baseline_model_snapshots": teaching.baseline_snapshots(teaching.model_snapshot),
@@ -570,6 +566,18 @@ def _sign_run(run: dict) -> dict:
         for coefficient in run["result"]["coefs"]:
             coefficient.setdefault("se", 0.1)
             coefficient.setdefault("t", float(coefficient["coef"]) / float(coefficient["se"]))
+        # The course model (data v10) has X, L1.X and the exchange rate; the test's X estimate becomes the
+        # cumulative relation (the report's headline), split 60/40 over X and L1.X, the exchange rate at 0.
+        if run["result"]["coefs"]:
+            base = run["result"]["coefs"][0]
+            course = RegressionDesign(outcome, teaching=True, baseline=baseline)
+            names = [*course.regressors, *course.controls]
+            shares = {course.regressors[0]: 0.6, course.regressors[1]: 0.4}
+            run["result"]["coefs"] = [
+                {"name": name, "coef": float(base["coef"]) * shares.get(name, 0.0), "se": float(base["se"])}
+                for name in names
+            ]
+            run["result"]["cumulative"] = {"name": "cumulative", "coef": float(base["coef"]), "se": float(base["se"])}
     result = run["result"]
     result.setdefault("n_entities", 2)
     result.setdefault("n_times", result["n_obs"])
@@ -586,9 +594,13 @@ def _sign_run(run: dict) -> dict:
     support.setdefault("reasons", list(reasons))
     diagnostics = result.setdefault("diagnostics", {})
     diagnostics.setdefault("study_contract", "economics-v2")
-    for coefficient in result.get("coefs", []):
+    estimates = [
+        *result.get("coefs", []),
+        *([result["cumulative"]] if isinstance(result.get("cumulative"), dict) else []),
+    ]
+    for coefficient in estimates:
         if stopped:
-            coefficient.update(p=None, ci_low=None, ci_high=None)
+            coefficient.update(t=coefficient["coef"] / coefficient["se"], p=None, ci_low=None, ci_high=None)
         else:
             beta, se = coefficient["coef"], coefficient["se"]
             critical = stats.t.ppf(0.975, result["n_clusters"] - 1)
@@ -733,18 +745,24 @@ def test_report_statements_are_associations_with_their_number():
     falling = {"coef": -0.4, "ci_low": -0.6, "ci_high": -0.2}
     evidence, copy = teaching_report._evidence_reading("production", falling, False, {})
     assert evidence == "方向明确：X 越高，Y 越低"
-    assert copy == "扣掉各国家×行业自身的平均水平和每年的共同变化后，关税暴露 X 越高，复杂 GVC 生产份额平均越低（X 每高 1 个百分点，约低 0.40 个百分点）。"
+    assert (
+        copy
+        == "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动后，关税暴露 X 越高，复杂 GVC 生产份额两年累计平均越低（X 每高 1 个百分点，两年累计约低 0.40 个百分点）。"
+    )
     assert "模拟" not in copy and "真实" not in copy and "下降" not in copy
     assert re.search(r"与.*(?:扩张|收缩)一致", copy) is None
     # A length reads in length units per percentage point of X (the raw coefficient is 100 times larger).
     _evidence, length = teaching_report._evidence_reading(
         "length", {"coef": -1.8186, "ci_low": -1.9, "ci_high": -1.7}, False, {}
     )
-    assert length == "扣掉各国家×行业自身的平均水平和每年的共同变化后，关税暴露 X 越高，前向 GVC 段长度平均越短（X 每高 1 个百分点，约短 0.0182 个长度单位）。"
+    assert (
+        length
+        == "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动后，关税暴露 X 越高，前向 GVC 段长度两年累计平均越短（X 每高 1 个百分点，两年累计约短 0.0182 个长度单位）。"
+    )
     _evidence, network = teaching_report._evidence_reading(
         "network", {"coef": 3969.9979, "ci_low": 3000.0, "ci_high": 4900.0}, False, {}
     )
-    assert network.endswith("加权总度平均越高（X 每高 1 个百分点，约高 39.70 个中心性原始单位）。")
+    assert network.endswith("加权总度两年累计平均越高（X 每高 1 个百分点，两年累计约高 39.70 个中心性原始单位）。")
     assert teaching_report._evidence_reading("trade", {"coef": -0.1, "ci_low": -0.3, "ci_high": 0.1}, False, {})[0] == (
         "方向不确定"
     )
@@ -1464,9 +1482,14 @@ def test_report_prints_automatically_saved_teaching_row(tmp_path, monkeypatch):
     assert summary.lstrip().startswith(f"**{GENERATED_Y_DISCLOSURE}**")
     regression = [chart for chart in charts if chart["type"] == "diverging-bar"]
     assert regression[0]["title"] == "四步保存的结果（都换算成标准差）"
-    assert [item["sub"] for item in regression[0]["items"]] == ["步骤 11 · 贸易流", "步骤 12 · 生产", "步骤 13 · 长度", "步骤 14 · 网络"]
+    assert [item["sub"] for item in regression[0]["items"]] == [
+        "步骤 11 · 贸易流",
+        "步骤 12 · 生产",
+        "步骤 13 · 长度",
+        "步骤 14 · 网络",
+    ]
     for step, chart in zip(range(11, 15), regression[1:]):
-        assert chart["title"] == f"步骤 {step} · 你保存的 Y：X 每高 1 个百分点，Y 平均相差多少"
+        assert chart["title"] == f"步骤 {step} · 你保存的 Y：X 每高 1 个百分点，Y 两年累计平均相差多少"
         (item,) = chart["items"]
         assert item["saved"] is True
         assert item["ci_low"] <= item["value"] <= item["ci_high"]
@@ -1495,24 +1518,28 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert report.provenance["release_id"] == "2" * 32
     assert report.provenance["quiz_version"] == quizzes.QUIZ_VERSION
     assert report.provenance["quiz_versions"] == {
-        str(step): "course-quiz-v9" if step in (11, 14) else "course-quiz-v8" for step in range(1, 15)
+        str(step): "course-quiz-v10" if 10 <= step <= 14 else "course-quiz-v8" for step in range(1, 15)
     }
     assert report.provenance["course_release"] == config.COURSE_RELEASE
     assert report.provenance["runs"][0]["step"] == 11
-    assert report.provenance["runs"][0]["result"]["coefs"][0]["coef"] == 1.2
+    assert report.provenance["runs"][0]["result"]["cumulative"]["coef"] == 1.2
     assert "1.2" in report.markdown and "生成报告时不会重算" in report.markdown
     assert "[0.5721, 1.8279]" in report.markdown
+    assert (
+        "| X 各项合计（累计效应） | +1.20 个百分点 | 1.2000 | [0.5721, 1.8279] | 0.3000 | 4.00 | 0.0008 |"
+        in report.markdown
+    )
     assert "## 关键证据摘要" in report.markdown
     assert X_COLUMN in report.markdown
     assert "+1.20 个百分点" in report.markdown
     assert "## 技术附录：保存的回归结果" in report.markdown
     # The raw coefficient states its scale, next to the per-percentage-point reading used in the body.
     assert (
-        "| 变量 | X 每高 1 个百分点，Y 平均相差 | 系数（X 按份额计） | 95% 区间（按系数计） | 标准误（按国家聚类） | t 值 | p 值 |"
+        "| 变量 | X 每高 1 个百分点，Y 两年累计平均相差 | 系数（X 按份额计） | 95% 区间（按系数计） | 标准误（按国家聚类） | t 值 | p 值 |"
         in report.markdown
     )
     # Four decimals for every number but p, as the page's 详细数字 table prints them.
-    assert "| 关税暴露 X | +1.20 个百分点 | 1.2000 | [0.5721, 1.8279] | 0.3000 | 4.00 | 0.0008 |" in report.markdown
+    assert "| 关税暴露 X | — | 0.7200 |" in report.markdown
     assert "4 位有效数字" not in report.markdown and "保留 4 位小数" in report.markdown
     # Versions and the session digest are listed only under "报告溯源", at the end; the unused macro controls
     # are not mentioned at all.
@@ -1533,16 +1560,21 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert f"剩下 {disclosure['published_entities']} 个用于四项回归" in report.markdown
     assert "预设" not in report.markdown
     assert (
-        "扣掉各国家×行业自身的平均水平和每年的共同变化后，关税暴露 X 越高，外国增加值项占比平均越高（X 每高 1 个百分点，约高 1.20 个百分点）。"
+        "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动后，关税暴露 X 越高，外国增加值项占比两年累计平均越高（X 每高 1 个百分点，两年累计约高 1.20 个百分点）。"
         in report.markdown
     )
-    assert "- **可以支持的表述**：扣掉各国家×行业自身的平均水平和每年的共同变化后，关税暴露 X 越高" in report.markdown
+    assert (
+        "- **可以支持的表述**：扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动后，关税暴露 X 越高"
+        in report.markdown
+    )
     # The method notes state the tariff's scope, the parallel-trends premise and the SD basis.
-    assert "美国只对被加税国家的货物行业（ICIO 行业 A–C）加税，服务业 τ = 0" in report.markdown
+    assert (
+        "美国分两批对被加税国家的货物行业（ICIO 行业 A–C）加税" in report.markdown and "服务业 τ = 0" in report.markdown
+    )
     assert "前提是没有关税时两组的 Y 会平行变化" in report.markdown
     assert "扣掉各国家×行业平均水平和每年共同变化后 Y 的标准差" in report.markdown
     assert (
-        "- **按步骤 10 的例子换算**：CHN 中国 · s1 的 X 为 2.00 个百分点，按估计与 X 相关的差异约为 +2.40 个百分点（Y 偏高）。"
+        "- **按步骤 10 的例子换算**：CHN 中国 · s1 的 X 为 2.00 个百分点，按估计两年累计与 X 相关的差异约为 +2.40 个百分点（Y 偏高）。"
         in report.markdown
     )
     assert "本实验没有生成冲击后的投入产出表或网络" not in report.markdown
@@ -1701,7 +1733,8 @@ def test_exact_run_identity_prevents_unsigned_latest_from_shadowing_distinct_qua
         "suppress_inference": True,
         "reasons": ["测试诊断"],
     }
-    latest["result"]["coefs"][0].update(p=None, ci_low=None, ci_high=None)
+    for coefficient in [*latest["result"]["coefs"], latest["result"]["cumulative"]]:
+        coefficient.update(p=None, ci_low=None, ci_high=None)
     latest["result"]["notes"] = ["LATEST_COLLISION_FIXTURE"]
     session["steps"]["11"]["data"].update({"run": latest, "qualified_run": qualified})
 
@@ -1743,8 +1776,14 @@ def test_report_carries_release_qc_disclosures(tmp_path, monkeypatch):
     assert "## 数据检查" in report.markdown
     # A lead-in says what the check names are before the names themselves (kept as the QC contract writes them).
     assert "需要留意的项目（检查名保留系统原文）" in report.markdown
-    assert "提醒（检查发现个别特殊取值，例如负的增加值；这些取值来自原始数据，已保留）：因子投入与派生指标定义域（VA/TLS）" in report.markdown
-    assert "通过，附说明（检查通过，只记录了在容差内的微小偏差或特殊取值）：维度一致性与索引对齐（Z/Y/A/L/x/OUT）" in report.markdown
+    assert (
+        "提醒（检查发现个别特殊取值，例如负的增加值；这些取值来自原始数据，已保留）：因子投入与派生指标定义域（VA/TLS）"
+        in report.markdown
+    )
+    assert (
+        "通过，附说明（检查通过，只记录了在容差内的微小偏差或特殊取值）：维度一致性与索引对齐（Z/Y/A/L/x/OUT）"
+        in report.markdown
+    )
     # Chinese and Latin letters are spaced in check names; a name under 提醒 is not repeated under 通过.
     assert "原始 OUT = Z 列和 + VA + TLS" in report.markdown or "原始OUT" not in report.markdown
 
@@ -1773,7 +1812,10 @@ def test_report_discloses_output_economic_warnings_without_blocking_publication(
     assert summary["requires_disclosure"] is True
     assert summary["warning"] == [warning["name"]]
     report = build(_complete(), "同学")
-    assert "提醒（检查发现个别特殊取值，例如负的增加值；这些取值来自原始数据，已保留）：panel_share_economic_domains" in report.markdown
+    assert (
+        "提醒（检查发现个别特殊取值，例如负的增加值；这些取值来自原始数据，已保留）：panel_share_economic_domains"
+        in report.markdown
+    )
     assert report.provenance["output_qc"]["years"]["2020"]["warnings"] == [warning["name"]]
 
 
@@ -2002,7 +2044,8 @@ def test_report_marks_suppressed_inference_and_reasons(tmp_path, monkeypatch):
 
     assert "这一项不显示 95% 区间" in report.markdown
     assert "处理聚类不足" in report.markdown
-    assert "| 关税暴露 X | -0.20 个百分点 | -0.2000 | 不显示 | 0.1000 | — | 不显示 |" in report.markdown
+    assert "| 关税暴露 X | — | -0.1200 | 不显示 | 0.1000 | — | 不显示 |" in report.markdown
+    assert "| X 各项合计（累计效应） | -0.20 个百分点 | -0.2000 | 不显示 | 0.1000 | — | 不显示 |" in report.markdown
 
 
 def test_report_translates_settings_controls_and_rounds_display_values(tmp_path, monkeypatch):
@@ -2045,14 +2088,14 @@ def test_report_translates_settings_controls_and_rounds_display_values(tmp_path,
 
     markdown = build(session, "同学").markdown
 
-    assert "双向固定效应（TWFE） · 国家×行业 · 不加控制变量" in markdown
+    assert "双向固定效应（TWFE） · 国家×行业 · 控制：汇率变动" in markdown
     assert "+0.0014 个百分点" in markdown
     assert "[-0.0017, +0.0045] 个百分点" in markdown
     assert "方向不确定" in markdown
     assert "关税暴露 X" in markdown
     assert "总增加值规模(log, ICIO GVA proxy)" not in markdown
     assert "0.0013729825631389496" not in markdown
-    assert "Y 平均相差多少（双向固定效应，TWFE），不加控制变量" in markdown
+    assert "Y 当年与次年合计平均相差多少（双向固定效应，TWFE），控制：汇率变动" in markdown
     assert "twfe_intensity ×" not in markdown
     assert "icio_derived" not in markdown
 
@@ -2077,7 +2120,7 @@ def test_complete_stopped_diagnosis_satisfies_report_gate_without_hiding_it(
     result["status_reasons"] = ["实际配对支持不足或处理路径不相容"]
     result["support"] = {"status": status, "suppress_inference": True, "reasons": result["status_reasons"]}
     result["diagnostics"] = {"study_contract": "economics-v2"}
-    for coefficient in result["coefs"]:
+    for coefficient in [*result["coefs"], result["cumulative"]]:
         coefficient.update(p=None, ci_low=None, ci_high=None, stars="")
     assert check_gate(session) == []
     report = build(session, "诊断学习者")
@@ -2365,15 +2408,17 @@ def _course_overview(**coefs: float) -> dict:
                     "kind": item.kind,
                     "default": index == 0,
                     "coef": coefs.get(item.key, defaults[item.kind]),
-                    "ci_low": coefs.get(item.key, defaults[item.kind]) - abs(coefs.get(item.key, defaults[item.kind])) / 10,
-                    "ci_high": coefs.get(item.key, defaults[item.kind]) + abs(coefs.get(item.key, defaults[item.kind])) / 10,
+                    "ci_low": coefs.get(item.key, defaults[item.kind])
+                    - abs(coefs.get(item.key, defaults[item.kind])) / 10,
+                    "ci_high": coefs.get(item.key, defaults[item.kind])
+                    + abs(coefs.get(item.key, defaults[item.kind])) / 10,
                     "status": "ok",
                     "suppress_inference": False,
                     "depvar_within_std": stds[item.kind],
                 }
                 for index, item in enumerate(items)
             ]
-            for outcome, items in teaching.BASELINES.items()
+            for outcome, items in ((key, teaching.selectable_baselines(key)) for key in teaching.BASELINES)
         }
     }
 
@@ -2390,7 +2435,10 @@ def test_report_draws_every_y_of_each_family_with_the_saved_one_marked(tmp_path,
     run = session["steps"]["11"]["data"]["run"]
     run["result"]["coefs"][0]["coef"] = -0.55
     run["result"]["coefs"][0]["se"] = 0.001
-    run["result"]["binscatter"] = {"bins": [{"x": -0.02, "y": 0.011, "n": 10}, {"x": 0.02, "y": -0.011, "n": 10}], "slope": -0.55}
+    run["result"]["binscatter"] = {
+        "bins": [{"x": -0.02, "y": 0.011, "n": 10}, {"x": 0.02, "y": -0.011, "n": 10}],
+        "slope": -0.55,
+    }
     _sign_run(run)
 
     markdown = build(session, "同学").markdown
@@ -2400,19 +2448,25 @@ def test_report_draws_every_y_of_each_family_with_the_saved_one_marked(tmp_path,
     ]
     assert not {"binscatter", "coefficient"} & {chart["type"] for chart in charts}
     trade = next(chart for chart in charts if chart["title"].startswith("步骤 11"))
-    assert trade["title"] == "步骤 11 · 贸易流的 2 个 Y：X 每高 1 个百分点，Y 平均相差多少"
+    assert trade["title"] == "步骤 11 · 贸易流的 2 个 Y：X 每高 1 个百分点，Y 两年累计平均相差多少"
     assert trade["items"] == [
-        {"label": "外国增加值项占比", "value": -0.55, "text": "-0.55", "ci_low": pytest.approx(-0.5627, abs=1e-4),
-         "ci_high": pytest.approx(-0.5373, abs=1e-4), "saved": True},
+        {
+            "label": "外国增加值项占比",
+            "value": -0.55,
+            "text": "-0.55",
+            "ci_low": pytest.approx(-0.5627, abs=1e-4),
+            "ci_high": pytest.approx(-0.5373, abs=1e-4),
+            "saved": True,
+        },
         {"label": "国内增加值出口占比", "value": 0.55, "text": "+0.55", "ci_low": 0.495, "ci_high": 0.605},
     ]
     step_11 = markdown.split("### 步骤 11 · 贸易流回归", 1)[1].split("### ", 1)[0]
-    assert "| 关税暴露 X 每高 1 个百分点，Y 平均相差 | **-0.55 个百分点** |" in step_11
+    assert "| 关税暴露 X 每高 1 个百分点，Y 两年累计平均相差 | **-0.55 个百分点** |" in step_11
     assert "- 图中标“已保存”的是你保存的 Y，下表是它的详细数字" in step_11
     # Steps 13 and 14 mix units, so their bars are in standard deviations with the native value first.
     network = next(chart for chart in charts if chart["title"].startswith("步骤 14"))
     assert len(network["items"]) == len(teaching.BASELINES["network"])
-    assert network["x_label"] == "X 每高 1 个百分点，Y 平均相差（个标准差）"
+    assert network["x_label"] == "X 每高 1 个百分点，Y 两年累计平均相差（个标准差）"
     assert network["items"][1]["text"] == "-20.00（-0.040 个标准差）"
     assert "介数" in [item["label"] for item in network["items"]]
     assert "生成报告时不会重算" in markdown and "其余 Y 的条形是课程用同一份数据、同一个模型算出的结果" in markdown
@@ -2442,7 +2496,7 @@ def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(
     markdown = build(session, "同学").markdown
     assert "| 结果指标 Y | GVC 位置指数 |" in markdown
     assert "位置指数单位" not in markdown
-    assert "GVC 位置指数平均越低（X 每高 1 个百分点，约低 0.0040）" in markdown
+    assert "GVC 位置指数两年累计平均越低（X 每高 1 个百分点，两年累计约低 0.0040）" in markdown
     charts = [
         json.loads(block)
         for block in re.findall("```gvcsim-chart" + chr(10) + "(.*?)" + chr(10) + "```", markdown, re.S)
@@ -2452,11 +2506,11 @@ def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(
     length = next(chart for chart in charts if chart["title"].startswith("步骤 13"))
     assert [item["label"] for item in length["items"]] == ["前向 GVC 段长度", "后向 GVC 段长度", "GVC 位置指数"]
     assert [item.get("saved", False) for item in length["items"]] == [False, False, True]
-    assert length["x_label"] == "X 每高 1 个百分点，Y 平均相差（个标准差）"
+    assert length["x_label"] == "X 每高 1 个百分点，Y 两年累计平均相差（个标准差）"
     saved = length["items"][2]
     assert saved["value"] == pytest.approx(-0.004 / 0.17, rel=1e-3)
     assert saved["text"] == "-0.0040（-0.024 个标准差）"
-    assert "| 关税暴露 X 每高 1 个百分点，Y 平均相差 | **-0.0040（幅度约 0.024 个标准差）** |" in markdown
+    assert "| 关税暴露 X 每高 1 个百分点，Y 两年累计平均相差 | **-0.0040（幅度约 0.024 个标准差）** |" in markdown
     assert [item["sub"] for item in length["items"]] == ["长度单位", "长度单位", "无量纲"]
     summary = next(chart for chart in charts if chart["title"] == "四步保存的结果（都换算成标准差）")
     assert summary["items"][2]["text"] == "-0.0040（-0.024 个标准差）"
@@ -2480,7 +2534,10 @@ def test_technical_appendix_states_the_chosen_y_unit_not_the_family_unit():
         "result": {"status": "ok", "coefs": []},
     }
     lines = _run_sections([run])
-    assert "- 单位：无量纲（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏）" in lines
+    assert (
+        "- 单位：无量纲（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏）"
+        in lines
+    )
     assert "- 结果指标 Y：GVC 位置指数" in lines
     default = {**run, "design": {"depvar_label": "前向生产长度", "equation": "Y = βX + FE"}}
     assert (
@@ -2537,7 +2594,6 @@ def test_bold_markup_closes_before_chinese_punctuation():
     assert not _re.search(r"[。：；，]\*\*[^\s*|]", text)
 
 
-
 def test_report_regression_headings_name_the_step_not_its_default_y(tmp_path, monkeypatch):
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
@@ -2563,10 +2619,17 @@ def test_report_regression_headings_name_the_step_not_its_default_y(tmp_path, mo
 def test_report_example_conversion_reads_like_the_page():
     from gvcsim.report_render import _example_conversion
 
-    example = {"country": "CAN", "industry": "C29", "teaching_tariff_exposure": 0.2325, "teaching_tariff_rate_tau": 0.25}
+    example = {
+        "country": "CAN",
+        "industry": "C29",
+        "teaching_tariff_exposure": 0.2325,
+        "teaching_tariff_rate_tau": 0.25,
+    }
     coefficient = {"coef": -0.55}
     line = _example_conversion("trade", {}, coefficient, True, example)
-    assert line is not None and line.endswith("的 X 为 23.25 个百分点，按估计与 X 相关的差异约为 -12.79 个百分点（Y 偏低）。")
+    assert line is not None and line.endswith(
+        "的 X 为 23.25 个百分点，按估计两年累计与 X 相关的差异约为 -12.79 个百分点（Y 偏低）。"
+    )
     length = _example_conversion("length", {"depvar_kind": "length"}, {"coef": -1.8}, True, example)
     assert length is not None and length.endswith("约为 -0.419 个长度单位（Y 偏短）。")
     imposer = _example_conversion("trade", {}, coefficient, True, {**example, "country": "USA"})
@@ -2582,10 +2645,17 @@ def test_report_example_conversion_multiplies_the_printed_numbers():
     """The printed -0.55 × the printed 20.44 = -11.24, not the unrounded -0.5517 × 20.44 = -11.28 (as on the page)."""
     from gvcsim.report_render import _example_conversion
 
-    example = {"country": "CAN", "industry": "C29", "teaching_tariff_exposure": 0.2044, "teaching_tariff_rate_tau": 0.25}
+    example = {
+        "country": "CAN",
+        "industry": "C29",
+        "teaching_tariff_exposure": 0.2044,
+        "teaching_tariff_rate_tau": 0.25,
+    }
     coefficient = {"coef": -0.5517, "ci_low": -0.61, "ci_high": -0.49}
     line = _example_conversion("trade", {}, coefficient, True, example)
-    assert line is not None and line.endswith("的 X 为 20.44 个百分点，按估计与 X 相关的差异约为 -11.24 个百分点（Y 偏低）。")
+    assert line is not None and line.endswith(
+        "的 X 为 20.44 个百分点，按估计两年累计与 X 相关的差异约为 -11.24 个百分点（Y 偏低）。"
+    )
 
 
 def test_report_example_x_uses_step_ten_digits():
@@ -2605,7 +2675,10 @@ def test_report_example_x_uses_step_ten_digits():
         "teaching_export_share_w": 0.0089776,
     }
     line = _example_conversion("network", {"depvar_kind": "network"}, {"coef": 4080}, True, example)
-    assert line is not None and "的 X 为 0.22444 个百分点，按估计与 X 相关的差异约为 +9.16 个中心性原始单位" in line
+    assert (
+        line is not None
+        and "的 X 为 0.22444 个百分点，按估计两年累计与 X 相关的差异约为 +9.16 个中心性原始单位" in line
+    )
     # Without w (an older record), two decimals as before.
     del example["teaching_export_share_w"]
     line = _example_conversion("network", {"depvar_kind": "network"}, {"coef": 4080}, True, example)
@@ -2706,7 +2779,8 @@ def test_report_step_ten_states_the_scenario_and_who_is_taxed(tmp_path, monkeypa
         "year": year,
         "teaching_export_share_w": float(first_row.teaching_export_share_w),
         "teaching_tariff_rate_tau": float(first_row.teaching_tariff_rate_tau),
-        "teaching_tariff_exposure": float(first_row.teaching_export_share_w) * float(first_row.teaching_tariff_rate_tau),
+        "teaching_tariff_exposure": float(first_row.teaching_export_share_w)
+        * float(first_row.teaching_tariff_rate_tau),
         "version": TEACHING_VERSION,
     }
     session["steps"]["10"]["data"].update(
@@ -2723,7 +2797,7 @@ def test_report_step_ten_states_the_scenario_and_who_is_taxed(tmp_path, monkeypa
     # The saved-snapshot section's step 10 (the quiz record has a heading of the same name).
     snapshots = markdown.split("## 保存的实验快照", 1)[1]
     step_ten = snapshots.split("### 步骤 10 · 认识关税暴露 X", 1)[1].split("###", 1)[0]
-    status ={code: "被加税" if flag else "未被加税" for code, flag in taxed.items()}
+    status = {code: "被加税" if flag else "未被加税" for code, flag in taxed.items()}
     assert (
         f"- 两国趋势示例：{country_label(first)}（{status[first]}）、{country_label(other)}（{status[other]}） · "
         f"{_sector(industry)} · 全部可用年份"
@@ -2795,6 +2869,28 @@ def test_report_scenario_line_and_two_example_conversion_read_like_step_ten():
         "- 情景：美国从 2018 年起对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 44 国的货物（农业、采矿业和制造业，"
         "ICIO 行业 A–C）加征 25% 关税，服务业不加税；其余 32 国未被加税。"
     )
+    # Two waves (v10): the line names both, largest surpluses first, as step 10 does; each taxed country's start year.
+    waves = {
+        **goods,
+        "taxed_countries": 37,
+        "untaxed_countries": 38,
+        "waves": [
+            {"wave": 1, "start_year": 2018, "min_million_usd": 10000.0, "countries": 14},
+            {"wave": 2, "start_year": 2019, "min_million_usd": 1000.0, "countries": 23},
+        ],
+        "taxed": {"CAN": True, "MEX": True, "CRI": False},
+        "start_year": {"CAN": 2018, "MEX": 2019},
+    }
+    assert _scenario_line(waves) == (
+        "- 情景：美国分两批对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 37 国的货物（农业、采矿业和制造业，"
+        "ICIO 行业 A–C）加征 25% 关税：对美货物顺差 ≥ 100 亿美元的 14 国 2018 年起，其余 23 国 2019 年起；"
+        "服务业不加税；其余 38 国未被加税。"
+    )
+    assert _with_tax_status("MEX", waves) == f"{country_label('MEX')}（被加税，2019 年起）"
+    assert _with_tax_status("CRI", waves) == f"{country_label('CRI')}（未被加税）"
+    # One wave with countries (a small fixture) keeps the single-start sentence.
+    one = {**waves, "waves": [{**waves["waves"][0], "countries": 0}, waves["waves"][1]]}
+    assert _scenario_line(one) == _scenario_line(goods | {"taxed_countries": 37, "untaxed_countries": 38})
     service = {"country": "CAN", "industry": "O", X_COLUMN: 0.0, "teaching_tariff_rate_tau": 0.0}
     service_line = _example_conversion("trade", {}, {"coef": -0.55}, True, [service])
     assert service_line == (
@@ -2805,7 +2901,7 @@ def test_report_scenario_line_and_two_example_conversion_read_like_step_ten():
     untaxed = {"country": "CRI", "industry": "C29", X_COLUMN: 0.0, "teaching_tariff_rate_tau": 0.0}
     line = _example_conversion("trade", {}, {"coef": -0.55}, True, [taxed, untaxed])
     assert line == (
-        f"- **按步骤 10 的例子换算**：{country_label('CAN')} · {_sector('C29')} 的 X 为 23.25 个百分点，按估计与 X 相关的"
+        f"- **按步骤 10 的例子换算**：{country_label('CAN')} · {_sector('C29')} 的 X 为 23.25 个百分点，按估计两年累计与 X 相关的"
         f"差异约为 -12.79 个百分点（Y 偏低）；{country_label('CRI')} · {_sector('C29')} 未被加税，X = 0，按估计没有与 X 相关的差异。"
     )
     # An open direction is said once, after the converted example, not after the untaxed one.
@@ -2828,7 +2924,15 @@ def test_report_appendix_numbers_match_the_page_detail_table():
     result = {
         "status": "ok",
         "coefs": [
-            {"name": X_COLUMN, "coef": -1.84138, "se": 0.0398641, "t": -46.19, "p": 0.00002, "ci_low": -0.41094, "ci_high": -0.37902}
+            {
+                "name": X_COLUMN,
+                "coef": -1.84138,
+                "se": 0.0398641,
+                "t": -46.19,
+                "p": 0.00002,
+                "ci_low": -0.41094,
+                "ci_high": -0.37902,
+            }
         ],
     }
     lines = _technical_estimate_tables({"depvar_kind": "length"}, result, suppressed=False, outcome="length")
@@ -2845,7 +2949,15 @@ def test_report_appendix_groups_thousands_like_the_page_detail_table():
         "status": "ok",
         "depvar_within_std": 850,
         "coefs": [
-            {"name": X_COLUMN, "coef": -4080.37226, "se": 39.88, "t": -102.3163, "p": 0.00001, "ci_low": -4158.542, "ci_high": -4002.2026}
+            {
+                "name": X_COLUMN,
+                "coef": -4080.37226,
+                "se": 39.88,
+                "t": -102.3163,
+                "p": 0.00001,
+                "ci_low": -4158.542,
+                "ci_high": -4002.2026,
+            }
         ],
     }
     lines = _technical_estimate_tables({"depvar_kind": "network"}, result, suppressed=False, outcome="network")
@@ -2860,3 +2972,292 @@ def test_report_example_conversion_groups_thousands_like_the_page():
 
     assert _example_size("network", -1382.4) == "1,382 个中心性原始单位"
     assert _example_size("network", 12.345) == "12.3 个中心性原始单位"
+
+
+def _custom(name: str, spec, *, in_report: bool = True, baseline: str = "FVA_share", snapshot=None) -> dict:
+    return {
+        "id": f"id-{name}",
+        "name": name,
+        "outcome": "trade",
+        "baseline": baseline,
+        "spec": spec.canonical().to_dict(),
+        "in_report": in_report,
+        "saved_at": "2026-10-11T09:00:00Z",
+        "snapshot": snapshot or {"result": {"coefs": [{"name": "teaching_tariff_exposure", "coef": 99.0}]}},
+    }
+
+
+def test_report_appendix_recomputes_the_models_marked_for_the_report(tmp_path, monkeypatch):
+    """自己设计模型: each Y gets a table with the default model first; the numbers come from the saved spec, so a
+    tampered snapshot changes nothing, and models not marked 放入报告 are left out."""
+    from gvcsim import regression_routes
+    from gvcsim.regression.design import RegressionDesign
+    from gvcsim.regression.spec import DEFAULT_SPEC, EXCHANGE_RATE_COLUMN, ModelSpec
+
+    from test_model_spec import _panel
+
+    from gvcsim import report_workbench
+
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    regression_routes.clear_result_cache()
+    plain = build(_complete(), "同学")
+    assert "附录：学生设计的模型" not in plain.markdown and "按你保存的设定" not in plain.markdown
+    assert plain.provenance["custom_results"] == []
+    # The small release fixture has no tariff (X = 0 everywhere): each model says it could not be recomputed.
+    failing = _complete()
+    failing["steps"]["11"]["data"]["custom_results"] = [_custom("结果1", ModelSpec((0,), (), ("year",)))]
+    lines = build(failing, "同学").markdown.split("## 附录：学生设计的模型", 1)[1]
+    assert "- 结果1：X；无控制变量；年份 FE。这次没能重算：关税暴露 X 在这个设定下无法估计" in lines
+    # The rest of this test reads a teaching-shaped panel with two tariff waves.
+    panel = _panel()
+    monkeypatch.setattr(report_workbench, "read_csv_artifact", lambda _path: panel)
+    regression_routes.clear_result_cache()
+
+    no_rate = ModelSpec((0, 1), (), ("country_industry", "year"))
+    country_year = ModelSpec((0, 1), ((EXCHANGE_RATE_COLUMN, 0),), ("country_industry", "country_year"))
+    session = _complete()
+    session["steps"]["11"]["data"]["custom_results"] = [
+        _custom("去掉汇率", no_rate),
+        _custom("没放入报告", ModelSpec((0,), (), ()), in_report=False),
+        _custom("国家×年份*", country_year),
+    ]
+    report = build(session, "同学")
+    markdown = report.markdown
+    appendix = markdown.split("## 附录：学生设计的模型", 1)[1].split("\n## ", 1)[0]
+    assert "| 变量 | 默认模型 | 去掉汇率 | 国家×年份\\* |" in appendix
+    assert "控制变量都是国家层面的逐年数值：汇率变动 = 本币兑美元的年变动（百分点，负为贬值）（课程生成）。" in appendix
+    assert "没放入报告" not in appendix
+    # The recomputed numbers, not the snapshot's 99.
+    for spec in (DEFAULT_SPEC, no_rate):
+        run = regression_routes.cached_run(panel, RegressionDesign("trade", teaching=True, spec=spec))
+        x = next(item for item in run["result"]["coefs"] if item["name"] == X_COLUMN)
+        assert _fixed4(x["coef"]) in appendix
+    assert "99.0000" not in appendix
+    # The exchange rate is absorbed by country × year effects and said so; the default column's model is summarised.
+    assert (
+        "- 国家×年份\\*：X + L1.X；汇率变动；国家×行业 + 国家×年份 FE；已省略（被国家×年份 FE 吸收：汇率变动）"
+        in appendix
+    )
+    assert "- 默认模型：X + L1.X；汇率变动；国家×行业 + 年份 FE" in appendix
+    assert "| 国家×年份 FE | 否 | 否 | 是 |" in appendix
+    assert "| 国家 FE | 是 | 是 | 是 |" in appendix
+    assert "| 观测值 |" in appendix and "| 组内 R² |" in appendix and "| F（自由度） |" in appendix
+    # Under the cumulative relation, each column's sum per 1 percentage point of X, as the page's table reads it.
+    per_point = next(line for line in appendix.splitlines() if line.startswith("| 合计：X 每高 1 个百分点 |"))
+    assert appendix.index("| X 各项合计（累计效应） |") < appendix.index(per_point)
+    cells = per_point.strip(" |").split(" | ")[1:]
+    assert len(cells) == 3 and all(cell.endswith(" 个百分点（两年累计）") for cell in cells)
+    default_run = regression_routes.cached_run(panel, RegressionDesign("trade", teaching=True, spec=DEFAULT_SPEC))
+    assert cells[0] == f"{default_run['result']['cumulative']['coef']:+.2f} 个百分点（两年累计）"
+    assert "注：括号内为按国家聚类的标准误。\\*\\*\\* p\\<0.01" in appendix
+    assert report.provenance["custom_results"] == [
+        {"step": 11, "name": "去掉汇率", "outcome": "trade", "baseline": "FVA_share", "spec": no_rate.to_dict()},
+        {"step": 11, "name": "国家×年份*", "outcome": "trade", "baseline": "FVA_share", "spec": country_year.to_dict()},
+    ]
+    # Each step's evidence names the models the appendix compares.
+    summary = markdown.split("## 关键证据摘要", 1)[1].split("## 理解题答题记录", 1)[0]
+    assert "- 你还在本步比较了 2 个自己设计的模型（去掉汇率、国家×年份\\*），见附录“学生设计的模型”。" in summary
+    assert summary.count("你还在本步比较了") == 1
+    # The methods note says the appendix is the one part recomputed.
+    assert "“学生设计的模型”附录中的模型则按你保存的设定在生成报告时重新计算。" in markdown
+
+    tampered = copy.deepcopy(session)
+    tampered["steps"]["11"]["data"]["custom_results"][0]["snapshot"] = {"result": {"coefs": [{"coef": -1e9}]}}
+    tampered_appendix = build(tampered, "同学").markdown.split("## 附录：学生设计的模型", 1)[1].split("\n## ", 1)[0]
+    assert tampered_appendix == appendix
+    regression_routes.clear_result_cache()
+
+
+def test_report_appendix_reads_each_x_sum_per_percentage_point():
+    """The appendix's "合计：X 每高 1 个百分点" row (the page's ``perPointRow``): the first column's decimals for every
+    column, the years each sum covers, and an empty cell where a model could not be recomputed."""
+    from gvcsim.regression.spec import DEFAULT_SPEC, X_LAG_COLUMNS, ModelSpec
+    from gvcsim.report_workbench import _per_point_rows
+
+    design = {"outcome": "length", "depvar_kind": "length"}
+    x = {"name": X_COLUMN, "coef": -1.1, "ci_low": -1.2, "ci_high": -1.0}
+    lag = {"name": X_LAG_COLUMNS[1], "coef": -0.7234, "ci_low": -0.8, "ci_high": -0.65}
+    cumulative = {"coef": -1.8234, "ci_low": -1.8952, "ci_high": -1.7516}
+    columns = [
+        {
+            "name": "默认模型",
+            "spec": DEFAULT_SPEC,
+            "run": {"design": design, "result": {"coefs": [x, lag], "cumulative": cumulative}},
+        },
+        {
+            "name": "只看当年",
+            "spec": ModelSpec((0,), (), ("country_industry", "year")),
+            "run": {"design": design, "result": {"coefs": [{"name": X_COLUMN, "coef": -1.2}]}},
+        },
+        {"name": "算不出", "spec": ModelSpec((0, 1), (), ()), "run": "关税暴露 X 在这个设定下无法估计"},
+    ]
+    assert _per_point_rows(columns) == [
+        "| 合计：X 每高 1 个百分点 | -0.0182 个长度单位（两年累计） | -0.0120 个长度单位（仅当年） |  |"
+    ]
+    assert _per_point_rows([columns[2]]) == []
+
+
+def test_report_appendix_never_calls_one_coefficient_a_sum():
+    """L1.X dropped from a two-term model: the estimate has no sum, so the cell stays empty rather than printing the
+    remaining X term as 两年累计."""
+    from gvcsim.regression.spec import DEFAULT_SPEC, X_LAG_COLUMNS
+    from gvcsim.report_workbench import _per_point_rows
+
+    design = {"outcome": "length", "depvar_kind": "length"}
+    x = {"name": X_COLUMN, "coef": -1.1, "ci_low": -1.2, "ci_high": -1.0}
+    lag = {"name": X_LAG_COLUMNS[1], "coef": -0.7234, "ci_low": -0.8, "ci_high": -0.65}
+    cumulative = {"coef": -1.8234, "ci_low": -1.8952, "ci_high": -1.7516}
+    columns = [
+        {
+            "name": "默认模型",
+            "spec": DEFAULT_SPEC,
+            "run": {"design": design, "result": {"coefs": [x, lag], "cumulative": cumulative}},
+        },
+        {
+            "name": "L1.X 被剔除",
+            "spec": DEFAULT_SPEC,
+            "run": {"design": design, "result": {"coefs": [x], "cumulative": None}},
+        },
+    ]
+    assert _per_point_rows(columns) == ["| 合计：X 每高 1 个百分点 | -0.0182 个长度单位（两年累计） |  |"]
+
+
+def test_gate_marks_the_steps_where_only_the_quiz_is_missing(monkeypatch):
+    """The page's gate link goes to the quiz when nothing else of the step is missing, whichever quiz message it is."""
+    from gvcsim import report_gate
+
+    monkeypatch.setattr(
+        report_gate, "check_material_gate", lambda session: [{"step": 2, "title": "指标", "missing": ["记录两个国家"]}]
+    )
+    # Step 1's quiz was saved for an older version; step 3's was never answered; step 2 also lacks its material.
+    session = {"steps": {"1": {"data": {"quiz": {"version": "old", "answers": {}}}}}}
+    gate = {item["step"]: item for item in report_gate.check_gate(session)}
+    assert gate[1]["quiz_only"] is True and gate[3]["quiz_only"] is True
+    assert gate[2]["quiz_only"] is False
+
+
+def test_report_technical_appendix_writes_the_v10_formula():
+    from gvcsim.regression.spec import DEFAULT_SPEC
+    from gvcsim.report_render import _formula_line
+
+    assert _formula_line({"spec": DEFAULT_SPEC.to_dict()}) == (
+        "- 公式：Y = β₁·X + β₂·L1.X + γ₁·汇率变动 + α（每个国家×行业的平均水平）+ λ（每年的共同变化）+ ε（随机波动）"
+    )
+
+
+def test_report_prints_typed_model_names_literally():
+    """A typed name cannot turn into Markdown: strikethrough, an autolink or an e-mail link stay plain text."""
+    from gvcsim.report_workbench import _name
+
+    joiner = "\u2060"
+    # The joiner goes only where GFM would start a link: "www.", "://" and "@".
+    assert _name("~~删~~www.ab.cn") == f"\\~\\~删\\~\\~www{joiner}\\.ab\\.cn"
+    assert _name("WWW.A.CN") == f"WWW{joiner}\\.A\\.CN"
+    assert _name("a@b.cn") == f"a{joiner}\\@b\\.cn"
+    assert _name("http://x.y") == f"http{joiner}\\:\\/\\/x\\.y"
+    # Elsewhere a name copies as typed: no invisible characters in "模型1.5" or "x.cn".
+    assert _name("模型1.5") == "模型1\\.5"
+    assert _name("x.cn") == "x\\.cn"
+    assert _name("国家×年份") == "国家×年份"
+    assert _name("C+I+Y") == "C\\+I\\+Y"
+
+
+def test_x_sum_labels_name_their_terms_when_not_a_run_of_years():
+    from gvcsim.regression.spec import ModelSpec
+    from gvcsim.report_workbench import _x_span
+
+    effects = ("country_industry", "year")
+    assert [
+        _x_span(ModelSpec(lags, (), effects)) for lags in ((0,), (0, 1), (0, 1, 2), (1,), (2,), (0, 2), (1, 2))
+    ] == [
+        "仅当年",
+        "两年累计",
+        "三年累计",
+        "仅 L1.X",
+        "仅 L2.X",
+        "X + L2.X 之和",
+        "L1.X + L2.X 之和",
+    ]
+
+
+def test_technical_appendix_names_the_default_models_control():
+    from gvcsim.report_render import _run_sections
+
+    run = {
+        "step": 11,
+        "outcome": "trade",
+        "design": {
+            "depvar_label": "外国增加值项占比",
+            "equation": "Y = βX + FE",
+            "method": "twfe_intensity",
+            "control_mode": "spec",
+            "control_labels": {"teaching_exchange_rate_change": "汇率变动"},
+        },
+        "result": {"status": "ok", "coefs": []},
+    }
+    [setting] = [line for line in _run_sections([run]) if line.startswith("- 保存的设定：")]
+    assert "控制变量：汇率变动" in setting and "自选" not in setting
+    none = {**run, "design": {**run["design"], "control_mode": "none", "control_labels": {}}}
+    [setting] = [line for line in _run_sections([none]) if line.startswith("- 保存的设定：")]
+    assert "控制变量：不加控制变量" in setting
+
+
+def test_a_tiny_estimate_and_its_interval_share_decimals():
+    """Below the rounding step the value keeps 2 significant digits and its interval ends the same decimals."""
+    from gvcsim.report_common import _signed, estimate_digits
+
+    digits = estimate_digits("share", 0.0048, (-0.0072, 0.0168))
+    assert [_signed(value, digits) for value in (0.0048, -0.0072, 0.0168)] == ["+0.0048", "-0.0072", "+0.0168"]
+    assert estimate_digits("share", 0.00752, (-0.0112, 0.0262)) == 3
+
+
+def test_step_15_answers_count_visible_characters_as_the_page_does():
+    """report_gate.reflection_length and the page's reflectionLength give the same counts (report-lab.test.tsx)."""
+    from gvcsim.report_gate import reflection_length
+
+    assert reflection_length("  贸易 😀\n\n分析  ") == 7
+    assert reflection_length("😀😀") == 2
+    assert reflection_length("👨‍👩‍👧") == 3
+    assert reflection_length("🇨🇳") == 2
+    assert reflection_length("é") == 1
+    assert reflection_length("​" * 40) == 0
+    assert reflection_length("‮结果‬") == 2
+    assert reflection_length("甲\x1f乙") == 3
+
+
+def test_invisible_answers_do_not_pass_the_gate(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    session["steps"]["15"]["data"].update(
+        {"research_question": "​" * 12, "evidence_interpretation": "​" * 40, "limitations": "​" * 30}
+    )
+    blocked = [item for item in check_gate(session) if item["step"] == 15]
+    assert blocked and len(blocked[0]["missing"]) == 3
+
+
+def test_report_prints_the_analysis_without_bidi_overrides_or_runs_of_blank_lines():
+    from gvcsim.report_observed import _reflection_value
+
+    block = _reflection_value("第一段\n\n\n\n   \n" + "\n" * 2000 + "第二段‮反过来‬")
+    assert block.splitlines()[1:-1] == ["第一段", "", "第二段反过来"]
+
+
+def test_report_marks_a_default_step_10_example_and_names_accounts_rows(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    session["steps"]["10"]["data"]["teaching_example_chosen"] = False
+    markdown = build(session, "同学").markdown
+    assert "换算用的例子（系统默认例子，学生未另选）" in markdown
+    session["steps"]["10"]["data"]["teaching_example_chosen"] = True
+    assert "系统默认例子" not in build(session, "同学").markdown
+    # An accounts-table cell: its row is a country × industry with its own accounts, not a supplier.
+    session["steps"]["1"]["data"]["observation"].update(
+        {"table": "accounts", "row_country": "BRN", "row_sector": "C29"}
+    )
+    markdown = build(session, "同学").markdown
+    assert (
+        "国家（行）：BRN" in markdown and "供给国" not in markdown.split("### 步骤 1", 1)[1].split("### 步骤 2", 1)[0]
+    )

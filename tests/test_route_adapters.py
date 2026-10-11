@@ -16,6 +16,7 @@ from gvcsim.data import quality
 from gvcsim.api import app
 
 from gvcsim.regression.contracts import RegressionRequest
+from gvcsim.regression.spec import DEFAULT_SPEC
 
 
 @pytest.fixture(autouse=True)
@@ -900,7 +901,18 @@ def test_malformed_qc_api_uses_controlled_artifact_error(teaching_db, tmp_path, 
 
 def test_regression_design_and_validation(teaching_db):
     client = _authenticated_client(teaching_db)
-    assert client.get("/api/regression/options").status_code == 404
+    # The workbench's choices (自己设计模型): the default model, the whitelist and the limits.
+    options = client.get("/api/regression/options")
+    assert options.status_code == 200
+    assert options.json()["default_spec"] == DEFAULT_SPEC.to_dict()
+    assert [item["lag"] for item in options.json()["x_lags"]] == [0, 1, 2]
+    assert options.json()["limits"] == {
+        "saved": 6,
+        "in_report": 3,
+        "compared": 4,
+        "name_length": 20,
+        "runs_per_minute": 20,
+    }
     design = client.get("/api/regression/design", params={"outcome": "trade"})
     assert design.status_code == 200
     assert design.json()["outcome"] == "trade"
@@ -935,10 +947,13 @@ def test_regression_route_coalesces_identical_inflight_work(monkeypatch):
     computations = 0
     release_id = "b" * 32
 
+    panels = {release_id: panel}
+
     def read_panel(_name):
         nonlocal reads
         reads += 1
-        return panel
+        # A new release is a new panel object (the artifact cache keys on the file), which empties the run cache.
+        return panels.setdefault(release_id, panel.copy())
 
     class Result:
         def to_dict(self):
@@ -1044,7 +1059,13 @@ def test_regression_run_discloses_teaching_simulation_and_rejects_retired_contra
     ],
     ids=["blank-entity", "string-outcome", "infinite-regressor", "duplicate-key"],
 )
-def test_regression_runtime_boundary_maps_to_controlled_route_400(teaching_db, monkeypatch, mutation, detail):
+# The workbench's lagged control is matched on (unit, year): its checks must come first there too.
+@pytest.mark.parametrize(
+    "spec",
+    [None, {"x_lags": [0, 1], "controls": [{"name": "teaching_exchange_rate_change", "lag": 1}], "fixed_effects": []}],
+    ids=["default-model", "lagged-control"],
+)
+def test_regression_runtime_boundary_maps_to_controlled_route_400(teaching_db, monkeypatch, mutation, detail, spec):
     client = _authenticated_client(teaching_db)
     panel = pd.DataFrame(
         [
@@ -1055,6 +1076,8 @@ def test_regression_runtime_boundary_maps_to_controlled_route_400(teaching_db, m
                 "year": 2018 + year,
                 "teaching_y_trade": 0.1 * entity + 0.03 * year,
                 "teaching_tariff_exposure": 0.02 * entity * year + 0.01 * (entity % 2),
+                "teaching_tariff_exposure_lag1": 0.02 * entity * max(year - 1, 0) + 0.01 * (entity % 2) * (year > 0),
+                "teaching_exchange_rate_change": 0.5 * ((entity + year) % 3) - 1.0,
                 "teaching_treated": int(year > 0 and entity % 2),
             }
             for entity in range(6)
@@ -1069,7 +1092,7 @@ def test_regression_runtime_boundary_maps_to_controlled_route_400(teaching_db, m
     monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", direct_cpu)
     response = client.post(
         "/api/regression/run",
-        json={"outcome": "trade"},
+        json={"outcome": "trade", **({"spec": spec} if spec else {})},
     )
     assert response.status_code == 400
     assert detail in response.json()["detail"]
@@ -1136,4 +1159,5 @@ def test_regression_design_and_run_accept_only_a_same_family_baseline(teaching_d
     body = run.json()
     assert body["design"]["baseline"] == "DVAex_share"
     assert body["model_snapshot"]["baseline"] == "DVAex_share" and body["model_snapshot"]["beta"] == 0.55
-    assert body["variable_catalog"][1]["name"] == "teaching_y_trade_DVAex_share"
+    assert body["variable_catalog"][-1]["name"] == "teaching_y_trade_DVAex_share"
+    assert body["variable_catalog"][-1]["role"] == "Y"

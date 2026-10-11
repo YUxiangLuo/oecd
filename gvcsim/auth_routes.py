@@ -3,11 +3,12 @@
 from fastapi import APIRouter, Header, HTTPException, Request
 import threading
 import time
+import unicodedata
 from typing import Any
 
 from pydantic import Field, field_validator
 
-from gvcsim import auth, config
+from gvcsim import auth, config, demo_accounts
 from gvcsim.classroom import db
 from gvcsim.rate_limit import RateLimitExceeded, SlidingWindowRateLimiter
 from gvcsim.request_validation import TextRequest
@@ -43,8 +44,11 @@ class LoginRequest(TextRequest):
     @field_validator("username", mode="before")
     @classmethod
     def trimmed_username(cls, value: Any) -> Any:
-        # Usernames cannot contain whitespace; a name pasted from a roster often carries some around it.
-        return value.strip().strip("\ufeff\u200b\u200c\u200d\u2060").strip() if isinstance(value, str) else value
+        # Usernames cannot contain whitespace; a name pasted from a roster often carries some around it. They are
+        # ASCII, so full-width input from a Chinese IME ("００２６００２") is read as its ASCII form (NFKC).
+        if not isinstance(value, str):
+            return value
+        return unicodedata.normalize("NFKC", value.strip().strip("\ufeff\u200b\u200c\u200d\u2060").strip())
 
 
 class PasswordChangeRequest(TextRequest):
@@ -57,6 +61,14 @@ class PasswordChangeRequest(TextRequest):
         if not value.strip():
             raise ValueError("新密码不能全是空格")
         return value
+
+
+def _initial_password(role: str, auth_version: int, username: str) -> bool:
+    """A teacher still on the password the deployment set (``classroom-init`` or the bootstrap): every password
+    change or reset raises the account's auth version past 1. Demo accounts keep their shared password."""
+    if role != "teacher" or auth_version != 1:
+        return False
+    return not (config.DEMO_MODE and demo_accounts.is_demo_account_username(username))
 
 
 @router.post("/login")
@@ -79,6 +91,7 @@ def login(req: LoginRequest, request: Request):
             "name": user["name"],
             "role": user["role"],
             "account_id": user["account_id"],
+            "initial_password": _initial_password(user["role"], user["auth_version"], user["username"]),
         },
     }
 
@@ -150,6 +163,7 @@ def me(authorization: str | None = Header(default=None)):
         "name": payload["name"],
         "role": payload["role"],
         "account_id": payload.get("aid"),
+        "initial_password": _initial_password(payload["role"], payload["av"], payload["sub"]),
     }
 
 

@@ -1,4 +1,4 @@
-import { normalizeLabel } from "./text";
+import { searchKey } from "./text";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ScrollableRegion } from "../a11y";
 import { api, isApiErrorStatus } from "../api";
@@ -48,7 +48,7 @@ export function reportRowAction(report: Pick<TeacherReport, "state" | "display_n
 export const GRADE_RUBRIC = [
   ["概念与衔接 · 25", "能讲清数据、指标、图表、回归到报告的关系，术语准确。"],
   ["证据使用 · 25", "引用实际保存的比较、估计值和 95% 区间，数字与报告一致。"],
-  ["识别与边界 · 25", "区分描述和因果；说明冲击是模拟的、对照组的大小与可比性、可能有外溢和同期冲击。"],
+  ["识别与边界 · 25", "区分描述和因果；说明关税情景与 Y 由课程按设定生成、对照组的大小与可比性、可能的外溢和同期冲击（如汇率变动）。"],
   ["表达与可复核性 · 25", "研究问题明确，结论、证据与局限一一对应，老师能沿报告记录核对。"],
 ] as const;
 
@@ -161,13 +161,13 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh, onReturn 
   useRefetchOnVisible(() => setRefresh((value) => value + 1), openAccountId == null);
   const reports = data?.reports ?? [];
   const semesters = academic?.semesters ?? [];
-  // Normalized like stored names (full-width letters/digits, zero-width characters), then case-folded.
-  const needle = normalizeLabel(query).toLowerCase();
+  // Compared with full-width punctuation folded too (names stored before it was kept as typed have ASCII).
+  const needle = searchKey(query);
   // The term/class filter and the search narrow every tab alike, so the 待评阅 count is taken after them
   // (as 学生与进度 counts its summary over the rows its filters leave); only the sidebar badge counts them all.
   const narrowed = reports
     .filter((report) => matchesAcademicFilter(report.enrollments, semesterId, classId))
-    .filter((report) => !needle || [report.display_name, report.username, report.student_no].some((value) => normalizeLabel(value ?? "").toLowerCase().includes(needle)));
+    .filter((report) => !needle || [report.display_name, report.username, report.student_no].some((value) => searchKey(value ?? "").includes(needle)));
   const shown = narrowed.filter((report) => filter === "all" || report.state === filter);
   // The open review comes first: a list refresh failing in the background must not unmount an unsaved review.
   if (openAccountId != null) {

@@ -193,14 +193,7 @@ def _release_metadata(
         "simulation_contract": {
             "version": teaching.VERSION,
             "seed": teaching.SEED,
-            "parameters": {
-                "market": teaching.MARKET,
-                "tariff_path": list(teaching.TARIFF_PATH),
-                "taxed_rule": teaching.TAXED_RULE,
-                "betas": teaching.BETAS,
-                "calibration": teaching.CALIBRATION,
-                "baselines": teaching.baseline_parameters(),
-            },
+            "parameters": teaching.simulation_parameters(),
             "model_snapshots": {name: teaching.model_snapshot(name) for name in teaching.BETAS},
             "variable_catalogs": {name: teaching.variable_catalog(name) for name in teaching.BETAS},
             "baseline_model_snapshots": teaching.baseline_snapshots(teaching.model_snapshot),
@@ -477,7 +470,7 @@ def test_v13_release_requires_integrity_mathematics_regression_qc_manifest_and_i
 
     assert result == {"release_id": RELEASE_ID, "files": 39, "years": 5}
     assert artifacts.release_identity(tmp_path) == RELEASE_ID
-    assert metadata["artifact_contract_version"] == 16
+    assert metadata["artifact_contract_version"] == 17
     assert metadata["publication_policy"] == artifacts.publication_policy_metadata()
     assert metadata["integrity"]["status"] == "passed"
     assert "冲击数值字段完整性(*_shock有限且treated为0/1)" in metadata["integrity"]["scopes"]["shocks"]["checked"]
@@ -1131,11 +1124,11 @@ def test_regression_input_qc_missing_contract_file_and_summary_tamper_fail(tmp_p
         artifacts.validate_release(tmp_path)
 
 
-@pytest.mark.parametrize("old_version", [13, 14, 15])
-def test_old_artifacts_are_rejected_and_v16_is_required(tmp_path, old_version):
+@pytest.mark.parametrize("old_version", [14, 15, 16])
+def test_old_artifacts_are_rejected_and_v17_is_required(tmp_path, old_version):
     _release(tmp_path)
     _tamper_signed_metadata(tmp_path, lambda metadata: metadata.__setitem__("artifact_contract_version", old_version))
-    with pytest.raises(artifacts.ArtifactContractError, match=f"expected 16, got {old_version}"):
+    with pytest.raises(artifacts.ArtifactContractError, match=f"expected 17, got {old_version}"):
         artifacts.validate_release(tmp_path)
 
 

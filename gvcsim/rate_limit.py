@@ -48,17 +48,21 @@ class SlidingWindowRateLimiter:
         self._events: OrderedDict[Hashable, deque[float]] = OrderedDict()
         self._lock = threading.Lock()
 
-    def check(self, key: Hashable) -> None:
+    def check(self, key: Hashable, count: int = 1) -> None:
+        """Record ``count`` events for ``key`` at once, or none of them when they do not all fit in the window."""
+        if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= self.limit:
+            raise ValueError("rate-limit count must be between 1 and the limit")
         now = float(self._clock())
         cutoff = now - self.window_seconds
         with self._lock:
             events = self._events.pop(key, deque())
             while events and events[0] <= cutoff:
                 events.popleft()
-            if len(events) >= self.limit:
+            if len(events) + count > self.limit:
                 self._events[key] = events
-                raise RateLimitExceeded(events[0] + self.window_seconds - now)
-            events.append(now)
+                # Room for `count` events once the oldest (len + count − limit) of them have left the window.
+                raise RateLimitExceeded(events[len(events) + count - self.limit - 1] + self.window_seconds - now)
+            events.extend([now] * count)
             self._events[key] = events
             while len(self._events) > self.max_keys:
                 self._events.popitem(last=False)

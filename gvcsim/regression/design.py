@@ -3,6 +3,15 @@
 from dataclasses import dataclass
 
 from gvcsim.regression import teaching as teaching_module
+from gvcsim.regression.spec import (
+    CONTROLS,
+    DEFAULT_SPEC,
+    X_LAG_COLUMNS,
+    ModelSpec,
+    control_column,
+    control_term_label,
+    x_term_label,
+)
 from gvcsim.regression.teaching import X_COLUMN
 
 OUTCOME_DEPVARS = {
@@ -24,7 +33,8 @@ OUTCOME_GRANULARITIES = {
 METHOD_TWFE_INTENSITY = "twfe_intensity"
 METHOD_LABELS = {METHOD_TWFE_INTENSITY: "连续强度 TWFE（描述性）"}
 CONTROL_MODE_NONE = "none"
-CONTROL_MODE_LABELS = {CONTROL_MODE_NONE: "不加控制变量"}
+CONTROL_MODE_SPEC = "spec"
+CONTROL_MODE_LABELS = {CONTROL_MODE_NONE: "不加控制变量", CONTROL_MODE_SPEC: "加控制变量"}
 PRICE_MODE_NOMINAL = "nominal"
 PRICE_MODE_LABELS = {PRICE_MODE_NOMINAL: "名义值"}
 SCENARIO_CLEAN = "clean"
@@ -33,11 +43,11 @@ SCENARIO_LABELS = {SCENARIO_CLEAN: "基准场景(clean)"}
 
 @dataclass
 class RegressionDesign:
-    """Fixed tariff × industry-country TWFE teaching specification.
+    """A tariff × industry-country teaching regression: the course default or a model a student designs.
 
-    ``granularity`` remains an estimator-test seam for disconnected FE fixtures;
-    HTTP contracts do not expose it. All other formerly variable specification
-    choices have deliberately been removed.
+    A teaching design carries a ``ModelSpec`` (X terms, controls, fixed effects; ``None`` means the course default
+    ``DEFAULT_SPEC``). Observed-panel designs (release QC) stay the classic one-regressor (entity, year) model.
+    ``granularity`` remains an estimator-test seam for disconnected FE fixtures; HTTP contracts do not expose it.
     """
 
     outcome: str
@@ -46,10 +56,15 @@ class RegressionDesign:
     teaching: bool = False
     # Which same-family indicator calibrates the simulated Y; None means the family's fixed default.
     baseline: str | None = None
+    spec: ModelSpec | None = None
 
     def __post_init__(self) -> None:
         if self.outcome not in OUTCOMES:
             raise ValueError(f"outcome 必须是 {OUTCOMES}")
+        if self.teaching:
+            self.spec = (self.spec or DEFAULT_SPEC).canonical()
+        elif self.spec is not None:
+            raise ValueError("只有教学面板可以自选模型设定")
         self.baseline = teaching_module.baseline(self.outcome, self.baseline).key
         if not self.teaching and self._baseline.derived is not None:
             raise ValueError("观测面板没有派生份额列，只有教学面板可以选择该基线")
@@ -111,16 +126,27 @@ class RegressionDesign:
         return "teaching_treated" if self.teaching else "treated"
 
     @property
+    def is_classic_model(self) -> bool:
+        """X only with country × industry and year effects: the model whose wording predates the spec."""
+        return self.spec is None or (
+            self.spec.x_lags == (0,)
+            and not self.spec.controls
+            and self.spec.fixed_effects == ("country_industry", "year")
+        )
+
+    @property
     def regressors(self) -> tuple[str, ...]:
-        return (self.shock_col,)
+        return tuple(self.spec.x_columns) if self.spec else (self.shock_col,)
 
     @property
     def controls(self) -> tuple[str, ...]:
-        return ()
+        return tuple(self.spec.control_columns) if self.spec else ()
 
     @property
     def control_labels(self) -> dict[str, str]:
-        return {}
+        if not self.spec:
+            return {}
+        return {control_column(key, lag): control_term_label(key, lag) for key, lag in self.spec.controls}
 
     @property
     def granularity_label(self) -> str:
@@ -140,11 +166,14 @@ class RegressionDesign:
 
     @property
     def control_mode(self) -> str:
-        return CONTROL_MODE_NONE
+        return CONTROL_MODE_SPEC if self.controls else CONTROL_MODE_NONE
 
     @property
     def control_mode_label(self) -> str:
-        return CONTROL_MODE_LABELS[CONTROL_MODE_NONE]
+        """ "不加控制变量", or the controls by name ("控制：汇率变动")."""
+        if not self.controls:
+            return CONTROL_MODE_LABELS[CONTROL_MODE_NONE]
+        return "控制：" + "、".join(self.control_labels.values())
 
     @property
     def interaction(self) -> bool:
@@ -175,6 +204,8 @@ class RegressionDesign:
         return "排除 ROW(世界其他地区聚合账户)"
 
     def equation_parts(self) -> list[dict[str, str]]:
+        if not self.is_classic_model:
+            return self._spec_equation_parts()
         unit, ent = ("ijt", "ij") if self.granularity == GRANULARITY_COUNTRY_INDUSTRY else ("it", "i")
         return [
             {
@@ -213,8 +244,78 @@ class RegressionDesign:
             },
         ]
 
+    def _spec_equation_parts(self) -> list[dict[str, str]]:
+        assert self.spec is not None
+        parts: list[dict[str, str]] = [
+            {
+                "text": f"{self.depvar}_ijt",
+                "term": "dependent",
+                "description": f"Y：结果变量，本步看的指标（{self.depvar_label}）。",
+                "meta_key": "depvar",
+            },
+            {"text": " = "},
+        ]
+        terms: list[dict[str, str]] = []
+        for index, lag in enumerate(self.spec.x_lags):
+            when = "当年" if lag == 0 else f"{lag} 年前"
+            terms.append(
+                {
+                    "text": f"β{_subscript(index + 1)}·{X_LAG_COLUMNS[lag]}_ijt",
+                    "term": "policy",
+                    "description": f"{x_term_label(lag)}：{when}的关税暴露（对美出口份额 w × 当年税率 τ）。",
+                    "meta_key": "policy",
+                }
+            )
+        for index, (key, lag) in enumerate(self.spec.controls):
+            terms.append(
+                {
+                    "text": f"γ{_subscript(index + 1)}·{control_column(key, lag)}_it",
+                    "term": "control",
+                    "description": f"{control_term_label(key, lag)}：{CONTROLS[key].definition}。",
+                    "meta_key": "controls",
+                }
+            )
+        for key in self.spec.fixed_effects:
+            symbol, description = _EFFECT_PARTS[key]
+            terms.append({"text": symbol, "term": "fixed-effect", "description": description, "meta_key": "entity"})
+        if not self.spec.fixed_effects:
+            terms.append(
+                {
+                    "text": "α",
+                    "term": "constant",
+                    "description": "α：常数项（没有固定效应时加入）。",
+                    "meta_key": "entity",
+                }
+            )
+        terms.append(
+            {
+                "text": "ε_ijt",
+                "term": "error",
+                "description": "ε：剩下的扰动；标准误按国家聚类。",
+                "meta_key": "cluster",
+            }
+        )
+        for index, term in enumerate(terms):
+            if index:
+                parts.append({"text": " + "})
+            parts.append(term)
+        return parts
+
     def equation(self) -> str:
         return "".join(part["text"] for part in self.equation_parts())
+
+
+_EFFECT_PARTS = {
+    "country": ("α_i", "α：每个国家自己的起点，扣掉。"),
+    "industry": ("α_j", "α：每个行业自己的起点，扣掉。"),
+    "country_industry": ("α_ij", "α：每个国家×行业自己的起点，扣掉。"),
+    "year": ("λ_t", "λ：所有单位共同的年份变化，扣掉。"),
+    "country_year": ("μ_it", "μ：每个国家每年共同的变化，扣掉（国家层面的控制变量会被它吸收）。"),
+}
+
+
+def _subscript(number: int) -> str:
+    return str(number).translate(str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉"))
 
 
 def validate_outcome_granularity(outcome: str, granularity: str) -> None:

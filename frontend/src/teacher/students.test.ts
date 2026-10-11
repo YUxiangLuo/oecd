@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  DEMO_PASSWORD_HINT, EnrollmentModal, enrollmentToast, FieldModal, StudentModal, StudentRowMenu, newStudentError, newStudentProblem, nextStudentSort,
+  DEMO_PASSWORD_HINT, EnrollmentModal, RESET_PASSWORD_NOTE, breakableUsername, enrollmentToast, FieldModal, StudentModal, StudentRowMenu, newStudentError, newStudentProblem, nextStudentSort,
   settleModalSubmission, sortStudents, studentFieldError, summarizeStudents,
 } from "./students";
 import type { AcademicSemester, StudentRow } from "../types";
@@ -293,4 +293,17 @@ describe("student table sorting and summary", () => {
     expect(newStudentProblem({ ...student, student_no: "9".repeat(41) })?.field).toBe("student_no");
     expect(newStudentProblem({ ...student, password: "short" })).toEqual({ field: "password", message: "密码至少 12 个字符" });
   });
+});
+
+test("the reset-password note names the student, not a gendered pronoun", () => {
+  expect(RESET_PASSWORD_NOTE).toContain("告诉学生本人");
+  expect(RESET_PASSWORD_NOTE).not.toMatch(/[他她]/);
+});
+
+test("a long login name may wrap only after its separators", () => {
+  const html = (name: string) => renderToStaticMarkup(createElement("td", null, ...breakableUsername(name)));
+  expect(html("report-snapshot-709020de")).toBe("<td>report-<wbr/>snapshot-<wbr/>709020de</td>");
+  expect(html("manual_student2")).toBe("<td>manual_<wbr/>student2</td>");
+  expect(html("0230101")).toBe("<td>0230101</td>");
+  expect(html("a.b")).toBe("<td>a.<wbr/>b</td>");
 });

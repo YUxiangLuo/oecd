@@ -112,6 +112,37 @@ def test_password_change_updates_credentials_and_revokes_existing_token(teaching
     assert teaching_db.change_own_password("teacher", "teacher-new-private-password", "gvclab2026-reset")
 
 
+def test_teacher_on_the_initial_password_is_reminded_until_it_changes(teaching_db, monkeypatch):
+    """classroom-init asks the first teacher to replace the password the deployment set: login and /me say whether
+    the teacher still uses it, so the workspace can remind them; a student's password is the teacher's business."""
+    monkeypatch.setattr("gvcsim.config.DEMO_MODE", False)
+    client = TestClient(app)
+    login = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).json()
+    assert login["user"]["initial_password"] is True
+    headers = {"Authorization": f"Bearer {login['token']}"}
+    assert client.get("/api/auth/me", headers=headers).json()["initial_password"] is True
+    student = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).json()
+    assert student["user"]["initial_password"] is False
+    client.post(
+        "/api/auth/password",
+        headers=headers,
+        json={"current_password": "gvclab2026", "new_password": "teacher-own-private-password"},
+    )
+    relogin = client.post(
+        "/api/auth/login", json={"username": "teacher", "password": "teacher-own-private-password"}
+    ).json()
+    assert relogin["user"]["initial_password"] is False
+    me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {relogin['token']}"}).json()
+    assert me["initial_password"] is False
+    assert teaching_db.change_own_password("teacher", "teacher-own-private-password", "gvclab2026-reset")
+
+
+def test_demo_teacher_is_not_reminded_to_change_the_shared_password(teaching_db):
+    client = TestClient(app)
+    login = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).json()
+    assert login["user"]["initial_password"] is False
+
+
 def test_teacher_password_reset_revokes_student_token(teaching_db):
     client = TestClient(app)
     teacher_login = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).json()
@@ -316,3 +347,9 @@ def test_demo_student_suggestion_does_not_exist_outside_demo_mode(teaching_db, m
 
     monkeypatch.setattr(config, "DEMO_MODE", False)
     assert TestClient(app).get("/api/auth/demo-student").status_code == 404
+
+
+def test_login_reads_a_full_width_username_as_ascii(teaching_db):
+    client = TestClient(app)
+    login = client.post("/api/auth/login", json={"username": "　ｓｔｕｄｅｎｔ ", "password": "gvclab2026"})
+    assert login.status_code == 200

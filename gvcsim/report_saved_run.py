@@ -14,20 +14,34 @@ from typing import Any, cast
 from scipy import stats
 
 from gvcsim.regression.design import RegressionDesign
-from gvcsim.regression.teaching import BASELINES, X_COLUMN, Y_COLUMNS, model_snapshot, variable_catalog
+from gvcsim.regression.teaching import Y_COLUMNS, model_snapshot, selectable_baselines, variable_catalog
 from gvcsim.steps import STEPS
 
 _STEP_OUTCOMES = {
     cast(int, item["n"]): str(item["regression_outcome"]) for item in STEPS if item.get("regression_outcome")
 }
-_FIXED_DESIGN = {
-    "granularity": "country_industry",
-    "shock_type": "tariff",
-    "method": "twfe_intensity",
-    "control_mode": "none",
-    "interaction": False,
-    "scenario": "clean",
-}
+_FIXED_FIELDS = ("granularity", "shock_type", "method", "control_mode", "interaction", "scenario")
+
+
+def _course_design(design: dict[str, Any]) -> RegressionDesign | None:
+    """The course default design of the saved run's outcome and Y, or None when the run names neither validly."""
+    outcome, baseline = design.get("outcome"), design.get("baseline")
+    if outcome not in Y_COLUMNS or not isinstance(baseline, str):
+        return None
+    if baseline not in {item.key for item in selectable_baselines(outcome)}:
+        return None
+    return RegressionDesign(outcome, teaching=True, baseline=baseline)
+
+
+def _fixed_design_matches(design: dict[str, Any]) -> bool:
+    """A step's saved result must be the course default model (the workbench keeps other models separately)."""
+    canonical = _course_design(design) if isinstance(design, dict) else None
+    if canonical is None:
+        return False
+    # The model itself: a v10 run always records it (the snapshot check pins the release's teaching version).
+    if design.get("spec") != canonical.spec.to_dict():  # type: ignore[union-attr]
+        return False
+    return all(design.get(key) == getattr(canonical, key) for key in _FIXED_FIELDS)
 
 
 def _parse_saved_run(raw: Any, outcome: str) -> tuple[dict[str, Any], dict[str, Any]] | None:
@@ -37,10 +51,10 @@ def _parse_saved_run(raw: Any, outcome: str) -> tuple[dict[str, Any], dict[str, 
     snapshot, catalog = raw.get("model_snapshot"), raw.get("variable_catalog")
     if not isinstance(design, dict) or design.get("outcome") != outcome or not isinstance(result, dict):
         return None
-    if any(design.get(key) != value for key, value in _FIXED_DESIGN.items()):
+    if not _fixed_design_matches(design):
         return None
     baseline = design.get("baseline")
-    if not isinstance(baseline, str) or baseline not in {item.key for item in BASELINES[outcome]}:
+    if not isinstance(baseline, str) or baseline not in {item.key for item in selectable_baselines(outcome)}:
         return None
     # JSON persistence changes calibration tuples to lists. Compare the complete
     # published model, not just its version and variable names.
@@ -74,7 +88,7 @@ def _parse_saved_run(raw: Any, outcome: str) -> tuple[dict[str, Any], dict[str, 
     )
     if any(design.get(key) != getattr(canonical, key) for key in fields):
         return None
-    if design.get("controls") != [] or design.get("equation") != canonical.equation():
+    if design.get("controls") != list(canonical.controls) or design.get("equation") != canonical.equation():
         return None
     if not _result_is_reportable(result, design):
         return None
@@ -94,9 +108,41 @@ def _result_is_qualified(result: dict[str, Any], design: dict[str, Any] | None =
     )
 
 
-def _result_is_reportable(result: dict[str, Any], design: dict[str, Any]) -> bool:
-    if not isinstance(design, dict) or any(design.get(key) != value for key, value in _FIXED_DESIGN.items()):
+def _finite_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value))
+
+
+def _estimate_is_consistent(coefficient: Any, n_clusters: int, inferential: bool) -> bool:
+    """coef/se/t are finite with t = coef/se; with inference, p and the 95% interval follow from t(G − 1)."""
+    if not isinstance(coefficient, dict) or not all(_finite_number(coefficient.get(f)) for f in ("coef", "se", "t")):
         return False
+    beta, se = float(coefficient["coef"]), float(coefficient["se"])
+    if se <= 0 or not math.isclose(float(coefficient["t"]), beta / se, rel_tol=1e-8, abs_tol=1e-10):
+        return False
+    if not inferential:
+        return all(coefficient.get(key) is None for key in ("p", "ci_low", "ci_high"))
+    if not all(_finite_number(coefficient.get(f)) for f in ("p", "ci_low", "ci_high")):
+        return False
+    if not (0 <= coefficient["p"] <= 1 and coefficient["ci_low"] <= beta <= coefficient["ci_high"]):
+        return False
+    critical = float(stats.t.ppf(0.975, n_clusters - 1))
+    expected = {
+        "p": float(2 * stats.t.sf(abs(beta / se), n_clusters - 1)),
+        "ci_low": beta - critical * se,
+        "ci_high": beta + critical * se,
+    }
+    return all(
+        math.isclose(float(coefficient[key]), value, rel_tol=1e-8, abs_tol=1e-10) for key, value in expected.items()
+    )
+
+
+def _result_is_reportable(result: dict[str, Any], design: dict[str, Any]) -> bool:
+    """The saved result of the course default model: its X terms and controls in order, each internally consistent,
+    and the cumulative relation of the X terms (the step's headline) equal to their sum."""
+    if not isinstance(design, dict) or not _fixed_design_matches(design):
+        return False
+    canonical = _course_design(design)
+    assert canonical is not None
     support = result.get("support")
     diagnostics = result.get("diagnostics")
     coefs = result.get("coefs")
@@ -117,49 +163,29 @@ def _result_is_reportable(result: dict[str, Any], design: dict[str, Any]) -> boo
     n_obs, n_entities, n_times, n_clusters = cast(list[int], counts)
     if not (2 <= n_clusters <= n_entities <= n_obs and 2 <= n_times <= n_obs <= n_entities * n_times):
         return False
-    if len(coefs) != 1 or not isinstance(coefs[0], dict) or coefs[0].get("name") != X_COLUMN:
+    expected_names = [*canonical.regressors, *canonical.controls]
+    if [item.get("name") if isinstance(item, dict) else None for item in coefs] != expected_names:
         return False
-    coefficient = coefs[0]
-    numeric_fields = ("coef", "se", "t")
-    if any(
-        isinstance(coefficient.get(field), bool)
-        or not isinstance(coefficient.get(field), (int, float))
-        or not math.isfinite(float(coefficient[field]))
-        for field in numeric_fields
-    ):
+    inferential = status in {"ok", "warning"}
+    if inferential and support.get("suppress_inference") is True:
         return False
-    if float(coefficient["se"]) <= 0:
+    if not all(_estimate_is_consistent(item, n_clusters, inferential) for item in coefs):
         return False
-    beta, se = float(coefficient["coef"]), float(coefficient["se"])
-    if not math.isclose(float(coefficient["t"]), beta / se, rel_tol=1e-8, abs_tol=1e-10):
+    cumulative = result.get("cumulative")
+    if not _estimate_is_consistent(cumulative, n_clusters, inferential):
         return False
-    if status in {"ok", "warning"}:
-        inference = ("p", "ci_low", "ci_high")
-        if support.get("suppress_inference") is True or any(
-            isinstance(coefficient.get(field), bool)
-            or not isinstance(coefficient.get(field), (int, float))
-            or not math.isfinite(float(coefficient[field]))
-            for field in inference
-        ):
-            return False
-        if not (0 <= coefficient["p"] <= 1 and coefficient["ci_low"] <= beta <= coefficient["ci_high"]):
-            return False
-        critical = float(stats.t.ppf(0.975, n_clusters - 1))
-        expected = {
-            "p": float(2 * stats.t.sf(abs(beta / se), n_clusters - 1)),
-            "ci_low": beta - critical * se,
-            "ci_high": beta + critical * se,
-        }
-        return all(
-            math.isclose(float(coefficient[key]), value, rel_tol=1e-8, abs_tol=1e-10) for key, value in expected.items()
-        )
+    assert isinstance(cumulative, dict)
+    x_sum = sum(float(item["coef"]) for item in coefs if item["name"] in canonical.regressors)
+    if not math.isclose(float(cumulative["coef"]), x_sum, rel_tol=1e-9, abs_tol=1e-12):
+        return False
+    if inferential:
+        return True
     reasons = support.get("reasons")
     return (
         support.get("suppress_inference") is True
         and isinstance(reasons, list)
         and bool(reasons)
         and all(isinstance(reason, str) and reason.strip() for reason in reasons)
-        and all(coefficient.get(key) is None for key in ("p", "ci_low", "ci_high"))
     )
 
 

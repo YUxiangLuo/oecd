@@ -39,20 +39,19 @@ def test_wrong_or_old_answers_fail_and_unknown_step_is_rejected():
         evidence.evaluate_step(99, session)
 
 
-def test_reading_question_upgrade_invalidates_only_step_11():
+def test_question_upgrade_invalidates_only_the_rewritten_step():
     session = _complete_through_14()
-    session["steps"]["11"]["data"]["quiz"] = {
-        "version": "course-quiz-v8",
-        "answers": {"s11-metric": "b", "s11-compare": "b"},
-    }
-    for step in range(1, 15):
-        # Step 14 was re-questioned for v5 (its default Y is 加权总度), so it carries v9 as well.
-        assert session["steps"][str(step)]["data"]["quiz"]["version"] == (
-            "course-quiz-v9" if step == 14 else "course-quiz-v8"
-        )
-    assert evidence.completion_summary(session)["completed"] == [step for step in range(1, 15) if step != 11]
+    # A step 11 answered before the v10 questions (two-year relation, exchange-rate control).
     session["steps"]["11"]["data"]["quiz"] = {
         "version": "course-quiz-v9",
         "answers": {"s11-metric": "b", "s11-reading-v9": "a"},
     }
+    for step in range(1, 15):
+        if step != 11:
+            # Steps 10–14 were re-questioned for the v10 model; steps 1–9 keep v8.
+            assert session["steps"][str(step)]["data"]["quiz"]["version"] == (
+                "course-quiz-v10" if 10 <= step <= 14 else "course-quiz-v8"
+            )
+    assert evidence.completion_summary(session)["completed"] == [step for step in range(1, 15) if step != 11]
+    session["steps"]["11"]["data"]["quiz"] = quizzes.correct_quiz(11)
     assert evidence.completion_summary(session)["completed"] == list(range(1, 15))

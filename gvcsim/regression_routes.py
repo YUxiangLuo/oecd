@@ -1,7 +1,9 @@
-"""Routes for the fixed teaching TWFE regression."""
+"""Routes for the teaching regressions of steps 11–14: the course default model and the workbench's models."""
 
+import json
 import logging
 import threading
+from collections import OrderedDict
 from typing import Any, cast
 
 import numpy as np
@@ -11,7 +13,9 @@ from fastapi.requests import Request
 from gvcsim import artifacts, concurrency, shocks
 from gvcsim import config as app_config
 from gvcsim.data_routes import _read_csv
+from gvcsim.regression import workbench
 from gvcsim.regression.contracts import (
+    ModelSpecPayload,
     RegressionDesignResponse,
     RegressionRequest,
     RegressionRunResponse,
@@ -21,9 +25,12 @@ from gvcsim.regression.design import (
     RegressionDesign,
 )
 from gvcsim.regression.panel import run_design_with_benchmark
+from gvcsim.regression.spec import ModelSpec
 from gvcsim.regression.teaching import (
     BASELINES,
     DISCLAIMER,
+    EXCHANGE_RATE_COLUMN,
+    X_LAG_COLUMNS,
     VERSION,
     Y_COLUMNS,
     available_baselines,
@@ -45,6 +52,8 @@ _RUN_LIMITER = SlidingWindowRateLimiter(app_config.REGRESSION_RUNS_PER_MINUTE)
 def clear_result_cache() -> None:
     """Clear completed regression results at process and test boundaries."""
     _RESULT_CACHE.clear()
+    with _RUN_LOCK:
+        _RUN_CACHE.clear()
     with _OVERVIEW_LOCK:
         _COUNTRY_OVERVIEW_CACHE.clear()
         _ESTIMATE_OVERVIEW_CACHE.clear()
@@ -66,11 +75,14 @@ def _limit_expensive_request(limiter: SlidingWindowRateLimiter, account_id: int,
         ) from error
 
 
-def _validate_design(outcome: str, baseline: str | None = None) -> RegressionDesign:
+def _validate_design(
+    outcome: str, baseline: str | None = None, spec: ModelSpecPayload | None = None
+) -> RegressionDesign:
     if outcome not in OUTCOMES:
         raise HTTPException(status_code=400, detail=f"outcome 必须是 {OUTCOMES}")
     try:
-        return RegressionDesign(outcome, teaching=True, baseline=baseline)
+        model = ModelSpec.from_dict(spec.model_dump()) if spec is not None else None
+        return RegressionDesign(outcome, teaching=True, baseline=baseline, spec=model)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
@@ -109,6 +121,7 @@ def _design_info(design: RegressionDesign, weight_mode: str = shocks.EXPOSURE_MO
         "entity": design.entity,
         "cluster": design.cluster,
         "weight_mode": weight_mode,
+        "spec": design.spec.to_dict() if design.spec else None,
     }
 
 
@@ -127,7 +140,7 @@ def _regression_preflight(result: dict[str, Any]) -> dict[str, Any]:
         "disclosure",
         "Y 基准按首年指标排名校准；网络 Y 未重新构造贸易网络。",
     )
-    add("fixed_exposure", "disclosure", "X 使用首年销往美国的出口份额乘课程税率路径。")
+    add("fixed_exposure", "disclosure", "X 使用首年销往美国的出口份额乘加征税率（被加税国家分两批开始加税）。")
     return {
         "status": result.get("status") or "ok",
         "can_infer": result.get("status") in {"ok", "warning"} and not bool(support.get("suppress_inference")),
@@ -182,6 +195,8 @@ async def teaching_panel(
             "teaching_export_share_w",
             "teaching_tariff_rate_tau",
             "teaching_tariff_exposure",
+            # Step 10's year-by-year table: last year's X and the country's exchange-rate change (teaching data v10).
+            *(column for column in (X_LAG_COLUMNS[1], EXCHANGE_RATE_COLUMN) if column in panel.columns),
             *Y_COLUMNS.values(),
         ]
         return {
@@ -248,17 +263,20 @@ async def teaching_countries():
     return await concurrency.run_sync(read)
 
 
-def _estimate_overview(panel: Any) -> dict:
-    """The estimate of every Y of every family, as the run endpoint would compute it (one bar per Y)."""
+def _estimate_overview(panel: Any, release: str | None = None) -> dict:
+    """The estimate of every Y of every family, as the run endpoint computes it (one bar per Y). Through the run
+    cache, so a student's first run of a step's default model reads it instead of computing (and charging) it again.
+    `release`: read before the panel was."""
     outcomes: dict[str, list[dict[str, Any]]] = {}
     for outcome in OUTCOMES:
         default_key = BASELINES[outcome][0].key
         items = []
         for baseline in available_baselines(outcome, panel.columns):
             design = RegressionDesign(outcome, teaching=True, baseline=baseline.key)
-            result, _ = run_design_with_benchmark(panel, design)
-            info = result.to_dict()
-            coef = (info.get("coefs") or [{}])[0]
+            info = cached_run(panel, design, release)["result"]
+            # The headline of a run is the X terms' cumulative relation (the course model has X and L1.X). With a term
+            # dropped there is none, and the other term alone is not shown in its place.
+            coef = info.get("cumulative") or {}
             raw_support = info.get("support")
             support = raw_support if isinstance(raw_support, dict) else {}
             items.append(
@@ -289,8 +307,9 @@ async def teaching_overview():
     once per release, so it does not count against the per-student run limit)."""
 
     def read() -> dict:
+        release = current_release()
         panel = _read_csv("panel_teaching.csv")
-        return _cached_on_panel(_ESTIMATE_OVERVIEW_CACHE, panel, _estimate_overview)
+        return _cached_on_panel(_ESTIMATE_OVERVIEW_CACHE, panel, lambda frame: _estimate_overview(frame, release))
 
     try:
         return await concurrency.run_cpu_bound(read)
@@ -315,36 +334,157 @@ def regression_design(
     return _design_info(design)
 
 
+class MissingTeachingY(ValueError):
+    """The release's teaching panel has no column for this Y (an older release)."""
+
+
+def _run_key(design: RegressionDesign) -> str:
+    # baseline=None and the explicit default key are one design, and so are an omitted spec and the default spec.
+    assert design.spec is not None
+    return json.dumps(
+        {"outcome": design.outcome, "baseline": design.baseline, "spec": design.spec.to_dict()}, sort_keys=True
+    )
+
+
+def _require_y(panel: Any, design: RegressionDesign) -> None:
+    if not design.is_default_baseline and design.depvar not in panel.columns:
+        raise MissingTeachingY("当前课程数据没有这个指标对应的 Y，请换回本步默认指标")
+
+
+def _run_payload(design: RegressionDesign, result: Any, benchmark: dict[str, Any]) -> dict[str, Any]:
+    result_info = result.to_dict()
+    return {
+        "design": _design_info(design),
+        "result": result_info,
+        "preflight": _regression_preflight(result_info),
+        "benchmark": benchmark,
+        "disclaimer": DISCLAIMER,
+        "variable_catalog": variable_catalog(design.outcome, design.baseline, design.spec),
+        "model_snapshot": model_snapshot(design.outcome, design.baseline, design.spec),
+    }
+
+
+# Completed runs of the current teaching panel, shared by the run endpoint and the report (whose recalculation of
+# the workbench models is synchronous). Keyed on the release the panel was read under, not on the DataFrame: a
+# release's files never change, but the shared CSV cache (32 entries) may hand out a new DataFrame for the same
+# panel, which must neither recompute a run the limiter let through as cached nor drop everyone's runs. A new
+# release starts an empty cache, so a run cached before a release swap is not taken for one the new release already
+# computed (and let past the student's limit). The release is read before the panel (a run that ends after a swap
+# still carries the release its panel came from). Stored dicts are shared: never changed.
+_RUN_CACHE: list[tuple[str, "OrderedDict[str, dict[str, Any]]"]] = []
+_RUN_LOCK = threading.Lock()
+_RUN_CACHE_SIZE = 256
+
+
+def current_release() -> str | None:
+    try:
+        return artifacts.release_identity()
+    except (artifacts.ArtifactContractError, OSError, ValueError):
+        return None
+
+
+def _run_cached(key: str, release: str | None = None) -> bool:
+    release = release if release is not None else current_release()
+    with _RUN_LOCK:
+        return bool(_RUN_CACHE) and release is not None and _RUN_CACHE[0][0] == release and key in _RUN_CACHE[0][1]
+
+
+def _cached_payload(key: str, release: str | None) -> dict[str, Any] | None:
+    with _RUN_LOCK:
+        if not _RUN_CACHE or release is None or _RUN_CACHE[0][0] != release:
+            return None
+        results = _RUN_CACHE[0][1]
+        if key in results:
+            results.move_to_end(key)
+        return results.get(key)
+
+
+def _store_payload(key: str, payload: dict[str, Any], release: str | None = None) -> None:
+    """Keep a run; `release` is the one read before its panel was (by default, now). Without one, nothing is kept."""
+    release = release if release is not None else current_release()
+    if release is None:
+        return
+    with _RUN_LOCK:
+        if not _RUN_CACHE or _RUN_CACHE[0][0] != release:
+            _RUN_CACHE[:] = [(release, OrderedDict())]
+        results = _RUN_CACHE[0][1]
+        results[key] = payload
+        results.move_to_end(key)
+        while len(results) > _RUN_CACHE_SIZE:
+            results.popitem(last=False)
+
+
+def charge_report_runs(account_id: Any, designs: list[RegressionDesign]) -> None:
+    """Report generation recomputes the workbench models it prints: each run not computed yet counts against the
+    student's new calculations of the minute, as on the page (a run the page or an earlier report computed is free).
+    Refused as a whole before anything is computed, so a report is never printed with a model left out."""
+    if isinstance(account_id, bool) or not isinstance(account_id, int):
+        return
+    release = current_release()
+    missing = len({key for key in map(_run_key, designs) if not _run_cached(key, release)})
+    if not missing:
+        return
+    try:
+        _RUN_LIMITER.check(account_id, min(missing, _RUN_LIMITER.limit))
+    except RateLimitExceeded as error:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"生成报告要重新计算你放入报告的 {missing} 个模型，本分钟的计算次数已用完；"
+                f"请约 {error.retry_after_header} 秒后再生成。"
+            ),
+            headers={"Retry-After": error.retry_after_header},
+        ) from error
+
+
+def cached_run(panel: Any, design: RegressionDesign, release: str | None = None) -> dict[str, Any]:
+    """One run's response on the current panel, computed at most once per release (LRU of 256): the report's
+    recalculation of a model the page already ran reads the same numbers. `release`: read before the panel was."""
+    release = release if release is not None else current_release()
+    key = _run_key(design)
+    cached = _cached_payload(key, release)
+    if cached is not None:
+        return cached
+    _require_y(panel, design)
+    payload = _run_payload(design, *run_design_with_benchmark(panel, design))
+    _store_payload(key, payload, release)
+    return payload
+
+
+@router.get("/api/regression/options")
+def regression_options():
+    """The workbench's choices (X lags, controls, fixed effects), the default model, its limits and fixed texts."""
+    return workbench.options()
+
+
 async def regression_run(req: RegressionRequest, request: Request):
     account_id = _require_regression_student(request)
-    design = _validate_design(req.outcome, req.baseline)
-    # baseline=None and the explicit default key are the same design; cache them as one.
-    canonical = RegressionRequest(outcome=design.outcome, baseline=design.baseline)
-    key = (artifacts.release_identity(), "run", canonical.model_dump_json())
+    design = _validate_design(req.outcome, req.baseline, req.spec)
+    run_key = _run_key(design)
+    key = (artifacts.release_identity(), "run", run_key)
 
     async def compute() -> dict[str, Any]:
         panel = await concurrency.run_sync(_read_csv, "panel_teaching.csv")
-        if not design.is_default_baseline and design.depvar not in panel.columns:
-            raise HTTPException(status_code=409, detail="当前课程数据没有这个指标对应的 Y，请换回本步默认指标")
+        cached = _cached_payload(run_key, key[0])
+        if cached is not None:
+            return cached
+        try:
+            _require_y(panel, design)
+        except MissingTeachingY as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
         result, benchmark = await concurrency.run_cpu_bound(run_design_with_benchmark, panel, design)
-        result_info = result.to_dict()
-        return {
-            "design": _design_info(design),
-            "result": result_info,
-            "preflight": _regression_preflight(result_info),
-            "benchmark": benchmark,
-            "disclaimer": DISCLAIMER,
-            "variable_catalog": variable_catalog(req.outcome, design.baseline),
-            "model_snapshot": model_snapshot(req.outcome, design.baseline),
-        }
+        payload = _run_payload(design, result, benchmark)
+        # key[0] was read before the panel, at the request's start.
+        _store_payload(run_key, payload, key[0])
+        return payload
+
+    def admit() -> None:
+        # Only a calculation counts against the limit: a run the report (or another request) already computed does not.
+        if not _run_cached(run_key, key[0]):
+            _limit_expensive_request(_RUN_LIMITER, account_id, "计算")
 
     try:
-        return await _RESULT_CACHE.get_or_compute(
-            key,
-            compute,
-            owner=account_id,
-            admit=lambda: _limit_expensive_request(_RUN_LIMITER, account_id, "计算"),
-        )
+        return await _RESULT_CACHE.get_or_compute(key, compute, owner=account_id, admit=admit)
     except (np.linalg.LinAlgError, FloatingPointError, OverflowError) as e:
         _LOG.warning("回归线性代数计算失败（%s）：%s", req.outcome, e)
         raise HTTPException(

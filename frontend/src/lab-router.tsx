@@ -57,6 +57,7 @@ export function LabRouter({
         getStep={getStep}
         // Same "report needs update" signal as the sidebar and step 15, plus what the report was built from.
         reportRuns={report?.provenance.runs}
+        reportCustomResults={report?.provenance.custom_results}
         reportOutdated={Boolean(report) && (sessionUnsynced || sessionSyncing || reportCurrent === false)}
       />
     ) : null;

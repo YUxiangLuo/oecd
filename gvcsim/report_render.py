@@ -174,7 +174,14 @@ def _tax_status(country: str, scenario: dict[str, Any] | None) -> str | None:
     if country == MARKET:
         return "加征关税的一方"
     taxed = (scenario or {}).get("taxed", {}).get(country)
-    return None if taxed is None else "被加税" if taxed else "未被加税"
+    if taxed is None:
+        return None
+    if not taxed:
+        return "未被加税"
+    # Teaching data v10 taxes in two waves: say when this country's tariff starts.
+    start = (scenario or {}).get("start_year", {}).get(country)
+    waves = [wave for wave in (scenario or {}).get("waves") or [] if isinstance(wave, dict) and wave.get("countries")]
+    return f"被加税，{start} 年起" if len(waves) > 1 and isinstance(start, int) else "被加税"
 
 
 def _with_tax_status(country: str, scenario: dict[str, Any] | None) -> str:
@@ -202,6 +209,22 @@ def _scenario_line(scenario: dict[str, Any] | None) -> str | None:
     )
     # A space between 对 and a number ("对 2016 年"), none before 首年.
     space = " " if who[:1].isdigit() else ""
+    # Teaching data v10: two waves, the first for the largest surpluses (the page says the same on step 10).
+    waves = [wave for wave in scenario.get("waves") or [] if isinstance(wave, dict) and wave.get("countries")]
+    if rule.get("scope") and len(waves) > 1:
+        parts = "，".join(
+            (
+                f"对美货物顺差 ≥ {_yi_usd(float(wave['min_million_usd']))}的 {wave['countries']} 国"
+                if index == 0
+                else f"其余 {wave['countries']} 国"
+            )
+            + f" {wave['start_year']} 年起"
+            for index, wave in enumerate(waves)
+        )
+        return (
+            f"- 情景：美国分两批对{space}{who}的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 "
+            f"{_rate(float(rate) * 100)}% 关税：{parts}；服务业不加税；其余 {untaxed} 国未被加税。"
+        )
     # Teaching data v8 taxes goods only (the rule carries a scope); an older release taxed every industry.
     if rule.get("scope"):
         return (
@@ -258,13 +281,16 @@ def _experiment_sections(session: dict[str, Any], scenario: dict[str, Any] | Non
                     return sector_label(text)
                 return text
 
+            # The accounts table's rows are a country × industry with its own accounts, not a supplier (the page
+            # calls them 国家×行业（行）); the Z and Y tables' rows supply the column.
+            accounts = source_slice.get("table") == "accounts"
             selection = "；".join(
                 f"{label}：{_safe(slice_value(key, source_slice[key]))}"
                 for key, label in (
                     ("year", "年份"),
                     ("table", "表"),
-                    ("row_country", "供给国"),
-                    ("row_sector", "供给行业"),
+                    ("row_country", "国家（行）" if accounts else "供给国"),
+                    ("row_sector", "行业（行）" if accounts else "供给行业"),
                     ("col_country", "使用／需求国"),
                     ("col_sector", "使用行业／最终需求"),
                 )
@@ -390,16 +416,18 @@ def _experiment_sections(session: dict[str, Any], scenario: dict[str, Any] | Non
         captured = True
         # The scenario first (who is taxed and why), as at the top of step 10; then the example followed.
         scenario_line = _scenario_line(scenario)
+        # Recorded because the page was shown, not picked (the page saves the flag with the example), as step 1's cell.
+        default_example = "（系统默认例子，学生未另选）" if shock.get("teaching_example_chosen") is False else ""
         lines.extend(
             (
                 f"### 步骤 10 · {_STEP_TITLES.get(10, '')}",
                 "",
                 *([scenario_line] if scenario_line else []),
                 (
-                    f"- 两国趋势示例：{'、'.join(_with_tax_status(str(value), scenario) for value in shock.get('compared', []))} · "
+                    f"- 两国趋势示例{default_example}：{'、'.join(_with_tax_status(str(value), scenario) for value in shock.get('compared', []))} · "
                     f"{_safe(sector_label(str(shock.get('teaching_industry'))))} · 全部可用年份"
                     if isinstance(shock.get("compared"), list) and len(shock["compared"]) == 2
-                    else f"- 查看对象：{_with_tax_status(str(shock.get('teaching_country')), scenario)}"
+                    else f"- 查看对象{default_example}：{_with_tax_status(str(shock.get('teaching_country')), scenario)}"
                     + (
                         f" · {_safe(sector_label(str(shock.get('teaching_industry'))))}"
                         if shock.get("teaching_industry")
@@ -419,7 +447,7 @@ def _experiment_sections(session: dict[str, Any], scenario: dict[str, Any] | Non
             )
             lines.extend(
                 (
-                    f"- 换算用的例子：{_safe(country_label(str(teaching_observation.get('country'))))} · "
+                    f"- 换算用的例子{default_example}：{_safe(country_label(str(teaching_observation.get('country'))))} · "
                     f"{_safe(sector_label(str(teaching_observation.get('industry'))))} · {_safe(teaching_observation.get('year'))}",
                     # X is read in percentage points throughout steps 10–14, so print it the same way here.
                     # Same digits as step 10: w and X to two decimals, more where the product would not check by
@@ -493,7 +521,7 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
         "下表列出四步保存的结果（贸易流、生产、长度、网络），各用自己的单位，表中数值不能直接比较"
         + ("；表后的图将其统一换算为标准差，以便并列比较。" if qualified else "。"),
         "",
-        "| 步骤 | 指标 | X 每高 1 个百分点，Y 平均相差 | 95% 区间 | 方向 |",
+        "| 步骤 | 指标 | X 每高 1 个百分点，Y 两年累计平均相差 | 95% 区间 | 方向 |",
         "|---|---|---|---|---|",
     ]
     designs = []
@@ -608,7 +636,9 @@ def _example_conversion(
                 if item is converted[-1]
                 else ""
             )
-            text = f"{label} 的 X 为 {_example_x(item, x, tau)} 个百分点，按估计与 X 相关的差异{amount}{reading}"
+            text = (
+                f"{label} 的 X 为 {_example_x(item, x, tau)} 个百分点，按估计两年累计与 X 相关的差异{amount}{reading}"
+            )
         elif tau == 0 and _is_service(item.get("industry")):
             text = f"{label} 是服务业，不在加税范围内（τ = 0），X = 0，按估计没有与 X 相关的差异"
         elif tau > 0:
@@ -631,14 +661,26 @@ GENERATED_Y_DISCLOSURE = (
 )
 
 
+def markdown_name(value: Any) -> str:
+    """A name a student typed (a saved model), printed literally in Markdown."""
+    from gvcsim.report_workbench import _name
+
+    return _name(value)
+
+
 def _evidence_summary(
     runs: list[dict[str, Any]],
     source_filter: dict[str, Any] | None = None,
     teaching_observation: Any = None,
     overview: dict[str, Any] | None = None,
+    custom_models: list[dict[str, Any]] | None = None,
 ) -> list[str]:
     """``overview`` is the course's estimate of every Y (``_estimate_overview``) for the per-step bar charts;
-    without it each chart shows the saved Y alone."""
+    without it each chart shows the saved Y alone. ``custom_models`` are the workbench models marked 放入报告
+    (``report_workbench.reported_models``): each step names how many the appendix compares."""
+    compared: dict[int, list[str]] = {}
+    for model in custom_models or []:
+        compared.setdefault(int(model["step"]), []).append(str(model["name"]))
     lines = [
         "## 关键证据摘要",
         "",
@@ -725,6 +767,12 @@ def _evidence_summary(
         design_limit = _summary_design_limit(status, support, reasons)
         if design_limit:
             lines.append(f"- **需要写明的限制**：{design_limit}")
+        names = compared.get(step) if used_in_table or not several else None
+        if names:
+            lines.append(
+                f"- 你还在本步比较了 {len(names)} 个自己设计的模型（{'、'.join(markdown_name(name) for name in names)}），"
+                "见附录“学生设计的模型”。"
+            )
         lines.append("")
     return lines
 
@@ -790,11 +838,13 @@ def _technical_estimate_tables(
     lines = [
         "",
         # The page's column order (详细数字), t 值 included.
-        "| 变量 | X 每高 1 个百分点，Y 平均相差 | 系数（X 按份额计） | 95% 区间（按系数计） | 标准误（按国家聚类） | t 值 | p 值 |",
+        "| 变量 | X 每高 1 个百分点，Y 两年累计平均相差 | 系数（X 按份额计） | 95% 区间（按系数计） | 标准误（按国家聚类） | t 值 | p 值 |",
         "|---|---:|---:|---:|---:|---:|---:|",
     ]
     primary = _primary_coefficient(design, result)
-    for coefficient in result.get("coefs", []):
+    cumulative = result.get("cumulative")
+    rows = [*result.get("coefs", []), *([cumulative] if isinstance(cumulative, dict) else [])]
+    for coefficient in rows:
         if not isinstance(coefficient, dict):
             continue
         interval, p_value = _reported_inference_cells(
@@ -813,13 +863,30 @@ def _technical_estimate_tables(
         )
         t = coefficient.get("t")
         # Shown where the interval is (as the page shows t only when inference is allowed).
-        t_value = f"{t:,.2f}" if isinstance(t, (int, float)) and math.isfinite(t) and interval not in ("—", "不显示") else "—"
+        t_value = (
+            f"{t:,.2f}" if isinstance(t, (int, float)) and math.isfinite(t) and interval not in ("—", "不显示") else "—"
+        )
         lines.append(
             f"| {_coefficient_label(coefficient.get('name', '—'), design)} | {per_point} | "
             f"{_fixed4(coefficient.get('coef'))} | {interval} | {_fixed4(coefficient.get('se'))} | {t_value} | {p_value} |"
         )
 
     return lines
+
+
+def _formula_line(design: dict[str, Any]) -> str:
+    """The saved model in the page's symbols: X terms, controls, the two fixed effects and the error."""
+    from gvcsim.regression.spec import ModelSpec
+
+    try:
+        spec = ModelSpec.from_dict(design["spec"]) if isinstance(design.get("spec"), dict) else None
+    except ValueError:
+        spec = None
+    if spec is None or spec.fixed_effects != ("country_industry", "year"):
+        return "- 公式：Y = β·X + α（每个国家×行业的平均水平）+ λ（每年的共同变化）+ ε（随机波动）"
+    terms = spec.equation().split(" = ", 1)[1].split(" + ")
+    kept = [term for term in terms if not term.endswith(" FE") and term != "ε"]
+    return "- 公式：Y = " + " + ".join(kept) + " + α（每个国家×行业的平均水平）+ λ（每年的共同变化）+ ε（随机波动）"
 
 
 def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
@@ -862,12 +929,19 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
                     f"- 结果指标 Y：{_safe(_y_label(run['outcome'], design))}",
                     f"- 单位：{_KIND_DIMENSIONS.get(_depvar_kind(run['outcome'], design), '原始单位')}",
                     # The saved equation names data columns; the report shows its symbols, as the step pages do.
-                    "- 公式：Y = β·X + α（每个国家×行业的平均水平）+ λ（每年的共同变化）+ ε（随机波动）",
+                    _formula_line(design),
                     f"- 结果能否解读：{_STATUS_LABELS.get(str(status), _STATUS_LABELS['unknown'])}；记录数：{_count(result.get('n_obs'))}",
                 )
             )
+            # A model with controls names them ("控制变量：汇率变动"), not the generic mode.
+            control_labels = design.get("control_labels")
+            named_controls = (
+                "、".join(_safe(value) for value in control_labels.values())
+                if design.get("control_mode") != "none" and isinstance(control_labels, dict) and control_labels
+                else None
+            )
             setting_bits = [
-                f"{label}：{_setting_value(key, design[key])}"
+                f"{label}：{named_controls if key == 'control_mode' and named_controls else _setting_value(key, design[key])}"
                 for key, label in (
                     ("method", "模型"),
                     ("granularity", "观察单位"),

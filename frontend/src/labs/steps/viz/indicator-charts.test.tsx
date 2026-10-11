@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { ComparisonSummary, DistributionStrip, IndicatorPairBars, IndicatorTrendChart, LengthPositionTrajectory, TrendSummary } from "./indicator-charts";
+import { CHANGE_ROUNDING_NOTE, ComparisonSummary, DistributionStrip, IndicatorPairBars, IndicatorTrendChart, LengthPositionTrajectory, TrendSummary } from "./indicator-charts";
 import { countryDistribution } from "./indicator-model";
 import type { Row } from "./scaffold";
 
@@ -226,6 +226,17 @@ describe("trend cards name the empty year and say why (round 12)", () => {
     cleanup();
   });
 
+  test("the cards say a change is the unrounded difference; no cards, no note", () => {
+    // 16.7425% → 17.2665% reads 16.743% → 17.266% (a 0.523 difference) beside a +0.524 change.
+    const shares = [{ country: "CHN", year: 2016, value: 0.167425 }, { country: "CHN", year: 2020, value: 0.172665 }];
+    const view = render(<TrendSummary readings={shares} countries={["CHN"]} years={[2016, 2020]} unit="%" />);
+    expect(view.getByRole("note").textContent).toBe(CHANGE_ROUNDING_NOTE);
+    cleanup();
+    const single = render(<TrendSummary readings={shares} countries={["CHN"]} years={[2020]} unit="%" />);
+    expect(single.queryByRole("note")).toBeNull();
+    cleanup();
+  });
+
   test("really missing data still says so, with its year", () => {
     const view = render(<TrendSummary readings={readings} countries={["CHN", "MLT"]} years={[2016, 2020]} unit="%" />);
     const text = view.getByLabelText("趋势读数").textContent ?? "";
@@ -294,7 +305,7 @@ describe("trend cards name the industry when the scope is one industry (round 21
       );
     };
     const view = chart(1);
-    expect(view.getByRole("note").textContent).toContain("同行业全球中位数与中间 50% 远小于所选国家，图中贴近 0");
+    expect(view.container.querySelector("[data-reference-flat]")?.textContent).toContain("同行业全球中位数与中间 50% 远小于所选国家，图中贴近 0");
     cleanup();
     expect(chart(3).container.querySelector("[data-reference-flat]")).toBeNull();
     cleanup();

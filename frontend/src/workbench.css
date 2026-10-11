@@ -64,6 +64,9 @@
 }
 .comparison-summary span, .comparison-summary small { display: block; color: #616b7d; font-size: 10.5px; line-height: 1.4; word-break: keep-all; overflow-wrap: anywhere; }
 .comparison-summary b { display: block; margin: 4px 0 3px; color: #293342; font-size: 13px; line-height: 1.35; word-break: keep-all; overflow-wrap: anywhere; }
+/* The rounding note sits right under the cards it explains, taking the gap the cards leave below them. */
+.comparison-summary:has(+ .trend-rounding-note) { margin-bottom: 6px; }
+.trend-rounding-note { margin: 0 0 18px; font-size: 11px; }
 .comparison-facets { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
 .comparison-facets--stacked { grid-template-columns: minmax(0, 760px); justify-content: center; }
 /* Butterfly bars and the partner diagram need about 440px each: two side by side at 1280, stacked at 1024,
@@ -143,12 +146,15 @@
 .reg-evidence-table td, .reg-evidence-table th {
   padding: 8px 7px; vertical-align: top; white-space: normal; overflow-wrap: anywhere; text-align: left;
 }
-.reg-evidence-table th:nth-child(1), .reg-evidence-table td:nth-child(1) { width: 7%; }
-.reg-evidence-table th:nth-child(2), .reg-evidence-table td:nth-child(2) { width: 13%; }
-.reg-evidence-table th:nth-child(3), .reg-evidence-table td:nth-child(3) { width: 15%; }
-.reg-evidence-table th:nth-child(4), .reg-evidence-table td:nth-child(4) { width: 20%; }
-.reg-evidence-table th:nth-child(5), .reg-evidence-table td:nth-child(5) { width: 20%; }
-.reg-evidence-table th:nth-child(6), .reg-evidence-table td:nth-child(6) { width: 25%; }
+/* Seven columns, summing to 100 %: the last one (解释限制, a sentence per Y) needs its own share, or a fixed layout
+   leaves it 0 px wide and every row grows one character per line. */
+.reg-evidence-table th:nth-child(1), .reg-evidence-table td:nth-child(1) { width: 5%; }
+.reg-evidence-table th:nth-child(2), .reg-evidence-table td:nth-child(2) { width: 11%; }
+.reg-evidence-table th:nth-child(3), .reg-evidence-table td:nth-child(3) { width: 12%; }
+.reg-evidence-table th:nth-child(4), .reg-evidence-table td:nth-child(4) { width: 15%; }
+.reg-evidence-table th:nth-child(5), .reg-evidence-table td:nth-child(5) { width: 14%; }
+.reg-evidence-table th:nth-child(6), .reg-evidence-table td:nth-child(6) { width: 16%; }
+.reg-evidence-table th:nth-child(7), .reg-evidence-table td:nth-child(7) { width: 27%; }
 .reg-evidence-table td span { display: block; margin-top: 3px; color: #646d7d; font-size: 10.5px; }
 .technical-details { margin-top: 2px; }
 .technical-details[open] > summary { margin-bottom: 12px; }
@@ -389,11 +395,17 @@
 /* Room above the summary, so its focus ring does not run into the note above it. */
 .country-exposure-table { margin-top: 10px; }
 .country-exposure-table > summary { cursor: pointer; color: #4b47e0; font-size: 11.5px; font-weight: 700; }
-.country-exposure-table table { margin-top: 6px; }
-.teaching-x-card { margin: 12px 0 0; padding: 11px 14px; border: 1px solid #dcdff0; border-radius: 10px; background: #f8f8ff; }
-.teaching-x-card > b { display: block; color: #35328d; font-size: 12.5px; }
-.teaching-x-card > p { margin: 4px 0 0; color: #3f4759; font-size: 12.5px; line-height: 1.6; }
-.teaching-x-card .teaching-x-formula { font-size: 15px; color: #1b1f2b; font-variant-numeric: tabular-nums; }
+.country-exposure-table > .table-wrap { margin-top: 6px; }
+/* Step 10: the three variables of steps 11–14, each with where it comes from. */
+.teaching-variables { display: grid; gap: 8px; margin: 10px 0 12px; }
+.teaching-variables > div { padding: 9px 12px; border: 1px solid #dcdff0; border-radius: 9px; background: #f8f8ff; }
+.teaching-variables dt { color: #35328d; font-size: 13px; font-weight: 750; }
+.teaching-variables dd { margin: 4px 0 0; color: #3f4759; font-size: 12.5px; line-height: 1.65; }
+.source-tag { display: inline-block; margin: 0 2px 0 6px; padding: 0 6px; border-radius: 999px; background: #eceef8; color: #4b5266; font-size: 11px; font-weight: 650; line-height: 1.7; white-space: nowrap; }
+.teaching-example-body { margin-top: 14px; padding-top: 12px; border-top: 1px solid #eceef3; }
+.teaching-example-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 12px; }
+.teaching-example-charts > * { min-width: 0; }
+.teaching-table-note { margin: 6px 0 0; font-size: 11.5px; }
 @media (max-width: 600px) { .teaching-tiles { grid-template-columns: minmax(0, 1fr); } }
 .reg-group-figure { margin: 10px 0 12px; }
 
@@ -425,6 +437,12 @@
   border: 1px solid #dfe4ee; border-radius: 10px; box-shadow: 0 4px 12px rgba(35, 39, 60, .12);
 }
 .scope-card:focus { outline: none; box-shadow: 0 0 0 2px #4b47e0; }
+/* In a short window (1024 × 768) the summary keeps to one line, scrolling sideways if it must, so it covers less of
+   the chart under it than when its chips wrap to a second row. */
+@media (max-height: 820px) {
+  .scope-card { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+  .scope-card > * { flex: 0 0 auto; }
+}
 .scope-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .scope-sep { font-style: normal; color: #9aa3b5; }
 .scope-chip {
@@ -541,10 +559,72 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 }
 .reg-saved-chip-reset[aria-disabled="true"] { color: #8a8f9c; cursor: progress; }
 .reg-saved-chip-reset:focus-visible { outline: 2px solid #4b47e0; outline-offset: 2px; border-radius: 3px; }
-/* Under the trend chart: what the dashed bracket is. */
-.reg-gap-caption, .reg-parallel-note { margin: 6px 0 0; font-size: 12px; line-height: 1.6; }
-/* Step 14's numbers are long ("[-4109.8400, -3911.5600]"): headers wrap and cells are narrower, so the table fits
-   a 1280 px window instead of clipping its p 值 column. */
-.data-table.reg-coef-table th { white-space: normal; padding: 8px 8px; vertical-align: bottom; }
-.data-table.reg-coef-table td { padding-left: 8px; padding-right: 8px; }
+/* Under the 加税前后 chart: what it mixes in, and the premise it can only partly show. */
+.reg-gap-caption { margin: 6px 0 0; font-size: 12px; line-height: 1.6; }
 .verdict-card p.reg-verdict-direction .reg-interval-words { color: #4f586b; font-weight: 500; font-size: 12.5px; }
+
+/* 自己设计模型（选做）, steps 11–14: the form's three groups sit side by side and stack when the step is narrow. */
+.reg-custom-details[open] > summary { margin-bottom: 10px; }
+.reg-custom { display: grid; gap: 12px; min-width: 0; }
+/* Grid items keep min-width:auto by default: a wide regression table would widen its card (and the whole content
+   area) instead of scrolling inside its own region. */
+.reg-custom > * { min-width: 0; }
+.reg-custom-y { margin: 0; }
+.reg-custom-hints { margin: 0; padding: 8px 10px 8px 26px; border-radius: 7px; background: #f4f5fb; color: #3d4556; font-size: 12px; line-height: 1.6; }
+.reg-custom-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 10px; }
+.reg-custom-form fieldset { min-width: 0; margin: 0; padding: 9px 11px 10px; border: 1px solid #e1e5ee; border-radius: 9px; background: #fbfcff; }
+.reg-custom-form legend { padding: 0 4px; color: #2f3747; font-weight: 750; font-size: 13px; }
+.reg-custom-choice { display: flex; gap: 7px; align-items: flex-start; margin: 6px 0; cursor: pointer; }
+.reg-custom-choice input { margin-top: 3px; flex: none; }
+.reg-custom-choice span { display: grid; gap: 1px; min-width: 0; }
+.reg-custom-choice small { color: #636c7d; font-size: 11px; line-height: 1.45; }
+.reg-custom-included { cursor: default; }
+.reg-custom-included b { color: #636c7d; }
+.reg-custom-control select { min-height: 24px; margin: -2px 0 6px 22px; font-size: 12px; }
+.reg-custom-note { margin: 6px 0 0; font-size: 11px; line-height: 1.5; }
+.reg-custom-equation { margin: 0; padding: 8px 10px; border-radius: 7px; background: #fff; border: 1px dashed #c9cde0; font-family: var(--font-mono, ui-monospace, monospace); font-size: 12.5px; overflow-wrap: anywhere; }
+.reg-custom-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.reg-custom-actions .run-btn { min-width: 160px; }
+.reg-custom-caption { margin: 0 0 6px; color: #3d4556; font-size: 12px; font-weight: 650; }
+.reg-custom-table td, .reg-custom-table th { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.reg-custom-table td:not(:first-child) { text-align: right; }
+.reg-custom-compare-table td { text-align: right; line-height: 1.35; }
+.reg-custom-compare-table th[scope="row"] { text-align: left; font-weight: 600; }
+/* With many columns the table scrolls sideways: the variable names stay at the left edge, so the highlighted new
+   column (always last) still reads against its rows. */
+.reg-custom-compare-table th[scope="row"], .reg-custom-compare-table thead th:first-child {
+  position: sticky; left: 0; z-index: 1; background: #fff; box-shadow: 1px 0 0 #e6e9f0;
+}
+.reg-custom-compare-table thead th:first-child { background: #fafbfd; }
+.reg-custom-summary-start > * { border-top: 2px solid #c9cde0; }
+.reg-custom-stats { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 0; font-size: 12px; }
+.reg-custom-stats > div { display: flex; gap: 5px; }
+.reg-custom-stats dt { color: #636c7d; }
+.reg-custom-stats dd { margin: 0; font-weight: 650; font-variant-numeric: tabular-nums; }
+.reg-custom-omitted { margin: 6px 0 0; font-size: 12px; }
+.reg-custom-save { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.reg-custom-save input, .reg-custom-rename input { width: 12em; max-width: 100%; }
+.reg-custom-saved h4, .reg-custom-compare h4 { margin: 0 0 6px; font-size: 14px; }
+.reg-custom-saved-table td { vertical-align: top; }
+.reg-custom-rename { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.reg-custom-row-actions { white-space: nowrap; }
+.reg-custom .link-button { min-height: 24px; padding: 3px 6px; border: 0; background: none; color: #4b47e0; font-size: 12px; cursor: pointer; text-decoration: underline; }
+.reg-custom .link-button.danger { color: #a93f2c; }
+.reg-custom .field-error { color: #a93f2c; font-size: 12px; }
+.reg-custom-compare-head { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.reg-custom-legend { margin: 6px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.6; }
+.reg-custom-footnote { margin: 0; font-size: 11.5px; line-height: 1.6; }
+
+/* Steps 11–14: the default model above its run button, and the open change-the-model section. */
+.reg-model-box { margin: 6px 0 12px; }
+.reg-model-box .model-eq-terms { margin: 8px 0 6px; }
+.reg-model-facts { margin: 4px 0 0; font-size: 12px; }
+.reg-model-facts > summary { cursor: pointer; color: #4b47e0; font-weight: 650; }
+.reg-model-facts .design-meta { margin-top: 6px; }
+.reg-custom-section h3 { margin: 5px 0 10px; font-size: 17px; }
+.reg-custom-tries { padding: 9px 12px; border: 1px solid #dcdff0; border-radius: 9px; background: #f8f8ff; font-size: 12.5px; }
+.reg-custom-tries > b { color: #35328d; }
+.reg-custom-tries ol { margin: 6px 0 0; padding-left: 20px; line-height: 1.7; }
+.reg-custom-compare-table th.reg-custom-current, .reg-custom-compare-table td.reg-custom-current { background: #fff8e1; }
+.reg-custom-point-row > * { border-top: 1px dashed #c9cde0; font-weight: 650; }
+.reg-custom-detail-pick { display: inline-flex; gap: 6px; align-items: center; margin: 8px 0; font-size: 12.5px; }

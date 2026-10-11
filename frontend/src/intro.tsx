@@ -230,12 +230,12 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
           </button>
           <ul className="intro-card-facts">
             <li>X 由首年对美出口份额和加征税率算出。</li>
-            <li>前两年税率为 0，被加税国家后三年为 25%。</li>
+            <li>美国分两批加税：第一批 2018 年起、第二批 2019 年起税率为 25%，此前为 0。</li>
             <li>Y 是贸易流、生产、长度、网络四类结果指标。</li>
           </ul>
           {openCards.shock && (
             <div className="intro-card-body" id={shockPanelId}>
-              <p>关税暴露 X 等于首年对美出口份额 w 乘以加征税率 τ；未被加税国家的 X 始终为 0。步骤 11–14 用同一个 X 对四个结果指标 Y 做回归。</p>
+              <p>关税暴露 X 等于首年对美出口份额 w 乘以加征税率 τ；美国分两批加税（2018、2019 年起），未被加税国家的 X 始终为 0。步骤 11–14 用同一个 X 对四个结果指标 Y 做回归。</p>
             </div>
           )}
         </div>
@@ -312,7 +312,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
         <div className="intro-xy-card">
           <b>02 · 用回归把差距量化</b>
           <div className="intro-xy-item"><strong>X</strong><span><b>关税暴露</b><small>解释变量：按它的高低比较各国家×行业</small></span></div>
-          <div className="intro-xy-link" aria-hidden>↓ X 每高 1 个百分点，Y 平均相差多少？</div>
+          <div className="intro-xy-link" aria-hidden>↓ X 每高 1 个百分点，Y 两年累计平均相差多少？</div>
           <div className="intro-xy-item"><strong>Y</strong><span><b>指标结果</b><small>结果变量：要观察的变量</small></span></div>
         </div>
       </div>
@@ -336,7 +336,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       </p>
       {/* 进入前讲清完成规则，避免把浏览位置误认为学习进度。 */}
       <div className="intro-ready-rules">
-        <div><b>完成进度</b><p>答对本步理解题后，步骤显示 ✓。步骤 15 要提交报告后才显示 ✓。只浏览不算完成。</p></div>
+        <div><b>完成进度</b><p>答对本步理解题后，步骤显示 ✓；报告材料还没齐全时 ✓ 是橙色的。步骤 15 要提交报告后才显示 ✓。只浏览不算完成。</p></div>
         <div><b>报告材料</b><p>步骤 1–10 打开页面即自动记录；步骤 11–14 点“计算…回归”按钮后自动保存；步骤 15 写三段分析。每步顶部会显示报告材料是否齐全（保存成功后更新）。</p></div>
         <div><b>报告提交</b><p>只生成草稿不算提交。核对后提交给老师，页面显示“等待教师评阅”即表示提交成功。</p></div>
       </div>

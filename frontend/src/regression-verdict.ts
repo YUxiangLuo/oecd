@@ -163,7 +163,12 @@ export function distinctDigits(digits: number, point: number, bounds: [number, n
  * read the same as the estimate (report `estimate_digits`).
  */
 export function estimateDigits(kind: DepvarKind, value: number, bounds: [number, number] | null): number {
-  const base = kind === "network" ? networkIntervalDigits(value, bounds) : kind === "position" || kind === "length" ? 4 : shareDigits(value);
+  let base = kind === "network" ? networkIntervalDigits(value, bounds) : kind === "position" || kind === "length" ? 4 : shareDigits(value);
+  // A nonzero value that rounds to 0 prints with 2 significant digits (signed: "+0.0048"); its interval ends then get
+  // the same decimals ("[-0.0072, +0.0168]", not "[-0.01, +0.02]").
+  if (value !== 0 && Number.isFinite(value) && Number(value.toFixed(base)) === 0) {
+    base = Math.max(base, 1 - Math.floor(Math.log10(Math.abs(value))));
+  }
   return distinctDigits(base, value, bounds);
 }
 
@@ -228,8 +233,8 @@ export interface BarFigures {
 export type BarUnit = "points" | "sd";
 
 export const BAR_UNIT_TITLES: Record<BarUnit, string> = {
-  points: "X 每高 1 个百分点，Y 平均相差（个百分点）",
-  sd: "X 每高 1 个百分点，Y 平均相差（个标准差）",
+  points: "X 每高 1 个百分点，Y 两年累计平均相差（个百分点）",
+  sd: "X 每高 1 个百分点，Y 两年累计平均相差（个标准差）",
 };
 
 export function barUnitFor(kinds: readonly string[]): BarUnit {
@@ -348,12 +353,52 @@ function naturalScale(
   };
 }
 
+/**
+ * A run's headline estimate: the X terms' cumulative relation when the model has it (teaching data v10: X and L1.X,
+ * so the relation over the tariff's year and the next), else the coefficient of a model's single X. A model of
+ * several X terms that has no sum (one was dropped) has no headline: the term left is not the sum it is read as,
+ * and the overview's bars leave it out the same way.
+ */
+export function headlineCoefficient(
+  response: Pick<RegressionResponse, "design" | "result"> & Partial<Pick<RegressionResponse, "model_snapshot">>,
+): CoefStat | null {
+  if (response.result.cumulative) return response.result.cumulative;
+  if ((response.design.spec?.x_lags.length ?? 1) > 1) return null;
+  const expected = response.model_snapshot?.x_columns ?? [response.design.shock_col];
+  return response.result.coefs.find((item) => expected.includes(item.name)) ?? null;
+}
+
+/** The coefficient of one term (X, L1.X, a control), or null when the model does not have it. */
+export function termCoefficient(response: Pick<RegressionResponse, "result">, name: string): CoefStat | null {
+  return response.result.coefs.find((item) => item.name === name) ?? null;
+}
+
+/**
+ * The headline's X-terms sum split over the tariff's year (X) and the next (L1.X), in the headline's units and
+ * decimals (those of the sum with its interval), so the two parts read alike and add up to the headline as printed
+ * (to rounding); null without both terms.
+ */
+export function lagSplitParts(
+  outcome: RegressionOutcome, response: { design?: { depvar_kind?: string } | null; result: RegressionResponse["result"] },
+): [string, string] | null {
+  const current = termCoefficient(response, "teaching_tariff_exposure");
+  const previous = termCoefficient(response, "teaching_tariff_exposure_lag1");
+  if (!current || !previous) return null;
+  const kind = depvarKind(outcome, response.design);
+  const { scale } = chartDisplayScale(outcome, response.design);
+  const total = response.result.cumulative;
+  const digits = total
+    ? estimateDigits(kind, total.coef * scale, hasValidInterval(total) ? [total.ci_low! * scale, total.ci_high! * scale] : null)
+    : null;
+  const part = (beta: number) => withCountUnit(digits == null ? signedEffect(beta * scale, kind) : signed(beta * scale, digits), kind);
+  return [part(current.coef), part(previous.coef)];
+}
+
 export function buildRegressionVerdict(
   outcome: RegressionOutcome,
   response: RegressionResponse,
 ): RegressionVerdict {
-  const expected = response.model_snapshot?.x_columns ?? [response.design.shock_col];
-  const coefficient = response.result.coefs.find((item) => expected.includes(item.name)) ?? null;
+  const coefficient = headlineCoefficient(response);
   const support = response.result.support;
   const reasons = [...new Set([
     ...(response.result.status_reasons ?? []), ...(support?.reasons ?? []),

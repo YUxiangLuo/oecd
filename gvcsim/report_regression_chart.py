@@ -14,7 +14,7 @@ import json
 import math
 from typing import Any, TypeGuard
 
-from gvcsim.regression.teaching import BASELINES
+from gvcsim.regression.teaching import selectable_baselines
 from gvcsim.report_common import (
     UNIT_NAMES,
     _depvar_kind,
@@ -30,8 +30,8 @@ from gvcsim.report_common import (
 
 _FAMILIES = {11: "贸易流", 12: "生产", 13: "长度", 14: "网络"}
 UNIT_TITLES = {
-    "points": "X 每高 1 个百分点，Y 平均相差（个百分点）",
-    "sd": "X 每高 1 个百分点，Y 平均相差（个标准差）",
+    "points": "X 每高 1 个百分点，Y 两年累计平均相差（个百分点）",
+    "sd": "X 每高 1 个百分点，Y 两年累计平均相差（个标准差）",
 }
 # Step 12's four forward shares add up to 100% of value added, so their four estimates add up to about 0.
 _FORWARD_SHARES = ("1_VA_D_share", "2_VA_RT_share", "3a_VA_GVC_S_share", "3b_VA_GVC_C_share")
@@ -181,7 +181,7 @@ def family_chart(
         entries.append(saved_entry)
     # The page's rule, by family (so a chart without the overview keeps the page's unit): 个百分点 only when every Y
     # of the family is a share; otherwise 个标准差 (lengths with the position index; centralities of any size).
-    kinds = [item.kind for item in BASELINES.get(outcome, ())] or [entry["kind"] for entry in entries]
+    kinds = [item.kind for item in selectable_baselines(outcome)] or [entry["kind"] for entry in entries]
     standardized = not all(kind == "share" for kind in kinds)
     # Each bar keeps its own headline's digits (step 12: "-0.39" beside "+0.006"), so a number never reads one way in
     # the chart and another in the text.
@@ -206,7 +206,7 @@ def family_chart(
         "type": "diverging-bar",
         "title": f"步骤 {step} · "
         + (f"{_FAMILIES.get(step, '本步')}的 {len(items)} 个 Y" if len(items) > 1 else "你保存的 Y")
-        + "：X 每高 1 个百分点，Y 平均相差多少",
+        + "：X 每高 1 个百分点，Y 两年累计平均相差多少",
         "x_label": UNIT_TITLES["sd" if standardized else "points"],
         "items": items,
     }

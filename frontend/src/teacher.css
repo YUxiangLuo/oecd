@@ -230,6 +230,9 @@
 /* ---------- 表格补充(行内菜单 / 等宽) ---------- */
 /* Most 学号 are short or "—": a narrow column, the full value in the cell's title. */
 .student-table-scroll .student-no-cell { max-width: 7em; overflow: hidden; text-overflow: ellipsis; }
+/* A long login name wraps after its separators (breakableUsername) instead of pushing 最近登录 under the sticky
+   操作 column at 1024 px. */
+.student-table-scroll .username-cell { white-space: normal; }
 .student-table-scroll { max-height: calc(100vh - 290px); overflow: auto; scrollbar-gutter: stable; }
 .student-table-scroll thead th { position: sticky; top: 0; z-index: 3; }
 .student-table-scroll th:last-child, .student-table-scroll td:last-child {
@@ -422,9 +425,14 @@
   .dash-header { padding: 16px 20px 12px; }
   .teacher-content { padding: 16px 20px 32px; }
   .grade-split { grid-template-columns: minmax(0, 1fr) 288px; gap: 14px; }
+  /* Beside the grading card the report column is narrow: row labels and headers keep to one line and the table
+     scrolls sideways in place, instead of wrapping to one or two characters per line. */
+  .grade-doc .report-md th, .grade-doc .report-md td:first-child { white-space: nowrap; }
   .search-input { min-width: 200px; }
 }
 @media (max-width: 1400px) {
   .time-cell .time-full { display: none; }
   .time-cell .time-date { display: inline; }
 }
+/* Under the report status: the student changed the record after handing the report in. */
+.report-outdated-note { display: block; margin-top: 3px; color: #8a5a00; font-size: 11px; line-height: 1.4; }

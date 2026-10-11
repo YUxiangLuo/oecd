@@ -21,7 +21,7 @@ from gvcsim.indicators.core import IcioArrays
 from gvcsim.indicators.production import PRODUCTION_COLUMNS
 from gvcsim.indicators.tradeflow import TRADE_COLUMNS
 
-OUTPUT_QC_CONTRACT_VERSION = 5
+OUTPUT_QC_CONTRACT_VERSION = 6
 OUTPUT_QC_ABS_TOLERANCE = 1e-8
 OUTPUT_QC_REL_TOLERANCE = 1e-8
 OUTPUT_QC_DENOMINATOR_FLOOR = 1e-12
@@ -114,7 +114,7 @@ OUTPUT_CHECK_SPECS = (
     OutputCheckSpec(
         "teaching_panel_contract",
         "mathematical",
-        "Teaching panel has unique country-industry-year keys, five continuous years, finite teaching fields, bounded outcomes, and X=w*tariff with two zero pre-policy years.",
+        "Teaching panel has unique country-industry-year keys, five continuous years, finite teaching fields, bounded outcomes, X=w*tariff with two zero pre-policy years, lags of X equal to w*tariff of earlier years (zero before the panel), and tariff waves 0/1/2.",
     ),
 )
 OUTPUT_QC_EXPECTED_CHECKS = tuple(spec.name for spec in OUTPUT_CHECK_SPECS)
@@ -772,7 +772,16 @@ def _panel_share_economic_domains(frames: dict[str, pd.DataFrame], year: int) ->
 
 
 def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict:
-    from gvcsim.regression.teaching import X_COLUMN, Y_COLUMNS
+    from gvcsim.regression.teaching import (
+        EXCHANGE_RATE_COLUMN,
+        TARIFF_RATE,
+        WAVE_COLUMN,
+        X_COLUMN,
+        X_LAG_COLUMNS,
+        Y_COLUMNS,
+        _is_goods_sector,
+        wave_start_years,
+    )
 
     frame = frames["panel_teaching"]
     required = {
@@ -783,7 +792,9 @@ def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict
         "teaching_export_share_w",
         "teaching_tariff_rate_tau",
         "teaching_treated",
-        X_COLUMN,
+        WAVE_COLUMN,
+        EXCHANGE_RATE_COLUMN,
+        *X_LAG_COLUMNS.values(),
         *Y_COLUMNS.values(),
     }
     missing = _missing(frame, required)
@@ -810,6 +821,21 @@ def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict
     violations += int((tau < 0).sum())
     violations += int((~_close(x, w * tau)).sum())
     violations += int((~numeric["teaching_treated"].isin([0, 1])).sum())
+    violations += int((~numeric[WAVE_COLUMN].isin([0, 1, 2])).sum())
+    # τ follows the published schedule: the goods industries (ICIO A–C) of a taxed country from its wave's start year.
+    # A lag of X is the unit's w × that schedule k years earlier (0 before the panel), so a unit missing a year inside
+    # the panel still has its lags checked, as the generator writes them.
+    if unique_years:
+        starts = numeric[WAVE_COLUMN].map(wave_start_years(int(unique_years[0])))
+        goods = _is_goods_sector(frame["industry"])
+
+        def scheduled(at: pd.Series) -> pd.Series:
+            return TARIFF_RATE * (goods & starts.notna() & at.ge(starts)).astype(float)
+
+        violations += int((~_close(tau, scheduled(years))).sum())
+        for lag, column in X_LAG_COLUMNS.items():
+            if lag:
+                violations += int((~_close(numeric[column], w * scheduled(years - lag))).sum())
     if len(unique_years) >= 2:
         violations += int((x.loc[years.isin(unique_years[:2])].abs() > OUTPUT_QC_ABS_TOLERANCE).sum())
     violations += int((~numeric[Y_COLUMNS["trade"]].between(0, 1)).sum())

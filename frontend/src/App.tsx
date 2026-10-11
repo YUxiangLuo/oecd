@@ -17,7 +17,7 @@ import { LoginPage } from "./login";
 import { resetStepScroller } from "./step-navigation";
 import { StudentWorkspace } from "./student-workspace";
 import type { AuthUser, Meta, StepsResponse, StepStateApi } from "./types";
-import { expiredLoginNotice, hasKeptEdits, useSession } from "./use-session";
+import { expiredLoginNotice, hasKeptEdits, SAVE_RETRY_DELAYS_MS, useSession } from "./use-session";
 import { userFacingRequestError } from "./user-facing-error";
 
 const APP_TITLE = "供应链仿真系统 · GVC Simulation Lab";
@@ -77,6 +77,10 @@ function AppContent() {
   const [authAttempt, setAuthAttempt] = useState(0);
   // After a successful retry the failure page (and its focused button) is gone: put focus on the content.
   const recoverFocus = useRef(false);
+  // An automatic retry runs behind its failure page: the page stays (no loading screen, no new alert, focus where it
+  // was) until the retry succeeds. A click on the page's button shows the loading screen as before.
+  const quietAuthRetry = useRef(false);
+  const quietBootRetry = useRef(false);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [showIntro, setShowIntro] = useState(() => sessionStorage.getItem("gvcsim_show_intro") === "1");
   const introTriggerRef = useRef<HTMLButtonElement>(null);
@@ -99,6 +103,7 @@ function AppContent() {
     syncError: session.syncError,
     syncConflict: session.syncConflict,
     syncNow: () => { void session.syncNow().catch(() => {}); },
+    loadServerVersion: () => session.loadServerVersion().catch(() => false),
     materialLocked: session.report?.state === "pending" || session.report?.state === "graded",
   };
 
@@ -190,7 +195,9 @@ function AppContent() {
   }, [logout, user]);
 
   useEffect(() => {
-    if (authAttempt > 0) setAuthCheckError(null);
+    const quiet = quietAuthRetry.current;
+    quietAuthRetry.current = false;
+    if (authAttempt > 0 && !quiet) setAuthCheckError(null);
     const notice = sessionStorage.getItem("gvcsim_auth_notice");
     if (notice) {
       sessionStorage.removeItem("gvcsim_auth_notice");
@@ -203,12 +210,17 @@ function AppContent() {
     const token = sessionStorage.getItem(AUTH_TOKEN_KEY);
     if (!token) {
       setActiveAuthToken(null);
+      setAuthCheckError(null);
       setAuthChecked(true);
       return;
     }
     setActiveAuthToken(token);
     api.me(token).then(
-      (verifiedUser) => { if (getActiveAuthToken() === token) setUser(verifiedUser); },
+      (verifiedUser) => {
+        if (getActiveAuthToken() !== token) return;
+        setAuthCheckError(null);
+        setUser(verifiedUser);
+      },
       (error) => {
         if (getActiveAuthToken() !== token) return;
         if (isApiErrorStatus(error, 401)) reloadLoggedOut(expiredLoginNotice(hasKeptEdits(sessionStorage)));
@@ -228,12 +240,28 @@ function AppContent() {
     setFatal(null);
     setBootAttempt((value) => value + 1);
   }, []);
+  // Also on a timer (soon at first, then once a minute): a server that was down comes back without any "online"
+  // event in a browser that stayed online.
   useEffect(() => {
     if (!authCheckError && !fatal) return;
-    const online = () => (authCheckError ? retryAuthCheck() : retryCourse());
-    window.addEventListener("online", online);
-    return () => window.removeEventListener("online", online);
-  }, [authCheckError, fatal, retryAuthCheck, retryCourse]);
+    const retry = () => {
+      recoverFocus.current = true;
+      if (authCheckError) {
+        quietAuthRetry.current = true;
+        setAuthAttempt((value) => value + 1);
+      } else {
+        quietBootRetry.current = true;
+        setBootAttempt((value) => value + 1);
+      }
+    };
+    const attempt = authCheckError ? authAttempt : bootAttempt;
+    const timer = window.setTimeout(retry, SAVE_RETRY_DELAYS_MS[Math.min(attempt, SAVE_RETRY_DELAYS_MS.length - 1)]);
+    window.addEventListener("online", retry);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("online", retry);
+    };
+  }, [authAttempt, authCheckError, bootAttempt, fatal]);
 
   useEffect(() => {
     // Back after logout can restore a signed-in page from the back/forward cache with its token
@@ -260,22 +288,34 @@ function AppContent() {
   useEffect(() => {
     if (!user) return;
     let live = true;
-    setFatal(null);
+    const quiet = quietBootRetry.current;
+    quietBootRetry.current = false;
+    if (!quiet) setFatal(null);
     setMetaReady(false);
-    api.meta().then((value) => {
-      if (!live) return;
+    // Each load says whether it succeeded, so a quiet retry clears the failure page only once both did.
+    const metaLoaded = api.meta().then((value) => {
+      if (!live) return false;
       setMeta(value);
       setMetaReady(true);
+      return true;
     }, (error) => {
-      if (!live) return;
+      if (!live) return false;
       setFatal(userFacingRequestError(error, "读取课程数据失败"));
       setMetaReady(true);
+      return false;
     });
-    if (user.role === "student") {
-      api.steps().then(
-        (value) => { if (live) setStepsData(value); },
-        (error) => { if (live) setFatal(userFacingRequestError(error, "读取课程步骤失败")); },
-      );
+    const stepsLoaded = user.role !== "student" ? Promise.resolve(true) : api.steps().then(
+      (value) => {
+        if (live) setStepsData(value);
+        return live;
+      },
+      (error) => {
+        if (live) setFatal(userFacingRequestError(error, "读取课程步骤失败"));
+        return false;
+      },
+    );
+    if (quiet) {
+      void Promise.all([metaLoaded, stepsLoaded]).then((loaded) => { if (live && loaded.every(Boolean)) setFatal(null); });
     }
     return () => { live = false; };
   }, [user, bootAttempt]);
@@ -303,7 +343,11 @@ function AppContent() {
     document.title = currentTitle ? `步骤 ${current} · ${currentTitle} · ${APP_TITLE}` : APP_TITLE;
   }, [current, currentTitle, isTeacher]);
 
-  // After a failure page's retry succeeds, its focused button is gone; continue from the step content.
+  // After a failure page's retry succeeds, its focused button is gone; continue from the step content. The record's
+  // own page retries inside useSession, so its showing is what marks the focus to recover.
+  useEffect(() => {
+    if (session.status === "unavailable") recoverFocus.current = true;
+  }, [session.status]);
   const workspaceReady = Boolean(user?.role === "student" && stepsData && metaReady && session.status === "ready");
   useEffect(() => {
     if (!workspaceReady || !recoverFocus.current) return;
@@ -320,7 +364,7 @@ function AppContent() {
       <BootFailure
         title="暂时无法连接教学服务"
         message={authCheckError}
-        note={`登录信息已保留。网络恢复后会自动重试，也可以点下方按钮再试。${authAttempt > 0 ? `已重试 ${authAttempt} 次。` : ""}`}
+        note={`登录信息已保留。连接恢复后会自动重试，也可以点下方按钮再试。${authAttempt > 0 ? `已重试 ${authAttempt} 次。` : ""}`}
         primary={{ label: "重试连接", onClick: retryAuthCheck }}
       />
     );
@@ -372,7 +416,7 @@ function AppContent() {
     <BootFailure
       title="课程加载失败"
       message={fatal}
-      note={`登录信息已保留。网络恢复后会自动重试，也可以点下方按钮再试。${bootAttempt > 0 ? `已重试 ${bootAttempt} 次。` : ""}`}
+      note={`登录信息已保留。连接恢复后会自动重试，也可以点下方按钮再试。${bootAttempt > 0 ? `已重试 ${bootAttempt} 次。` : ""}`}
       primary={{ label: "重试加载", onClick: retryCourse }}
       secondary={{ label: "退出登录", onClick: () => logout() }}
     />
@@ -384,7 +428,7 @@ function AppContent() {
     <BootFailure
       title="暂时无法读取实验记录"
       message={session.syncError ?? "读取实验记录失败：暂时无法连接服务器"}
-      note={`你的实验记录保存在服务器上，没有丢失。读取成功后才能继续；网络恢复后会自动重新读取。${session.loadAttempts > 0 ? `已重试 ${session.loadAttempts} 次。` : ""}`}
+      note={`你的实验记录保存在服务器上，没有丢失。读取成功后才能继续；连接恢复后会自动重新读取。${session.loadAttempts > 0 ? `已重试 ${session.loadAttempts} 次。` : ""}`}
       primary={{ label: "重试读取", onClick: () => { recoverFocus.current = true; session.retryLoad(); } }}
       secondary={{ label: "退出登录", onClick: () => logout() }}
     />
