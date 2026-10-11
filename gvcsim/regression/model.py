@@ -184,7 +184,10 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
         else None
     )
     # A lagged control is the same unit's value k years earlier, matched on the year (not on row position), so a
-    # missing year leaves the lag missing instead of borrowing an older value.
+    # missing year leaves the lag missing instead of borrowing an older value. The match needs one row per unit and
+    # year: a duplicated panel gets the course's message here instead of pandas' MergeError.
+    if lagged_controls and data.duplicated([design.entity, "year"]).any():
+        raise ValueError("最终回归样本要求 entity-time 唯一")
     for key, lag, column in lagged_controls:
         earlier = data[[design.entity, "year", key]].assign(year=data["year"] + lag).rename(columns={key: column})
         data = data.merge(earlier, on=[design.entity, "year"], how="left", validate="one_to_one")

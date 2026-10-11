@@ -1059,7 +1059,13 @@ def test_regression_run_discloses_teaching_simulation_and_rejects_retired_contra
     ],
     ids=["blank-entity", "string-outcome", "infinite-regressor", "duplicate-key"],
 )
-def test_regression_runtime_boundary_maps_to_controlled_route_400(teaching_db, monkeypatch, mutation, detail):
+# The workbench's lagged control is matched on (unit, year): its checks must come first there too.
+@pytest.mark.parametrize(
+    "spec",
+    [None, {"x_lags": [0, 1], "controls": [{"name": "teaching_exchange_rate_change", "lag": 1}], "fixed_effects": []}],
+    ids=["default-model", "lagged-control"],
+)
+def test_regression_runtime_boundary_maps_to_controlled_route_400(teaching_db, monkeypatch, mutation, detail, spec):
     client = _authenticated_client(teaching_db)
     panel = pd.DataFrame(
         [
@@ -1086,7 +1092,7 @@ def test_regression_runtime_boundary_maps_to_controlled_route_400(teaching_db, m
     monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", direct_cpu)
     response = client.post(
         "/api/regression/run",
-        json={"outcome": "trade"},
+        json={"outcome": "trade", **({"spec": spec} if spec else {})},
     )
     assert response.status_code == 400
     assert detail in response.json()["detail"]
