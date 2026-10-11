@@ -154,6 +154,8 @@ def test_the_report_and_the_page_share_one_computed_run(monkeypatch):
         "run_design_with_benchmark",
         lambda panel, design: calls.append(design) or real(panel, design),
     )
+    release = ["a" * 32]
+    monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: release[0])
     spec = ModelSpec((0, 1), (), ("country_year", "industry"))
     design = RegressionDesign("trade", teaching=True, spec=spec)
     first = regression_routes.cached_run(PANEL, design)
@@ -165,16 +167,18 @@ def test_the_report_and_the_page_share_one_computed_run(monkeypatch):
 
     monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: PANEL)
     monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", direct_cpu)
-    monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: "a" * 32)
     import asyncio
 
     request = SimpleNamespace(state=SimpleNamespace(user={"role": "student", "sub": "student", "aid": 9}))
     payload = regression_routes.RegressionRequest(outcome="trade", spec=spec.to_dict())
     assert asyncio.run(regression_routes.regression_run(payload, request)) is first
     assert len(calls) == 1
-    # Another panel (a new release) starts empty.
-    other = PANEL.copy()
-    assert regression_routes.cached_run(other, design) is not first
+    # A new DataFrame of the same release (the CSV cache read it again) still reads the cached run.
+    assert regression_routes.cached_run(PANEL.copy(), design) is first
+    assert len(calls) == 1
+    # A new release starts empty.
+    release[0] = "b" * 32
+    assert regression_routes.cached_run(PANEL, design) is not first
     assert len(calls) == 2
     regression_routes.clear_result_cache()
 

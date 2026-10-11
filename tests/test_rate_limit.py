@@ -219,7 +219,6 @@ def test_report_generation_charges_the_runs_it_has_to_compute(monkeypatch):
     monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: release[0])
     monkeypatch.setattr(regression_routes, "_RUN_LIMITER", SlidingWindowRateLimiter(3))
     regression_routes.clear_result_cache()
-    panel = object()
     own = ModelSpec((0,), (), ("country_industry", "year"))
     other = ModelSpec((0, 2), (), ("country_industry", "year"))
     designs = [
@@ -227,7 +226,7 @@ def test_report_generation_charges_the_runs_it_has_to_compute(monkeypatch):
         RegressionDesign("trade", teaching=True, baseline="FVA_share", spec=own),
     ]
     # The default model was computed on the page: only the student's own model is a new calculation.
-    regression_routes._store_payload(panel, regression_routes._run_key(designs[0]), {"cached": True})
+    regression_routes._store_payload(regression_routes._run_key(designs[0]), {"cached": True})
     regression_routes.charge_report_runs(7, designs + designs)
     regression_routes.charge_report_runs(7, designs[:1])  # all cached: free
     regression_routes.charge_report_runs(7, [RegressionDesign("trade", teaching=True, spec=other), designs[1]])
@@ -240,6 +239,38 @@ def test_report_generation_charges_the_runs_it_has_to_compute(monkeypatch):
     assert not regression_routes._run_cached(regression_routes._run_key(designs[0]))
     # A run on the older panel that ends after the swap keeps the release its panel was read under: it never makes
     # the new release's run look computed (and free).
-    regression_routes._store_payload(object(), regression_routes._run_key(designs[0]), {"late": True}, "a" * 32)
+    regression_routes._store_payload(regression_routes._run_key(designs[0]), {"late": True}, "a" * 32)
     assert not regression_routes._run_cached(regression_routes._run_key(designs[0]))
+    regression_routes.clear_result_cache()
+
+
+def test_a_new_dataframe_for_the_same_release_reads_the_cached_runs(monkeypatch):
+    # The shared CSV cache (32 entries) may hand out a new DataFrame for the same release's panel: a run the limiter
+    # let through as cached must then come from the cache, and the other students' runs must stay cached.
+    from gvcsim.regression.design import RegressionDesign
+
+    computed = []
+
+    def compute(panel, design):
+        computed.append(design.outcome)
+        return "result", {"benchmark_passed": True}
+
+    monkeypatch.setattr(regression_routes, "run_design_with_benchmark", compute)
+    monkeypatch.setattr(
+        regression_routes, "_run_payload", lambda design, result, benchmark: {"outcome": design.outcome}
+    )
+    monkeypatch.setattr(regression_routes, "_require_y", lambda *_args: None)
+    regression_routes.clear_result_cache()
+    trade, production = (RegressionDesign(outcome, teaching=True) for outcome in ("trade", "production"))
+    release = "a" * 32
+    regression_routes.cached_run(object(), trade, release)
+    regression_routes.cached_run(object(), production, release)
+    assert regression_routes._run_cached(regression_routes._run_key(trade), release)
+    assert regression_routes.cached_run(object(), trade, release) == {"outcome": "trade"}
+    assert computed == ["trade", "production"]
+    assert regression_routes._run_cached(regression_routes._run_key(production), release)
+    # Another release starts over.
+    regression_routes.cached_run(object(), trade, "b" * 32)
+    assert computed == ["trade", "production", "trade"]
+    assert not regression_routes._run_cached(regression_routes._run_key(production), "b" * 32)
     regression_routes.clear_result_cache()
