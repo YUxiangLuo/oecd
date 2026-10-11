@@ -442,21 +442,28 @@ describe("the workbench", () => {
 });
 
 describe("the open workbench", () => {
-  test("too many calculations: a countdown on the button and a message that is not about the model", async () => {
+  test("too many calculations: new models wait out the countdown, a model computed before can still be computed", async () => {
     spyOn(api, "regressionOptions").mockResolvedValue(options);
-    spyOn(api, "runRegression").mockRejectedValue(new ApiError(429, "计算次数过多，请约 5 秒后再试。", "x", 5) as never);
+    const run = spyOn(api, "runRegression").mockRejectedValue(new ApiError(429, "计算次数过多，请约 5 秒后再试。", "x", 5) as never);
     render(<Harness />);
     const compute = await screen.findByRole("button", { name: "计算这个模型" });
     fireEvent.click(checkbox(/^汇率变动/));
     await act(async () => { fireEvent.click(compute); });
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toBe("计算太频繁：每分钟最多算 20 个新模型（已经算过的不计），请稍等再算。");
-    const waiting = screen.getByRole("button", { name: /^重试（\d 秒后）$/ });
-    expect(waiting.getAttribute("aria-disabled")).toBe("true");
+    expect(alert.textContent).toBe("计算太频繁：每分钟最多算 20 个新模型，新的设定请等倒计时结束；已经算过的设定不计次，现在就能算。");
     expect(alert.textContent).not.toContain("没有算出结果");
+    expect(document.querySelector(".reg-custom-wait")?.textContent).toMatch(/^新的设定 \d 秒后可以计算$/);
     // Changing the form during the wait keeps the message next to the countdown.
     fireEvent.click(checkbox(/^GDP/));
     expect(screen.getByRole("alert").textContent).toContain("计算太频繁");
+    // A model computed before: the server answers it from its cache without counting it, so the button still works.
+    expect(compute.getAttribute("aria-disabled")).toBeNull();
+    run.mockResolvedValue(NO_RATE_RUN as never);
+    fireEvent.click(checkbox(/^GDP/));
+    await act(async () => { fireEvent.click(compute); });
+    await waitFor(() => expect(tableHeaders()).toContain("本次计算（未保存）"));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(document.querySelector(".reg-custom-wait")).not.toBeNull();
   });
 
   test("out of date: said when the form changed, named when the Y changed, silent when the form is back at the default", async () => {
