@@ -155,17 +155,21 @@ def summarize_benchmark(model: PreparedModel, own: RegressionResult, reference: 
     omitted = {item["name"] for item in model.omitted}
     policy = [name for name in model.policy_xcols if name not in omitted]
     for name in policy:
-        if name not in own_by or name not in ref_by:
+        if name not in own_by:
             raise ValueError(f"标准库对照缺少政策系数: {name}")
     names = [*policy, *(name for name in own_by if name not in policy)]
+    # A regressor the library dropped as absorbed while the course kept it (the two rank tests differ near the
+    # threshold) cannot be compared: the check fails, so the run is returned with its inference suppressed
+    # (run_design_with_benchmark) rather than refused.
+    missing = [name for name in names if name not in ref_by]
     rows: list[dict] = []
     coef_diffs: list[float] = []
     coef_tolerances: list[float] = []
     se_diffs: list[float] = []
     se_tolerances: list[float] = []
     for name in names:
-        if name not in ref_by:
-            raise ValueError(f"标准库对照缺少系数: {name}")
+        if name in missing:
+            continue
         a, b = own_by[name], ref_by[name]
         if a.se is None or b.se is None:
             raise ValueError(f"标准库对照缺少标准误: {name}")
@@ -188,11 +192,16 @@ def summarize_benchmark(model: PreparedModel, own: RegressionResult, reference: 
         coef_tolerances.append(1e-8 + 1e-9 * max(abs(a.coef), abs(b.coef)))
         se_diffs.append(abs(se_diff))
         se_tolerances.append(1e-10 + 1e-6 * max(abs(a.se), abs(b.se)))
-    max_coef = max(coef_diffs)
-    max_se = max(se_diffs)
+    max_coef = max(coef_diffs, default=0.0)
+    max_se = max(se_diffs, default=0.0)
     require_finite("标准库对照摘要", max_coef, max_se, coef_diffs, se_diffs, se_tolerances)
-    coef_passed = all(diff <= tolerance for diff, tolerance in zip(coef_diffs, coef_tolerances, strict=True))
-    se_passed = all(diff <= tolerance for diff, tolerance in zip(se_diffs, se_tolerances, strict=True))
+    coef_passed = not missing and all(
+        diff <= tolerance for diff, tolerance in zip(coef_diffs, coef_tolerances, strict=True)
+    )
+    se_passed = not missing and all(diff <= tolerance for diff, tolerance in zip(se_diffs, se_tolerances, strict=True))
+    notes = list(reference.notes)
+    if missing:
+        notes.append(f"标准库把这些变量当作已被固定效应吸收而去掉，无法对照：{'、'.join(missing)}")
     return {
         "backend": reference.diagnostics.get("backend", "linearmodels.PanelOLS"),
         "policy_coefs": rows,
@@ -201,6 +210,7 @@ def summarize_benchmark(model: PreparedModel, own: RegressionResult, reference: 
         "coef_check_passed": coef_passed,
         "se_check_passed": se_passed,
         "benchmark_passed": coef_passed and se_passed,
+        "missing_in_reference": missing,
         "se_check_mode": "matched_cr1_atol_1e-10_rtol_1e-6",
-        "notes": reference.notes,
+        "notes": notes,
     }

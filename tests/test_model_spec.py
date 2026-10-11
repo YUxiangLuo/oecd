@@ -287,6 +287,28 @@ def test_a_failed_library_check_hides_every_inferential_number(monkeypatch):
     assert result.constant is not None and result.constant.p is None
 
 
+@pytest.mark.parametrize("dropped", [EXCHANGE_RATE_COLUMN, X_COLUMN])
+def test_a_regressor_the_library_drops_fails_the_check_instead_of_the_run(monkeypatch, dropped):
+    # The library's rank test can call a nearly absorbed regressor absorbed where the course keeps it.
+    from gvcsim.regression import panel as panel_module
+
+    original = panel_module._absorbing_estimate
+
+    def without(model, keep, omitted):
+        reference = original(model, keep, omitted)
+        reference.coefs = [coef for coef in reference.coefs if coef.name != dropped]
+        return reference
+
+    monkeypatch.setattr(panel_module, "_absorbing_estimate", without)
+    result, benchmark = run_design_with_benchmark(_panel(), RegressionDesign("trade", teaching=True))
+    assert benchmark["missing_in_reference"] == [dropped]
+    assert not benchmark["benchmark_passed"] and dropped not in {row["name"] for row in benchmark["policy_coefs"]}
+    assert any(dropped in note for note in benchmark["notes"])
+    assert result.status == "invalid_design" and result.support["suppress_inference"] is True
+    assert result.cumulative is not None and result.cumulative.p is None
+    assert {coef.name for coef in result.coefs} >= {X_COLUMN, EXCHANGE_RATE_COLUMN}
+
+
 def test_effects_nested_in_country_split_the_sample_without_a_note():
     spec = ModelSpec((0, 1), (), ("country_industry", "country_year"))
     result, _ = run_design_with_benchmark(_panel(), RegressionDesign("trade", teaching=True, spec=spec))
