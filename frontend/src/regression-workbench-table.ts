@@ -302,17 +302,6 @@ export function samplesDiffer(columns: TableColumn[]): boolean {
   return new Set(columns.map(({ snapshot }) => `${snapshot.result.n_obs}|${yearsText(snapshot)}`)).size > 1;
 }
 
-/** "汇率变动：被国家×年份 FE 吸收" for each omitted term of a run. */
-export function omittedLines(snapshot: CustomResultSnapshot, options: WorkbenchOptions): string[] {
-  return (snapshot.result.omitted ?? []).map((item) => {
-    const label = termLabel(item.name, options);
-    if (item.reason === "absorbed") {
-      return item.by && item.by !== "常数项" ? `${label}：被${item.by} FE 吸收` : `${label}：在样本里不变，与常数项重合`;
-    }
-    return `${label}：${item.reason === "zero" ? "样本里全为 0" : "与其他变量完全共线"}`;
-  });
-}
-
 /** Omitted terms grouped by why: "被国家×年份 FE 吸收：汇率变动、GDP（取对数）". */
 export function omittedSummary(snapshot: CustomResultSnapshot, options: WorkbenchOptions): string[] {
   const groups = new Map<string, string[]>();

@@ -5,7 +5,7 @@ import { api, ApiError } from "./api";
 import { ColumnDetails, customReportChanged, RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
 import {
   canonicalSpec, coefficientRows, comparisonCsv, effectiveEffects, equationPreview, includedBy, nameProblem, omittedSummary, perPointReading, perPointRow,
-  nextResultName, omittedLines, samplesDiffer, significanceStars, snapshotOf, specSummary, summaryRows, termLabel,
+  nextResultName, samplesDiffer, significanceStars, snapshotOf, specSummary, summaryRows, termLabel,
   type TableColumn,
 } from "./regression-workbench-table";
 import optionsFixture from "./regression-workbench-options.fixture.json";
@@ -153,7 +153,7 @@ describe("tables", () => {
     expect(summaryRows(both, options).find((row) => row.key === "r2_within")?.cells).toEqual(["—", "0.8774"]);
     expect(summaryRows(both, options).find((row) => row.key === "years")?.cells).toEqual(["2017–2020", "2016–2020"]);
     expect(samplesDiffer(both)).toBe(true);
-    expect(omittedLines(snapshotOf(absorbed), options)).toEqual(["汇率变动：被国家×年份 FE 吸收"]);
+    expect(omittedSummary(snapshotOf(absorbed), options)).toEqual(["被国家×年份 FE 吸收：汇率变动"]);
   });
 
   test("suppressed inference keeps coefficients and SE but drops the stars and F", () => {
