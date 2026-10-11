@@ -23,7 +23,9 @@ type KeptStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 /**
  * Edits the server had not confirmed when the page was left (refresh, navigation, expired login,
  * logout or password change). `base` is the last record the server confirmed, so the next load can
- * tell which steps were edited and put back only those, without asking the student.
+ * tell which steps were edited and put back only those, without asking the student. `sent` is the
+ * snapshot of a save still on its way when the page was left: it may have landed, and the server's
+ * step equal to it is then this page's own save, not an edit made elsewhere.
  */
 export interface KeptEdits {
   version: 3;
@@ -31,6 +33,7 @@ export interface KeptEdits {
   release_id: string;
   base: ExperimentSession;
   session: ExperimentSession;
+  sent?: ExperimentSession;
 }
 
 export function keepEdits(storage: KeptStorage, kept: Omit<KeptEdits, "version">): boolean {
@@ -53,6 +56,7 @@ export function readKeptEdits(storage: KeptStorage, username: string, releaseId:
       || value.release_id !== releaseId
       || !isValidSession(value.base)
       || !isValidSession(value.session)
+      || (value.sent !== undefined && !isValidSession(value.sent))
     ) return null;
     return value as KeptEdits;
   } catch {
@@ -86,8 +90,12 @@ export function clearKeptEdits(storage: KeptStorage): void {
  * the two are combined only if they changed different fields; a field changed on both sides keeps
  * the server's whole step, since fields recorded together (e.g. a chart's countries and readings)
  * must not be mixed.
+ *
+ * A step (or field) the server holds exactly as `sent` (this page's save that was on its way) was not changed
+ * elsewhere: the server took this page's own save, so what was typed after it is put back on top. A save the
+ * server normalised on the way in no longer matches `sent` and is treated as before.
  */
-export function mergeKeptEdits(server: ExperimentSession, kept: Pick<KeptEdits, "base" | "session">): ExperimentSession {
+export function mergeKeptEdits(server: ExperimentSession, kept: Pick<KeptEdits, "base" | "session" | "sent">): ExperimentSession {
   const changed = (from: Record<string, unknown>, to: Record<string, unknown>) =>
     [...new Set([...Object.keys(from), ...Object.keys(to)])].filter((key) => !sameJsonValue(from[key], to[key]));
   const put = <T,>(out: Record<string, T>, key: string, value: T | undefined) => {
@@ -95,15 +103,20 @@ export function mergeKeptEdits(server: ExperimentSession, kept: Pick<KeptEdits, 
     else out[key] = value;
   };
   const data = (record: unknown) => ((record as { data?: Record<string, unknown> } | undefined)?.data ?? {});
-  const merge = <T,>(current: Record<string, T>, base: Record<string, T>, local: Record<string, T>) => {
+  const merge = <T,>(current: Record<string, T>, base: Record<string, T>, local: Record<string, T>, sent?: Record<string, T>) => {
     const out = { ...current };
-    for (const key of changed(base, local)) {
-      if (sameJsonValue(current[key], base[key])) {
+    for (const key of new Set([...changed(base, local), ...(sent ? changed(sent, local) : [])])) {
+      // The server holds this page's own save of this step: what the page has since then goes on top of it.
+      const own = sent !== undefined && sameJsonValue(current[key], sent[key]);
+      if (sameJsonValue(local[key], own ? sent[key] : base[key])) continue;
+      if (own || sameJsonValue(current[key], base[key])) {
         put(out, key, local[key]);
         continue;
       }
       const mine = changed(data(base[key]), data(local[key]));
-      const theirs = new Set(changed(data(base[key]), data(current[key])));
+      // A field the server holds as this page sent it was changed by this page, not elsewhere.
+      const theirs = new Set(changed(data(base[key]), data(current[key]))
+        .filter((field) => !(sent && sameJsonValue(data(current[key])[field], data(sent[key])[field]))));
       if (current[key] === undefined || local[key] === undefined || mine.some((field) => theirs.has(field))) continue;
       const combined = { ...data(current[key]) };
       for (const field of mine) put(combined, field, data(local[key])[field]);
@@ -113,8 +126,8 @@ export function mergeKeptEdits(server: ExperimentSession, kept: Pick<KeptEdits, 
   };
   return {
     ...server,
-    steps: merge(server.steps, kept.base.steps, kept.session.steps),
-    shared: merge(server.shared, kept.base.shared, kept.session.shared),
+    steps: merge(server.steps, kept.base.steps, kept.session.steps, kept.sent?.steps),
+    shared: merge(server.shared, kept.base.shared, kept.session.shared, kept.sent?.shared),
   };
 }
 
@@ -194,6 +207,8 @@ export class SessionSaveQueue {
   private saving: Promise<void> | null = null;
   private baseUpdatedAt: string | null = null;
   private confirmed: ExperimentSession | null = null;
+  // The snapshot of the save on its way, kept after a failure too: the server may still have taken it.
+  private sent: ExperimentSession | null = null;
   private outcomeUncertain = false;
 
   constructor(
@@ -210,12 +225,18 @@ export class SessionSaveQueue {
 
   setConfirmedSession(session: ExperimentSession) {
     this.confirmed = session;
+    this.sent = null;
     this.outcomeUncertain = false;
   }
 
   /** The last snapshot the server confirmed. */
   getConfirmedSession(): ExperimentSession | null {
     return this.confirmed;
+  }
+
+  /** The snapshot of a save sent but not confirmed (on its way, or failed without an answer). */
+  getSentSession(): ExperimentSession | null {
+    return this.sent;
   }
 
   hasUnsynced(): boolean {
@@ -258,6 +279,7 @@ export class SessionSaveQueue {
           if (!this.outcomeUncertain && this.confirmed && sameSessionContent(next, this.confirmed)) continue;
           let response: SessionSaveResponse;
           this.outcomeUncertain = true;
+          this.sent = next;
           try {
             response = await this.save(next, this.baseUpdatedAt);
           } catch (cause) {
@@ -487,6 +509,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       username,
       release_id: releaseIdRef.current,
       base: queue.current.getConfirmedSession() ?? emptySession(),
+      sent: queue.current.getSentSession() ?? undefined,
       session: sessionRef.current,
     });
   }, [enabled, username]);
@@ -625,7 +648,9 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       // Keep this page's edits the other page did not touch: the same rule as edits kept on leaving.
       const sameRelease = response.release_id === releaseIdRef.current;
       const base = queue.current?.getConfirmedSession() ?? emptySession();
-      const merged = sameRelease ? mergeKeptEdits(response.session, { base, session: localSnapshot }) : response.session;
+      // A save that failed without an answer may have gone through: the server's step equal to it is this page's.
+      const sent = queue.current?.getSentSession() ?? undefined;
+      const merged = sameRelease ? mergeKeptEdits(response.session, { base, session: localSnapshot, sent }) : response.session;
       releaseIdRef.current = response.release_id;
       queue.current?.discardPending(response.updated_at ?? null);
       queue.current?.setConfirmedSession(response.session);

@@ -292,6 +292,61 @@ describe("session helpers", () => {
     expect(readStep(mergeKeptEdits(base, { base, session: removed }), 9)).toBeUndefined();
   });
 
+  test("a save on its way when the page was left is this page's own: what was typed after it goes back on top", () => {
+    const base = patchSessionStep(emptySession(), 15, { research_question: "", reflection: "旧" });
+    const sent = patchSessionStep(base, 15, { research_question: "第一版" });
+    const local = patchSessionStep(sent, 15, { research_question: "第二版" });
+    const question = (session: ExperimentSession) => readStep<Record<string, unknown>>(session, 15)?.research_question;
+    // The save landed: the server holds the sent snapshot.
+    expect(question(mergeKeptEdits(sent, { base, sent, session: local }))).toBe("第二版");
+    // It never landed: the server still holds the base.
+    expect(question(mergeKeptEdits(base, { base, sent, session: local }))).toBe("第二版");
+    // Without the sent snapshot the server's step reads as changed elsewhere (the old rule).
+    expect(question(mergeKeptEdits(sent, { base, session: local }))).toBe("第一版");
+    // It landed and another tab then changed another field: both survive.
+    const elsewhere = patchSessionStep(sent, 15, { reflection: "别处" });
+    expect(readStep<Record<string, unknown>>(mergeKeptEdits(elsewhere, { base, sent, session: local }), 15))
+      .toEqual({ research_question: "第二版", reflection: "别处" });
+    // Another tab changed the same field after it: the server's step stays, as before.
+    const sameField = patchSessionStep(sent, 15, { research_question: "别处的问题" });
+    expect(question(mergeKeptEdits(sameField, { base, sent, session: local }))).toBe("别处的问题");
+  });
+
+  test("the queue keeps the snapshot it sent until the server confirms one, also after a failure", async () => {
+    const requests: ReturnType<typeof deferred<SessionSaveResponse>>[] = [];
+    const queue = new SessionSaveQueue(() => {
+      const request = deferred<SessionSaveResponse>();
+      requests.push(request);
+      return request.promise;
+    }, { onSaved: () => {}, onError: () => {}, onSyncing: () => {}, onUnsynced: () => {} });
+    const first = patchSessionStep(emptySession(), 15, { research_question: "first" });
+    queue.enqueue(first);
+    const failing = queue.drain();
+    expect(queue.getSentSession()).toBe(first);
+    requests[0].reject(new Error("offline"));
+    await expect(failing).rejects.toThrow("offline");
+    expect(queue.getSentSession()).toBe(first);
+    const retry = queue.drain();
+    requests[1].resolve(response(first));
+    await retry;
+    expect(queue.getSentSession()).toBeNull();
+  });
+
+  test("the kept copy carries the snapshot that was on its way", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+      removeItem: (key: string) => { values.delete(key); },
+    };
+    const sent = patchSessionStep(emptySession(), 15, { research_question: "第一版" });
+    const session = patchSessionStep(sent, 15, { research_question: "第二版" });
+    keepEdits(storage, { username: "student", release_id: RELEASE_A, base: emptySession(), sent, session });
+    expect(readKeptEdits(storage, "student", RELEASE_A)?.sent).toEqual(sent);
+    values.set(KEPT_EDITS_KEY, JSON.stringify({ ...JSON.parse(values.get(KEPT_EDITS_KEY)!), sent: { version: "forged" } }));
+    expect(readKeptEdits(storage, "student", RELEASE_A)).toBeNull();
+  });
+
   test("composes step and shared patches", () => {
     let session = patchSessionStep(emptySession(), 7, { chart: "quadrant" });
     session = patchSessionStep(session, 7, { metric: "FVA_share" });
