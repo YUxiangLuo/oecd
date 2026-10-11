@@ -4,8 +4,8 @@ import { useState } from "react";
 import { api, ApiError } from "./api";
 import { ColumnDetails, customReportChanged, RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
 import {
-  canonicalSpec, coefficientRows, comparisonCsv, effectiveEffects, equationPreview, includedBy, nameProblem, omittedSummary, perPointReading, perPointRow,
-  nextResultName, samplesDiffer, significanceStars, snapshotOf, specSummary, summaryRows, termLabel,
+  canonicalSpec, coefficientRows, comparisonCsv, effectiveEffects, equationPreview, includedBy, mergeCustomResults, nameProblem, omittedSummary, perPointReading,
+  perPointRow, nextResultName, SAVED_LIMITS, samplesDiffer, significanceStars, snapshotOf, specSummary, summaryRows, termLabel,
   type TableColumn,
 } from "./regression-workbench-table";
 import optionsFixture from "./regression-workbench-options.fixture.json";
@@ -542,3 +542,64 @@ describe("one column's full numbers", () => {
     expect(cells(run)[0][4]).toBe(expected);
   });
 });
+
+describe("saved models changed on this page and elsewhere", () => {
+  const spec = (effects: string[], controls: ModelSpec["controls"] = []): ModelSpec => ({ x_lags: [0, 1], controls, fixed_effects: effects });
+  const model = (name: string, effects: string[], change: Partial<CustomResult> = {}) => saved(name, spec(effects), NO_RATE_RUN, change);
+  const names = (items: CustomResult[]) => items.map((item) => item.name);
+  const four = [
+    model("结果1", ["country_industry"]), model("结果2", ["country", "year"]), model("结果3", ["industry", "year"]), model("结果4", []),
+  ];
+
+  test("the limits are the server's", () => {
+    expect(SAVED_LIMITS).toEqual({ saved: options.limits.saved, in_report: options.limits.in_report });
+  });
+
+  test("a model each side added is kept; this page's takes the next free name", () => {
+    const other = model("结果5", ["country_year"], { id: "other" });
+    const mine = model("结果5", ["country_industry", "country_year"], { id: "mine" });
+    const { value, notes } = mergeCustomResults(four, [...four, other], [...four, mine], "步骤 11");
+    expect(value.map((item) => item.id)).toEqual([...four.map((item) => item.id), "other", "mine"]);
+    expect(names(value).slice(-2)).toEqual(["结果5", "结果6"]);
+    expect(notes).toEqual(["步骤 11：本页保存的“结果5”与另一处保存的模型同名，已改名为“结果6”"]);
+  });
+
+  test("past six, this page's addition is left out and the student is told (the dogfood case: five, then one each)", () => {
+    const five = [...four, model("结果5", ["industry"])];
+    const other = model("结果6", ["country_year"], { id: "other" });
+    const mine = model("结果6", ["country_industry", "country_year"], { id: "mine" });
+    const { value, notes } = mergeCustomResults(five, [...five, other], [...five, mine], "步骤 11");
+    expect(value.map((item) => item.id)).toEqual([...five.map((item) => item.id), "other"]);
+    expect(notes).toEqual(["步骤 11：本页保存的“结果6”没能保留（每步最多保存 6 个模型），需要时请删去一个后重新计算并保存"]);
+  });
+
+  test("the same model saved on both sides is kept once, without a note", () => {
+    const other = model("甲", ["country_year"], { id: "other" });
+    const mine = model("乙", ["country_year"], { id: "mine" });
+    expect(mergeCustomResults(four, [...four, other], [...four, mine], "步骤 11")).toEqual({ value: [...four, other], notes: [] });
+  });
+
+  test("edits and deletions: this page's edit of an untouched model wins, the server's edit wins otherwise", () => {
+    const renamed = { ...four[0], name: "我的模型" };
+    const local = [renamed, four[2], four[3]];
+    const server = [four[0], { ...four[1], in_report: true }, four[2], { ...four[3], name: "别处改名" }];
+    const { value, notes } = mergeCustomResults(four, server, local, "步骤 11");
+    // 结果1 renamed here only: this page's. 结果2 deleted here but edited elsewhere: kept. 结果4 renamed elsewhere only: theirs.
+    expect(names(value)).toEqual(["我的模型", "结果2", "结果3", "别处改名"]);
+    expect(notes).toEqual([]);
+    // Deleted here and untouched elsewhere: gone. Deleted elsewhere: gone.
+    expect(names(mergeCustomResults(four, four, four.slice(1), "步骤 11").value)).toEqual(["结果2", "结果3", "结果4"]);
+    expect(names(mergeCustomResults(four, four.slice(1), four, "步骤 11").value)).toEqual(["结果2", "结果3", "结果4"]);
+  });
+
+  test("the report's limit keeps the server's models first", () => {
+    const base = four.map((item, index) => (index < 2 ? { ...item, in_report: true } : item));
+    const server = base.map((item, index) => (index === 2 ? { ...item, in_report: true } : item));
+    const mine = model("新模型", ["country_year"], { id: "mine", in_report: true });
+    const { value, notes } = mergeCustomResults(base, server, [...base, mine], "步骤 12");
+    expect(value.filter((item) => item.in_report).map((item) => item.name)).toEqual(["结果1", "结果2", "结果3"]);
+    expect(value.at(-1)).toMatchObject({ id: "mine", in_report: false });
+    expect(notes).toEqual(["步骤 12：“新模型”没能放入报告（每步最多 3 个），已取消勾选"]);
+  });
+});
+

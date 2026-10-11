@@ -23,7 +23,7 @@ export function SyncProblemBanner({ problem, compact = false }: { problem: SyncP
   if (!problem.error) return null;
   const conflictNote = problem.error === EDITED_DURING_RELOAD
     ? EDITED_DURING_RELOAD
-    : "本页的修改暂未保存。点“载入服务器版本”后，本页的其他修改会保留；如果两边在同一步改了同一项，本页这一步会被替换，请先复制需要保留的文字。";
+    : "本页的修改暂未保存。点“载入服务器版本”后，本页的其他修改会保留；如果两边在同一步改了同一项，本页这一步会被替换（两边保存的模型会合并保留），请先复制需要保留的文字。";
   return (
     <div className={`error-box persistent-qc-warning${compact ? " sync-problem--compact" : ""}`} role="alert">
       <b>{problem.conflict ? "你的账号在别处保存了更新的记录" : "实验记录尚未保存到服务器"}</b>

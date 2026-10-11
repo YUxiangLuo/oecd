@@ -84,6 +84,11 @@ export function clearKeptEdits(storage: KeptStorage): void {
   storage.removeItem(KEPT_EDITS_KEY);
 }
 
+/** Combines one step field changed both on this page and elsewhere (see mergeKeptEdits); `notes` say what of this
+ *  page's change was not kept as it was. `place` names the step ("步骤 11"). */
+export type FieldMerger = (base: unknown, server: unknown, local: unknown, place: string) => { value: unknown; notes: string[] };
+export type FieldMergers = Readonly<Record<string, FieldMerger>>;
+
 /**
  * Put this page's edits back on the server's current record. Each step (or shared entry) the copy
  * changed since its base is applied when the server did not change it too. When both changed it,
@@ -94,8 +99,15 @@ export function clearKeptEdits(storage: KeptStorage): void {
  * A step (or field) the server holds exactly as `sent` (this page's save that was on its way) was not changed
  * elsewhere: the server took this page's own save, so what was typed after it is put back on top. A save the
  * server normalised on the way in no longer matches `sent` and is treated as before.
+ *
+ * A field with a merger in `mergers` (the workbench's saved models) is combined by it instead, and the step's other
+ * fields go on as above; what the merger could not keep is added to `notes`.
  */
-export function mergeKeptEdits(server: ExperimentSession, kept: Pick<KeptEdits, "base" | "session" | "sent">): ExperimentSession {
+export function mergeKeptEdits(
+  server: ExperimentSession,
+  kept: Pick<KeptEdits, "base" | "session" | "sent">,
+  { mergers, notes }: { mergers?: FieldMergers; notes?: string[] } = {},
+): ExperimentSession {
   const changed = (from: Record<string, unknown>, to: Record<string, unknown>) =>
     [...new Set([...Object.keys(from), ...Object.keys(to)])].filter((key) => !sameJsonValue(from[key], to[key]));
   const put = <T,>(out: Record<string, T>, key: string, value: T | undefined) => {
@@ -103,7 +115,10 @@ export function mergeKeptEdits(server: ExperimentSession, kept: Pick<KeptEdits, 
     else out[key] = value;
   };
   const data = (record: unknown) => ((record as { data?: Record<string, unknown> } | undefined)?.data ?? {});
-  const merge = <T,>(current: Record<string, T>, base: Record<string, T>, local: Record<string, T>, sent?: Record<string, T>) => {
+  const merge = <T,>(
+    current: Record<string, T>, base: Record<string, T>, local: Record<string, T>, sent: Record<string, T> | undefined,
+    place: (key: string) => string,
+  ) => {
     const out = { ...current };
     for (const key of new Set([...changed(base, local), ...(sent ? changed(sent, local) : [])])) {
       // The server holds this page's own save of this step: what the page has since then goes on top of it.
@@ -117,17 +132,27 @@ export function mergeKeptEdits(server: ExperimentSession, kept: Pick<KeptEdits, 
       // A field the server holds as this page sent it was changed by this page, not elsewhere.
       const theirs = new Set(changed(data(base[key]), data(current[key]))
         .filter((field) => !(sent && sameJsonValue(data(current[key])[field], data(sent[key])[field]))));
-      if (current[key] === undefined || local[key] === undefined || mine.some((field) => theirs.has(field))) continue;
+      // A field changed on both sides is combined only by its merger; otherwise the server's whole step stays.
+      if (current[key] === undefined || local[key] === undefined) continue;
+      if (mine.some((field) => theirs.has(field) && !mergers?.[field])) continue;
       const combined = { ...data(current[key]) };
-      for (const field of mine) put(combined, field, data(local[key])[field]);
+      for (const field of mine) {
+        if (!theirs.has(field)) {
+          put(combined, field, data(local[key])[field]);
+          continue;
+        }
+        const result = mergers![field](data(base[key])[field], data(current[key])[field], data(local[key])[field], place(key));
+        put(combined, field, result.value);
+        notes?.push(...result.notes);
+      }
       out[key] = { ...current[key], data: combined };
     }
     return out;
   };
   return {
     ...server,
-    steps: merge(server.steps, kept.base.steps, kept.session.steps, kept.sent?.steps),
-    shared: merge(server.shared, kept.base.shared, kept.session.shared, kept.sent?.shared),
+    steps: merge(server.steps, kept.base.steps, kept.session.steps, kept.sent?.steps, (key) => `步骤 ${key}`),
+    shared: merge(server.shared, kept.base.shared, kept.session.shared, kept.sent?.shared, (key) => key),
   };
 }
 
@@ -167,6 +192,10 @@ export interface SessionApi {
   workspaceGeneration: number;
   /** Incremented each time edits kept in this tab (an expired login, a logout offline) are put back after login. */
   restoredEdits?: number;
+  /** What of this page's edits a merge with the server's record could not keep as it was (a saved model renamed,
+   *  taken out of the report or left out), shown until the student dismisses it. */
+  mergeNotes?: readonly string[];
+  dismissMergeNotes?: () => void;
   getStep: <T>(step: number) => T | undefined;
   getConfirmedStep: <T>(step: number) => T | undefined;
   patchStep: <T extends object>(step: number, patch: Partial<T>) => void;
@@ -314,7 +343,7 @@ export function updateSessionShared<T>(session: ExperimentSession, key: SharedSe
   return writeShared(session, key, apply(readShared<T>(session, key)));
 }
 
-export function useSession(enabled: boolean, username?: string): SessionApi {
+export function useSession(enabled: boolean, username?: string, mergers?: FieldMergers): SessionApi {
   const [status, setStatus] = useState<SessionStatus>(enabled ? "loading" : "unavailable");
   const [loadAttempt, setLoadAttempt] = useState(0);
   // An automatic retry reads again behind the failure page (no loading state): the page, its focus and its alert stay.
@@ -332,6 +361,9 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const [materialGate, setMaterialGate] = useState<ReportGateItem[] | null>(null);
   const [workspaceGeneration, setWorkspaceGeneration] = useState(0);
   const [restoredEdits, setRestoredEdits] = useState(0);
+  const [mergeNotes, setMergeNotes] = useState<readonly string[]>([]);
+  const mergersRef = useRef(mergers);
+  mergersRef.current = mergers;
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncConflict, setSyncConflict] = useState(false);
@@ -445,7 +477,9 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         // Edits kept when this tab was last left go back on top of the server's record, step by step.
         const kept = username ? readKeptEdits(sessionStorage, username, response.release_id) : null;
         if (kept) clearKeptEdits(sessionStorage);
-        const restored = kept ? mergeKeptEdits(response.session, kept) : response.session;
+        const notes: string[] = [];
+        const restored = kept ? mergeKeptEdits(response.session, kept, { mergers: mergersRef.current, notes }) : response.session;
+        setMergeNotes(notes);
         replace(restored);
         setConfirmedSession(response.session);
         setUpdatedAt(response.updated_at ?? null);
@@ -650,7 +684,11 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       const base = queue.current?.getConfirmedSession() ?? emptySession();
       // A save that failed without an answer may have gone through: the server's step equal to it is this page's.
       const sent = queue.current?.getSentSession() ?? undefined;
-      const merged = sameRelease ? mergeKeptEdits(response.session, { base, session: localSnapshot, sent }) : response.session;
+      const notes: string[] = [];
+      const merged = sameRelease
+        ? mergeKeptEdits(response.session, { base, session: localSnapshot, sent }, { mergers: mergersRef.current, notes })
+        : response.session;
+      setMergeNotes(notes);
       releaseIdRef.current = response.release_id;
       queue.current?.discardPending(response.updated_at ?? null);
       queue.current?.setConfirmedSession(response.session);
@@ -700,6 +738,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   return {
     status, session, report, updatedAt, syncing, syncError, syncConflict, unsynced, autoRetry: retryAt != null,
     completion, reportCurrent, reportGate, materialGate, workspaceGeneration, restoredEdits,
+    mergeNotes, dismissMergeNotes: useCallback(() => setMergeNotes([]), []),
     getStep: useCallback(<T,>(step: number) => readStep<T>(session, step), [session]),
     getConfirmedStep: useCallback(<T,>(step: number) => readStep<T>(confirmedSession, step), [confirmedSession]),
     patchStep: useCallback(<T extends object,>(step: number, patch: Partial<T>) => update((value) => patchStoredStep(value, step, patch)), [update]),

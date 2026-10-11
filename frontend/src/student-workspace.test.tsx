@@ -4,6 +4,7 @@ import {
   carriedComparisonFor,
   carriedComparisonSource,
   latestComparison,
+  MergeNotes,
   StudentWorkspaceSkipLink,
   focusStepMainContent,
   stepMainContentId,
@@ -146,3 +147,16 @@ test("edits put back after a re-login are confirmed once with a toast", async ()
   expect(toasts()).toBe(before);
   cleanup();
 });
+
+describe("what a merge with the server's record did not keep", () => {
+  test("is listed until dismissed; nothing shows without notes", () => {
+    let dismissed = 0;
+    render(<MergeNotes notes={["步骤 11：本页保存的“结果6”没能保留"]} onDismiss={() => { dismissed += 1; }} />);
+    expect(screen.getByRole("status").textContent).toContain("步骤 11：本页保存的“结果6”没能保留");
+    screen.getByRole("button", { name: "知道了" }).click();
+    expect(dismissed).toBe(1);
+    cleanup();
+    expect(renderToStaticMarkup(<MergeNotes notes={[]} />)).toBe("");
+  });
+});
+

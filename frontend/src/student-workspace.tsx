@@ -46,6 +46,19 @@ export function useRestoredEditsToast(restoredEdits: number): void {
   }, [restoredEdits]);
 }
 
+/** After this page's edits were combined with the server's record: what of them was not kept as it was (a saved
+ *  model renamed, taken out of the report or left out). It stays until dismissed, unlike a toast. */
+export function MergeNotes({ notes, onDismiss }: { notes?: readonly string[]; onDismiss?: () => void }) {
+  if (!notes?.length) return null;
+  return (
+    <div className="merge-notes" role="status">
+      <b>本页的修改已与服务器上的记录合并，以下几处没能原样保留：</b>
+      <ul>{notes.map((note) => <li key={note}>{note}</li>)}</ul>
+      {onDismiss && <button type="button" className="secondary sm" onClick={onDismiss}>知道了</button>}
+    </div>
+  );
+}
+
 export function stepMainContentId(step: number): string {
   return `step-${step}-main-content`;
 }
@@ -317,6 +330,7 @@ export function StudentWorkspace({
 
           <div className="workarea">
             <SyncProblemBanner problem={syncProblem} />
+            <MergeNotes notes={session.mergeNotes} onDismiss={session.dismissMergeNotes} />
             <StepHeader
               step={step}
               previous={prevStep}
