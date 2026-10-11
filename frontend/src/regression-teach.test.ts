@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { cleanup, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -8,6 +9,7 @@ import {
   familyVerdict,
   regressionSummaryRows,
 } from "./regression-teach";
+import { api } from "./api";
 import { snapshotOf } from "./regression-workbench-table";
 import type { CoefStat, RegressionOutcome, RegressionResponse } from "./types";
 
@@ -229,6 +231,34 @@ describe("ReportedCustomModels", () => {
     // The model's sum says which years it covers; both read at the default's decimals.
     expect(rows[0][3]).toBe("-0.70 个百分点（两年累计）");
     expect(rows[0][4]).toBe("-0.55 个百分点");
+  });
+
+  test("a model on another Y than the step's saved run is compared with the course default on that Y", async () => {
+    const saved = withSum(-0.55, -0.57, -0.53); // the step's run is on FVA_share
+    const dvaex = withSum(0.7057, 0.6566, 0.7548);
+    const estimate = (key: string, coef: number, low: number, high: number) => ({
+      key, label: key, kind: "share", default: key === "FVA_share", coef, ci_low: low, ci_high: high, p: 0.001, status: "ok",
+      suppress_inference: false, depvar_std: 1, depvar_within_std: 1, depvar_mean: 1, n_obs: 10,
+    });
+    const overview = spyOn(api, "teachingOverview").mockResolvedValue({
+      version: "v10", disclaimer: "",
+      outcomes: { trade: [estimate("FVA_share", -0.5504, -0.567, -0.534), estimate("DVAex_share", 0.549, 0.533, 0.565)], production: [], length: [], network: [] },
+    });
+    const model = {
+      id: "m", name: "去掉汇率", outcome: "trade" as const, baseline: "DVAex_share", in_report: true, saved_at: "2026-10-11",
+      spec: { x_lags: [0, 1], controls: [], fixed_effects: ["country_industry", "year"] }, snapshot: snapshotOf(dvaex),
+    };
+    try {
+      const view = render(createElement(ReportedCustomModels, {
+        getStep: (step: number) => step === 11 ? { run: { design: saved.design, result: saved.result }, custom_results: [model] } : undefined,
+      }));
+      await waitFor(() => expect(view.container.querySelector("tbody tr td:last-child")?.textContent).toBe("+0.55 个百分点"));
+      // The model reads at that default's decimals, as on the workbench's table.
+      expect(view.container.querySelectorAll("tbody tr td")[2].textContent).toBe("+0.71 个百分点（两年累计）");
+    } finally {
+      overview.mockRestore();
+      cleanup();
+    }
   });
 
   test("says how to add one when none is marked", () => {

@@ -98,6 +98,10 @@ describe("names", () => {
     expect(nameProblem("一".repeat(21), list, 20)).toBe("名称最多 20 个字符");
     expect(nameProblem("结果1", list, 20)).toBe("本步已有名为“结果1”的模型");
     expect(nameProblem("结果1", list, 20, "a")).toBeNull();
+    // Invisible characters: the server refuses them, and JavaScript's trim would keep some Python strips (U+001F).
+    for (const name of ["\u200b", "结果\u202e1", "结果\u001f", "结\u2028果"]) {
+      expect(nameProblem(name, list, 20)).toBe("名称不能包含不可见字符");
+    }
   });
 });
 
@@ -187,6 +191,17 @@ describe("tables", () => {
     expect(omittedSummary(snapshotOf(run), options)).toEqual(["被国家×年份 FE 吸收：汇率变动、GDP（取对数）"]);
   });
 
+  test("in the CSV only typed names are kept from reading as formulas; the table's signed numbers stay as they are", () => {
+    const flipped = response(NO_RATE, { teaching_tariff_exposure: 0.4608, teaching_tariff_exposure_lag1: 0.244 });
+    const named: TableColumn[] = [columns[0], { name: "-2+3+cmd", spec: NO_RATE, snapshot: snapshotOf(flipped) }];
+    const csv = comparisonCsv(named, options, "Y", perPointRow(named, "trade"));
+    const lines = csv.slice(1).trimEnd().split("\r\n");
+    expect(lines[0]).toBe("因变量：Y,默认模型,'-2+3+cmd");
+    const perPoint = lines.find((line) => line.startsWith("合计：X 每高 1 个百分点"))!;
+    expect(perPoint).toBe("合计：X 每高 1 个百分点,-0.55 个百分点（两年累计）,+0.70 个百分点（两年累计）");
+    expect(csv).not.toContain(",'+");
+  });
+
   test("the CSV has a BOM, two rows per term, the fixed effects, the models and the footnote last", () => {
     const named: TableColumn[] = [columns[0], { ...columns[1], name: "=SUM(1,2)" }];
     const csv = comparisonCsv(named, options, "外国增加值项占比", perPointRow(named, "trade"));
@@ -213,10 +228,20 @@ describe("report notice", () => {
     expect(customReportChanged(12, [], reported)).toBe(false);
     expect(customReportChanged(11, [a], undefined)).toBe(true);
   });
+
+  test("the report's copy may list each control's keys in another order (as the database returns it)", () => {
+    const withRate = { ...NO_RATE, controls: [{ name: "teaching_exchange_rate_change", lag: 0 }] };
+    const a = saved("国家年份", withRate, NO_RATE_RUN, { in_report: true });
+    const fromDatabase = { ...withRate, controls: [{ lag: 0, name: "teaching_exchange_rate_change" }] };
+    const reported = [{ step: 11, name: "国家年份", outcome: "trade", baseline: "FVA_share", spec: fromDatabase }];
+    expect(customReportChanged(11, [a], reported)).toBe(false);
+    expect(customReportChanged(11, [a], [{ ...reported[0], spec: { ...fromDatabase, controls: [{ lag: 1, name: "teaching_exchange_rate_change" }] } }])).toBe(true);
+  });
 });
 
-function Harness({ initial, onSave, locked = false, defaultResponse = DEFAULT_RUN }: {
+function Harness({ initial, onSave, onView, locked = false, defaultResponse = DEFAULT_RUN }: {
   initial?: WorkbenchStepState; onSave?: (patch: Partial<WorkbenchStepState>) => void; locked?: boolean;
+  onView?: (patch: Partial<WorkbenchStepState>) => void;
   /** The step's saved default run (a bar click on the step can change its Y). */
   defaultResponse?: RegressionResponse;
 }) {
@@ -224,7 +249,7 @@ function Harness({ initial, onSave, locked = false, defaultResponse = DEFAULT_RU
   const state: StepStateApi<WorkbenchStepState> = {
     data,
     save: (patch) => { onSave?.(patch); setData((current) => ({ ...current, ...patch })); },
-    saveView: (patch) => setData((current) => ({ ...current, ...patch })),
+    saveView: (patch) => { onView?.(patch); setData((current) => ({ ...current, ...patch })); },
     complete: false, syncing: false, syncError: null, syncNow: () => {}, materialLocked: locked,
   };
   return <RegressionModelWorkbench stepNumber={11} outcome="trade" defaultResponse={defaultResponse} state={state} />;
@@ -299,6 +324,70 @@ describe("the workbench", () => {
     expect(await screen.findByText("删除“结果1”？")).toBeTruthy();
     fireEvent.click(screen.getAllByRole("button", { name: "删除" }).at(-1)!);
     expect(saves.at(-1)!.custom_results!.map((item) => item.name)).toEqual(["结果2", "结果3", "结果4"]);
+  });
+
+  test("after a rename or a delete, focus moves to what replaced the button", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    render(<Harness initial={{ custom_results: [saved("结果1", NO_RATE, NO_RATE_RUN), saved("结果2", { ...NO_RATE, x_lags: [0] }, NO_RATE_RUN)] }} />);
+    fireEvent.click((await screen.findAllByRole("button", { name: "改名" }))[0]);
+    fireEvent.change(screen.getByLabelText("新名称"), { target: { value: "去掉汇率" } });
+    fireEvent.click(screen.getByRole("button", { name: "确定" }));
+    await waitFor(() => expect(document.activeElement?.textContent).toBe("改名"));
+    expect(document.activeElement?.closest("tr")?.textContent).toContain("去掉汇率");
+    fireEvent.click(screen.getAllByRole("button", { name: "删除" })[0]);
+    fireEvent.click((await screen.findAllByRole("button", { name: "删除" })).at(-1)!);
+    await waitFor(() => expect(document.activeElement?.textContent).toBe("已保存的模型（1/6）"));
+  });
+
+  test("compare choices made while another Y was saved are kept", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    const views: Partial<WorkbenchStepState>[] = [];
+    const list = [
+      saved("结果1", NO_RATE, NO_RATE_RUN),
+      saved("结果2", { ...NO_RATE, x_lags: [0] }, NO_RATE_RUN),
+      saved("别的Y", { ...NO_RATE, x_lags: [1] }, NO_RATE_RUN, { baseline: "DVAex_share" }),
+    ];
+    render(<Harness initial={{ custom_results: list, custom_draft: { compare: [list[0].id, list[2].id] } }} onView={(patch) => views.push(patch)} />);
+    fireEvent.click(await screen.findByRole("checkbox", { name: /对比 结果2/ }));
+    expect(views.at(-1)!.custom_draft!.compare).toEqual([list[2].id, list[0].id, list[1].id]);
+  });
+
+  test("the CSV is the table on screen, with the model just computed", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    spyOn(api, "runRegression").mockResolvedValue(NO_RATE_RUN as never);
+    const blobs: Blob[] = [];
+    const created = URL.createObjectURL;
+    const revoked = URL.revokeObjectURL;
+    URL.createObjectURL = (blob: Blob | MediaSource) => { blobs.push(blob as Blob); return "blob:test"; };
+    URL.revokeObjectURL = () => {};
+    try {
+      render(<Harness />);
+      const compute = await screen.findByRole("button", { name: "计算这个模型" });
+      fireEvent.click(checkbox(/^汇率变动/));
+      await act(async () => { fireEvent.click(compute); });
+      await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "本次计算（未保存）"]));
+      fireEvent.click(screen.getByRole("button", { name: "导出 CSV" }));
+      const text = await blobs[0].text();
+      expect(text.split("\r\n")[0]).toBe("\ufeff因变量：外国增加值项占比,默认模型,本次计算（未保存）");
+    } finally {
+      URL.createObjectURL = created;
+      URL.revokeObjectURL = revoked;
+    }
+  });
+
+  test("leaving the step stops a calculation still running", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    let signal: AbortSignal | undefined;
+    spyOn(api, "runRegression").mockImplementation(((_outcome: string, abort: AbortSignal) => {
+      signal = abort;
+      return new Promise(() => {});
+    }) as never);
+    const view = render(<Harness />);
+    const compute = await screen.findByRole("button", { name: "计算这个模型" });
+    await act(async () => { fireEvent.click(compute); });
+    expect(signal?.aborted).toBe(false);
+    view.unmount();
+    expect(signal?.aborted).toBe(true);
   });
 
   test("renaming checks the name in this step", async () => {

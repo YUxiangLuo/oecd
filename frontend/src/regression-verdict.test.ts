@@ -188,6 +188,12 @@ describe("bars repeat the headline's numbers", () => {
     const weak = barFigures(estimate(0.00752, -0.0112, 0.0262), "share", "points");
     expect(weak.valueLabel).toBe("+0.008");
     expect(weak.uncertain).toBe(true);
+    // Below 0.005 point the value keeps 2 significant digits, and its interval the same decimals (v10's weak Y).
+    const tiny = barFigures(estimate(0.0048, -0.0072, 0.0168), "share", "points");
+    expect(tiny.valueLabel).toBe("+0.0048");
+    expect(tiny.spokenLabel).toBe("+0.0048 个百分点，95% 区间 [-0.0072, +0.0168]");
+    expect(buildRegressionVerdict("production", response("production", coefficient(0.0048, -0.0072, 0.0168))).interval)
+      .toBe("[-0.0072, +0.0168] 个百分点");
   });
 
   test("a network bar is its size in standard deviations, labelled with the native value as the headline gives it", () => {

@@ -10,14 +10,15 @@ import {
   buildRegressionVerdict,
   depvarKind,
   globalInferenceIsSuppressed,
+  lagSplitParts,
   SD_DEFINITION,
-  teachingEffect,
-  termCoefficient,
 } from "./regression-verdict";
 import { api } from "./api";
 import { useAsync } from "./labs";
-import { perPointDigits, perPointReading, snapshotOf, specSummary, xSpanLabel, xSum } from "./regression-workbench-table";
-import type { CustomResult, RegressionOutcome, RegressionResponse, WorkbenchOptions } from "./types";
+import { perPointDigits, perPointReading, snapshotOf, specSummary, xSpanLabel, xSum, type PerPointSource } from "./regression-workbench-table";
+import type {
+  CoefStat, CustomResult, RegressionOutcome, RegressionResponse, TeachingEstimate, TeachingOverviewResponse, WorkbenchOptions,
+} from "./types";
 import { DivergingBarChart, type DivergingBarRow } from "./viz/regression/diverging-bars";
 
 interface SavedRegression {
@@ -62,11 +63,8 @@ function familyRun(outcome: RegressionOutcome, getStep?: (step: number) => Sibli
 /** "-0.33 个百分点 / -0.22 个百分点": the saved run's X and L1.X, in the headline's units ("—" without L1.X). */
 export function lagParts(outcome: RegressionOutcome, saved: SavedRegression | undefined): string {
   if (!saved?.design || !saved.result) return "—";
-  const response = { result: saved.result };
-  const current = termCoefficient(response, "teaching_tariff_exposure");
-  const previous = termCoefficient(response, "teaching_tariff_exposure_lag1");
-  if (!current || !previous) return "—";
-  return `${teachingEffect(outcome, current.coef, saved.design)} / ${teachingEffect(outcome, previous.coef, saved.design)}`;
+  const parts = lagSplitParts(outcome, { design: saved.design, result: saved.result });
+  return parts ? `${parts[0]} / ${parts[1]}` : "—";
 }
 
 export function familyVerdict(
@@ -166,6 +164,16 @@ export function RegressionEvidenceMatrix({
  * Step 15: the workbench models marked 放入报告 in steps 11–14, each with its X-terms sum next to the step's default
  * model (the report's appendix recomputes both). Each links back to its step.
  */
+/** A course-overview row (a Y's default model) as a per-point reading's input; null when it has no estimate. */
+function overviewEstimate(item: TeachingEstimate | undefined): { stat: Pick<CoefStat, "coef" | "ci_low" | "ci_high">; source: PerPointSource } | null {
+  if (!item || item.coef == null) return null;
+  const suppressed = item.suppress_inference || !(item.status === "ok" || item.status === "warning");
+  return {
+    stat: { coef: item.coef, ci_low: item.ci_low, ci_high: item.ci_high },
+    source: { depvar_kind: item.kind, result: { suppressed } },
+  };
+}
+
 export function ReportedCustomModels({ getStep, onNavigateStep }: {
   getStep?: (step: number) => SiblingStepData | undefined;
   onNavigateStep?: (step: number) => void;
@@ -176,6 +184,11 @@ export function ReportedCustomModels({ getStep, onNavigateStep }: {
   });
   const optionsQuery = useAsync<WorkbenchOptions>(() => api.regressionOptions(), ["regression-options"], { enabled: rows.length > 0 });
   const options = optionsQuery.status === "success" ? optionsQuery.data ?? null : null;
+  // A model on another Y than its step's saved run is compared with the course default on that Y, as the report's
+  // appendix does: every Y's default estimate is in the course overview (the step's bar chart).
+  const otherY = rows.some(({ model, run }) => run?.design?.baseline !== model.baseline);
+  const overviewQuery = useAsync<TeachingOverviewResponse>(() => api.teachingOverview(), ["teaching-overview"], { enabled: otherY });
+  const overview = overviewQuery.status === "success" ? overviewQuery.data ?? null : null;
   return (
     <section className="reg-reported-models" aria-labelledby="reg-reported-models-title">
       <span className="reg-section-step">改模型、对比</span>
@@ -189,10 +202,12 @@ export function ReportedCustomModels({ getStep, onNavigateStep }: {
               <tbody>
                 {rows.map(({ step, family, outcome, model, run }) => {
                   const sum = xSum(model.snapshot);
-                  // The step's default run is compared only when it is on the same Y as the saved model.
+                  // The step's default run when it is on the model's Y; otherwise that Y's row of the course overview.
                   const sameY = run?.design && run.result && run.design.baseline === model.baseline;
-                  const defaultSnapshot = sameY ? snapshotOf({ design: run.design!, result: run.result! }) : null;
-                  const defaultSum = defaultSnapshot?.result.cumulative;
+                  const stepDefault = sameY ? snapshotOf({ design: run.design!, result: run.result! }) : null;
+                  const overviewDefault = !sameY ? overviewEstimate(overview?.outcomes[outcome]?.find((item) => item.key === model.baseline)) : null;
+                  const defaultSnapshot: PerPointSource | null = stepDefault ?? overviewDefault?.source ?? null;
+                  const defaultSum = stepDefault?.result.cumulative ?? overviewDefault?.stat;
                   // Both numbers at the default's decimals, so the two read alike.
                   const digits = defaultSum && defaultSnapshot ? perPointDigits(outcome, defaultSum, defaultSnapshot) : undefined;
                   return (
@@ -205,7 +220,7 @@ export function ReportedCustomModels({ getStep, onNavigateStep }: {
                       <td><b>{model.name}</b><br /><small className="muted">Y：{model.snapshot.depvar_label}</small></td>
                       <td>{options ? specSummary(model.spec, options) : "…"}</td>
                       <td>{sum ? `${perPointReading(outcome, sum, model.snapshot, digits)}（${xSpanLabel(model.spec)}）` : "—"}</td>
-                      <td>{defaultSum && defaultSnapshot ? perPointReading(outcome, defaultSum, defaultSnapshot, digits) : "—（因变量不同）"}</td>
+                      <td>{defaultSum && defaultSnapshot ? perPointReading(outcome, defaultSum, defaultSnapshot, digits) : sameY || overviewQuery.status !== "loading" ? "—" : "…"}</td>
                     </tr>
                   );
                 })}

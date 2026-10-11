@@ -157,7 +157,9 @@ describe("loading the server version without a conflict", () => {
         await result.current.syncNow();
       });
       // Another tab saved newer answers; this page has no conflict, it only learns of them (step 15's notice).
-      await act(async () => { await result.current.loadServerVersion(); });
+      let loaded = false;
+      await act(async () => { loaded = await result.current.loadServerVersion(); });
+      expect(loaded).toBe(true);
       expect(result.current.getStep<{ research_question: string }>(15)?.research_question).toBe("third committed");
       expect(result.current.unsynced).toBe(false);
       expect(save).toHaveBeenCalledTimes(1);
@@ -177,6 +179,20 @@ describe("loading the server version without a conflict", () => {
     }
   });
 
+  test("a failed load says it was the load that failed, not a save", async () => {
+    const get = spyOn(api.classroom, "session").mockResolvedValueOnce({ ...response(), report: null })
+      .mockRejectedValue(new Error("network down"));
+    try {
+      const { result } = renderHook(() => useSession(true, "student"));
+      await waitFor(() => expect(result.current.status).toBe("ready"));
+      await act(async () => { await result.current.loadServerVersion().catch(() => {}); });
+      expect(result.current.syncError).toContain("载入服务器版本失败");
+      expect(result.current.syncError).not.toContain("保存失败");
+    } finally {
+      get.mockRestore();
+    }
+  });
+
   test("waits for a save still on its way, so its answer cannot put an older record back as the base", async () => {
     const mine = patchSessionStep(emptySession(), 1, { year: 2020 });
     const server = patchSessionStep(mine, 15, { research_question: "other tab" });
@@ -191,9 +207,13 @@ describe("loading the server version without a conflict", () => {
         result.current.patchStep(1, { year: 2020 });
         void result.current.syncNow().catch(() => {});
       });
-      let loading!: Promise<void>;
+      let loading!: Promise<boolean>;
       act(() => { loading = result.current.loadServerVersion(); });
       expect(get).toHaveBeenCalledTimes(1); // the first load only: the read waits for the save
+      // A second press while this one runs does nothing, and says so.
+      let again: boolean | undefined;
+      await act(async () => { again = await result.current.loadServerVersion(); });
+      expect(again).toBe(false);
       await act(async () => {
         inFlight.resolve(response(mine));
         await loading;

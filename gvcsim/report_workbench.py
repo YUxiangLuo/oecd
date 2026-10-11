@@ -7,6 +7,7 @@ so editing it in the browser changes nothing in the report. Each Y gets one tabl
 from __future__ import annotations
 
 import math
+import re
 from typing import Any, cast
 
 import numpy as np
@@ -44,6 +45,15 @@ _OMITTED_REASONS = {"zero": "样本里全为 0", "collinear": "与其他变量�
 _X_SPANS = {(0,): "仅当年", (0, 1): "两年累计", (0, 1, 2): "三年累计"}
 
 
+def _x_span(spec: ModelSpec) -> str:
+    """Named spans, or the terms themselves ("仅 L1.X", "X + L2.X 之和") so one coefficient is never called a sum."""
+    lags = tuple(sorted(spec.x_lags))
+    if lags in _X_SPANS:
+        return _X_SPANS[lags]
+    terms = [x_term_label(lag) for lag in lags]
+    return f"仅 {terms[0]}" if len(terms) == 1 else " + ".join(terms) + " 之和"
+
+
 def reported_models(session: dict[str, Any]) -> list[dict[str, Any]]:
     """The saved models marked 放入报告, step by step, in saved order: ``{step, name, outcome, baseline, spec}``.
     The session route checks them on save; an entry that no longer passes (an older release) is left out."""
@@ -58,6 +68,15 @@ def reported_models(session: dict[str, Any]) -> list[dict[str, Any]]:
             if item["baseline"] in baselines:
                 models.append({"step": step, **item})
     return models
+
+
+def run_designs(models: list[dict[str, Any]]) -> list[RegressionDesign]:
+    """Every run ``recompute`` reads for these models: each (step, Y)'s default model and each model itself."""
+    return [
+        RegressionDesign(model["outcome"], teaching=True, baseline=model["baseline"], spec=spec)
+        for model in models
+        for spec in (DEFAULT_SPEC, ModelSpec.from_dict(model["spec"]))
+    ]
 
 
 def _run(panel: Any, outcome: str, baseline: str, spec: ModelSpec) -> dict[str, Any] | str:
@@ -108,8 +127,16 @@ def _escape(text: str) -> str:
     return text
 
 
+# Any ASCII punctuation may be backslash-escaped in Markdown: escaping all of it in a typed name keeps it from turning
+# into emphasis, strikethrough ("~~…~~") or a table cell break. GFM still reads "www.…", "http://…" and "a@b.cn" as
+# links whatever the escapes, so an invisible word joiner (U+2060) goes before each ".", ":" and "@" of the name.
+_ASCII_PUNCTUATION = re.compile(r"([!-/:-@\[-`{-~])")
+_WORD_JOINER = "\u2060"
+
+
 def _name(value: Any) -> str:
-    return _escape(_safe(value))
+    escaped = _ASCII_PUNCTUATION.sub(r"\\\1", _safe(value))
+    return re.sub(r"(\\[.:@])", _WORD_JOINER + r"\1", escaped)
 
 
 def _fixed(value: Any, digits: int) -> str:
@@ -220,7 +247,7 @@ def _per_point_rows(columns: list[dict[str, Any]]) -> list[str]:
             cells.append("")
             continue
         value, _ = _per_point(kind, column["run"]["result"], total)
-        span = _X_SPANS.get(tuple(sorted(column["spec"].x_lags)), "X 各项之和")
+        span = _x_span(column["spec"])
         cells.append(f"{with_count_unit(_signed(value, digits), kind)}（{span}）")
     return [f"| 合计：X 每高 1 个百分点 | {' | '.join(cells)} |"]
 

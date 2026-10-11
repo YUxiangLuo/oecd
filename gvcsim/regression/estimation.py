@@ -310,7 +310,8 @@ def within_ols(model: PreparedModel, prepared=None) -> RegressionResult:
     # The X terms' sum (one term: the term itself) with SE from the clustered covariance.
     policy_index = [i for i, name in enumerate(names) if name in model.policy_xcols]
     cumulative = None
-    if policy_index:
+    # A sum over fewer X terms than the model has would silently mean something else: no sum when one is omitted.
+    if policy_index and len(policy_index) == len(model.policy_xcols):
         weights = np.zeros(len(names))
         weights[policy_index] = 1.0
         total = float(weights @ beta)
@@ -339,7 +340,12 @@ def within_ols(model: PreparedModel, prepared=None) -> RegressionResult:
         f_p = None
     classic = model.fe_columns is None
     notes = [*model.notes, two_way_note(model.entity, model.time) if classic else effects_note(effects)]
-    if components > 1:
+    # Fixed effects that all nest in one cluster (country × industry with country × year) split the sample by
+    # country by construction; that is the design, not a data problem worth a note.
+    structural = components == model.data[model.cluster].nunique() and all(
+        model.data.groupby(column, sort=False)[model.cluster].nunique().max() == 1 for column in effects
+    )
+    if components > 1 and not structural:
         notes.append(
             f"样本分成 {components} 组互不重叠的数据；估计值是这几组共同的斜率"
             f"（技术细节：固定效应秩 {rank}，残差自由度 {df}）。"

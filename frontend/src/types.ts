@@ -535,7 +535,8 @@ export interface StepStateApi<T = Record<string, unknown>> {
    * Adopt the server's record as this page's base (another tab saved newer content), keeping this page's edits the
    * server did not touch. Step 15 uses it for "这三段是本页的旧文字 → 载入服务器版本".
    */
-  loadServerVersion?: () => Promise<void>;
+  /** Resolves true once the server's record is this page's; false when it did not load (the notice stays). */
+  loadServerVersion?: () => Promise<boolean>;
   /**
    * The report has been submitted (or graded): browsing must no longer rewrite report material
    * automatically; a step records its current view only when the student explicitly asks.

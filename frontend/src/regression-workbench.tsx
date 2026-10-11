@@ -44,6 +44,7 @@ import type {
   StepStateApi,
   WorkbenchOptions,
 } from "./types";
+import { sameJsonValue } from "./session-store";
 import { userFacingRequestError } from "./user-facing-error";
 
 export interface WorkbenchDraft {
@@ -60,15 +61,16 @@ export interface WorkbenchStepState extends Record<string, unknown> {
 const DEFAULT_COLUMN = "默认模型";
 const UNSAVED_COLUMN = "本次计算（未保存）";
 
-/** Whether the models marked 放入报告 differ from the ones the report printed (name, Y and model). */
+/** Whether the models marked 放入报告 differ from the ones the report printed (name, Y and model). Compared as JSON
+ *  values, not strings: the report's copy comes back from the database with each control's keys in another order. */
 export function customReportChanged(
   stepNumber: number, saved: readonly CustomResult[], reported: readonly ReportedCustomResult[] | undefined,
 ): boolean {
   const identity = (item: { name: string; outcome: string; baseline: string; spec: ModelSpec }) =>
-    JSON.stringify([item.name, item.outcome, item.baseline, item.spec]);
+    [item.name, item.outcome, item.baseline, item.spec];
   const mine = saved.filter((item) => item.in_report).map(identity);
   const theirs = (reported ?? []).filter((item) => item.step === stepNumber).map(identity);
-  return mine.length !== theirs.length || mine.some((item, index) => item !== theirs[index]);
+  return !sameJsonValue(mine, theirs);
 }
 
 function download(text: string, filename: string) {
@@ -233,6 +235,21 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   }, [retryAt]);
   const retryWait = retryAt == null ? 0 : Math.max(0, Math.ceil((retryAt - now) / 1000));
   const controller = useRef<AbortController | null>(null);
+  // Leaving the step (or the page) stops a calculation still running; its answer would land nowhere.
+  useEffect(() => () => controller.current?.abort(), []);
+  // After a rename or a delete the button that had focus is gone: focus moves to what replaced it.
+  const root = useRef<HTMLDivElement>(null);
+  // The id of the row whose 改名 button takes focus, or "" for the saved-models heading.
+  const [pendingFocus, setPendingFocus] = useState<string | null>(null);
+  useEffect(() => {
+    if (pendingFocus == null || !root.current) return;
+    const rename = [...root.current.querySelectorAll<HTMLElement>("[data-rename]")].find((button) => button.dataset.rename === pendingFocus);
+    const target = rename
+      ?? root.current.querySelector<HTMLElement>(".reg-custom-saved h4")
+      ?? root.current.querySelector<HTMLElement>(".reg-custom-actions button");
+    target?.focus();
+    setPendingFocus(null);
+  }, [pendingFocus]);
 
   if (optionsQuery.status === "error") {
     return <div className="error-box" role="alert">可选的设定没有加载成功：{optionsQuery.error}<button type="button" className="secondary" onClick={optionsQuery.retry}>重试</button></div>;
@@ -293,7 +310,10 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const compare = (draft.compare ?? saved.map((item) => item.id))
     .filter((id) => saved.some((item) => item.id === id && item.baseline === baseline))
     .slice(0, limits.compared);
-  const setCompare = (ids: string[]) => state.saveView?.({ custom_draft: { ...draft, spec, compare: ids } });
+  // The choices made while another Y was saved stay for when it is back.
+  const otherYCompared = (draft.compare ?? saved.map((item) => item.id))
+    .filter((id) => saved.some((item) => item.id === id && item.baseline !== baseline));
+  const setCompare = (ids: string[]) => state.saveView?.({ custom_draft: { ...draft, spec, compare: [...otherYCompared, ...ids] } });
   const save = () => {
     if (!unsaved || problem || full) return;
     const item: CustomResult = {
@@ -333,7 +353,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const cellClass = (index: number) => (index === highlighted ? "reg-custom-current" : undefined);
 
   return (
-    <div className="reg-custom">
+    <div className="reg-custom" ref={root}>
       <p className="reg-custom-y">因变量：<b>{depvarLabel}</b>（本步保存的 Y；在上面的条形图上点另一条可以换 Y）</p>
       <div className="reg-custom-tries">
         <b>试一试：每次只改一处设定，算出后和表中第一列的默认模型比较</b>
@@ -356,7 +376,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       <div className="reg-custom-compare">
         <div className="reg-custom-compare-head">
           <h4>回归结果表（因变量：{depvarLabel}）</h4>
-          <button type="button" className="secondary" onClick={() => download(comparisonCsv(comparedColumns, options, depvarLabel, perPointRow(comparedColumns, outcome)), `步骤${stepNumber}-回归对比.csv`)}>
+          <button type="button" className="secondary" onClick={() => download(comparisonCsv(columns, options, depvarLabel, pointRow), `步骤${stepNumber}-回归对比.csv`)}>
             导出 CSV
           </button>
         </div>
@@ -426,7 +446,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
 
       {saved.length > 0 && (
         <div className="reg-custom-saved">
-          <h4>已保存的模型（{saved.length}/{limits.saved}）</h4>
+          <h4 tabIndex={-1}>已保存的模型（{saved.length}/{limits.saved}）</h4>
           {state.materialLocked && (
             <p className="reg-rerun-warning" role="note"><b>报告已提交</b>勾选或取消“放入报告”、给已放入报告的模型改名或删除它，都会改变报告；之后要到步骤 15 更新报告，并重新提交给老师。</p>
           )}
@@ -445,8 +465,8 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
                           <span className="reg-custom-rename">
                             <input aria-label="新名称" value={renaming.name} onChange={(event) => setRenaming({ id: item.id, name: event.target.value })} aria-invalid={renameProblem ? true : undefined} />
                             <button type="button" className="secondary" aria-disabled={renameProblem ? true : undefined}
-                              onClick={() => { if (renameProblem) return; update(item.id, { name: renaming.name.trim() }); setRenaming(null); }}>确定</button>
-                            <button type="button" className="link-button" onClick={() => setRenaming(null)}>取消</button>
+                              onClick={() => { if (renameProblem) return; update(item.id, { name: renaming.name.trim() }); setRenaming(null); setPendingFocus(item.id); }}>确定</button>
+                            <button type="button" className="link-button" onClick={() => { setRenaming(null); setPendingFocus(item.id); }}>取消</button>
                             {renameProblem && <span className="field-error" role="alert">{renameProblem}</span>}
                           </span>
                         ) : <b>{item.name}</b>}
@@ -464,7 +484,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
                           onChange={() => update(item.id, { in_report: !item.in_report })} />
                       </td>
                       <td className="reg-custom-row-actions">
-                        <button type="button" className="link-button" onClick={() => setRenaming({ id: item.id, name: item.name })}>改名</button>
+                        <button type="button" className="link-button" data-rename={item.id} onClick={() => setRenaming({ id: item.id, name: item.name })}>改名</button>
                         <button type="button" className="link-button danger" onClick={() => setDeleting(item)}>删除</button>
                       </td>
                     </tr>
@@ -497,6 +517,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
             state.save({ custom_results: saved.filter((item) => item.id !== deleting.id) });
             setCompare(compare.filter((id) => id !== deleting.id));
             setDeleting(null);
+            setPendingFocus("");
           }}
           onClose={() => setDeleting(null)}
         />

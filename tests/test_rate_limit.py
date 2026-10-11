@@ -195,3 +195,47 @@ def test_exhausted_initiator_does_not_publish_429_to_49_other_students(monkeypat
         assert isinstance(await call(1), dict)
 
     asyncio.run(scenario())
+
+
+def test_several_events_are_recorded_together_or_not_at_all():
+    now = [100.0]
+    limiter = SlidingWindowRateLimiter(4, 10.0, clock=lambda: now[0])
+    limiter.check("student", 3)
+    now[0] = 101.0
+    with pytest.raises(RateLimitExceeded) as exc_info:
+        limiter.check("student", 2)
+    # One of the three must leave the window first: at 110, nine seconds from now.
+    assert exc_info.value.retry_after_header == "9"
+    limiter.check("student")  # the refused two were not recorded
+    with pytest.raises(ValueError):
+        limiter.check("student", 5)
+
+
+def test_report_generation_charges_the_runs_it_has_to_compute(monkeypatch):
+    from gvcsim.regression.design import RegressionDesign
+    from gvcsim.regression.spec import ModelSpec
+
+    release = ["a" * 32]
+    monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: release[0])
+    monkeypatch.setattr(regression_routes, "_RUN_LIMITER", SlidingWindowRateLimiter(3))
+    regression_routes.clear_result_cache()
+    panel = object()
+    own = ModelSpec((0,), (), ("country_industry", "year"))
+    other = ModelSpec((0, 2), (), ("country_industry", "year"))
+    designs = [
+        RegressionDesign("trade", teaching=True, baseline="FVA_share"),
+        RegressionDesign("trade", teaching=True, baseline="FVA_share", spec=own),
+    ]
+    # The default model was computed on the page: only the student's own model is a new calculation.
+    regression_routes._store_payload(panel, regression_routes._run_key(designs[0]), {"cached": True})
+    regression_routes.charge_report_runs(7, designs + designs)
+    regression_routes.charge_report_runs(7, designs[:1])  # all cached: free
+    regression_routes.charge_report_runs(7, [RegressionDesign("trade", teaching=True, spec=other), designs[1]])
+    with pytest.raises(HTTPException) as exc_info:
+        regression_routes.charge_report_runs(7, designs)
+    assert exc_info.value.status_code == 429
+    assert "生成报告要重新计算" in exc_info.value.detail and exc_info.value.headers["Retry-After"]
+    # A run cached before the release changed is computed again, so it counts again.
+    release[0] = "b" * 32
+    assert not regression_routes._run_cached(regression_routes._run_key(designs[0]))
+    regression_routes.clear_result_cache()

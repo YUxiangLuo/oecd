@@ -251,6 +251,10 @@ def estimate_digits(kind: str, value: float, bounds: tuple[float, float] | None)
         if kind in ("position", "length")
         else _share_digits(value)
     )
+    # A nonzero value that rounds to 0 prints with 2 significant digits (_signed: "+0.0048"); its interval ends then
+    # get the same decimals ("[-0.0072, +0.0168]", not "[-0.01, +0.02]").
+    if value != 0 and math.isfinite(value) and float(f"{value:.{base}f}") == 0:
+        base = max(base, 1 - math.floor(math.log10(abs(value))))
     return distinct_digits(base, value, bounds)
 
 

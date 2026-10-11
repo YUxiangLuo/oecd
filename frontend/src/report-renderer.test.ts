@@ -19,6 +19,16 @@ describe("report tables", () => {
     expect(element.querySelector("em, strong")).toBeNull();
   });
 
+  test("a typed name with GFM strikethrough, a web address or an e-mail stays plain text (all ASCII punctuation escaped)", () => {
+    // As the report writes such a name (report_workbench._name): punctuation escaped, a word joiner before . : @.
+    const wj = "\u2060";
+    const markdown = `| 变量 | 默认模型 | \\~\\~删\\~\\~www${wj}\\.ab${wj}\\.cn | a${wj}\\@b${wj}\\.cn | http${wj}\\:\\/\\/x${wj}\\.y |\n|---|---:|---:|---:|---:|\n| X | 1 | 2 | 3 | 4 |`;
+    const element = document.createElement("div");
+    element.innerHTML = renderToStaticMarkup(createElement(ReportMarkdown, { markdown }));
+    expect([...element.querySelectorAll("th")].map((cell) => cell.textContent!.replaceAll(wj, ""))).toEqual(["变量", "默认模型", "~~删~~www.ab.cn", "a@b.cn", "http://x.y"]);
+    expect(element.querySelector("del, a")).toBeNull();
+  });
+
   test("isolates literal reflection text from following report headings, tables and charts", () => {
     const prose = "段落 `指标` | 原文\n\n~~~\n```\n</div><script>文本</script>\n## 学生粘贴的标题";
     const chart = JSON.stringify({ version: 1, type: "bar", items: [{ label: "CHN", value: 1 }] });

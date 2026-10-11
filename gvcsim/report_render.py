@@ -928,8 +928,15 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
                     f"- 结果能否解读：{_STATUS_LABELS.get(str(status), _STATUS_LABELS['unknown'])}；记录数：{_count(result.get('n_obs'))}",
                 )
             )
+            # A model with controls names them ("控制变量：汇率变动"), not the generic mode.
+            control_labels = design.get("control_labels")
+            named_controls = (
+                "、".join(_safe(value) for value in control_labels.values())
+                if design.get("control_mode") != "none" and isinstance(control_labels, dict) and control_labels
+                else None
+            )
             setting_bits = [
-                f"{label}：{_setting_value(key, design[key])}"
+                f"{label}：{named_controls if key == 'control_mode' and named_controls else _setting_value(key, design[key])}"
                 for key, label in (
                     ("method", "模型"),
                     ("granularity", "观察单位"),

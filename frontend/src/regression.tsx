@@ -11,7 +11,7 @@ import {
   barUnitFor,
   buildRegressionVerdict,
   differenceWords,
-  teachingEffect,
+  lagSplitParts,
   chartDisplayScale,
   unitName,
   withCountUnit,
@@ -21,7 +21,6 @@ import {
   networkDigits,
   signed,
   shownPerPoint,
-  termCoefficient,
   type BarEstimate,
 } from "./regression-verdict";
 import { workedNumbers } from "./labs/steps/shock-lab";
@@ -237,7 +236,9 @@ export function RegressionResultCard({ outcome, response, examples = [], example
   // shown) the sign is not settled, so the signed estimate is given without 高/低.
   const unsignedEffect = verdict.effect.replace(/^[+−-]/, "");
   // The course model has X and L1.X: the headline is their sum, the relation over the tariff's year and the next.
-  const twoYears = Boolean(response.result.cumulative);
+  // Said only for that model (a sum of other X terms, or no sum at all, is not "两年累计").
+  const lags = response.design.spec?.x_lags;
+  const twoYears = Boolean(response.result.cumulative) && (lags == null || (lags.length === 2 && lags.includes(0) && lags.includes(1)));
   const plainResult = directional
     ? `${twoYears ? "两年累计" : ""}平均${verdict.state === "negative" ? words.lower : words.higher} ${unsignedEffect}`
     : `${twoYears ? "两年累计" : ""}平均相差 ${verdict.effect}，但高低方向不确定`;
@@ -317,13 +318,9 @@ export function RegressionResultCard({ outcome, response, examples = [], example
  * headline's units; null when the run has no L1.X.
  */
 export function lagSplit(outcome: RegressionOutcome, response: Pick<RegressionResponse, "design" | "result">): string | null {
-  const current = termCoefficient(response, "teaching_tariff_exposure");
-  const previous = termCoefficient(response, "teaching_tariff_exposure_lag1");
-  if (!current || !previous) return null;
-  const now = teachingEffect(outcome, current.coef, response.design);
-  const next = teachingEffect(outcome, previous.coef, response.design);
+  const parts = lagSplitParts(outcome, response);
   // The model box above the run button says what the two terms are; here only the split.
-  return `其中当年 ${now}，次年再 ${next}。`;
+  return parts ? `其中当年 ${parts[0]}，次年再 ${parts[1]}。` : null;
 }
 
 /** 自动保存最近一次真实运行，供刷新恢复与报告复估。 */
@@ -514,13 +511,14 @@ export function waveMarkers(years: readonly number[]): { year: number; label: st
  */
 export const GROUP_CHART_CAPTION = "图上的变化混有同一时期的其他变化（如汇率），回归会把它们分开，所以条形图的数字不必等于图上两条线的距离。";
 
-/** Under the 加税前后 chart: the premise the regression rests on, and how little the chart can show of it. */
+/** Under the 加税前后 chart: the premise the regression rests on, and how little the chart can show of it. In teaching
+ *  data v10 it holds by design only once the exchange-rate change is controlled (the chart's lines are not parallel). */
 export function parallelTrendsNote(years: readonly number[], policyYear: number | null | undefined, groups = 2): string {
   const before = policyYear == null ? [] : years.filter((year) => year < policyYear);
   const count = ["", "一", "两", "三", "四", "五"][before.length] ?? String(before.length);
   const pre = before.length ? `加税前只有 ${before.join("、")} ${count}年可看` : "加税前的年份很少";
   const who = groups > 2 ? "各组" : "两组";
-  return `这张图也用来看回归的前提：如果没有关税，${who}的走势应大致平行。${pre}，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，这一前提由设计保证。`;
+  return `这张图也用来看回归的前提：如果没有关税，扣掉汇率等同期变化后，${who}的走势应大致平行。${pre}，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，控制汇率变动后这一前提由设计保证。`;
 }
 
 /** Step 14: weighted degree is in-degree + out-degree in every row (the report says the same under its chart). */

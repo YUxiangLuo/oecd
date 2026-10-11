@@ -200,14 +200,22 @@ const effectIncluded = (spec: ModelSpec, key: string, options: WorkbenchOptions)
 const yearsText = (snapshot: CustomResultSnapshot) =>
   snapshot.result.years ? `${snapshot.result.years[0]}–${snapshot.result.years[1]}` : "—";
 
-/** What a column's X-terms sum covers: "两年累计" for X + L1.X, "仅当年" for X alone, "三年累计" with L2.X. */
+/** What a column's X-terms sum covers: "两年累计" for X + L1.X, "仅当年" for X alone, "三年累计" with L2.X; other
+ *  sets name their terms ("仅 L1.X", "X + L2.X 之和"), so one coefficient is never called a sum. */
 export function xSpanLabel(spec: Pick<ModelSpec, "x_lags">): string {
-  const lags = [...spec.x_lags].sort((a, b) => a - b).join(",");
-  return ({ "0": "仅当年", "0,1": "两年累计", "0,1,2": "三年累计" } as Record<string, string>)[lags] ?? "X 各项之和";
+  const lags = [...spec.x_lags].sort((a, b) => a - b);
+  const named = ({ "0": "仅当年", "0,1": "两年累计", "0,1,2": "三年累计" } as Record<string, string>)[lags.join(",")];
+  if (named) return named;
+  const terms = lags.map((lag) => (lag === 0 ? "X" : `L${lag}.X`));
+  return terms.length === 1 ? `仅 ${terms[0]}` : `${terms.join(" + ")} 之和`;
 }
 
+/** What a per-point reading needs of a result: its Y's kind and whether its interval is shown (a saved model's
+ *  snapshot, or a default model from the course overview). */
+export type PerPointSource = Pick<CustomResultSnapshot, "depvar_kind"> & { result: Pick<CustomResultSnapshot["result"], "suppressed"> };
+
 /** A coefficient per percentage point of X in the step's unit: β × 0.01 (× 100 for a share, read in points). */
-function perPointValue(outcome: RegressionOutcome, stat: Pick<CoefStat, "coef" | "ci_low" | "ci_high">, snapshot: CustomResultSnapshot) {
+function perPointValue(outcome: RegressionOutcome, stat: Pick<CoefStat, "coef" | "ci_low" | "ci_high">, snapshot: PerPointSource) {
   const design = { depvar_kind: snapshot.depvar_kind };
   const { scale } = chartDisplayScale(outcome, design);
   const bounds: [number, number] | null = !snapshot.result.suppressed && stat.ci_low != null && stat.ci_high != null
@@ -217,14 +225,14 @@ function perPointValue(outcome: RegressionOutcome, stat: Pick<CoefStat, "coef" |
 }
 
 /** Decimals the step's headline gives this coefficient (its interval sets them, as on the result card). */
-export function perPointDigits(outcome: RegressionOutcome, stat: Pick<CoefStat, "coef" | "ci_low" | "ci_high">, snapshot: CustomResultSnapshot): number {
+export function perPointDigits(outcome: RegressionOutcome, stat: Pick<CoefStat, "coef" | "ci_low" | "ci_high">, snapshot: PerPointSource): number {
   const { kind, value, bounds } = perPointValue(outcome, stat, snapshot);
   return estimateDigits(kind, value, bounds);
 }
 
 /** "-0.55 个百分点", "-0.0182 个长度单位": the page's reading of a coefficient, at the given decimals or its own. */
 export function perPointReading(
-  outcome: RegressionOutcome, stat: Pick<CoefStat, "coef" | "ci_low" | "ci_high">, snapshot: CustomResultSnapshot, digits?: number,
+  outcome: RegressionOutcome, stat: Pick<CoefStat, "coef" | "ci_low" | "ci_high">, snapshot: PerPointSource, digits?: number,
 ): string {
   const { kind, value, bounds } = perPointValue(outcome, stat, snapshot);
   return withCountUnit(signed(value, digits ?? estimateDigits(kind, value, bounds)), kind);
@@ -323,14 +331,18 @@ export function nameProblem(
 ): string | null {
   const trimmed = name.trim();
   if (!trimmed) return "请输入名称";
+  // Control, zero-width, bidi and line-separator characters, as the server refuses them (workbench.name_problem):
+  // with them gone, JavaScript's trim and Python's strip agree on the rest.
+  if (/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(trimmed)) return "名称不能包含不可见字符";
   if ([...trimmed].length > limit) return `名称最多 ${limit} 个字符`;
   if (saved.some((item) => item.name === trimmed && item.id !== selfId)) return `本步已有名为“${trimmed}”的模型`;
   return null;
 }
 
-function csvField(value: string): string {
-  // A typed name that starts like a formula is kept as text when a spreadsheet opens the file.
-  const safe = /^[=+@\t\r]/.test(value) ? `'${value}` : value;
+function csvField(value: string, typed = false): string {
+  // A typed name that starts like a formula is kept as text when a spreadsheet opens the file. The table's own cells
+  // ("+0.55 个百分点（两年累计）", "-0.3298***") are never formulas, so they keep their sign and get no visible quote.
+  const safe = typed && /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
   return /[",\n\r]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
 }
 
@@ -353,5 +365,6 @@ export function comparisonCsv(
   for (const row of summaryRows(columns, options)) lines.push([row.label, ...row.cells]);
   lines.push(["设定", ...columns.map((column) => specSummary(column.spec, options))]);
   lines.push([options.footnote]);
-  return `﻿${lines.map((line) => line.map(csvField).join(",")).join("\r\n")}\r\n`;
+  // Only the header row carries names a student typed (the model names).
+  return `\ufeff${lines.map((line, row) => line.map((cell, index) => csvField(cell, row === 0 && index > 0)).join(",")).join("\r\n")}\r\n`;
 }

@@ -214,8 +214,14 @@ def test_the_coefficient_check_scales_with_the_coefficient():
     assert not summarize_benchmark(model, result(-3945.78), result(-3945.78 + 1e-5))["coef_check_passed"]
 
 
+# Distinct non-default models, for lists of saved models (the same model may be saved once per Y).
+_DISTINCT_SPECS = [
+    ModelSpec(lags, (), ("country_industry", "year")) for lags in ((0,), (0, 1), (0, 2), (1,), (0, 1, 2), (2,), (1, 2))
+]
+
+
 def test_saved_models_are_checked_before_the_session_is_stored():
-    good = [_saved("结果1"), _saved("结果2", in_report=True)]
+    good = [_saved("结果1"), _saved("结果2", in_report=True, spec=_DISTINCT_SPECS[1])]
     assert workbench.custom_results_problem(good, "trade") is None
     assert workbench.custom_results_problem([], "trade") is None
     cases = [
@@ -225,12 +231,39 @@ def test_saved_models_are_checked_before_the_session_is_stored():
         ([_saved("结果1"), _saved("结果2", id="id-结果1")], "编号"),
         ([_saved("一" * 21)], "1–20 个字符"),
         ([_saved(" 结果1")], "1–20 个字符"),
-        ([_saved("")], "1–20 个字符"),
+        ([_saved("")], "请输入名称"),
+        ([_saved("\u200b")], "不可见字符"),
+        ([_saved("结果\u202e1")], "不可见字符"),
+        ([_saved("结果\u001f")], "不可见字符"),
+        ([_saved(name=["结果1"])], "请输入名称"),
+        ([_saved(spec=DEFAULT_SPEC)], "默认模型"),
+        ([_saved("结果1"), _saved("结果2")], "这个设定已保存为“结果1”"),
+        ([_saved(baseline=["FVA_share"])], "Y 不在当前课程数据中"),
+        ([_saved(outcome=["trade"])], "结果指标"),
+        (
+            [_saved() | {"spec": {"x_lags": [0, 1.0], "controls": [], "fixed_effects": ["country_industry", "year"]}}],
+            "滞后期",
+        ),
+        (
+            [_saved() | {"spec": {"x_lags": [0], "controls": [{"name": ["汇率"], "lag": 0}], "fixed_effects": []}}],
+            "名称",
+        ),
+        ([_saved() | {"spec": {"x_lags": [0], "controls": [], "fixed_effects": [{"a": 1}]}}], "名称"),
+        (
+            [
+                _saved()
+                | {"spec": {"x_lags": [0], "controls": [{"name": "log_gdp_proxy", "lag": 1.0}], "fixed_effects": []}}
+            ],
+            "滞后期",
+        ),
         ([_saved(outcome="network")], "结果指标"),
         ([_saved(baseline="PLy_GVC")], "Y 不在当前课程数据中"),
         ([_saved(spec=None) | {"spec": {"x_lags": [1, 0], "controls": [], "fixed_effects": []}}], "规范形式"),
         ([_saved() | {"spec": {"x_lags": [3], "controls": [], "fixed_effects": []}}], "滞后期"),
-        ([_saved(f"结果{index}", in_report=True) for index in range(4)], "最多 3 个模型放入报告"),
+        (
+            [_saved(f"结果{index}", in_report=True, spec=_DISTINCT_SPECS[index]) for index in range(4)],
+            "最多 3 个模型放入报告",
+        ),
         ([{k: v for k, v in _saved().items() if k != "saved_at"}], "字段不完整"),
         ([_saved(in_report="yes")], "是或否"),
         ([_saved(snapshot={"padding": "x" * 20_000})], "过大"),
@@ -238,6 +271,13 @@ def test_saved_models_are_checked_before_the_session_is_stored():
     for value, message in cases:
         problem = workbench.custom_results_problem(value, "trade")
         assert problem is not None and message in problem, (value, problem)
+    # As the database returns a saved model (jsonb orders keys by length): each control as {"lag", "name"}.
+    with_rate = ModelSpec((0, 1, 2), ((EXCHANGE_RATE_COLUMN, 0),), ("country_industry", "year")).to_dict()
+    stored = {**with_rate, "controls": [{"lag": 0, "name": EXCHANGE_RATE_COLUMN}]}
+    assert json.dumps(stored) != json.dumps(with_rate)
+    assert workbench.custom_results_problem([_saved(spec=None) | {"spec": stored}], "trade") is None
+    # The same model on another Y is a different saved model.
+    assert workbench.custom_results_problem([_saved("结果1"), _saved("结果2", baseline="DVAex_share")], "trade") is None
 
 
 def test_put_session_refuses_an_invalid_saved_model_and_keeps_a_valid_one(monkeypatch):
@@ -261,6 +301,43 @@ def test_put_session_refuses_an_invalid_saved_model_and_keeps_a_valid_one(monkey
     assert refused.value.status_code == 422
     assert refused.value.detail == "步骤 11 自己设计的模型没有保存：本步已有名为“结果1”的模型。"
     assert len(persisted) == 1
+
+
+def test_put_session_refuses_saved_models_outside_the_regression_steps(monkeypatch):
+    monkeypatch.setattr(classroom_routes.db, "save_session", lambda *args: {"updated_at": "saved-at"})
+    monkeypatch.setattr(classroom_routes.db, "latest_report", lambda _username: None)
+    session = empty_session()
+    session["steps"]["5"] = make_record({"custom_results": [{"in_report": True, "name": {"x": 1}}]})
+    with pytest.raises(classroom_routes.HTTPException) as refused:
+        classroom_routes.put_session(
+            classroom_routes.SessionRequest(session=session, base_updated_at=None), {"sub": "student"}
+        )
+    assert refused.value.status_code == 422
+    assert "步骤 5 没有“自己设计模型”" in refused.value.detail
+    # Nor do such entries count in the fingerprint (an older record may still hold them).
+    base = empty_session()
+    assert records.report_fingerprint(session) == records.report_fingerprint(
+        base | {"steps": {**base["steps"], "5": make_record({})}}
+    )
+
+
+def test_put_session_answers_422_not_500_for_a_tampered_saved_model(monkeypatch):
+    monkeypatch.setattr(classroom_routes.db, "save_session", lambda *args: {"updated_at": "saved-at"})
+    monkeypatch.setattr(classroom_routes.db, "latest_report", lambda _username: None)
+    for tampered in (
+        _saved(baseline=["FVA_share"]),
+        _saved(baseline={"a": 1}),
+        _saved() | {"spec": {"x_lags": [0], "controls": [{"name": ["汇率"], "lag": 0}], "fixed_effects": []}},
+        _saved() | {"spec": {"x_lags": [0, 1.0], "controls": [], "fixed_effects": ["country_industry", "year"]}},
+    ):
+        session = empty_session()
+        session["steps"]["11"] = make_record({"custom_results": [tampered]})
+        with pytest.raises(classroom_routes.HTTPException) as refused:
+            classroom_routes.put_session(
+                classroom_routes.SessionRequest(session=session, base_updated_at=None), {"sub": "student"}
+            )
+        assert refused.value.status_code == 422, tampered
+        assert "unhashable" not in refused.value.detail and "instance" not in refused.value.detail
 
 
 def test_report_fingerprint_counts_only_what_the_report_prints_of_the_saved_models():
@@ -333,3 +410,26 @@ def test_step_ten_panel_rows_carry_last_years_x_and_the_exchange_rate(monkeypatc
     by_year = {row["year"]: row for row in first}
     assert by_year[2018]["teaching_tariff_exposure"] > 0 and by_year[2018]["teaching_tariff_exposure_lag1"] == 0
     assert by_year[2019]["teaching_tariff_exposure_lag1"] == by_year[2018]["teaching_tariff_exposure"]
+
+
+def test_report_generation_charges_the_reported_models_once_the_gate_passes(monkeypatch):
+    import asyncio
+
+    charged = []
+    session = empty_session()
+    session["steps"]["11"] = make_record({"custom_results": [_saved("结果1", in_report=True)]})
+    monkeypatch.setattr(classroom_routes, "_workspace", lambda _sub: (session, None, None))
+    monkeypatch.setattr(
+        classroom_routes, "charge_report_runs", lambda account, designs: charged.append((account, designs))
+    )
+    monkeypatch.setattr(classroom_routes.teaching_report, "build", lambda *_args: "built")
+    monkeypatch.setattr(classroom_routes, "check_gate", lambda _session: [{"step": 1}])
+    with pytest.raises(classroom_routes.HTTPException):
+        asyncio.run(classroom_routes._prepare_report({"sub": "student", "aid": 3}))
+    assert charged == []  # blocked by the gate: nothing to compute, nothing charged
+    monkeypatch.setattr(classroom_routes, "check_gate", lambda _session: [])
+    with pytest.raises(classroom_routes.HTTPException):  # the row is missing in this stub
+        asyncio.run(classroom_routes._prepare_report({"sub": "student", "aid": 3}))
+    [(account, designs)] = charged
+    assert account == 3
+    assert [design.spec for design in designs] == [DEFAULT_SPEC, ModelSpec((0,), (), ("country_industry", "year"))]

@@ -774,10 +774,12 @@ def _panel_share_economic_domains(frames: dict[str, pd.DataFrame], year: int) ->
 def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict:
     from gvcsim.regression.teaching import (
         EXCHANGE_RATE_COLUMN,
+        TARIFF_RATE,
         WAVE_COLUMN,
         X_COLUMN,
         X_LAG_COLUMNS,
         Y_COLUMNS,
+        wave_start_years,
     )
 
     frame = frames["panel_teaching"]
@@ -819,15 +821,20 @@ def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict
     violations += int((~_close(x, w * tau)).sum())
     violations += int((~numeric["teaching_treated"].isin([0, 1])).sum())
     violations += int((~numeric[WAVE_COLUMN].isin([0, 1, 2])).sum())
-    # A lag of X is the same unit's w × τ k years earlier; before the panel's first year τ is 0.
-    tau_by_key = pd.Series(tau.to_numpy(), index=pd.MultiIndex.from_arrays([frame["entity_id"].astype(str), years]))
-    for lag, column in X_LAG_COLUMNS.items():
-        if lag == 0:
-            continue
-        keys = pd.MultiIndex.from_arrays([frame["entity_id"].astype(str), years - lag])
-        earlier = pd.Series(tau_by_key.reindex(keys).to_numpy(), index=frame.index)
-        earlier = earlier.where(years - lag >= unique_years[0], 0.0) if unique_years else earlier
-        violations += int((~_close(numeric[column], w * earlier)).sum())
+    # τ follows the published schedule: the goods industries (ICIO A–C) of a taxed country from its wave's start year.
+    # A lag of X is the unit's w × that schedule k years earlier (0 before the panel), so a unit missing a year inside
+    # the panel still has its lags checked, as the generator writes them.
+    if unique_years:
+        starts = numeric[WAVE_COLUMN].map(wave_start_years(int(unique_years[0])))
+        goods = frame["industry"].astype(str).str[0].isin(["A", "B", "C"])
+
+        def scheduled(at: pd.Series) -> pd.Series:
+            return TARIFF_RATE * (goods & starts.notna() & at.ge(starts)).astype(float)
+
+        violations += int((~_close(tau, scheduled(years))).sum())
+        for lag, column in X_LAG_COLUMNS.items():
+            if lag:
+                violations += int((~_close(numeric[column], w * scheduled(years - lag))).sum())
     if len(unique_years) >= 2:
         violations += int((x.loc[years.isin(unique_years[:2])].abs() > OUTPUT_QC_ABS_TOLERANCE).sum())
     violations += int((~numeric[Y_COLUMNS["trade"]].between(0, 1)).sum())

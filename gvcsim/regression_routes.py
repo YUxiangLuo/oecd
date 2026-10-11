@@ -140,7 +140,7 @@ def _regression_preflight(result: dict[str, Any]) -> dict[str, Any]:
         "disclosure",
         "Y 基准按首年指标排名校准；网络 Y 未重新构造贸易网络。",
     )
-    add("fixed_exposure", "disclosure", "X 使用首年销往美国的出口份额乘课程税率路径。")
+    add("fixed_exposure", "disclosure", "X 使用首年销往美国的出口份额乘加征税率（被加税国家分两批开始加税）。")
     return {
         "status": result.get("status") or "ok",
         "can_infer": result.get("status") in {"ok", "warning"} and not bool(support.get("suppress_inference")),
@@ -364,21 +364,31 @@ def _run_payload(design: RegressionDesign, result: Any, benchmark: dict[str, Any
 # Completed runs of the current teaching panel, shared by the run endpoint and the report (whose recalculation of
 # the workbench models is synchronous). Keyed on the panel object: the artifact cache returns the same DataFrame
 # until the release changes, and a new panel starts an empty cache. Stored dicts are shared: never changed.
-_RUN_CACHE: list[tuple[Any, "OrderedDict[str, dict[str, Any]]"]] = []
+# The release the cache was started under is kept with it, so a run cached before a release swap is not taken for
+# one the new release already computed (and let past the student's limit).
+_RUN_CACHE: list[tuple[Any, str | None, "OrderedDict[str, dict[str, Any]]"]] = []
 _RUN_LOCK = threading.Lock()
 _RUN_CACHE_SIZE = 256
 
 
-def _run_cached(key: str) -> bool:
+def _current_release() -> str | None:
+    try:
+        return artifacts.release_identity()
+    except (artifacts.ArtifactContractError, OSError, ValueError):
+        return None
+
+
+def _run_cached(key: str, release: str | None = None) -> bool:
+    release = release if release is not None else _current_release()
     with _RUN_LOCK:
-        return bool(_RUN_CACHE) and key in _RUN_CACHE[0][1]
+        return bool(_RUN_CACHE) and release is not None and _RUN_CACHE[0][1] == release and key in _RUN_CACHE[0][2]
 
 
 def _cached_payload(panel: Any, key: str) -> dict[str, Any] | None:
     with _RUN_LOCK:
         if not _RUN_CACHE or _RUN_CACHE[0][0] is not panel:
             return None
-        results = _RUN_CACHE[0][1]
+        results = _RUN_CACHE[0][2]
         if key in results:
             results.move_to_end(key)
         return results.get(key)
@@ -387,12 +397,35 @@ def _cached_payload(panel: Any, key: str) -> dict[str, Any] | None:
 def _store_payload(panel: Any, key: str, payload: dict[str, Any]) -> None:
     with _RUN_LOCK:
         if not _RUN_CACHE or _RUN_CACHE[0][0] is not panel:
-            _RUN_CACHE[:] = [(panel, OrderedDict())]
-        results = _RUN_CACHE[0][1]
+            _RUN_CACHE[:] = [(panel, _current_release(), OrderedDict())]
+        results = _RUN_CACHE[0][2]
         results[key] = payload
         results.move_to_end(key)
         while len(results) > _RUN_CACHE_SIZE:
             results.popitem(last=False)
+
+
+def charge_report_runs(account_id: Any, designs: list[RegressionDesign]) -> None:
+    """Report generation recomputes the workbench models it prints: each run not computed yet counts against the
+    student's new calculations of the minute, as on the page (a run the page or an earlier report computed is free).
+    Refused as a whole before anything is computed, so a report is never printed with a model left out."""
+    if isinstance(account_id, bool) or not isinstance(account_id, int):
+        return
+    release = _current_release()
+    missing = len({key for key in map(_run_key, designs) if not _run_cached(key, release)})
+    if not missing:
+        return
+    try:
+        _RUN_LIMITER.check(account_id, min(missing, _RUN_LIMITER.limit))
+    except RateLimitExceeded as error:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"生成报告要重新计算你放入报告的 {missing} 个模型，本分钟的计算次数已用完；"
+                f"请约 {error.retry_after_header} 秒后再生成。"
+            ),
+            headers={"Retry-After": error.retry_after_header},
+        ) from error
 
 
 def cached_run(panel: Any, design: RegressionDesign) -> dict[str, Any]:
@@ -436,7 +469,7 @@ async def regression_run(req: RegressionRequest, request: Request):
 
     def admit() -> None:
         # Only a calculation counts against the limit: a run the report (or another request) already computed does not.
-        if not _run_cached(run_key):
+        if not _run_cached(run_key, key[0]):
             _limit_expensive_request(_RUN_LIMITER, account_id, "计算")
 
     try:

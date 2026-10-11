@@ -822,3 +822,30 @@ test("two taxed countries: the comparison country's jump sits beside the first o
   series.mockRestore();
   cleanup();
 });
+
+test("teaching data v10: a service example of a second-wave country marks that country's start, said to be on goods", async () => {
+  const waveOf = { CAN: 1, CRI: 2, BRN: 2 } as Record<string, number>;
+  countriesSpy.mockResolvedValue({
+    ...countriesOverview,
+    version: "step10-tariff-teaching-v10",
+    policy_years: [2018, 2019],
+    waves: [
+      { wave: 1, start_year: 2018, min_million_usd: 10000, countries: 1 },
+      { wave: 2, start_year: 2019, min_million_usd: 1000, countries: 2 },
+    ],
+    countries: countriesOverview.countries.map((row) => ({
+      ...row, wave: waveOf[row.country] ?? 0, start_year: { 1: 2018, 2: 2019 }[waveOf[row.country] ?? 0] ?? null,
+    })),
+  });
+  const meta: Meta = { years: tenYears, countries: ["AUT", "CRI", "USA"], sectors: ["C29", "O"] };
+  const groups = tenGroups();
+  const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.5, false)));
+  render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["CRI", "AUT"], teaching_industry: "O" })} />);
+  await waitFor(() => expect(document.querySelector("[data-mark-year]")).not.toBeNull());
+  // Not the first wave's 2018: CRI's own tariff began in 2019, and on goods only.
+  expect(document.querySelector('[data-mark-year="2018"]')).toBeNull();
+  expect(document.querySelector('[data-mark-year="2019"] text')!.textContent).toBe("2019 年起对货物加税");
+  groups.mockRestore();
+  series.mockRestore();
+  cleanup();
+});

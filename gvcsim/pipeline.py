@@ -184,11 +184,14 @@ def _check_weak_teaching_y(teaching: pd.DataFrame) -> None:
 
     outcome, key = TEACHING_WEAK_Y
     try:
-        result, _ = run_design_with_benchmark(teaching, RegressionDesign(outcome, teaching=True, baseline=key))
+        result, benchmark = run_design_with_benchmark(teaching, RegressionDesign(outcome, teaching=True, baseline=key))
     except (ValueError, np.linalg.LinAlgError):
         # A design that cannot be estimated at all (e.g. a tiny synthetic release) is disclosed by the release's
         # regression QC; this check only guards the teaching point on an estimable release.
         return
+    # Estimated, but the library check disagrees: the interval cannot be trusted either way, so the release stops.
+    if not benchmark.get("benchmark_passed", True):
+        raise ValueError(f"教学弱效应 Y（{key}）的估计未通过标准库对照，无法确认 95% 区间含 0；请检查后重建")
     info = result.to_dict()
     if info.get("status") not in ("ok", "warning"):
         return

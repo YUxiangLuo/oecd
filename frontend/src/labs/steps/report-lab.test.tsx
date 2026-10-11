@@ -501,14 +501,19 @@ test("in the app, 载入服务器版本 adopts the server's record as the base i
     session: { version: "experiment-session-simple-v3", steps: { "15": { data: newer } }, shared: {} } as never,
   });
   const saved: Record<string, unknown>[] = [];
-  const loadServerVersion = mock(() => Promise.resolve());
+  // The first load does not go through (another one was running, or it failed): the notice stays for another try.
+  const outcomes = [false, true];
+  const loadServerVersion = mock(() => Promise.resolve(outcomes.shift()!));
   const data = { research_question: "旧的研究问题", evidence_interpretation: "旧的结果解释", limitations: "旧的局限" };
   try {
     render(<ReportLab {...finishProps} state={{ ...finishProps.state, data, save: (patch) => { saved.push(patch); }, loadServerVersion }} />);
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "只生成草稿（不提交）" })); });
     expect(screen.getByText("这三段是本页的旧文字")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "载入服务器版本" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "载入服务器版本" })); });
     expect(loadServerVersion).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("这三段是本页的旧文字")).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "载入服务器版本" })); });
+    expect(loadServerVersion).toHaveBeenCalledTimes(2);
     expect(saved).not.toContainEqual(newer);
     expect(screen.queryByText("这三段是本页的旧文字")).toBeNull();
   } finally { generate.mockRestore(); session.mockRestore(); }

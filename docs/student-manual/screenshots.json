@@ -10,7 +10,7 @@
   "code_sources_sha256": "2cb9b9d276be16dd116636804c4465b9d5697eb035c42bb628d0cdb6f0668031",
   "data_release": "cc257d6ba486432b8b3d47a97accff3b",
   "simulation_contract": "step10-tariff-teaching-v10",
-  "source": "Manual 2.17 re-captured all 20 figures (19 kept plus the new step-11 改模型、对比 figure) with headless Chrome driven by frontend/scripts/capture-student-manual.ts at 1280x960 against an independent local classroom (fresh database, plain non-demo build) on release cc257d6ba486432b8b3d47a97accff3b (contract step10-tariff-teaching-v10). The submitted and graded images are element captures. Passwords are not visible.",
+  "source": "Manual 2.17 re-captured all 20 figures (19 kept plus the new step-11 改模型、对比 figure) with headless Chrome driven by frontend/scripts/capture-student-manual.ts at 1280x960 against an independent local classroom (fresh database, plain non-demo build) on release cc257d6ba486432b8b3d47a97accff3b (contract step10-tariff-teaching-v10). The submitted and graded images are element captures. Passwords are not visible. After the pre-PR review fixes, 11-regression-setup was re-captured (MANUAL_ONLY_REG=1, fresh test accounts in a separate local classroom); the other three figures of that run were byte-identical.",
   "provenance_scope": "Single capture run against an independent local classroom. The complete-course account's learning records for Steps 1–14 were prepared through public APIs (scripts/seed_full_journey.py), then every page was opened in the browser; Step 10's example was selected in the page, and the step-11 workbench model (去掉汇率变动) was computed, saved and marked 放入报告 in the page before the report was generated. Not a pure UI journey.",
   "screenshots": [
     {
@@ -61,14 +61,14 @@
       "file": "screenshots/11-regression-setup.png",
       "width": 1280,
       "height": 960,
-      "sha256": "4a7561ee93b21d06a2360ddacced58bdf78e8d5e099e41260727acbcbb47d826",
+      "sha256": "c1ad1fdd8e0e162f5d9a07a74b2db9ac7db3bf82230860061c061a977bb7502c",
       "captured_on": "2026-10-11",
       "capture_url": "http://127.0.0.1:5180",
       "capture_tool": "headless-chrome-cdp",
       "journey": "partial-course-browser",
-      "account": "manual_gate",
+      "account": "manual_gate2",
       "capture_note": "Step 12 before running: taxed vs untaxed group chart and run button.",
-      "baseline_commit": "12b88e7",
+      "baseline_commit": "pre-PR review fixes on 96c5616",
       "data_release": "cc257d6ba486432b8b3d47a97accff3b",
       "simulation_contract": "step10-tariff-teaching-v10",
       "data_sources": [
@@ -77,7 +77,9 @@
           "production_data": true,
           "release_id": "cc257d6ba486432b8b3d47a97accff3b"
         }
-      ]
+      ],
+      "recapture_note": "Re-captured with MANUAL_ONLY_REG=1 after the pre-PR review fixes: the group-chart caption now says parallel trends hold by design once the exchange-rate change is controlled. The other step 10–12 figures re-captured in the same run were byte-identical and keep their entries. Its code_sources_sha256 (same rule as the top-level field, which stays that of 12b88e7) is the working tree it was captured from.",
+      "code_sources_sha256": "ed65d597adee4cf00d887dac74b40ed651e6d7cf9b53900c72f6e068842d59fd"
     },
     {
       "file": "screenshots/01-icio.png",

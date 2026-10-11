@@ -8,6 +8,7 @@ report recomputes every model it prints from the saved ``(outcome, baseline, spe
 from __future__ import annotations
 
 import json
+import unicodedata
 from typing import Any
 
 from gvcsim import config
@@ -107,13 +108,35 @@ def options() -> dict[str, Any]:
     }
 
 
-def _spec_problem(value: Any) -> str | None:
+# Invisible or layout characters (control, zero-width, bidi override, line/paragraph separators): a name made of
+# them looks empty or reorders the text around it in the report. The page refuses the same set (nameProblem).
+_NAME_FORBIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Zl", "Zp"})
+
+
+def name_problem(name: Any) -> str | None:
+    """Why a saved model's name cannot be stored, or None; the page's ``nameProblem`` gives the same answers."""
+    if not isinstance(name, str) or not name.strip():
+        return "请输入名称"
+    if any(unicodedata.category(char) in _NAME_FORBIDDEN_CATEGORIES for char in name):
+        return "名称不能包含不可见字符"
+    if name != name.strip() or len(name) > NAME_MAX_LENGTH:
+        return f"模型名称应为 1–{NAME_MAX_LENGTH} 个字符，前后不留空格"
+    return None
+
+
+def _spec_problem(value: Any) -> tuple[ModelSpec | None, str | None]:
+    """The saved spec, normalised, or why it cannot be stored."""
     try:
-        canonical = ModelSpec.from_dict(value).to_dict()
-    except (TypeError, ValueError) as error:
-        return str(error)
-    # Stored as the server returned it (``design.spec``), so it is already in canonical order.
-    return None if canonical == value else "模型设定不是规范形式"
+        spec = ModelSpec.from_dict(value)
+    except ValueError as error:
+        return None, str(error)
+    except TypeError:
+        return None, "模型设定的格式无效"
+    # Stored as the server returned it (``design.spec``), so its lists are already in canonical order; compared as JSON
+    # so 1.0 cannot stand in for 1, with sorted keys because the database returns each control as {"lag", "name"}.
+    if json.dumps(spec.to_dict(), sort_keys=True) != json.dumps(value, sort_keys=True):
+        return None, "模型设定不是规范形式"
+    return spec, None
 
 
 def custom_results_problem(value: Any, outcome: str) -> str | None:
@@ -125,6 +148,7 @@ def custom_results_problem(value: Any, outcome: str) -> str | None:
     baselines = {item.key for item in selectable_baselines(outcome)}
     ids: set[str] = set()
     names: set[str] = set()
+    models: dict[tuple[str, str], str] = {}
     in_report = 0
     for item in value:
         if not isinstance(item, dict) or set(item) != CUSTOM_RESULT_KEYS:
@@ -133,18 +157,26 @@ def custom_results_problem(value: Any, outcome: str) -> str | None:
         if not isinstance(identifier, str) or not 1 <= len(identifier) <= 64 or identifier in ids:
             return "已保存模型的编号无效或重复"
         ids.add(identifier)
-        if not isinstance(name, str) or name != name.strip() or not 1 <= len(name) <= NAME_MAX_LENGTH:
-            return f"模型名称应为 1–{NAME_MAX_LENGTH} 个字符"
+        problem = name_problem(name)
+        if problem:
+            return problem
         if name in names:
             return f"本步已有名为“{name}”的模型"
         names.add(name)
-        if item["outcome"] != outcome:
+        if not isinstance(item["outcome"], str) or item["outcome"] != outcome:
             return "已保存模型的结果指标与本步不符"
-        if item["baseline"] not in baselines:
+        if not isinstance(item["baseline"], str) or item["baseline"] not in baselines:
             return "已保存模型的 Y 不在当前课程数据中"
-        problem = _spec_problem(item["spec"])
-        if problem:
+        spec, problem = _spec_problem(item["spec"])
+        if spec is None:
             return problem
+        # The page offers neither (its first column is the default model; a repeat shows the saved one).
+        if spec == DEFAULT_SPEC:
+            return "默认模型就是表中第一列，不用另存"
+        key = (item["baseline"], json.dumps(spec.to_dict()))
+        if key in models:
+            return f"这个设定已保存为“{models[key]}”"
+        models[key] = name
         if not isinstance(item["in_report"], bool):
             return "“放入报告”必须是是或否"
         in_report += item["in_report"]

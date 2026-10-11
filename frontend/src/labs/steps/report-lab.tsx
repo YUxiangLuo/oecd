@@ -842,9 +842,14 @@ export function ReportLab({
               <button type="button" className="secondary" disabled={busy} onClick={() => {
                 // The server's text becomes this page's base, not a new edit of it: an edit typed afterwards then
                 // survives an expired login (its kept copy is compared with the server's record, not an older one).
-                if (state.loadServerVersion) void state.loadServerVersion();
-                else if (serverAnswers) state.save({ ...serverAnswers });
-                setServerAnswers(null);
+                // The notice goes once the server's text is here; if the load fails (its message shows at the top) or
+                // another load is running, it stays and the button can be pressed again.
+                if (state.loadServerVersion) {
+                  void state.loadServerVersion().then((loaded) => { if (loaded) setServerAnswers(null); });
+                } else {
+                  if (serverAnswers) state.save({ ...serverAnswers });
+                  setServerAnswers(null);
+                }
               }}>载入服务器版本</button>
             </div>
           )}

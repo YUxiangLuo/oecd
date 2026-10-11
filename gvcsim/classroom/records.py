@@ -58,14 +58,18 @@ _VIEW_ONLY_KEYS = frozenset(
 )
 
 
-def _report_data(data: dict[str, Any]) -> dict[str, Any]:
+# Only the regression steps have the workbench; the report reads saved models nowhere else.
+_WORKBENCH_STEPS = frozenset({"11", "12", "13", "14"})
+
+
+def _report_data(step: str, data: dict[str, Any]) -> dict[str, Any]:
     """A step's data as the report reads it. The workbench's saved models count only by what the report prints of
     them (name, Y and model of those marked 放入报告); with none marked, the key is left out, so a session that never
     used the workbench keeps the fingerprint it had before."""
     from gvcsim.regression.workbench import reported_custom_results
 
     projected = {k: v for k, v in data.items() if k not in _VIEW_ONLY_KEYS and k != "custom_results"}
-    reported = reported_custom_results(data.get("custom_results"))
+    reported = reported_custom_results(data.get("custom_results")) if step in _WORKBENCH_STEPS else []
     if reported:
         projected["custom_results"] = reported
     return projected
@@ -78,7 +82,7 @@ def report_fingerprint(session: dict[str, Any]) -> str:
         return _session_fingerprint(session)
     projected_steps = {
         key: (
-            {**value, "data": _report_data(value["data"])}
+            {**value, "data": _report_data(str(key), value["data"])}
             if isinstance(value, dict) and isinstance(value.get("data"), dict)
             else value
         )

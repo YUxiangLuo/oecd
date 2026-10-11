@@ -154,9 +154,10 @@ export interface SessionApi {
   /**
    * Read the server's record and make it this page's confirmed version, keeping this page's edits the server did
    * not touch (the rule for edits kept on leaving). Used for a conflict and when step 15 learns that another tab
-   * saved newer answers: the server's text then becomes the base, not a new edit of this page.
+   * saved newer answers: the server's text then becomes the base, not a new edit of this page. Resolves false when
+   * nothing was loaded (another load was running, or the student typed meanwhile); rejects when the read failed.
    */
-  loadServerVersion: () => Promise<void>;
+  loadServerVersion: () => Promise<boolean>;
   applyReportMutation: (response: ReportMutationResponse) => void;
 }
 
@@ -544,8 +545,9 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     return () => window.removeEventListener("online", online);
   }, [drain, enabled, status, unsynced]);
 
-  const loadServerVersion = useCallback(async () => {
-    if (resolvingConflictRef.current) return;
+  /** Whether the server's record became this page's (false: another load was running, or edits were typed meanwhile). */
+  const loadServerVersion = useCallback(async (): Promise<boolean> => {
+    if (resolvingConflictRef.current) return false;
     resolvingConflictRef.current = true;
     let toSave: ExperimentSession | null = null;
     setSyncing(true);
@@ -561,7 +563,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         && !sameSessionContent(current, queue.current?.getConfirmedSession() ?? emptySession());
       if (typedSince) {
         setSyncError(EDITED_DURING_RELOAD);
-        return;
+        return false;
       }
       // Keep this page's edits the other page did not touch: the same rule as edits kept on leaving.
       const sameRelease = response.release_id === releaseIdRef.current;
@@ -585,7 +587,8 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       setStatus("ready");
       if (!sameSessionContent(merged, response.session)) toSave = merged;
     } catch (cause) {
-      setSyncError(userFacingRequestError(cause, "保存失败"));
+      // A read, not a save: the message says which one failed.
+      setSyncError(userFacingRequestError(cause, "载入服务器版本失败"));
       throw cause;
     } finally {
       resolvingConflictRef.current = false;
@@ -595,6 +598,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       queue.current?.enqueue(toSave);
       await queue.current?.drain().catch(() => {});
     }
+    return true;
   }, [replace]);
 
   const resolveSyncConflict = useCallback(async () => {

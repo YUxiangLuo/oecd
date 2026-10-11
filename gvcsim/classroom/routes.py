@@ -13,10 +13,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from gvcsim import concurrency, demo_accounts, evidence, quizzes
 from gvcsim import session as session_model
-from gvcsim import teaching_report
+from gvcsim import report_workbench, teaching_report
 from gvcsim.classroom import db, management, records
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 from gvcsim.regression.workbench import custom_results_problem
+from gvcsim.regression_routes import charge_report_runs
+from gvcsim.report_gate import check_gate
 from gvcsim.report_saved_run import _STEP_OUTCOMES, _parse_saved_run
 from gvcsim.request_validation import TextRequest
 from gvcsim.singleflight import AsyncSingleFlightCache
@@ -126,6 +128,11 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
                 status_code=422,
                 detail="步骤 10 记录的例子已过期：请回到步骤 10，等关税数据加载完成后再继续。",
             )
+    # Only steps 11–14 have the workbench: saved models anywhere else are never shown or printed, so not stored.
+    for key, value in payload.get("steps", {}).items():
+        data = value.get("data") if isinstance(value, dict) else None
+        if isinstance(data, dict) and "custom_results" in data and key not in {str(step) for step in _STEP_OUTCOMES}:
+            raise HTTPException(status_code=422, detail=f"步骤 {key} 没有“自己设计模型”，不能保存模型。")
     # A stale DID or renamed-column snapshot may remain visible to the student,
     # but it must never be silently persisted as completion evidence for v1.
     for step in range(11, 15):
@@ -171,6 +178,10 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
 async def _prepare_report(user: dict) -> tuple[dict[str, Any], teaching_report.TeachingReport, datetime]:
     # PostgreSQL pool/row-lock waits must not block unrelated requests on the event loop.
     session, _report, row = await concurrency.run_sync(_workspace, user["sub"])
+    # The appendix recomputes the workbench models marked 放入报告: a run not computed yet counts against the student's
+    # calculations of the minute, as on the page (checked once the gate passes, before anything is computed).
+    if not check_gate(session):
+        charge_report_runs(user.get("aid"), report_workbench.run_designs(report_workbench.reported_models(session)))
     try:
         generated = await concurrency.run_cpu_bound(teaching_report.build, session, user.get("name") or user["sub"])
     except teaching_report.ReportGateError as error:

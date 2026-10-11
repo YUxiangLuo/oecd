@@ -259,3 +259,59 @@ def test_a_model_whose_x_terms_are_all_zero_is_refused():
 def test_observed_panel_designs_cannot_take_a_spec():
     with pytest.raises(ValueError, match="只有教学面板"):
         RegressionDesign("trade", spec=ModelSpec((0,), (), ()))
+
+
+def test_a_failed_library_check_hides_every_inferential_number(monkeypatch):
+    from gvcsim.regression import panel as panel_module
+    from gvcsim.report_saved_run import _result_is_reportable
+    from gvcsim.regression_routes import _design_info
+
+    original = panel_module._summarize_benchmark
+    monkeypatch.setattr(
+        panel_module, "_summarize_benchmark", lambda *args: {**original(*args), "benchmark_passed": False}
+    )
+    design = RegressionDesign("trade", teaching=True)
+    result, benchmark = run_design_with_benchmark(_panel(), design)
+    assert not benchmark["benchmark_passed"]
+    assert result.status == "invalid_design"
+    assert all(c.p is None and c.ci_low is None and c.stars == "" for c in result.coefs)
+    assert result.cumulative is not None and result.cumulative.p is None and result.cumulative.ci_low is None
+    assert result.f_p is None
+    assert result.support["suppress_inference"] is True
+    assert any("标准库实现对照" in reason for reason in result.support["reasons"])
+    # The step's saved run is then printed as "计算设定有问题", not refused as unreportable.
+    assert _result_is_reportable(result.to_dict(), _design_info(design))
+
+    no_effects = RegressionDesign("trade", teaching=True, spec=ModelSpec((0, 1), (), ()))
+    result, _ = run_design_with_benchmark(_panel(), no_effects)
+    assert result.constant is not None and result.constant.p is None
+
+
+def test_effects_nested_in_country_split_the_sample_without_a_note():
+    spec = ModelSpec((0, 1), (), ("country_industry", "country_year"))
+    result, _ = run_design_with_benchmark(_panel(), RegressionDesign("trade", teaching=True, spec=spec))
+    assert not any("互不重叠" in note for note in result.notes)
+
+
+def test_no_x_sum_when_an_x_term_is_omitted():
+    panel = _panel(12)
+    panel[X_LAG_COLUMNS[2]] = 0.0
+    spec = ModelSpec((0, 1, 2), (), ("country_industry", "year"))
+    result, _ = run_design_with_benchmark(panel, RegressionDesign("trade", teaching=True, spec=spec))
+    assert X_LAG_COLUMNS[2] in {item["name"] for item in result.omitted}
+    assert result.cumulative is None
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        ModelSpec((0, 1.0), (), ("year",)),
+        ModelSpec((0,), ((EXCHANGE_RATE_COLUMN, 1.0),), ("year",)),
+        ModelSpec((True,), (), ("year",)),
+        ModelSpec((0,), ((["x"], 0),), ("year",)),
+        ModelSpec((0,), (), ({"a": 1},)),
+    ],
+)
+def test_spec_terms_must_have_their_exact_types(spec):
+    with pytest.raises(ValueError):
+        spec.canonical()

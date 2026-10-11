@@ -322,12 +322,17 @@ export function ShockLab({ meta, step: _step, state }: {
     const row = overview?.countries.find((item) => item.country === code);
     return waves.length > 1 && row?.wave && row.start_year ? `（${WAVE_NAMES[row.wave] ?? `第 ${row.wave} 批`}，${row.start_year} 年起）` : "";
   };
-  // The example chart marks when its own tariff starts: the earliest start among the taxed countries shown.
+  // The example chart marks when its own tariff starts: the earliest start among the taxed rows shown; with none (a
+  // service industry), the shown countries' own start (COL's 2019, not the first wave's 2018); else the first tariff.
   const exampleStart = (() => {
-    const starts = lastRows
+    const taxedStarts = lastRows
       .filter((row) => row.teaching_tariff_rate_tau > 0)
       .map((row) => startYearOf(row.country))
       .filter((year): year is number => year != null);
+    const countryStarts = lastRows
+      .map((row) => overview?.countries.find((item) => item.country === row.country)?.start_year)
+      .filter((year): year is number => year != null);
+    const starts = taxedStarts.length ? taxedStarts : countryStarts;
     return starts.length ? Math.min(...starts) : policyYear ?? undefined;
   })();
   // One note under the selects for a selection outside the regression sample (the imposer, or an industry with
@@ -501,7 +506,7 @@ export function ShockLab({ meta, step: _step, state }: {
             metric="teaching_tariff_exposure"
             label="关税暴露 X"
             unit="个百分点"
-            markYear={exampleStart ? { year: exampleStart, label: `${exampleStart} 年起加税` } : undefined}
+            markYear={exampleStart ? { year: exampleStart, label: isService(shownIndustry) ? `${exampleStart} 年起对货物加税` : `${exampleStart} 年起加税` } : undefined}
             stepped
             gapNote={lastRows.length === 2 && isService(shownIndustry) && !lastRows.some((row) => isImposer(row.country))
               ? "服务业不加税：两国这个行业的 X 都为 0，没有差距"

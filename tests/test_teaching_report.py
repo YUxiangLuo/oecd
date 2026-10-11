@@ -3105,3 +3105,64 @@ def test_report_technical_appendix_writes_the_v10_formula():
     assert _formula_line({"spec": DEFAULT_SPEC.to_dict()}) == (
         "- 公式：Y = β₁·X + β₂·L1.X + γ₁·汇率变动 + α（每个国家×行业的平均水平）+ λ（每年的共同变化）+ ε（随机波动）"
     )
+
+
+def test_report_prints_typed_model_names_literally():
+    """A typed name cannot turn into Markdown: strikethrough, an autolink or an e-mail link stay plain text."""
+    from gvcsim.report_workbench import _name
+
+    joiner = "\u2060"
+    assert _name("~~删~~www.ab.cn") == f"\\~\\~删\\~\\~www{joiner}\\.ab{joiner}\\.cn"
+    assert _name("a@b.cn") == f"a{joiner}\\@b{joiner}\\.cn"
+    assert _name("http://x.y") == f"http{joiner}\\:\\/\\/x{joiner}\\.y"
+    assert _name("国家×年份") == "国家×年份"
+    assert _name("C+I+Y") == "C\\+I\\+Y"
+
+
+def test_x_sum_labels_name_their_terms_when_not_a_run_of_years():
+    from gvcsim.regression.spec import ModelSpec
+    from gvcsim.report_workbench import _x_span
+
+    effects = ("country_industry", "year")
+    assert [
+        _x_span(ModelSpec(lags, (), effects)) for lags in ((0,), (0, 1), (0, 1, 2), (1,), (2,), (0, 2), (1, 2))
+    ] == [
+        "仅当年",
+        "两年累计",
+        "三年累计",
+        "仅 L1.X",
+        "仅 L2.X",
+        "X + L2.X 之和",
+        "L1.X + L2.X 之和",
+    ]
+
+
+def test_technical_appendix_names_the_default_models_control():
+    from gvcsim.report_render import _run_sections
+
+    run = {
+        "step": 11,
+        "outcome": "trade",
+        "design": {
+            "depvar_label": "外国增加值项占比",
+            "equation": "Y = βX + FE",
+            "method": "twfe_intensity",
+            "control_mode": "spec",
+            "control_labels": {"teaching_exchange_rate_change": "汇率变动"},
+        },
+        "result": {"status": "ok", "coefs": []},
+    }
+    [setting] = [line for line in _run_sections([run]) if line.startswith("- 保存的设定：")]
+    assert "控制变量：汇率变动" in setting and "自选" not in setting
+    none = {**run, "design": {**run["design"], "control_mode": "none", "control_labels": {}}}
+    [setting] = [line for line in _run_sections([none]) if line.startswith("- 保存的设定：")]
+    assert "控制变量：不加控制变量" in setting
+
+
+def test_a_tiny_estimate_and_its_interval_share_decimals():
+    """Below the rounding step the value keeps 2 significant digits and its interval ends the same decimals."""
+    from gvcsim.report_common import _signed, estimate_digits
+
+    digits = estimate_digits("share", 0.0048, (-0.0072, 0.0168))
+    assert [_signed(value, digits) for value in (0.0048, -0.0072, 0.0168)] == ["+0.0048", "-0.0072", "+0.0168"]
+    assert estimate_digits("share", 0.00752, (-0.0112, 0.0262)) == 3

@@ -409,7 +409,7 @@ describe("simple regression workbench", () => {
     await screen.findByRole("img", { name: /加税前后/ });
     // One note under the chart: what it mixes in, then the premise.
     expect(document.querySelector(".reg-gap-caption")?.textContent).toStartWith(GROUP_CHART_CAPTION);
-    expect(document.querySelector(".reg-gap-caption")?.textContent).toContain("如果没有关税，各组的走势应大致平行");
+    expect(document.querySelector(".reg-gap-caption")?.textContent).toContain("如果没有关税，扣掉汇率等同期变化后，各组的走势应大致平行");
     expect(document.querySelector(".reg-parallel-note")).toBeNull();
   });
 
@@ -560,7 +560,7 @@ describe("simple regression workbench", () => {
 
   test("the 加税前后 chart states the parallel-trends premise and its two pre-tariff years", () => {
     expect(parallelTrendsNote([2016, 2017, 2018, 2019, 2020], 2018)).toBe(
-      "这张图也用来看回归的前提：如果没有关税，两组的走势应大致平行。加税前只有 2016、2017 两年可看，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，这一前提由设计保证。",
+      "这张图也用来看回归的前提：如果没有关税，扣掉汇率等同期变化后，两组的走势应大致平行。加税前只有 2016、2017 两年可看，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，控制汇率变动后这一前提由设计保证。",
     );
   });
 
@@ -602,6 +602,24 @@ describe("simple regression workbench", () => {
     render(<RegressionResultCard outcome="trade" response={{ ...twoYear, benchmark } as never} />);
     expect(screen.getByRole("heading", { level: 3 }).textContent).toContain("两年累计平均低 0.55 个百分点");
     expect(document.querySelector(".reg-lag-split")?.textContent).toContain("其中当年 -0.33 个百分点");
+    cleanup();
+    // The parts take the headline's decimals: a sum read to 3 decimals splits to 3 decimals, not 2.
+    const small = {
+      ...twoYear,
+      result: {
+        ...twoYear.result,
+        coefs: [
+          { ...twoYear.result.coefs[0], coef: 0.0412 },
+          { ...twoYear.result.coefs[1], coef: 0.0331 },
+          twoYear.result.coefs[2],
+        ],
+        cumulative: { ...twoYear.result.cumulative, coef: 0.0743, ci_low: 0.061, ci_high: 0.0876 },
+      },
+    };
+    expect(lagSplit("trade", small as never)).toBe("其中当年 +0.041 个百分点，次年再 +0.033 个百分点。");
+    // "两年累计" is said for X + L1.X only: a sum of other terms is not over the tariff's year and the next.
+    render(<RegressionResultCard outcome="trade" response={{ ...twoYear, design: { ...twoYear.design, spec: { x_lags: [0, 2], controls: [], fixed_effects: ["year"] } }, benchmark } as never} />);
+    expect(screen.getByRole("heading", { level: 3 }).textContent).not.toContain("两年累计");
   });
 
   test("step 14 says weighted degree is in + out once all three are in the family", () => {
