@@ -537,6 +537,8 @@ describe("saving when the tab is hidden or closed", () => {
         hook.result.current.patchStep(15, { research_question: "typed on a large record" });
         window.dispatchEvent(leaving);
         window.dispatchEvent(unloading());
+        // The page turns hidden as it unloads: the whole record is not sent again.
+        setVisibility("hidden");
       });
       expect(leaving.defaultPrevented).toBe(false);
       expect(save).not.toHaveBeenCalled();

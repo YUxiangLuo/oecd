@@ -567,9 +567,12 @@ export function useSession(enabled: boolean, username?: string, mergers?: FieldM
 
   useEffect(() => {
     if (!enabled || !username) return;
+    // Set once the changed steps went out as the page unloads: the hidden event that follows does not send the whole
+    // record again (it would only be refused, the base having moved on).
+    let changesSent = false;
     // Send unsaved edits now, without waiting for the autosave delay: the tab is being hidden or closed.
     const flushBeforeLeaving = () => {
-      if (!queue.current?.hasUnsynced() || syncConflictRef.current || statusRef.current !== "ready") return;
+      if (changesSent || !queue.current?.hasUnsynced() || syncConflictRef.current || statusRef.current !== "ready") return;
       if (timer.current != null) {
         window.clearTimeout(timer.current);
         timer.current = null;
@@ -608,6 +611,7 @@ export function useSession(enabled: boolean, username?: string, mergers?: FieldM
           window.clearTimeout(timer.current);
           timer.current = null;
         }
+        changesSent = true;
         void api.classroom.patchSession(changes).catch(() => {});
         return;
       }
