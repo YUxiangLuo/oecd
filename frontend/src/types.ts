@@ -509,12 +509,6 @@ export interface ExperimentSession {
   shared: Partial<Record<SharedSessionKey, SessionRecord>>;
 }
 
-/** The steps and shared entries changed between two records (null: removed), as PATCH /api/classroom/session takes them. */
-export interface SessionChanges {
-  steps: Record<string, SessionRecord | null>;
-  shared: Partial<Record<SharedSessionKey, SessionRecord | null>>;
-}
-
 /**
  * 一步实验台读写自己的自动保存状态。
  *
@@ -537,12 +531,6 @@ export interface StepStateApi<T = Record<string, unknown>> {
   /** Another tab saved a newer record: retrying cannot help until the server version is loaded. */
   syncConflict?: boolean;
   syncNow: () => void;
-  /**
-   * Adopt the server's record as this page's base (another tab saved newer content), keeping this page's edits the
-   * server did not touch. Step 15 uses it for "这三段是本页的旧文字 → 载入服务器版本".
-   */
-  /** Resolves true once the server's record is this page's; false when it did not load (the notice stays). */
-  loadServerVersion?: () => Promise<boolean>;
   /**
    * The report has been submitted (or graded): browsing must no longer rewrite report material
    * automatically; a step records its current view only when the student explicitly asks.

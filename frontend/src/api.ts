@@ -1,4 +1,4 @@
-import type { ExperimentSession, ReportMutationResponse, SessionChanges, SessionResponse, SessionSaveResponse } from "./types";
+import type { ExperimentSession, ReportMutationResponse, SessionResponse, SessionSaveResponse } from "./types";
 
 export const AUTH_TOKEN_KEY = "gvcsim_token";
 
@@ -184,23 +184,9 @@ function get<T>(url: string, signal?: AbortSignal): Promise<T> {
   return getWithToken<T>(url, getActiveAuthToken(), undefined, signal);
 }
 
-/** Browsers refuse a keepalive request once the bodies of all keepalive requests in flight pass 64 KiB
- * (65,536 bytes); the session saves are sent one at a time, so stay just below it. A finished record with the
- * regression runs and saved models of teaching data v10 is about 80–105 KB, so a page closing sends only the steps
- * changed since the last confirmed save (`patchSession`), which fits unless one step alone is that large. */
-export const KEEPALIVE_BODY_LIMIT = 64_000;
-
-/** Whether a JSON body is small enough to be sent with `keepalive` (it then outlives the page). */
-export function fitsKeepalive(body: unknown): boolean {
-  return new TextEncoder().encode(JSON.stringify(body)).length <= KEEPALIVE_BODY_LIMIT;
-}
-
-async function post<T>(url: string, body?: unknown, method = "POST", callerSignal?: AbortSignal, keepalive = false): Promise<T> {
+async function post<T>(url: string, body?: unknown, method = "POST", callerSignal?: AbortSignal): Promise<T> {
   const requestToken = getActiveAuthToken();
   const encoded = body === undefined ? undefined : JSON.stringify(body);
-  // A request the page may not outlive (the tab is being hidden or closed) is sent with keepalive, so the
-  // browser still delivers it; a body over the limit goes as a normal request instead of failing outright.
-  const outlivePage = keepalive && (encoded === undefined || new TextEncoder().encode(encoded).length <= KEEPALIVE_BODY_LIMIT);
   return withRequestTimeout(url, MUTATION_TIMEOUT_MS, async (signal) => {
     if (signal.aborted) throw new Error("请求已取消");
     const resp = await fetch(url, {
@@ -208,7 +194,6 @@ async function post<T>(url: string, body?: unknown, method = "POST", callerSigna
       headers: authHeaders(requestToken, { "Content-Type": "application/json" }),
       body: encoded,
       signal,
-      ...(outlivePage ? { keepalive: true } : {}),
     });
     if (!resp.ok) {
       const payload = await resp.json().catch(() => null);
@@ -389,13 +374,8 @@ export const api = {
         quiz?: { version: string; answers: Record<string, string> };
       }>("/api/classroom/quiz/submit", body),
     session: () => get<SessionResponse>("/api/classroom/session"),
-    /** `keepalive`: the page is being hidden or closed; the same request is sent so that it outlives the page. */
-    saveSession: (body: { session: ExperimentSession; base_updated_at: string | null }, options?: { keepalive?: boolean }) =>
-      post<SessionSaveResponse>("/api/classroom/session", body, "PUT", undefined, options?.keepalive ?? false),
-    /** Only the steps and shared entries changed since `base_updated_at` (null removes one): the save sent as the page
-     *  closes when the whole record is too large for a keepalive request. */
-    patchSession: (body: SessionChanges & { base_updated_at: string }) =>
-      post<SessionSaveResponse>("/api/classroom/session", body, "PATCH", undefined, true),
+    saveSession: (body: { session: ExperimentSession; base_updated_at: string | null }) =>
+      post<SessionSaveResponse>("/api/classroom/session", body, "PUT"),
     submitReport: () => post<ReportMutationResponse>("/api/classroom/report/submit"),
     generateReport: (expectedReportUpdatedAt: string | null) =>
       post<ReportMutationResponse>("/api/classroom/report/generate", { expected_report_updated_at: expectedReportUpdatedAt }),

@@ -46,19 +46,6 @@ export function useRestoredEditsToast(restoredEdits: number): void {
   }, [restoredEdits]);
 }
 
-/** After this page's edits were combined with the server's record: what of them was not kept as it was (a saved
- *  model renamed, taken out of the report or left out). It stays until dismissed, unlike a toast. */
-export function MergeNotes({ notes, onDismiss }: { notes?: readonly string[]; onDismiss?: () => void }) {
-  if (!notes?.length) return null;
-  return (
-    <div className="merge-notes" role="status" tabIndex={0} aria-label="合并说明，可上下滚动">
-      <b>本页的修改已与服务器上的记录合并，以下几处没能原样保留：</b>
-      <ul>{notes.map((note) => <li key={note}>{note}</li>)}</ul>
-      {onDismiss && <button type="button" className="secondary sm" onClick={onDismiss}>知道了</button>}
-    </div>
-  );
-}
-
 export function stepMainContentId(step: number): string {
   return `step-${step}-main-content`;
 }
@@ -227,7 +214,7 @@ export function StudentWorkspace({
   onPasswordChanged,
   onLogout,
 }: StudentWorkspaceProps) {
-  const quizDrafts = useMemo<QuizDraftStore>(() => new Map(), [user.account_id, session.workspaceGeneration]);
+  const quizDrafts = useMemo<QuizDraftStore>(() => new Map(), [user.account_id]);
   const steps = stepsData.steps;
   const totalSteps = steps.length;
   const stepIndex = steps.findIndex((item) => item.n === current);
@@ -291,11 +278,8 @@ export function StudentWorkspace({
         void session.syncNow().catch(() => {});
         return;
       }
-      // Loading the server version remounts the step (a fullscreen panel closes with it), so the button
-      // that had focus is gone: move focus to the step's main content instead of leaving it on <body>.
-      void session.resolveSyncConflict().catch(() => {}).finally(() => {
-        window.requestAnimationFrame(() => contentRef.current?.focus());
-      });
+      // The hook confirms before discarding unsaved edits and reloading the page.
+      void session.resolveSyncConflict().catch(() => {});
     },
   };
 
@@ -330,7 +314,6 @@ export function StudentWorkspace({
 
           <div className="workarea">
             <SyncProblemBanner problem={syncProblem} />
-            <MergeNotes notes={session.mergeNotes} onDismiss={session.dismissMergeNotes} />
             <StepHeader
               step={step}
               previous={prevStep}
@@ -363,10 +346,10 @@ export function StudentWorkspace({
                     role="region"
                     aria-label={stepPrimaryActionLabel(step)}
                   >
-                    {/* The same key as the step's content: a new step or a reloaded server version draws it afresh. */}
-                    <StepErrorBoundary resetKey={`${step.n}:${session.workspaceGeneration}`}>
+                    {/* Changing steps draws the step's content afresh. */}
+                    <StepErrorBoundary resetKey={`${step.n}`}>
                       <LabRouter
-                        key={`lab:${step.n}:${session.workspaceGeneration}`}
+                        key={`lab:${step.n}`}
                         step={step}
                         meta={meta}
                         state={labState}
@@ -386,7 +369,7 @@ export function StudentWorkspace({
                     </StepErrorBoundary>
                   </div>
                   <QuizPanel
-                    key={`quiz:${step.n}:${session.workspaceGeneration}`}
+                    key={`quiz:${step.n}`}
                     draftStore={quizDrafts}
                     step={step}
                     state={stepState}

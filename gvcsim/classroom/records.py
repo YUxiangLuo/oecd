@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime
-from collections.abc import Callable
 from typing import Any
 
 import psycopg
@@ -31,10 +30,6 @@ class SessionChanged(RuntimeError):
     """The browser attempted to replace a session version that is no longer current."""
 
     pass
-
-
-class SessionMissing(SessionChanged):
-    """A delta cannot create the full record it was based on."""
 
 
 _UNCONDITIONAL_SESSION_WRITE = object()
@@ -143,7 +138,7 @@ def save_session(
     session: dict[str, Any],
     expected_updated_at: datetime | None | object = _UNCONDITIONAL_SESSION_WRITE,
 ) -> dict[str, Any] | None:
-    """Persist a session, optionally rejecting a stale whole-session replacement.
+    """Persist a session, accepting identical retries without advancing its version.
 
     Internal maintenance callers may omit ``expected_updated_at``. The classroom
     HTTP route always supplies the version observed by that browser, including
@@ -160,69 +155,29 @@ def save_session(
             return c.execute(
                 "INSERT INTO experiment_sessions(account_id,release_id,session) VALUES (%s,%s,%s)"
                 " ON CONFLICT (account_id,release_id) DO UPDATE"
-                " SET session=EXCLUDED.session,updated_at=clock_timestamp()"
+                " SET session=EXCLUDED.session,updated_at=CASE"
+                " WHEN experiment_sessions.session=EXCLUDED.session THEN experiment_sessions.updated_at"
+                " ELSE clock_timestamp() END"
                 " RETURNING updated_at",
                 (account["id"], release_id, encoded),
             ).fetchone()
-        if expected_updated_at is None:
-            saved = c.execute(
-                "INSERT INTO experiment_sessions(account_id,release_id,session) VALUES (%s,%s,%s)"
-                " ON CONFLICT (account_id,release_id) DO NOTHING RETURNING updated_at",
-                (account["id"], release_id, encoded),
-            ).fetchone()
-        else:
-            saved = c.execute(
-                "UPDATE experiment_sessions SET session=%s,updated_at=clock_timestamp()"
-                " WHERE account_id=%s AND release_id=%s AND updated_at=%s RETURNING updated_at",
-                (encoded, account["id"], release_id, expected_updated_at),
-            ).fetchone()
+        # The conflict path locks the row, including a concurrent first insert.
+        # JSONB equality compares stored content, not serialization/key order.
+        saved = c.execute(
+            "INSERT INTO experiment_sessions(account_id,release_id,session)"
+            " SELECT %s,%s,%s::jsonb WHERE %s::timestamptz IS NULL OR EXISTS ("
+            " SELECT 1 FROM experiment_sessions WHERE account_id=%s AND release_id=%s)"
+            " ON CONFLICT (account_id,release_id) DO UPDATE SET"
+            " session=EXCLUDED.session,updated_at=CASE"
+            " WHEN experiment_sessions.session=EXCLUDED.session THEN experiment_sessions.updated_at"
+            " ELSE clock_timestamp() END"
+            " WHERE experiment_sessions.session=EXCLUDED.session OR experiment_sessions.updated_at=%s"
+            " RETURNING updated_at",
+            (account["id"], release_id, encoded, expected_updated_at, account["id"], release_id, expected_updated_at),
+        ).fetchone()
         if saved is None:
             raise SessionChanged("实验记录已被另一个标签页更新")
         return saved
-
-
-def patch_session(
-    username: str,
-    apply: Callable[[dict[str, Any]], dict[str, Any]],
-    expected_updated_at: datetime,
-) -> tuple[dict[str, Any], dict[str, Any]] | None:
-    """Change the stored session under its row lock when it is still the version the browser saw.
-
-    ``apply`` gets the stored session and returns the whole new one, checked; its errors propagate and nothing is
-    written. Returns the new session and the row (``updated_at``), or None for an unknown student. A missing row or
-    another version raises ``SessionChanged``, as a stale whole-session save does.
-    """
-    release_id = database.current_release_id()
-    with database.conn() as c:
-        account = _student(c, username)
-        if not account:
-            return None
-        current = c.execute(
-            "SELECT session,updated_at FROM experiment_sessions WHERE account_id=%s AND release_id=%s FOR UPDATE",
-            (account["id"], release_id),
-        ).fetchone()
-        if current is None:
-            from gvcsim.session import empty_session
-
-            apply(empty_session())
-            raise SessionMissing("尚无已保存的实验记录")
-        session = apply(current["session"])
-        if session == current["session"]:
-            saved = c.execute(
-                "SELECT updated_at FROM experiment_sessions WHERE account_id=%s AND release_id=%s AND updated_at=%s",
-                (account["id"], release_id, expected_updated_at),
-            ).fetchone()
-            if saved is None:
-                raise SessionChanged("实验记录已被另一个标签页更新")
-            return session, saved
-        saved = c.execute(
-            "UPDATE experiment_sessions SET session=%s,updated_at=clock_timestamp()"
-            " WHERE account_id=%s AND release_id=%s AND updated_at=%s RETURNING updated_at",
-            (json.dumps(session, ensure_ascii=False), account["id"], release_id, expected_updated_at),
-        ).fetchone()
-        if saved is None:
-            raise SessionChanged("实验记录已被另一个标签页更新")
-        return session, saved
 
 
 _REPORT_COLUMNS = (

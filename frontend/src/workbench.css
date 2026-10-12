@@ -237,8 +237,7 @@
 .report-version-notice p { margin: 4px 0 0; }
 .report-version-notice.outdated { border-color: #e8c77b; background: #fff8e8; color: #6b450b; }
 /* Scrolled to after a refused regeneration or a closed receipt: kept clear of the scroller's top edge. */
-.report-answers-outdated, .report-error, #report-status-card { scroll-margin-top: 16px; }
-.report-version-notice .report-conflict-reason { margin: 0 0 6px; color: #9a3412; font-weight: 700; }
+.report-error, #report-status-card { scroll-margin-top: 16px; }
 .report-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .report-actions code { font-size: 11px; background: #f4f5f8; padding: 1px 5px; border-radius: 4px; }
 .report-provenance-slot { display: inline-block; flex: 1 1 320px; min-height: 18px; }

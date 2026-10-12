@@ -1,4 +1,4 @@
-import { SESSION_VERSION, type ExperimentSession, type SessionChanges, type SharedSessionKey } from "./types";
+import { SESSION_VERSION, type ExperimentSession, type SharedSessionKey } from "./types";
 
 export function emptySession(): ExperimentSession {
   return { version: SESSION_VERSION, steps: {}, shared: {} };
@@ -60,17 +60,3 @@ export function readShared<T>(session: ExperimentSession, key: SharedSessionKey)
 export function writeShared<T>(session: ExperimentSession, key: SharedSessionKey, data: T): ExperimentSession {
   return { ...session, shared: { ...session.shared, [key]: { data } } };
 }
-
-/** What `to` changed from `from`, step by step and entry by entry (null: removed), for a save of only those. */
-export function sessionChanges(from: ExperimentSession, to: ExperimentSession): SessionChanges {
-  const diff = <T,>(before: Record<string, T>, after: Record<string, T>) => Object.fromEntries(
-    [...new Set([...Object.keys(before), ...Object.keys(after)])]
-      .filter((key) => !sameJsonValue(before[key], after[key]))
-      .map((key) => [key, after[key] ?? null]),
-  );
-  return {
-    steps: diff(from.steps, to.steps),
-    shared: diff(from.shared as Record<string, unknown>, to.shared as Record<string, unknown>) as SessionChanges["shared"],
-  };
-}
-

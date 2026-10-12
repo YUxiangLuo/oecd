@@ -40,7 +40,7 @@ test("report generation sends the observed report revision without rounding it",
   } finally { globalThis.fetch = originalFetch; }
 });
 
-test("the changed steps sent as a page closes are a PATCH with keepalive", async () => {
+test("session saves send the full snapshot and exact base revision as a PUT", async () => {
   const originalFetch = globalThis.fetch;
   const calls: { url: string; init?: RequestInit }[] = [];
   globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
@@ -49,39 +49,15 @@ test("the changed steps sent as a page closes are a PATCH with keepalive", async
   }) as typeof fetch;
   setActiveAuthToken("token-a");
   try {
-    const body = { steps: { "15": { data: { research_question: "q" } }, "2": null }, shared: {}, base_updated_at: "2026-10-09T00:00:00Z" };
-    await api.classroom.patchSession(body);
-    expect(calls.map((call) => [call.url, call.init?.method, call.init?.keepalive])).toEqual([["/api/classroom/session", "PATCH", true]]);
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual(body);
-  } finally {
-    globalThis.fetch = originalFetch;
-    setActiveAuthToken(null);
-  }
-});
-
-test("a session save sent while leaving is the same PUT with keepalive, unless the body is too large for it", async () => {
-  const originalFetch = globalThis.fetch;
-  const calls: { url: string; init?: RequestInit }[] = [];
-  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
-    calls.push({ url: String(url), init });
-    return new Response("{}", { status: 200 });
-  }) as typeof fetch;
-  setActiveAuthToken("token-a");
-  try {
-    const body = { session: emptySession(), base_updated_at: "2026-10-09T00:00:00Z" };
-    await api.classroom.saveSession(body);
-    await api.classroom.saveSession(body, { keepalive: true });
-    const large = { ...body, session: { ...emptySession(), steps: { "15": { data: { limitations: "长".repeat(30_000) } } } } };
-    await api.classroom.saveSession(large, { keepalive: true });
-    expect(calls.map((call) => [call.url, call.init?.method, call.init?.keepalive])).toEqual([
-      ["/api/classroom/session", "PUT", undefined],
-      ["/api/classroom/session", "PUT", true],
-      ["/api/classroom/session", "PUT", undefined],
-    ]);
-    // The flush carries the same token and body as a normal save, so the server checks the same base.
-    expect(calls[1].init?.headers).toEqual(calls[0].init?.headers);
-    expect((calls[1].init?.headers as Record<string, string>).Authorization).toBe("Bearer token-a");
-    expect(calls[1].init?.body).toBe(calls[0].init?.body);
+    const session = { ...emptySession(), steps: { "15": { data: { research_question: "q" } } } };
+    for (const base_updated_at of [null, "2026-10-09T00:00:00.123456+00:00"]) {
+      const body = { session, base_updated_at };
+      await api.classroom.saveSession(body);
+      const call = calls.at(-1)!;
+      expect([call.url, call.init?.method]).toEqual(["/api/classroom/session", "PUT"]);
+      expect(JSON.parse(String(call.init?.body))).toEqual(body);
+      expect((call.init?.headers as Record<string, string>).Authorization).toBe("Bearer token-a");
+    }
   } finally {
     globalThis.fetch = originalFetch;
     setActiveAuthToken(null);

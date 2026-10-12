@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { api, ApiError } from "../../api";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -23,7 +23,6 @@ import {
   REFLECTION_MAX_LENGTH,
   reportConflictMessage,
   reportOutdatedAdvice,
-  newerServerAnswers,
   gradedExportRefusal,
   reportStatusChanged,
   revealWithOffset,
@@ -178,13 +177,6 @@ describe("step 15 report states", () => {
     expect(reportOutdatedAdvice("pending")).not.toContain("请先重新生成");
     expect(reportOutdatedAdvice("graded")).toContain("老师那里仍是已评阅的版本");
     expect(reportOutdatedAdvice("graded")).toContain("清除原评分和评语");
-  });
-
-  test("server answers are offered only when they differ from the page's", () => {
-    const page = { research_question: "旧问题", evidence_interpretation: "旧解释", limitations: "旧局限" };
-    expect(newerServerAnswers(page, undefined)).toBeNull();
-    expect(newerServerAnswers(page, { ...page })).toBeNull();
-    expect(newerServerAnswers(page, { ...page, limitations: "新局限" })).toEqual({ ...page, limitations: "新局限" });
   });
 
   test("uses resubmission semantics after submission or grading", () => {
@@ -477,107 +469,6 @@ test("a 409 because the report was submitted in another tab says so, not that it
     const alert = screen.getByRole("alert").textContent ?? "";
     expect(alert).toContain("已在别处提交给老师");
     expect(alert).not.toContain("评分与评语");
-  } finally { generate.mockRestore(); session.mockRestore(); }
-});
-
-test("a stale tab whose answers were changed elsewhere says so and loads the server's answers on request", async () => {
-  const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new ApiError(409, "报告或评分已更新，请刷新页面核对后再确认重新生成", "Conflict"));
-  const latest = mutation("pending");
-  const newer = { research_question: "新的研究问题", evidence_interpretation: "新的结果解释", limitations: "新的局限" };
-  const session = spyOn(api.classroom, "session").mockResolvedValue({
-    release_id: "a".repeat(32), updated_at: null, ...latest,
-    session: { version: "experiment-session-simple-v3", steps: { "15": { data: newer } }, shared: {} } as never,
-  });
-  const saved: Record<string, unknown>[] = [];
-  function Harness() {
-    const [data, setData] = useState<Record<string, unknown>>({ research_question: "旧的研究问题", evidence_interpretation: "旧的结果解释", limitations: "旧的局限" });
-    return <ReportLab {...finishProps} state={{ ...finishProps.state, data, save: (patch) => { saved.push(patch); setData((value) => ({ ...value, ...patch })); } }} />;
-  }
-  try {
-    render(<Harness />);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "只生成草稿（不提交）" })); });
-    expect(screen.getByRole("alert").textContent).toContain("已在别处提交给老师");
-    expect(screen.getByText("这三段是本页的旧文字")).toBeTruthy();
-    // The autosave mark no longer says 已保存 next to text that is not the server's.
-    expect(screen.getByText("不是最新版本")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "载入服务器版本" }));
-    expect(saved.at(-1)).toEqual(newer);
-    expect((screen.getByRole("textbox", { name: "局限与反思" }) as HTMLTextAreaElement).value).toBe("新的局限");
-    expect(screen.queryByText("这三段是本页的旧文字")).toBeNull();
-  } finally { generate.mockRestore(); session.mockRestore(); }
-});
-
-test("in the app, 载入服务器版本 adopts the server's record as the base instead of saving its text as an edit", async () => {
-  const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new ApiError(409, "报告或评分已更新，请刷新页面核对后再确认重新生成", "Conflict"));
-  const latest = mutation("pending");
-  const newer = { research_question: "新的研究问题", evidence_interpretation: "新的结果解释", limitations: "新的局限" };
-  const session = spyOn(api.classroom, "session").mockResolvedValue({
-    release_id: "a".repeat(32), updated_at: null, ...latest,
-    session: { version: "experiment-session-simple-v3", steps: { "15": { data: newer } }, shared: {} } as never,
-  });
-  const saved: Record<string, unknown>[] = [];
-  // The first load does not go through (another one was running, or it failed): the notice stays for another try.
-  const outcomes = [false, true];
-  const loadServerVersion = mock(() => Promise.resolve(outcomes.shift()!));
-  const data = { research_question: "旧的研究问题", evidence_interpretation: "旧的结果解释", limitations: "旧的局限" };
-  try {
-    render(<ReportLab {...finishProps} state={{ ...finishProps.state, data, save: (patch) => { saved.push(patch); }, loadServerVersion }} />);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "只生成草稿（不提交）" })); });
-    expect(screen.getByText("这三段是本页的旧文字")).toBeTruthy();
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "载入服务器版本" })); });
-    expect(loadServerVersion).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("这三段是本页的旧文字")).toBeTruthy();
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "载入服务器版本" })); });
-    expect(loadServerVersion).toHaveBeenCalledTimes(2);
-    expect(saved).not.toContainEqual(newer);
-    expect(screen.queryByText("这三段是本页的旧文字")).toBeNull();
-  } finally { generate.mockRestore(); session.mockRestore(); }
-});
-
-test("regenerating a graded report from a stale tab says the report holds the other tab's answers and offers them", async () => {
-  // Tab 1 added text and autosaved; this tab still shows the old text. Regenerating succeeds (the report itself did
-  // not change), and the server builds it from its own record, with tab 1's text.
-  const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("pending"));
-  const newer = { research_question: "新的研究问题", evidence_interpretation: "新的结果解释", limitations: "新的局限" };
-  const session = spyOn(api.classroom, "session").mockResolvedValue({
-    release_id: "a".repeat(32), updated_at: null, ...mutation("pending"),
-    session: { version: "experiment-session-simple-v3", steps: { "15": { data: newer } }, shared: {} } as never,
-  });
-  const saved: Record<string, unknown>[] = [];
-  function Harness() {
-    const [data, setData] = useState<Record<string, unknown>>({ research_question: "旧的研究问题", evidence_interpretation: "旧的结果解释", limitations: "旧的局限" });
-    return <ReportLab {...finishProps} report={report("graded")} sessionUpdatedAt="2026-08-12T00:00:00Z"
-      state={{ ...finishProps.state, data, save: (patch) => { saved.push(patch); setData((value) => ({ ...value, ...patch })); } }} />;
-  }
-  try {
-    render(<Harness />);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" })); });
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "确定重新生成" })); });
-    expect(generate).toHaveBeenCalledTimes(1);
-    expect(session).toHaveBeenCalledTimes(1);
-    const dialog = screen.getByRole("dialog", { name: "报告已提交" });
-    fireEvent.keyDown(dialog, { key: "Escape" });
-    expect(screen.getByText("这三段是本页的旧文字")).toBeTruthy();
-    expect(screen.getByText("不是最新版本")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "载入服务器版本" }));
-    expect(saved.at(-1)).toEqual(newer);
-    expect((screen.getByRole("textbox", { name: "局限与反思" }) as HTMLTextAreaElement).value).toBe("新的局限");
-    expect(screen.queryByText("这三段是本页的旧文字")).toBeNull();
-  } finally { generate.mockRestore(); session.mockRestore(); }
-});
-
-test("regenerating with the same answers as the server shows no stale-text notice", async () => {
-  const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("pending"));
-  const answers = { research_question: "研究问题", evidence_interpretation: "结果解释", limitations: "局限" };
-  const session = spyOn(api.classroom, "session").mockResolvedValue({
-    release_id: "a".repeat(32), updated_at: null, ...mutation("pending"),
-    session: { version: "experiment-session-simple-v3", steps: { "15": { data: answers } }, shared: {} } as never,
-  });
-  try {
-    render(<ReportLab {...finishProps} report={report("pending")} state={{ ...finishProps.state, data: answers }} />);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" })); });
-    expect(session).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText("这三段是本页的旧文字")).toBeNull();
   } finally { generate.mockRestore(); session.mockRestore(); }
 });
 
@@ -1067,29 +958,6 @@ test("a tab coming back shows a report changed elsewhere, and will not export a 
   } finally { session.mockRestore(); print.mockRestore(); }
 });
 
-test("a tab coming back says at once that its three answers are older than the server's", async () => {
-  const newer = { research_question: "新的研究问题", evidence_interpretation: "新的结果解释", limitations: "新的局限" };
-  const older = { research_question: "旧的研究问题", evidence_interpretation: "旧的结果解释", limitations: "旧的局限" };
-  const session = spyOn(api.classroom, "session").mockResolvedValue(sessionWith(mutation("pending"), { "15": { data: newer } }));
-  try {
-    // While this tab has its own unsaved typing, a different server text is expected: no notice.
-    const typing = render(<ReportLab {...finishProps} report={report("pending")} sessionUnsynced state={{ ...finishProps.state, data: older }} />);
-    await act(async () => { window.dispatchEvent(new Event("focus")); });
-    expect(document.querySelector(".report-answers-outdated")).toBeNull();
-    typing.unmount();
-    render(<ReportLab {...finishProps} report={report("pending")} state={{ ...finishProps.state, data: older }} />);
-    expect(document.querySelector(".report-answers-outdated")).toBeNull();
-    await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
-    const notice = document.querySelector(".report-answers-outdated")!;
-    expect(notice.textContent).toContain("这三段是本页的旧文字");
-    expect(within(notice as HTMLElement).getByRole("button", { name: "载入服务器版本" })).toBeTruthy();
-    // This tab's text was saved over the other one: the server matches the page again, so the notice goes.
-    session.mockResolvedValue(sessionWith(mutation("pending"), { "15": { data: older } }));
-    await act(async () => { window.dispatchEvent(new Event("focus")); });
-    expect(document.querySelector(".report-answers-outdated")).toBeNull();
-  } finally { session.mockRestore(); }
-});
-
 test("a combined emoji that does not fit is said to take several characters", async () => {
   const base = "甲".repeat(REFLECTION_MAX_LENGTH - 3);
   const family = limitInsertion(base, `${base}👨‍👩‍👧`, base.length + 8);
@@ -1105,7 +973,7 @@ test("a combined emoji that does not fit is said to take several characters", as
   expect(screen.queryByText(/一部分没有保留/)).toBeNull();
 });
 
-test("a refused regeneration says why inside the 旧文字 notice it brings into view", async () => {
+test("a refused regeneration reveals the teacher-grade conflict without replacing local answers", async () => {
   const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new ApiError(409, "报告或评分已更新，请刷新页面核对后再确认重新生成", "Conflict"));
   const newer = { research_question: "新的研究问题", evidence_interpretation: "新的结果解释", limitations: "新的局限" };
   const session = spyOn(api.classroom, "session").mockResolvedValue(sessionWith(mutation("graded"), { "15": { data: newer } }));
@@ -1115,12 +983,11 @@ test("a refused regeneration says why inside the 旧文字 notice it brings into
     render(<ReportLab {...finishProps} report={report("pending")} state={{ ...finishProps.state, data: { research_question: "旧的研究问题", evidence_interpretation: "旧的结果解释", limitations: "旧的局限" } }} />);
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: /重新生成并提交/ })); });
     await settle();
-    const notice = document.querySelector(".report-answers-outdated")!;
-    expect(notice.querySelector(".report-conflict-reason")?.textContent).toContain("老师刚刚评阅了这份报告");
-    // Said once, at the top of the notice, not again in a box below the fold.
-    expect(notice.firstElementChild?.className).toBe("report-conflict-reason");
-    expect(document.querySelector(".error-box")).toBeNull();
-    expect(revealed.at(-1) === notice).toBe(true);
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("老师刚刚评阅了这份报告");
+    expect((screen.getByRole("textbox", { name: "局限与反思" }) as HTMLTextAreaElement).value).toBe("旧的局限");
+    expect(document.querySelector(".report-answers-outdated")).toBeNull();
+    expect(revealed.at(-1) === alert).toBe(true);
   } finally { generate.mockRestore(); session.mockRestore(); scrolled.mockRestore(); }
 });
 

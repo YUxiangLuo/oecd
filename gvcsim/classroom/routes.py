@@ -162,8 +162,7 @@ def _session_changed() -> HTTPException:
         detail={
             "message": (
                 "服务器记录版本已变化，本次请求未覆盖服务器内容。"
-                "可能是其他页面已更新，也可能是此前保存成功但未收到响应。"
-                "请载入服务器版本并核对内容后再操作。"
+                "请先复制需要保留的未保存内容，再放弃本页修改并重新加载。"
             ),
             "code": "session_changed",
         },
@@ -187,50 +186,6 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
         raise _session_changed() from error
     if saved is None:
         raise HTTPException(status_code=404, detail="学生账号不存在")
-    return _saved_session_response(user["sub"], payload, saved["updated_at"])
-
-
-class SessionPatchRequest(BaseModel):
-    """The save sent as a page closes: only the steps and shared entries changed since the version the browser saw
-    (`base_updated_at`), so it fits a keepalive request (64 KiB) when the whole record does not. A null removes one."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    steps: dict[str, dict[str, Any] | None] = Field(default_factory=dict)
-    shared: dict[str, Any] = Field(default_factory=dict)
-    base_updated_at: datetime
-
-
-@router.patch("/session")
-def patch_session(req: SessionPatchRequest, user: dict = Depends(require_student)):
-    """Apply the changed steps to the stored record under its row lock, when it is still the version the browser
-    saw; the whole result passes the same checks as a PUT."""
-
-    def apply(stored: dict[str, Any]) -> dict[str, Any]:
-        if set(req.steps) - {str(step) for step in range(1, session_model.MAX_STEPS + 1)}:
-            raise HTTPException(status_code=422, detail="步骤编号无效")
-        if set(req.shared) - session_model.SHARED_KEYS:
-            raise HTTPException(status_code=422, detail="shared 包含未知字段")
-        merged = {**stored, "steps": dict(stored.get("steps") or {}), "shared": dict(stored.get("shared") or {})}
-        for part, changes in (("steps", req.steps), ("shared", req.shared)):
-            for key, value in changes.items():
-                if value is None:
-                    merged[part].pop(key, None)
-                else:
-                    merged[part][key] = value
-        return _checked_session(merged)
-
-    try:
-        result = db.patch_session(user["sub"], apply, req.base_updated_at)
-    except records.SessionMissing as error:
-        raise HTTPException(
-            status_code=409, detail={"code": "session_changed", "message": "尚无已保存的实验记录，请载入后重新保存。"}
-        ) from error
-    except records.SessionChanged as error:
-        raise _session_changed() from error
-    if result is None:
-        raise HTTPException(status_code=404, detail="学生账号不存在")
-    payload, saved = result
     return _saved_session_response(user["sub"], payload, saved["updated_at"])
 
 

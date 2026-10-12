@@ -23,6 +23,33 @@ def _save_report(markdown: str, provenance: dict, username: str = "student"):
     )
 
 
+@pytest.mark.parametrize("same_content", [True, False])
+def test_concurrent_first_session_saves_are_content_idempotent(teaching_db, same_content):
+    from threading import Barrier
+
+    barrier = Barrier(2)
+    first = empty_session()
+    second = empty_session()
+    if not same_content:
+        second["steps"]["2"] = make_record({"value": 2})
+
+    def save(payload):
+        barrier.wait(timeout=5)
+        try:
+            return db.save_session("student", payload, None)
+        except records.SessionChanged:
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(save, (first, second)))
+    successes = [result for result in results if result is not None]
+    assert len(successes) == (2 if same_content else 1)
+    assert all(result["updated_at"] == successes[0]["updated_at"] for result in successes)
+    stored = db.get_session("student")
+    assert stored["updated_at"] == successes[0]["updated_at"]
+    assert stored["session"] in (first, second)
+
+
 def test_v12_schema_contains_release_auth_and_class_contracts(teaching_db):
     with db.conn() as connection:
         names = {

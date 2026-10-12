@@ -9,7 +9,6 @@ import { stepTaskTitleId } from "../../step-task-card";
 import { ConfirmModal } from "../../teacher/ui";
 import type { ClassroomReport, ReportGateItem, ReportMutationResponse, StepStateApi } from "../../types";
 import type { SessionStatus } from "../../use-session";
-import { readStep } from "../../session-store";
 import { userFacingRequestError } from "../../user-facing-error";
 
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
@@ -60,15 +59,6 @@ const REFLECTION_FIELDS: {
   { key: "evidence_interpretation", label: "结果解释", prompt: "引用保存的数字，注明对象、年份、指标、方向和区间，并标明是真实指标还是模拟回归。比较四步当前保存的 Y 在默认模型设定下的两年累计结果；更换过 Y 时注明指标名称。自定义模型按所选 X 滞后覆盖跨度（仅当年／两年累计／三年累计）解释，不能一律写两年累计。方向不确定或没算出估计值时写明原因，不要写成“没有关联”。改过模型时，写明改了什么、X 各项合计怎样变、样本是否相同及原因。", starter: "句式参考：真实 ICIO 指标探索的步骤……显示，……在……年的……为……；课程模拟的步骤 11 默认模型估计 X 每高 1 个百分点，Y 两年累计平均高（或低）……，95% 区间为……；自定义模型覆盖……，合计为……。", min: 40 },
   { key: "limitations", label: "局限与反思", prompt: "真实指标比较和模拟回归各有哪些限制？模拟结果不能当作真实政策效应；选例子换算也不是对该国家行业单独估计。控制变量、固定效应、滞后期及样本变化会怎样影响结论？下一步需要什么真实数据或检验？", starter: "句式参考：课程模拟回归展示 X 与 Y 的关联，不能推出真实政策效应；换一种固定效应或去掉……后结论会……；真实指标比较只覆盖……；若要进一步验证，需要……。", min: 30 },
 ];
-
-type ReflectionAnswers = Pick<ReportReflectionState, "research_question" | "evidence_interpretation" | "limitations">;
-
-/** The server's three answers when any differs from this page's, else null (nothing to load). */
-export function newerServerAnswers(page: ReportReflectionState, server: ReportReflectionState | undefined): ReflectionAnswers | null {
-  if (!server) return null;
-  const answers = Object.fromEntries(REFLECTION_FIELDS.map((field) => [field.key, String(server[field.key] ?? "")])) as ReflectionAnswers;
-  return REFLECTION_FIELDS.some((field) => answers[field.key] !== String(page[field.key] ?? "")) ? answers : null;
-}
 
 export const REPORT_REFLECTION_TITLE_ID = "report-reflection-title";
 export const REPORT_REFLECTION_INCOMPLETE_SELECTOR = "textarea[data-report-reflection-incomplete='true']:not(:disabled)";
@@ -515,11 +505,9 @@ export function ReportLab({
   // The button that opened the receipt (查看提交回执与实验总结); null when it opened by itself after a submit.
   const outroOpener = useRef<HTMLElement | null>(null);
   const statusCardRef = useRef<HTMLElement>(null);
-  // Why a regeneration was refused (409), shown inside the 旧文字 notice when that notice is what the page shows.
-  const [conflictReason, setConflictReason] = useState<string | null>(null);
-  const answersNoticeRef = useRef<HTMLDivElement>(null);
+  // Bring a refused regeneration's explanation into view.
   const errorRef = useRef<HTMLDivElement>(null);
-  const revealConflict = useRef<"notice" | "error" | null>(null);
+  const revealConflict = useRef<"error" | null>(null);
   // After "只生成草稿（不提交）" the page continues at the draft preview (scrolled to and focused), once the
   // parent has rendered the new report; a session restore does not move the page.
   const previewRef = useRef<HTMLDivElement>(null);
@@ -590,10 +578,6 @@ export function ReportLab({
     field.setSelectionRange(pending.caret, pending.caret);
   });
   const [attemptedIncomplete, setAttemptedIncomplete] = useState(false);
-  // Newer answers found on the server after a refused generation (another tab wrote them); shown until loaded or
-  // until the fields match them.
-  const [serverAnswers, setServerAnswers] = useState<ReflectionAnswers | null>(null);
-  const answersOutdated = serverAnswers != null && newerServerAnswers(reflection, serverAnswers) != null;
   // Same split as the gate summary below: steps 1–14, plus global conditions (step 0) counted apart.
   const materialMissing = visibleBlocked.filter((item) => item.step > 0 && item.step < 15);
   const globalMissing = visibleBlocked.filter((item) => item.step <= 0).length;
@@ -626,10 +610,6 @@ export function ReportLab({
   reportRef.current = report;
   const reportChangedRef = useRef(onReportChanged);
   reportChangedRef.current = onReportChanged;
-  const reflectionRef = useRef(reflection);
-  reflectionRef.current = reflection;
-  const pendingSaveRef = useRef(false);
-  pendingSaveRef.current = sessionUnsynced || sessionSyncing || Boolean(state.syncError);
 
   /**
    * Read the server's report (a cheap GET of the session) and show it when it differs from this page's: another
@@ -642,12 +622,6 @@ export function ReportLab({
     // A generate or submit started meanwhile owns the report; its own response is newer than this read.
     if (latest.report && !operationRef.current && reportStatusChanged(reportRef.current, latest.report)) {
       reportChangedRef.current({ report: latest.report, completion: latest.completion, report_gate: latest.report_gate, material_gate: latest.material_gate });
-    }
-    // Another tab saved newer answers: say so now (这三段是本页的旧文字), not only after a refused update. While this
-    // tab has its own unsaved typing, the server is expected to differ, so that is not a sign of another tab.
-    // When the server matches the page again (this tab's text was saved over it), the notice is withdrawn.
-    if (!operationRef.current && !pendingSaveRef.current) {
-      setServerAnswers(newerServerAnswers(reflectionRef.current, readStep<ReportReflectionState>(latest.session, 15)));
     }
     return latest.report;
   };
@@ -675,10 +649,10 @@ export function ReportLab({
     if (!target) return;
     revealConflict.current = null;
     const frame = window.requestAnimationFrame(() => {
-      revealWithOffset(target === "notice" ? answersNoticeRef.current : errorRef.current);
+      revealWithOffset(errorRef.current);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [conflictReason, error, serverAnswers]);
+  }, [error]);
 
   const waitUntilReady = async () => {
     if (readyRef.current) return;
@@ -710,9 +684,7 @@ export function ReportLab({
     }
     setGenerating(true);
     setError(null);
-    setConflictReason(null);
     setBlocked([]);
-    const previousState = report?.state;
     let generated = false;
     try {
       await waitUntilReady();
@@ -728,14 +700,6 @@ export function ReportLab({
         const submitted = await api.classroom.submitReport();
         onReportChanged(submitted);
         finalReport = submitted.report;
-      }
-      // The server built the report from its own record. Another tab may have saved newer answers there while this
-      // one sat on step 15 (nothing here was unsaved, so the flush did not notice): the report then holds that
-      // tab's text while these fields keep the old one. Regenerating a submitted or graded report also resubmits
-      // it, so check, as the 409 path does, and offer 载入服务器版本.
-      if (previousState === "pending" || previousState === "graded") {
-        const latest = await api.classroom.session().catch(() => null);
-        if (latest) setServerAnswers(newerServerAnswers(reflection, readStep<ReportReflectionState>(latest.session, 15)));
       }
       if (finalReport.state !== "draft") {
         clearToasts();
@@ -757,15 +721,9 @@ export function ReportLab({
         // tab. Show the current state instead of a stale page, and say which of these happened.
         const latest = await api.classroom.session().catch(() => null);
         if (latest?.report) onReportChanged({ report: latest.report, completion: latest.completion, report_gate: latest.report_gate, material_gate: latest.material_gate });
-        // The server's record may also hold newer answers (written in that other tab): the preview now shows them,
-        // so the fields here must not keep the old text unnoticed.
-        const answers = latest ? newerServerAnswers(reflection, readStep<ReportReflectionState>(latest.session, 15)) : null;
-        setServerAnswers(answers);
         const reason = reportConflictMessage(report, latest?.report ?? null) ?? userFacingRequestError(cause, "报告生成失败");
-        // The reason goes where the page shows the change: inside the 旧文字 notice when it appears, else in the
-        // error box; either is scrolled into view with room above it.
-        if (answers) setConflictReason(reason); else setError(reason);
-        revealConflict.current = answers ? "notice" : "error";
+        setError(reason);
+        revealConflict.current = "error";
       } else setError(userFacingRequestError(cause, generated ? "报告已生成为草稿，但提交给老师失败，请重试提交" : "报告生成失败"));
     } finally {
       setGenerating(false);
@@ -847,7 +805,7 @@ export function ReportLab({
         <span className="reg-section-step">最后一步 · 完成报告</span>
         <h2>检查材料，写出分析并提交</h2>
         <ol>
-          <li><b>1 · 检查实验材料</b><span>{state.syncConflict ? "另一处已更新记录，请先点页面顶部的“载入服务器版本”" : state.syncError ? "保存失败，请先重试保存" : reportGate == null || sessionStatus !== "ready" ? "正在核对服务器记录" : sessionUnsynced || sessionSyncing ? "保存后将重新核对材料" : materialMissing.length || globalMissing ? `${[materialMissing.length ? `步骤 1–14 中 ${materialMissing.length} 个步骤还有 ${materialMissing.reduce((count, item) => count + item.missing.length, 0)} 项待补齐` : null, globalMissing ? `${globalMissing} 项其他条件未满足` : null].filter(Boolean).join("，")}，见下方入口` : "材料和理解题都已齐全"}</span></li>
+          <li><b>1 · 检查实验材料</b><span>{state.syncConflict ? "服务器版本与本页记录不一致，请先复制未保存内容，再按页面顶部说明丢弃修改并载入服务器版本" : state.syncError ? "保存失败，请先重试保存" : reportGate == null || sessionStatus !== "ready" ? "正在核对服务器记录" : sessionUnsynced || sessionSyncing ? "保存后将重新核对材料" : materialMissing.length || globalMissing ? `${[materialMissing.length ? `步骤 1–14 中 ${materialMissing.length} 个步骤还有 ${materialMissing.reduce((count, item) => count + item.missing.length, 0)} 项待补齐` : null, globalMissing ? `${globalMissing} 项其他条件未满足` : null].filter(Boolean).join("，")}，见下方入口` : "材料和理解题都已齐全"}</span></li>
           <li><b>2 · 写你的分析</b><span>{writtenCount} / 3 段达到最低字数 · 内容仍需自己核对</span></li>
           <li><b>3 · 提交给老师</b><span>{report && report.state !== "draft" && reportOutdated ? "报告需更新：之后的修改还没交给老师，请点“更新报告并提交给老师”" : report?.state === "pending" ? "已提交，等待评阅" : report?.state === "graded" ? <a href="#report-status-card" onClick={(event) => { event.preventDefault(); statusCardRef.current?.scrollIntoView?.({ block: "center" }); statusCardRef.current?.focus({ preventScroll: true }); }}>{report.feedback?.trim() ? "已评阅，查看分数与评语" : "已评阅，查看分数"}</a> : report ? (reportOutdated ? "草稿需更新，尚未提交" : "已有草稿，尚未提交") : "生成报告不等于提交"}</span></li>
         </ol>
@@ -870,33 +828,11 @@ export function ReportLab({
       <section className="report-reflection" aria-labelledby={REPORT_REFLECTION_TITLE_ID}>
         <div>
           <span className="reg-section-step">你的分析 · 自动保存</span>
-          {answersOutdated
-            ? <small className="report-autosave failed">不是最新版本</small>
-            : autosave && <small className={`report-autosave${autosave === "未保存" ? " failed" : ""}`}>{autosave}</small>}
+          {autosave && <small className={`report-autosave${autosave === "未保存" ? " failed" : ""}`}>{autosave}</small>}
           <h3 id={REPORT_REFLECTION_TITLE_ID} tabIndex={-1}>回答三个问题</h3>
           <p>写清研究对象、主要结果和仍不能确定的内容。引用具体数字，并说明结论限制。文字按原样写进报告，“#”“**”等符号不会变成标题或粗体。</p>
         </div>
         <div className="report-reflection-fields" ref={reflectionRoot}>
-          {answersOutdated && (
-            <div ref={answersNoticeRef} className="report-version-notice outdated report-answers-outdated" role="status">
-              {/* Why the regeneration was refused: here, where the page scrolls to, not below the fold. */}
-              {conflictReason && <p className="report-conflict-reason" role="alert">{conflictReason}</p>}
-              <b>这三段是本页的旧文字</b>
-              <p>你在别处（另一个标签页或设备）改过这三段：服务器上保存的是较新的文字，报告也按服务器上的记录生成。点“载入服务器版本”，让这里的文字与服务器一致。</p>
-              <button type="button" className="secondary" disabled={busy} onClick={() => {
-                // The server's text becomes this page's base, not a new edit of it: an edit typed afterwards then
-                // survives an expired login (its kept copy is compared with the server's record, not an older one).
-                // The notice goes once the server's text is here; if the load fails (its message shows at the top) or
-                // another load is running, it stays and the button can be pressed again.
-                if (state.loadServerVersion) {
-                  void state.loadServerVersion().then((loaded) => { if (loaded) setServerAnswers(null); });
-                } else {
-                  if (serverAnswers) state.save({ ...serverAnswers });
-                  setServerAnswers(null);
-                }
-              }}>载入服务器版本</button>
-            </div>
-          )}
           <div className="report-writing-checklist" role="note">
             <b>写作自检（字数达标不等于论证完整）</b>
             <span>① 点名比较对象　② 引用具体数字　③ 解释方向与区间　④ 说明不能推出什么</span>

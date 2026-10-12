@@ -41,7 +41,8 @@ test("self-service password change preserves the failed-save draft before logout
     fireEvent.click(screen.getByRole("button", { name: "修改并重新登录" }));
     await waitFor(() => expect(reload).toHaveBeenCalled());
     const draft = JSON.parse(sessionStorage.getItem(KEPT_EDITS_KEY)!);
-    expect(draft.version).toBe(3);
+    expect(draft.version).toBe(4);
+    expect(draft.base_updated_at).toBeNull();
     expect(draft.release_id).toBe(releaseId);
     expect(draft.username).toBe("draft-student");
     expect(draft.session.steps["15"].data.research_question).toBe("未保存的研究问题，改密后必须保留。");
