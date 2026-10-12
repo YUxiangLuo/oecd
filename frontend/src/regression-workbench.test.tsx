@@ -327,7 +327,7 @@ describe("the workbench", () => {
     expect(document.querySelector("th.reg-custom-current")?.textContent).toBe("结果1");
     // Changing the form marks the shown result as out of date.
     fireEvent.click(checkbox(/^L2\.X/));
-    expect(screen.getByText(/设定已更改/)).toBeTruthy();
+    expect(screen.getByRole("note").textContent).toContain("设定已更改");
   });
 
   test("the default model itself is not saved again", async () => {
@@ -513,6 +513,8 @@ describe("the open workbench", () => {
     await waitFor(() => expect(tableHeaders()).toContain("本次计算（未保存）"));
     fireEvent.click(checkbox(/^L2\.X/));
     expect(document.querySelector(".reg-stale-note")?.textContent).toBe("设定已更改，下面保留最近计算的结果；点“计算这个模型”查看新结果。");
+    expect(screen.getAllByRole("status").some((node) => node.textContent === "设定已更改，下面保留最近计算的结果；点“计算这个模型”查看新结果。")).toBe(true);
+    expect(screen.queryByText("已算出这个模型，结果在下面的回归结果表中。")).toBeNull();
     expect(screen.getByRole("region", { name: "当前模型完整结果" }).textContent).toContain("GDP 对数、贸易开放度");
     fireEvent.click(screen.getByRole("button", { name: "恢复默认设定" }));
     expect(document.querySelector(".reg-stale-note")?.textContent).toContain("保留最近计算的结果");
@@ -522,6 +524,8 @@ describe("the open workbench", () => {
     rerender(<Harness defaultResponse={other} />);
     fireEvent.click(checkbox(/^汇率变动/));
     expect(document.querySelector(".reg-stale-note")?.textContent).toBe("因变量已换成“国内增加值出口占比”，点“计算这个模型”在新的 Y 上计算。");
+    expect(screen.getAllByRole("status").some((node) => node.textContent === "因变量已换成“国内增加值出口占比”，点“计算这个模型”在新的 Y 上计算。")).toBe(true);
+    expect(screen.queryByText("已算出这个模型，结果在下面的回归结果表中。")).toBeNull();
   });
 
   test("it shows the four tries from the server and the default model's column before anything is computed", async () => {

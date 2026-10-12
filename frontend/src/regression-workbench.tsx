@@ -310,6 +310,11 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   };
   // The computed model belongs to this Y and this form; otherwise it is kept but marked out of date.
   const current = Boolean(computed && computed.design.baseline === baseline && sameSpec(computed.design.spec!, spec, options));
+  const staleMessage = computed && !current
+    ? computed.design.baseline !== baseline
+      ? `因变量已换成“${depvarLabel}”，点“计算这个模型”在新的 Y 上计算。`
+      : "设定已更改，下面保留最近计算的结果；点“计算这个模型”查看新结果。"
+    : "";
   const noX = spec.x_lags.length === 0;
   const run = async () => {
     if (running || noX) return;
@@ -432,12 +437,10 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         </button>
         {retryWait > 0 && <span className="muted reg-custom-wait">新的设定 {retryWait} 秒后可以计算</span>}
         <button type="button" className="secondary" onClick={() => changeSpec(options.default_spec)}>恢复默认设定</button>
-        <span className="sr-only" role="status" aria-live="polite">{running ? "正在计算…" : announcement}</span>
+        <span className="sr-only" role="status" aria-live="polite">{running ? "正在计算…" : staleMessage || announcement}</span>
       </div>
       {error && <div className="error-box async-error" role="alert">{error}</div>}
-      {computed && !current && (computed.design.baseline !== baseline
-        ? <p className="reg-stale-note" role="note">因变量已换成“{depvarLabel}”，点“计算这个模型”在新的 Y 上计算。</p>
-        : <p className="reg-stale-note" role="note">设定已更改，下面保留最近计算的结果；点“计算这个模型”查看新结果。</p>)}
+      {staleMessage && <p className="reg-stale-note" role="note">{staleMessage}</p>}
 
       <section className="reg-custom-details" aria-label="当前模型完整结果">
         <h4>当前模型的完整数字</h4>
