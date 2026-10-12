@@ -28,9 +28,9 @@ class ControlInfo:
 # Order is the order of the page and of a normalised spec.
 CONTROLS: dict[str, ControlInfo] = {
     EXCHANGE_RATE_COLUMN: ControlInfo("汇率变动", "本币兑美元的年变动（百分点，负为贬值）", "generated"),
-    "log_gdp_proxy": ControlInfo("GDP（取对数）", "ln（国家增加值总额，百万美元）", "icio"),
-    "export_intensity": ControlInfo("贸易开放度", "总出口 / 增加值总额", "icio"),
-    "manufacturing_va_share": ControlInfo("制造业占比", "制造业增加值 / 增加值总额", "icio"),
+    "log_gdp_proxy": ControlInfo("增加值总额对数", "ln（国家增加值总额，百万美元）；用作 GDP 代理，并非正式 GDP", "icio"),
+    "export_intensity": ControlInfo("出口强度", "总出口 / 增加值总额", "icio"),
+    "manufacturing_va_share": ControlInfo("制造业增加值占比", "制造业增加值 / 增加值总额", "icio"),
 }
 
 # Fixed effects in page order. A combined effect contains its parts, so checking it makes them redundant.

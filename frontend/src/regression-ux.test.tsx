@@ -172,7 +172,7 @@ describe("simple regression workbench", () => {
       .toEqual(["先看数据", "默认模型", "改模型、对比（选做）"]);
     // Folded: the chart's per-year table, the model's data facts, and one column's full numbers.
     await waitFor(() => expect([...document.querySelectorAll("details > summary")].map((node) => node.textContent))
-      .toEqual(["各组逐年读数", "数据、样本和区间的算法", "某一列的完整数字（区间、t 值、p 值）"]));
+      .toEqual(["各组逐年读数", "数据、样本和区间的算法"]));
     fireEvent.click(screen.getByRole("button", { name: DVA_BAR }));
     await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高 0.56 个百分点"));
     expect(run.mock.calls[1][2]).toBe("DVAex_share");
@@ -260,7 +260,7 @@ describe("simple regression workbench", () => {
     cleanup();
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
     await screen.findByText("换一种模型试试：每次改一处，和默认模型比较");
-    expect(document.querySelector(".reg-custom-section details")?.hasAttribute("open")).toBe(false);
+    expect(screen.getByRole("region", { name: "当前模型完整结果" })).toBeTruthy();
     expect(await screen.findByRole("button", { name: "计算这个模型" })).toBeTruthy();
     expect([...document.querySelectorAll(".reg-custom-compare-table thead th")].map((cell) => cell.textContent)).toEqual(["变量", "默认模型"]);
   });
@@ -713,7 +713,7 @@ test("the model's equation reads its lagged X and its controls as symbols, not c
   expect(equationSymbol({ text: "β₁·teaching_tariff_exposure_ijt", term: "policy" })).toBe("β₁·X_ijt");
   expect(equationSymbol({ text: "β₂·teaching_tariff_exposure_lag1_ijt", term: "policy" })).toBe("β₂·L1.X_ijt");
   expect(equationSymbol({ text: "γ₁·teaching_exchange_rate_change_it", term: "control" })).toBe("γ₁·汇率_it");
-  expect(equationSymbol({ text: "γ₂·log_gdp_proxy__lag1_it", term: "control" })).toBe("γ₂·L1.GDP_it");
+  expect(equationSymbol({ text: "γ₂·log_gdp_proxy__lag1_it", term: "control" })).toBe("γ₂·L1.增加值总额对数_it");
   // The single-X model's wording is unchanged.
   expect(equationSymbol({ text: "β·teaching_tariff_exposure_ijt", term: "policy" })).toBe("β·X_ijt");
 });

@@ -3070,6 +3070,12 @@ def test_report_appendix_recomputes_the_models_marked_for_the_report(tmp_path, m
     assert len(cells) == 3 and all(cell.endswith(" 个百分点（两年累计）") for cell in cells)
     default_run = regression_routes.cached_run(panel, RegressionDesign("trade", teaching=True, spec=DEFAULT_SPEC))
     assert cells[0] == f"{default_run['result']['cumulative']['coef']:+.2f} 个百分点（两年累计）"
+    (chart,) = [json.loads(block) for block in re.findall(r"```gvcsim-chart\n(.*?)\n```", appendix, re.S)]
+    assert [item["label"] for item in chart["items"]] == ["默认模型", "去掉汇率", "国家×年份*"]
+    for bar, spec in zip(chart["items"], (DEFAULT_SPEC, no_rate, country_year), strict=True):
+        recomputed = regression_routes.cached_run(panel, RegressionDesign("trade", teaching=True, spec=spec))
+        for key, source in (("value", "coef"), ("ci_low", "ci_low"), ("ci_high", "ci_high")):
+            assert bar[key] == recomputed["result"]["cumulative"][source]
     assert "注：括号内为按国家聚类的标准误。\\*\\*\\* p\\<0.01" in appendix
     assert report.provenance["custom_results"] == [
         {"step": 11, "name": "去掉汇率", "outcome": "trade", "baseline": "FVA_share", "spec": no_rate.to_dict()},
@@ -3281,3 +3287,68 @@ def test_report_marks_a_default_step_10_example_and_names_accounts_rows(tmp_path
     assert (
         "国家（行）：BRN" in markdown and "供给国" not in markdown.split("### 步骤 1", 1)[1].split("### 步骤 2", 1)[0]
     )
+
+
+@pytest.mark.parametrize("kind,scale", [("share", 1.0), ("length", 0.01), ("network", 0.01)])
+def test_custom_report_chart_compares_native_effects_and_omits_invalid_models(kind, scale):
+    from gvcsim.regression import workbench
+    from gvcsim.regression.spec import DEFAULT_SPEC, ModelSpec, X_LAG_COLUMNS
+    from gvcsim.report_workbench import custom_model_sections
+
+    def column(name, spec, coefficient, **extra):
+        coefs = [{"name": X_LAG_COLUMNS[lag], **coefficient} for lag in spec.x_lags]
+        return {
+            "name": name,
+            "spec": spec,
+            "run": {
+                "design": {"outcome": "length", "depvar_kind": kind, "depvar_label": "同一个 Y"},
+                "result": {
+                    "coefs": coefs,
+                    "cumulative": coefficient if len(spec.x_lags) > 1 else None,
+                    "n_obs": 120,
+                    "sample_flow": {"years": [2016, 2022]},
+                    "depvar_within_std": 0.001,
+                    **extra,
+                },
+            },
+        }
+
+    coefficient = {"coef": -2.0, "ci_low": -3.0, "ci_high": -1.0}
+    literal = '模型``` <img src=x> | " & www.x.cn'
+    columns = [
+        column("默认模型", DEFAULT_SPEC, coefficient),
+        column(
+            literal,
+            ModelSpec((1,), (), ()),
+            {"coef": 0.0, "ci_low": -1.0, "ci_high": 1.0},
+            n_obs=100,
+            depvar_within_std=999,
+        ),
+        column("非连续项", ModelSpec((0, 2), (), ()), coefficient),
+        column("停止推断", DEFAULT_SPEC, coefficient, support={"suppress_inference": True}),
+        column("无合计", DEFAULT_SPEC, coefficient, cumulative=None),
+        column("非有限区间", DEFAULT_SPEC, {**coefficient, "ci_high": float("nan")}),
+        column("无估计", DEFAULT_SPEC, {**coefficient, "coef": None}),
+        {"name": "失败", "spec": DEFAULT_SPEC, "run": "数据不可用"},
+    ]
+    table = {"step": 13, "outcome": "length", "baseline": "PLv_GVC", "columns": columns}
+    markdown = "\n".join(custom_model_sections([table]))
+    (chart,) = [json.loads(block) for block in re.findall(r"```gvcsim-chart\n(.*?)\n```", markdown, re.S)]
+    assert chart["type"] == "diverging-bar" and chart["version"] == 1
+    assert [item["label"] for item in chart["items"]] == ["默认模型", literal, "非连续项"]
+    first, single, noncontiguous = chart["items"]
+    assert [first[key] for key in ("value", "ci_low", "ci_high")] == pytest.approx([-2 * scale, -3 * scale, -scale])
+    assert single["value"] == 0 and single["ci_low"] == -scale and single["ci_high"] == scale
+    assert first["sub"] == "两年累计"
+    assert single["sub"] == "仅 L1.X"
+    assert noncontiguous["sub"] == "X + L2.X 之和"
+    assert "两年累计；N = 120；年份 2016–2022" in markdown
+    assert "仅 L1.X；N = 100" in markdown
+    assert "标准差" not in chart["x_label"]
+    assert "百分点" in chart["x_label"] if kind == "share" else "原始单位" in chart["note"]
+    assert markdown.count("不绘制对应模型") == 5
+    assert workbench.SAMPLE_DIFFERS_NOTE in markdown
+    assert markdown.index("| 变量 |") < markdown.index("```gvcsim-chart")
+    # No empty chart or synthetic zero when every model is unavailable.
+    unavailable = "\n".join(custom_model_sections([{**table, "columns": columns[3:]}]))
+    assert "```gvcsim-chart" not in unavailable and unavailable.count("不绘制对应模型") == 5

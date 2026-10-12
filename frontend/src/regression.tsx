@@ -84,9 +84,9 @@ function DesignMeta({ design }: { design: RegressionDesignInfo }) {
 /** Short names of the controls in the equation ("γ₁·汇率_it"). */
 const CONTROL_SYMBOLS: Record<string, string> = {
   teaching_exchange_rate_change: "汇率",
-  log_gdp_proxy: "GDP",
-  export_intensity: "开放度",
-  manufacturing_va_share: "制造业占比",
+  log_gdp_proxy: "增加值总额对数",
+  export_intensity: "出口强度",
+  manufacturing_va_share: "制造业增加值占比",
 };
 
 /**

@@ -28,6 +28,7 @@ from gvcsim.regression.spec import (
 )
 from gvcsim.regression.teaching import selectable_baselines
 from gvcsim.report_common import (
+    UNIT_NAMES,
     _depvar_kind,
     _no_negative_zero,
     _safe,
@@ -36,6 +37,7 @@ from gvcsim.report_common import (
     with_count_unit,
     y_display,
 )
+from gvcsim.report_regression_chart import _chart_block, _finite
 from gvcsim.report_saved_run import _STEP_OUTCOMES
 from gvcsim.steps import STEPS
 
@@ -329,6 +331,65 @@ def _omitted_groups(omitted: list[dict[str, Any]]) -> list[str]:
     return [f"{reason}：{'、'.join(labels)}" for reason, labels in groups.items()]
 
 
+def _comparison_chart(table: dict[str, Any], label: str) -> list[str]:
+    """Compare the same Y in native units; missing estimates are omitted, never zero placeholders."""
+    items: list[dict[str, Any]] = []
+    notes: list[str] = []
+    kind = ""
+    for column in table["columns"]:
+        run, spec = column["run"], column["spec"]
+        reason = ""
+        if not isinstance(run, dict):
+            reason = "重算失败"
+        else:
+            result = run["result"]
+            total = _x_sum(result, spec)
+            if _suppressed(result):
+                reason = "已停止推断"
+            elif total is None or not _finite(total.get("coef")):
+                reason = "无法计算所选 X 项效应"
+            elif not all(_finite(total.get(key)) for key in ("ci_low", "ci_high")):
+                reason = "没有有效的 95% 区间"
+            elif not total["ci_low"] <= total["coef"] <= total["ci_high"]:
+                reason = "没有有效的 95% 区间"
+            else:
+                kind = _depvar_kind(table["outcome"], run["design"])
+                value, bounds = _per_point(kind, result, total)
+                assert bounds is not None
+                years = (result.get("sample_flow") or {}).get("years")
+                years_text = f"{years[0]}–{years[1]}" if isinstance(years, list) and len(years) == 2 else "未记录"
+                n = result.get("n_obs")
+                n_text = f"{int(n):,}" if _finite(n) else "未记录"
+                items.append(
+                    {
+                        "label": " ".join(str(column["name"]).split())[:120],
+                        "sub": _x_span(spec),
+                        "value": value,
+                        "text": with_count_unit(_signed(value, estimate_digits(kind, value, bounds)), kind),
+                        "ci_low": bounds[0],
+                        "ci_high": bounds[1],
+                    }
+                )
+                notes.append(f"- {_name(column['name'])}：{_x_span(spec)}；N = {n_text}；年份 {years_text}。")
+        if reason:
+            notes.append(f"- {_name(column['name'])}：{reason}，不绘制对应模型。")
+    lines: list[str] = []
+    # The existing renderer accepts at most eight bars per block.
+    for start in range(0, len(items), 8):
+        lines += _chart_block(
+            {
+                "version": 1,
+                "type": "diverging-bar",
+                "title": f"步骤 {table['step']} · 模型 X 效应及 95% 区间（Y：{label}）",
+                "x_label": f"X 每高 1 个百分点，所选 X 项效应（{UNIT_NAMES.get(kind, '原始单位')}）",
+                "note": "同一 Y 使用原始单位（份额转换为百分点），不按各模型标准差归一化；"
+                "单项用该项系数，多项用累计系数；X 项范围见各条标签，样本数和年份见图下说明。不同跨度不是同一个估计量。",
+                "items": items[start : start + 8],
+            }
+        )
+    return lines + notes + ([""] if notes else [])
+
+
 def custom_model_sections(tables: list[dict[str, Any]]) -> list[str]:
     if not tables:
         return []
@@ -357,6 +418,7 @@ def custom_model_sections(tables: list[dict[str, Any]]) -> list[str]:
         lines += _coefficient_rows(columns)
         lines += _summary_rows(columns)
         lines.append("")
+        lines += _comparison_chart(table, label)
         for column in columns:
             run = column["run"]
             text = f"- {_name(column['name'])}：{column['spec'].summary()}"

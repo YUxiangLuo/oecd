@@ -389,13 +389,14 @@ export function ShockLab({ meta, step: _step, state }: {
   return <div className="shock-workbench">
     {/* One story, top to bottom: the US tariff, the variables of steps 11–14 on one example, then every country's X. */}
     <section className="reg-run-card">
-      <span className="reg-section-step">美国加征关税</span>
-      <h3>美国对哪些国家加征关税？</h3>
+      <span className="reg-section-step">课程模拟 · 美国加征关税</span>
+      <h3>课程模拟中，美国对哪些国家加征关税？</h3>
       <p className="muted teaching-data-note" role="note">{GENERATED_DATA_NOTE}</p>
       {overviewQuery.status === "loading" && <div className="reg-request-state" role="status">正在读取全部国家的关税暴露…</div>}
       {overviewQuery.status === "error" && <div className="error-box" role="alert">{userFacingRequestError(overviewQuery.error, "全部国家的关税暴露读取失败")} <button className="secondary" onClick={overviewQuery.retry}>重试</button></div>}
       {overview && <>
         <p className="teaching-scenario">
+          以下为课程模拟情景，不是真实关税政策的历史记录。
           {waves.length > 1
             ? <>{countryLabel(overview.market)}分两批对{ruleClause ? ` ${ruleClause}的 ${overview.taxed_countries} 个国家` : ` ${overview.taxed_countries} 个国家`}{goodsOnly ? "的货物（农业、采矿业和制造业，ICIO 行业 A–C）" : ""}加征 <b>{rate(overview.tariff_rate)}</b> 关税：{waves.map((wave, index) => `${index ? "，" : ""}${index === 0 ? `对美货物顺差 ≥ ${ruleYiUsd(wave.min_million_usd)}的 ${wave.countries} 国` : `其余 ${wave.countries} 国`} ${wave.start_year} 年起`).join("")}{goodsOnly ? "；服务业不加税" : ""}；其余 {overview.untaxed_countries} 个国家未被加税。{ruleClause ? "名单和批次都按这条规则由 ICIO 数据确定；" : ""}美国是加税方，不在回归样本中。</>
             : <>{overview.policy_year ? `${overview.policy_year} 年起，` : ""}{countryLabel(overview.market)}对{ruleClause ? ` ${ruleClause}的 ${overview.taxed_countries} 个国家` : ` ${overview.taxed_countries} 个国家的商品`}{goodsOnly ? "的货物（农业、采矿业和制造业，ICIO 行业 A–C）" : ""}加征 <b>{rate(overview.tariff_rate)}</b> 关税{goodsOnly ? "，服务业不加税；" : "，"}其余 {overview.untaxed_countries} 个国家未被加税。{ruleClause ? "名单按这条规则由 ICIO 数据确定；" : ""}美国是加税方，不在回归样本中。</>}
@@ -413,7 +414,7 @@ export function ShockLab({ meta, step: _step, state }: {
       <span className="reg-section-step">举例</span>
       <h3>回归要用到的变量：以一个国家×行业为例</h3>
       <p className="teaching-example-lead">
-        步骤 11–14 的模型用到下面三个变量。选一个国家和一个行业，可再选一个对照国家，在逐年表里看它们怎样变化；默认是被加税的加拿大和未被加税的哥斯达黎加（两国汽车业都主要出口到美国），行业为 C29 汽车及零部件。步骤 11–14 会把回归结果换算到这个例子上。
+        步骤 11–14 的模型用到下面三个变量。选一个国家和一个行业，可再选一个对照国家，在逐年表里看它们怎样变化；默认是被加税的加拿大和未被加税的哥斯达黎加（两国汽车业都主要出口到美国），行业为 C29 汽车及零部件。步骤 11–14 会把回归结果换算到这个例子上。所选例子只用于展示与换算，不是回归样本筛选；回归仍使用课程规定的样本。
       </p>
       <dl className="teaching-variables" aria-label="步骤 11–14 的模型用到的变量">
         <div>

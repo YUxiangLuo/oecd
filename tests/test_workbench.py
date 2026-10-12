@@ -46,7 +46,8 @@ def test_options_list_every_choice_in_page_order_with_the_default_and_the_limits
     assert options["default_spec"] == DEFAULT_SPEC.to_dict()
     assert [item["label"] for item in options["x_lags"]] == ["X", "L1.X", "L2.X"]
     assert "滞后 3 期" in options["x_lag_note"]
-    assert [item["label"] for item in options["controls"]] == ["汇率变动", "GDP（取对数）", "贸易开放度", "制造业占比"]
+    assert [item["label"] for item in options["controls"]] == ["汇率变动", "增加值总额对数", "出口强度", "制造业增加值占比"]
+    assert "用作 GDP 代理，并非正式 GDP" in options["controls"][1]["definition"]
     assert [item["source"] for item in options["controls"]] == [
         "课程生成",
         "按 ICIO 计算",

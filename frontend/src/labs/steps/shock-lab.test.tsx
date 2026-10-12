@@ -43,10 +43,11 @@ test("step 10 uses the dedicated teaching tariff panel independently of the old 
   // One screen: the US tariff first (loading), then the variables of steps 11–14 on one example with its selectors.
   expect(html).toContain("美国对哪些国家加征关税？");
   expect(html).toContain("正在读取全部国家的关税暴露");
-  expect(html.indexOf(">美国加征关税<")).toBeGreaterThan(-1);
-  expect(html.indexOf(">美国加征关税<")).toBeLessThan(html.indexOf(">举例<"));
+  expect(html.indexOf(">课程模拟 · 美国加征关税<")).toBeGreaterThan(-1);
+  expect(html.indexOf(">课程模拟 · 美国加征关税<")).toBeLessThan(html.indexOf(">举例<"));
   expect(html).toContain("回归要用到的变量：以一个国家×行业为例");
-  expect(html).not.toContain("模拟");
+  expect(html).toContain("课程模拟");
+  expect(html).toContain("不是回归样本筛选");
   expect(html).toContain("例子国家");
   expect(html).toContain("对照国家（可选）");
   expect(html).toContain("不选对照国家");
@@ -418,7 +419,7 @@ test("teaching data v10: the policy line and the rate tile name the two waves, w
   render(<ShockLab meta={meta} step={step} state={tenState(undefined)} />);
   await waitFor(() => expect(document.querySelector(".teaching-tiles")).not.toBeNull());
   expect(document.querySelector(".teaching-scenario")!.textContent).toBe(
-    "USA 美国分两批对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 3 个国家的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 25% 关税："
+    "以下为课程模拟情景，不是真实关税政策的历史记录。USA 美国分两批对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 3 个国家的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 25% 关税："
       + "对美货物顺差 ≥ 100 亿美元的 1 国 2018 年起，其余 2 国 2019 年起；服务业不加税；其余 2 个国家未被加税。"
       + "名单和批次都按这条规则由 ICIO 数据确定；美国是加税方，不在回归样本中。",
   );
@@ -435,14 +436,14 @@ test("step 10 reads top to bottom: the tariff, the three variables on one exampl
   await waitFor(() => expect(document.querySelector(".teaching-tiles")).not.toBeNull());
   await waitFor(() => expect(document.querySelector(".country-exposure")).not.toBeNull());
   const cards = [...document.querySelectorAll(".shock-workbench > section")];
-  expect(cards.map((card) => card.querySelector(".reg-section-step")!.textContent)).toEqual(["美国加征关税", "举例", "各国的关税暴露"]);
+  expect(cards.map((card) => card.querySelector(".reg-section-step")!.textContent)).toEqual(["课程模拟 · 美国加征关税", "举例", "各国的关税暴露"]);
   expect(cards.map((card) => card.querySelector("h3")!.textContent)).toEqual([
-    "美国对哪些国家加征关税？", "回归要用到的变量：以一个国家×行业为例", "3 个被加税国家的 X（从高到低）",
+    "课程模拟中，美国对哪些国家加征关税？", "回归要用到的变量：以一个国家×行业为例", "3 个被加税国家的 X（从高到低）",
   ]);
   // Card 1: one policy sentence from the response and three tiles (the imposer is in the sentence, not a tile).
   const [tariff, variables, ranking] = cards;
   expect(tariff.querySelector(".teaching-scenario")!.textContent).toBe(
-    "2018 年起，USA 美国对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 3 个国家的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 25% 关税，服务业不加税；其余 2 个国家未被加税。名单按这条规则由 ICIO 数据确定；美国是加税方，不在回归样本中。",
+    "以下为课程模拟情景，不是真实关税政策的历史记录。2018 年起，USA 美国对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 3 个国家的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 25% 关税，服务业不加税；其余 2 个国家未被加税。名单按这条规则由 ICIO 数据确定；美国是加税方，不在回归样本中。",
   );
   const tiles = [...tariff.querySelectorAll(".teaching-tiles li")].map((tile) => tile.textContent);
   expect(tiles).toEqual(["3 国被美国加税（对美货物顺差 ≥ 10 亿美元）", "2 国未被加税（X 始终为 0）", "25%2018 年起的税率（此前为 0）"]);
@@ -545,7 +546,7 @@ test("a server without the taxed rule keeps the plain scenario, tile and chart n
   expect(document.querySelectorAll(".teaching-tiles li")).toHaveLength(3);
   // No rule: no rule clause and no "名单按这条规则…".
   expect(document.querySelector(".teaching-scenario")!.textContent).toBe(
-    "2018 年起，USA 美国对 3 个国家的商品加征 25% 关税，其余 2 个国家未被加税。美国是加税方，不在回归样本中。",
+    "以下为课程模拟情景，不是真实关税政策的历史记录。2018 年起，USA 美国对 3 个国家的商品加征 25% 关税，其余 2 个国家未被加税。美国是加税方，不在回归样本中。",
   );
   expect(document.querySelector(".country-exposure-rule")).toBeNull();
   expect(document.querySelector(".country-exposure-note")!.textContent).toBe("悬停或用方向键查看每个国家的 X。");

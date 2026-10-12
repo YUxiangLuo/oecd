@@ -2,7 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { api, ApiError } from "./api";
-import { ColumnDetails, customReportChanged, RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
+import { ColumnDetails, customReportChanged, ModelComparisonChart, RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
 import {
   canonicalSpec, coefficientRows, comparisonCsv, effectiveEffects, equationPreview, includedBy, mergeCustomResults, nameProblem, omittedSummary, perPointReading,
   perPointRow, nextResultName, SAVED_LIMITS, samplesDiffer, significanceStars, snapshotOf, specSummary, summaryRows, termLabel,
@@ -69,7 +69,7 @@ describe("model wording (the server's ModelSpec.summary and equation)", () => {
     expect(canonicalSpec(messy, options)).toEqual({
       x_lags: [0, 2], controls: [{ name: ER, lag: 0 }, { name: "log_gdp_proxy", lag: 1 }], fixed_effects: ["industry", "country_year"],
     });
-    expect(specSummary(messy, options)).toBe("X + L2.X；汇率变动、L1.GDP（取对数）；行业 + 国家×年份 FE");
+    expect(specSummary(messy, options)).toBe("X + L2.X；汇率变动、L1.增加值总额对数；行业 + 国家×年份 FE");
     expect(equationPreview({ x_lags: [0], controls: [], fixed_effects: [] }, options)).toBe("Y = β₁·X + 常数项 + ε");
     expect(specSummary({ x_lags: [0], controls: [], fixed_effects: [] }, options)).toBe("X；无控制变量；无固定效应");
   });
@@ -206,7 +206,7 @@ describe("tables", () => {
     const run = response(DEFAULT, { teaching_tariff_exposure: -0.33 }, { omitted: [
       { name: ER, reason: "absorbed", by: "国家×年份" }, { name: "log_gdp_proxy", reason: "absorbed", by: "国家×年份" },
     ] });
-    expect(omittedSummary(snapshotOf(run), options)).toEqual(["被国家×年份 FE 吸收：汇率变动、GDP（取对数）"]);
+    expect(omittedSummary(snapshotOf(run), options)).toEqual(["被国家×年份 FE 吸收：汇率变动、增加值总额对数"]);
   });
 
   test("in the CSV only typed names are kept from reading as formulas; the table's signed numbers stay as they are", () => {
@@ -491,19 +491,19 @@ describe("the open workbench", () => {
     expect(alert.textContent).not.toContain("没有算出结果");
     expect(document.querySelector(".reg-custom-wait")?.textContent).toMatch(/^新的设定 \d 秒后可以计算$/);
     // Changing the form during the wait keeps the message next to the countdown.
-    fireEvent.click(checkbox(/^GDP/));
+    fireEvent.click(checkbox(/^增加值总额对数/));
     expect(screen.getByRole("alert").textContent).toContain("计算太频繁");
     // A model computed before: the server answers it from its cache without counting it, so the button still works.
     expect(compute.getAttribute("aria-disabled")).toBeNull();
     run.mockResolvedValue(NO_RATE_RUN as never);
-    fireEvent.click(checkbox(/^GDP/));
+    fireEvent.click(checkbox(/^增加值总额对数/));
     await act(async () => { fireEvent.click(compute); });
     await waitFor(() => expect(tableHeaders()).toContain("本次计算（未保存）"));
     expect(screen.queryByRole("alert")).toBeNull();
     expect(document.querySelector(".reg-custom-wait")).not.toBeNull();
   });
 
-  test("out of date: said when the form changed, named when the Y changed, silent when the form is back at the default", async () => {
+  test("changed settings retain and identify the last computed result, even after restoring the default form", async () => {
     spyOn(api, "regressionOptions").mockResolvedValue(options);
     spyOn(api, "runRegression").mockResolvedValue(NO_RATE_RUN as never);
     const { rerender } = render(<Harness />);
@@ -511,9 +511,10 @@ describe("the open workbench", () => {
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "计算这个模型" })); });
     await waitFor(() => expect(tableHeaders()).toContain("本次计算（未保存）"));
     fireEvent.click(checkbox(/^L2\.X/));
-    expect(document.querySelector(".reg-stale-note")?.textContent).toBe("设定已更改，点“计算这个模型”查看新结果。");
+    expect(document.querySelector(".reg-stale-note")?.textContent).toBe("设定已更改，下面保留最近计算的结果；点“计算这个模型”查看新结果。");
+    expect(screen.getByRole("region", { name: "当前模型完整结果" }).textContent).toContain("无控制变量");
     fireEvent.click(screen.getByRole("button", { name: "恢复默认设定" }));
-    expect(document.querySelector(".reg-stale-note")).toBeNull();
+    expect(document.querySelector(".reg-stale-note")?.textContent).toContain("保留最近计算的结果");
     // Another Y saved by the bars: the note names it.
     const other = response(DEFAULT, { teaching_tariff_exposure: 0.33, teaching_tariff_exposure_lag1: 0.22, [ER]: -0.005 }, {}, "DVAex_share");
     other.design.depvar_label = "国内增加值出口占比";
@@ -585,6 +586,25 @@ describe("one column's full numbers", () => {
     run.result.coefs[0] = { ...run.result.coefs[0], p };
     expect(cells(run)[0][4]).toBe(expected);
   });
+});
+
+test("model comparison uses native units, names nonconsecutive lags, and never plots unavailable estimates as zero", () => {
+  const native = snapshotOf(response(DEFAULT, { teaching_tariff_exposure: -120, teaching_tariff_exposure_lag1: -60 }));
+  native.depvar_kind = "length";
+  const absent = { ...native, result: { ...native.result, cumulative: null } };
+  const suppressed = { ...native, result: { ...native.result, suppressed: true } };
+  render(<ModelComparisonChart outcome="length" columns={[
+    { name: "长度模型", spec: { ...DEFAULT, x_lags: [0, 2] }, snapshot: native },
+    { name: "无合计", spec: DEFAULT, snapshot: absent },
+    { name: "停止模型", spec: DEFAULT, snapshot: suppressed },
+  ]} />);
+  const image = screen.getByRole("img");
+  expect(image.textContent).toContain("-1.80");
+  expect(image.textContent).toContain("X + L2.X 之和");
+  expect(image.textContent).not.toContain("无合计");
+  expect(image.textContent).not.toContain("停止模型");
+  expect(screen.getByText(/无合计：.*不绘制对应模型/)).toBeTruthy();
+  expect(screen.getByText(/停止模型：停止推断/)).toBeTruthy();
 });
 
 describe("saved models changed on this page and elsewhere", () => {

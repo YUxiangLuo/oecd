@@ -30,7 +30,10 @@ import {
   termLabel,
   type TableColumn,
   X_COLUMNS,
+  xSum,
+  xSpanLabel,
 } from "./regression-workbench-table";
+import { DivergingBarChart, type DivergingBarRow } from "./viz/regression/diverging-bars";
 import { formatPValue } from "./regression-statistics";
 import { ConfirmModal } from "./teacher/ui";
 import type {
@@ -197,6 +200,38 @@ export function ColumnDetails({ column, options, perPoint }: {
   );
 }
 
+export function ModelComparisonChart({ columns, outcome }: { columns: TableColumn[]; outcome: RegressionOutcome }) {
+  const rows: DivergingBarRow[] = [];
+  const notes: string[] = [];
+  for (const [index, column] of columns.entries()) {
+    const stat = xSum(column.snapshot, column.spec);
+    const result = column.snapshot.result;
+    if (result.suppressed || !stat || !Number.isFinite(stat.coef) || stat.ci_low == null || stat.ci_high == null
+      || !Number.isFinite(stat.ci_low) || !Number.isFinite(stat.ci_high)) {
+      notes.push(`${column.name}：${result.suppressed ? "停止推断" : "未取得完整的 X 效应与区间"}，不绘制对应模型；请查看结果表和省略原因。`);
+      continue;
+    }
+    const scale = column.snapshot.depvar_kind === "share" ? 1 : 0.01;
+    const interval = `${perPointReading(outcome, { ...stat, coef: stat.ci_low }, column.snapshot)} 至 ${perPointReading(outcome, { ...stat, coef: stat.ci_high }, column.snapshot)}`;
+    rows.push({
+      key: String(index), label: column.name,
+      sublabel: `${xSpanLabel(column.spec)} · N=${result.n_obs} · ${result.years?.join("–") ?? "年份未提供"}`,
+      value: stat.coef * scale, low: stat.ci_low * scale, high: stat.ci_high * scale,
+      uncertain: stat.ci_low <= 0 && stat.ci_high >= 0,
+      valueLabel: perPointReading(outcome, stat, column.snapshot),
+      intervalLabel: `95% 区间：${interval}`,
+      spokenLabel: `${perPointReading(outcome, stat, column.snapshot)}，95% 区间：${interval}，${xSpanLabel(column.spec)}`,
+    });
+  }
+  return <section aria-label="同一因变量的模型比较">
+    <h4>同一个 Y，换模型后怎样变？</h4>
+    <p className="muted">比较 X 各项的合计及 95% 区间；各行注明所含期数。不同跨度不是同一个估计量，样本变化也可能影响结果。此图不替换默认教学结果。</p>
+    {samplesDiffer(columns) && <p className="reg-stale-note">这几列的样本不同，差异有一部分来自样本，而不只是设定。</p>}
+    {rows.length > 0 && <DivergingBarChart rows={rows} title="同一 Y 的模型比较" unitTitle="X 每高 1 个百分点，Y 平均相差（各行标注原始单位）" />}
+    {notes.map((note, index) => <p className="muted" key={index}>{note}</p>)}
+  </section>;
+}
+
 export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse, state, reportCustomResults, reportOutdated = false }: {
   stepNumber: number;
   outcome: RegressionOutcome;
@@ -289,6 +324,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         throw new Error("页面版本已更新，请刷新页面后再计算");
       }
       setComputed(response);
+      setDetailColumn(0);
       setSaveName(null);
       setAnnouncement("已算出这个模型，结果在下面的回归结果表中。");
     } catch (cause) {
@@ -374,7 +410,10 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const coefficients = coefficientRows(columns, options);
   const pointRow = perPointRow(columns, outcome);
   const summary = summaryRows(columns, options);
-  const shownDetail = Math.min(detailColumn, columns.length - 1);
+  const latest: TableColumn | null = computed && computed.design.baseline === baseline && computed.design.spec
+    ? { name: "最近计算结果", spec: computed.design.spec, snapshot: snapshotOf(computed) } : null;
+  const detailColumns = latest ? [latest, ...columns.filter((column) => !sameSpec(column.spec, latest.spec, options))] : columns;
+  const shownDetail = Math.min(detailColumn, detailColumns.length - 1);
   const reportChanged = Boolean(state.materialLocked && reportOutdated && customReportChanged(stepNumber, saved, reportCustomResults));
   const cellClass = (index: number) => (index === highlighted ? "reg-custom-current" : undefined);
 
@@ -398,7 +437,22 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       {error && <div className="error-box async-error" role="alert">{error}</div>}
       {computed && !current && (computed.design.baseline !== baseline
         ? <p className="reg-stale-note" role="note">因变量已换成“{depvarLabel}”，点“计算这个模型”在新的 Y 上计算。</p>
-        : !sameSpec(spec, options.default_spec, options) && <p className="reg-stale-note" role="note">设定已更改，点“计算这个模型”查看新结果。</p>)}
+        : <p className="reg-stale-note" role="note">设定已更改，下面保留最近计算的结果；点“计算这个模型”查看新结果。</p>)}
+
+      <section className="reg-custom-details" aria-label="当前模型完整结果">
+        <h4>当前模型的完整数字</h4>
+        <label className="reg-custom-detail-pick">查看
+          <select value={shownDetail} onChange={(event) => setDetailColumn(Number(event.target.value))}>
+            {detailColumns.map((column, index) => <option key={index} value={index}>{column.name}</option>)}
+          </select>
+        </label>
+        <p><b>{detailColumns[shownDetail].name}</b>：{specSummary(detailColumns[shownDetail].spec, options)}</p>
+        <ColumnDetails column={detailColumns[shownDetail]} options={options} perPoint={perPoint} />
+        {detailColumns[shownDetail].snapshot.result.suppressed && <p className="reg-stale-note">{options.suppressed_note}</p>}
+        {omittedSummary(detailColumns[shownDetail].snapshot, options).map((note) => <p className="muted" key={note}>{note}</p>)}
+        <p className="muted">系数按 X 以份额计（1 = 100 个百分点）；最后一列换算为 X 每高 1 个百分点。{xSpanLabel(detailColumns[shownDetail].spec)}；括号内为标准误，星号含义见表下注释。</p>
+      </section>
+      <ModelComparisonChart columns={columns} outcome={outcome} />
 
       <div className="reg-custom-compare">
         <div className="reg-custom-compare-head">
@@ -531,16 +585,6 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         </div>
       )}
 
-      <details className="technical-details reg-custom-details">
-        <summary>某一列的完整数字（区间、t 值、p 值）</summary>
-        <label className="reg-custom-detail-pick">查看
-          <select value={shownDetail} onChange={(event) => setDetailColumn(Number(event.target.value))}>
-            {columns.map((column, index) => <option key={index} value={index}>{column.name}</option>)}
-          </select>
-        </label>
-        <ColumnDetails column={columns[shownDetail]} options={options} perPoint={perPoint} />
-        <p className="muted">表里的“系数”按 X 以份额计：X 每高 1（即 100 个百分点）时 Y 相差多少；最后一列换算成“X 每高 1 个百分点”，与上面的结论读法相同。</p>
-      </details>
       <p className="muted reg-custom-footnote">{options.footnote}{options.hints[1] ? ` ${options.hints[1]}` : ""}</p>
       {deleting && (
         <ConfirmModal

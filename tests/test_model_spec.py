@@ -85,7 +85,7 @@ def test_spec_normalisation_drops_contained_effects_and_orders_terms():
     assert ModelSpec((0,), (), ("country_year", "year", "country")).canonical().fixed_effects == ("country_year",)
     both = ModelSpec((0,), (), ("country_year", "country_industry", "year", "industry")).canonical()
     assert both.fixed_effects == ("country_industry", "country_year")
-    assert spec.summary() == "X + L1.X；汇率变动、L1.GDP（取对数）；国家×行业 + 年份 FE"
+    assert spec.summary() == "X + L1.X；汇率变动、L1.增加值总额对数；国家×行业 + 年份 FE"
     assert ModelSpec.from_dict(spec.to_dict()) == spec
 
 
