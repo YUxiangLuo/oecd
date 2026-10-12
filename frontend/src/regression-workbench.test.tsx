@@ -652,10 +652,34 @@ describe("saved models changed on this page and elsewhere", () => {
     const { value, notes } = mergeCustomResults(four, server, local, "步骤 11");
     // 结果1 renamed here only: this page's. 结果2 deleted here but edited elsewhere: kept. 结果4 renamed elsewhere only: theirs.
     expect(names(value)).toEqual(["我的模型", "结果2", "结果3", "别处改名"]);
-    expect(notes).toEqual([]);
+    expect(notes).toEqual(["步骤 11：“结果2”在另一处有修改，已保留服务器版本“结果2”，本页的删除未生效"]);
     // Deleted here and untouched elsewhere: gone. Deleted elsewhere: gone.
     expect(names(mergeCustomResults(four, four, four.slice(1), "步骤 11").value)).toEqual(["结果2", "结果3", "结果4"]);
     expect(names(mergeCustomResults(four, four.slice(1), four, "步骤 11").value)).toEqual(["结果2", "结果3", "结果4"]);
+  });
+
+  test("a local report toggle lost to a remote rename is explained, but unchanged or identical edits are not conflicts", () => {
+    const original = four[0];
+    const remote = { ...original, name: "远端改名" };
+    const local = { ...original, in_report: true };
+    // A real 409 retains the rejected outgoing save as `sent` until conflict resolution.
+    for (const sent of [undefined, [local]]) {
+      expect(mergeCustomResults([original], [remote], [local], "步骤 12", sent)).toEqual({
+        value: [remote],
+        notes: ["步骤 12：“结果1”在另一处也有修改，已保留服务器版本“远端改名”，本页对该模型的修改未保留"],
+      });
+    }
+    expect(mergeCustomResults([original], [remote], [], "步骤 12", [])).toEqual({
+      value: [remote],
+      notes: ["步骤 12：“结果1”在另一处有修改，已保留服务器版本“远端改名”，本页的删除未生效"],
+    });
+    for (const unchanged of [original, remote]) {
+      expect(mergeCustomResults([original], [remote], [unchanged], "步骤 12")).toEqual({ value: [remote], notes: [] });
+    }
+    // The server accepted a save whose response is still pending: a later toggle/delete is not a conflict.
+    const later = { ...remote, in_report: true };
+    expect(mergeCustomResults([original], [remote], [later], "步骤 12", [remote])).toEqual({ value: [later], notes: [] });
+    expect(mergeCustomResults([original], [remote], [], "步骤 12", [remote])).toEqual({ value: [], notes: [] });
   });
 
   test("the report's limit keeps the server's models first", () => {

@@ -455,7 +455,7 @@ export function DivergingBarChart({
             </g>
           );
         })}
-        <line x1={layout.zeroX} x2={layout.zeroX} y1={PAD_T - 4} y2={plotBottom} stroke={ZERO_LINE} strokeWidth={1.6} />
+        <line x1={layout.zeroX} x2={layout.zeroX} y1={PAD_T - 4} y2={plotBottom} stroke={ZERO_LINE} strokeWidth={1.6} pointerEvents="none" />
       </svg>
       {children}
       {Tip}

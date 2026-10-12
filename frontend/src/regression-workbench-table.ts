@@ -413,6 +413,7 @@ export function mergeCustomResults(
   const sent = new Map(list(sentValue).map((item) => [item.id, item]));
   const local = new Map(list(localValue).map((item) => [item.id, item]));
   const merged: { item: CustomResult; mine: boolean }[] = [];
+  const notes: string[] = [];
   for (const item of list(serverValue)) {
     const confirmed = base.get(item.id);
     const before = same(item, confirmed) ? confirmed : sent.get(item.id) ?? confirmed;
@@ -420,10 +421,17 @@ export function mergeCustomResults(
     // Deleted here and untouched elsewhere: gone. Changed here only: this page's version.
     if (!mine && before && same(item, before)) continue;
     if (mine && before && same(item, before) && !same(mine, before)) merged.push({ item: mine, mine: true });
-    else merged.push({ item, mine: false });
+    else {
+      merged.push({ item, mine: false });
+      // A rejected save can equal `mine`: it is still a local edit relative to the confirmed base.
+      if ((!same(mine, confirmed) || !same(mine, before)) && !same(mine, item)) {
+        notes.push(mine
+          ? `${place}：“${mine.name}”在另一处也有修改，已保留服务器版本“${item.name}”，本页对该模型的修改未保留`
+          : `${place}：“${before!.name}”在另一处有修改，已保留服务器版本“${item.name}”，本页的删除未生效`);
+      }
+    }
   }
   const onServer = new Set(list(serverValue).map((item) => item.id));
-  const notes: string[] = [];
   for (const item of list(localValue)) {
     // Kept or merged above, or deleted elsewhere after this page had it.
     if (onServer.has(item.id) || base.has(item.id)) continue;

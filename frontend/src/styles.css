@@ -953,6 +953,9 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
     width: 100%;
     table-layout: fixed;
   }
+  /* Override the screen-only first-column nowrap, too. */
+  .report-md .data-table th:first-child,
+  .report-md .data-table td:first-child,
   .report-md .data-table th,
   .report-md .data-table td {
     white-space: normal;
