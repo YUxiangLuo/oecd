@@ -1,5 +1,7 @@
 import copy
 
+import pytest
+
 from gvcsim.classroom import records
 
 
@@ -55,3 +57,23 @@ def test_exploration_view_selections_do_not_outdate_a_report():
     browsed["steps"]["9"]["data"]["network_browse"] = {"countries": ["BRN", "USA"], "view": "topology"}
     browsed["steps"]["2"]["data"]["browse_selection"] = {"first": "BRN", "others": ["USA"], "view": "structure"}
     assert records.report_matches_session(browsed, report)
+
+
+@pytest.mark.parametrize(
+    "original,replacement,equivalent",
+    [
+        (2020, 2020.0, True),
+        (0, -0.0, True),
+        (123456789012345680000, 1.2345678901234568e20, True),
+        (123456789012345683968, 1.2345678901234568e20, False),
+        (1, True, False),
+        (1, "1", False),
+        (1, 1.0000000000000002, False),
+    ],
+)
+def test_report_currency_uses_json_numeric_values_not_number_spelling(original, replacement, equivalent):
+    session = _session()
+    session["steps"]["2"]["data"]["observations"][0]["value"] = original
+    report = _report_for(session)
+    session["steps"]["2"]["data"]["observations"][0]["value"] = replacement
+    assert records.report_matches_session(session, report) is equivalent

@@ -122,7 +122,13 @@ class SessionSaveQueue {
           try { response = await this.save(next, this.baseUpdatedAt); }
           catch (cause) {
             if (this.stopped) throw cause;
-            if (cause instanceof ApiError && [400, 413, 422].includes(cause.status)) this.sent = null;
+            if (cause instanceof ApiError && [400, 413, 422].includes(cause.status)) {
+              this.sent = null;
+              this.outcomeUncertain = false;
+              // This snapshot was rejected, not committed. A correction typed while
+              // waiting is a new save, even if its debounce already fired.
+              if (this.pending && !sameSessionContent(this.pending, next)) continue;
+            }
             this.pending ??= next;
             this.callbacks.onError(cause);
             throw cause;

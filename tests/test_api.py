@@ -183,6 +183,32 @@ def test_session_retry_after_unacknowledged_commit_keeps_saved_content(teaching_
         assert retry.json()["updated_at"] == committed.json()["updated_at"]
 
 
+def test_numeric_equivalent_retry_keeps_report_current(teaching_db):
+    client = _client(teaching_db)
+    session = empty_session()
+    session["steps"]["2"] = make_record({"observations": [{"year": 2020, "value": 1}]})
+    saved = client.put("/api/classroom/session", json={"session": session, "base_updated_at": None})
+    assert saved.status_code == 200
+    row = db.get_session("student")
+    db.save_generated_report("student", "report fixture", {}, row["updated_at"], None)
+    assert client.get("/api/classroom/session").json()["report_current"] is True
+    session["steps"]["2"]["data"]["observations"] = [{"year": 2020.0, "value": 1.0}]
+    retry = client.put("/api/classroom/session", json={"session": session, "base_updated_at": None})
+    assert retry.status_code == 200
+    assert retry.json()["updated_at"] == saved.json()["updated_at"]
+    assert retry.json()["report_current"] is True
+    assert client.get("/api/classroom/session").json()["report_current"] is True
+    assert client.post("/api/classroom/report/submit").status_code == 200
+    # A genuine numeric change still needs a current version and invalidates the report.
+    session["steps"]["2"]["data"]["observations"][0]["value"] = 1.25
+    assert client.put("/api/classroom/session", json={"session": session, "base_updated_at": None}).status_code == 409
+    changed = client.put(
+        "/api/classroom/session", json={"session": session, "base_updated_at": saved.json()["updated_at"]}
+    )
+    assert changed.status_code == 200
+    assert changed.json()["report_current"] is False
+
+
 def test_new_session_race_rejects_second_null_version_write(teaching_db):
     first_tab = _client(teaching_db)
     second_tab = _client(teaching_db)

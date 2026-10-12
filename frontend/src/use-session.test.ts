@@ -100,6 +100,32 @@ test("network failure retries automatically without a new edit or click", async 
   expect(result.current.syncError).toBeNull();
 });
 
+test.each([50, 950])("correction while a rejected request is in flight saves automatically (response after %sms)", async (delay) => {
+  spyOn(api.classroom, "session").mockResolvedValue(response());
+  let reject!: (cause: unknown) => void;
+  const save = spyOn(api.classroom, "saveSession")
+    .mockImplementationOnce(() => new Promise<SessionSaveResponse>((_resolve, fail) => { reject = fail; }))
+    .mockImplementation(async ({ session }) => response(session, NEWER));
+  const { result } = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  let saving!: Promise<void>;
+  act(() => {
+    result.current.patchStep(15, { research_question: "invalid" });
+    saving = result.current.syncNow().catch(() => {});
+    result.current.patchStep(15, { research_question: "corrected" });
+  });
+  await act(async () => {
+    await new Promise((done) => setTimeout(done, delay));
+    reject(new ApiError(422, null, "invalid"));
+    await saving;
+  });
+  await waitFor(() => expect(result.current.unsynced).toBe(false));
+  expect(result.current.getConfirmedStep<{ research_question: string }>(15)?.research_question).toBe("corrected");
+  expect(save.mock.calls.map(([body]) => body.session.steps["15"].data)).toEqual([
+    { research_question: "invalid" }, { research_question: "corrected" },
+  ]);
+});
+
 test("422 can be corrected without replaying the rejected content", async () => {
   spyOn(api.classroom, "session").mockResolvedValue(response());
   const save = spyOn(api.classroom, "saveSession").mockRejectedValueOnce(new ApiError(422, null, "invalid"))

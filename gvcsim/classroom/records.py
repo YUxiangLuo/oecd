@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 import psycopg
@@ -36,7 +37,20 @@ _UNCONDITIONAL_SESSION_WRITE = object()
 
 
 def _session_fingerprint(session: dict[str, Any]) -> str:
-    return hashlib.sha256(json.dumps(session, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:12]
+    def numeric_content(value: Any) -> Any:
+        # Match JSONB numeric equality (1 == 1.0), without merging booleans or
+        # strings with numbers. Use the decimal JSON spelling, not the binary
+        # float's integer value, which differs for large exponent-form numbers.
+        if isinstance(value, float) and value.is_integer():
+            return int(Decimal(str(value)))
+        if isinstance(value, dict):
+            return {key: numeric_content(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [numeric_content(item) for item in value]
+        return value
+
+    content = json.dumps(numeric_content(session), sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(content.encode()).hexdigest()[:12]
 
 
 # What the student was looking at rather than what the report uses: changing these must not make a
