@@ -17,7 +17,7 @@ import {
 } from "./regression-verdict";
 import { api } from "./api";
 import { useAsync } from "./labs";
-import { perPointDigits, perPointReading, snapshotOf, specSummary, xSpanLabel, xSum, type PerPointSource } from "./regression-workbench-table";
+import { omittedSummary, perPointDigits, perPointReading, snapshotOf, specSummary, xSpanLabel, xSum, type PerPointSource } from "./regression-workbench-table";
 import type {
   CoefStat, CustomResult, RegressionOutcome, RegressionResponse, TeachingEstimate, TeachingOverviewResponse, WorkbenchOptions,
 } from "./types";
@@ -220,7 +220,10 @@ export function ReportedCustomModels({ getStep, onNavigateStep }: {
                           : `步骤 ${step} · ${family}`}
                       </th>
                       <td><b>{model.name}</b><br /><small className="muted">Y：{displayBaselineLabel(model.snapshot.depvar_label)}</small></td>
-                      <td>{options ? specSummary(model.spec, options) : "…"}</td>
+                      <td>{options ? <>
+                        {specSummary(model.spec, options)}
+                        {omittedSummary(model.snapshot, options).map((text) => <p className="muted" key={text}>{text}</p>)}
+                      </> : "…"}</td>
                       <td>{sum ? `${perPointReading(outcome, sum, model.snapshot, digits)}（${xSpanLabel(model.spec)}）` : "—"}</td>
                       <td>{defaultSum && defaultSnapshot ? perPointReading(outcome, defaultSum, defaultSnapshot, digits) : sameY || overviewQuery.status !== "loading" ? "—" : "…"}</td>
                     </tr>

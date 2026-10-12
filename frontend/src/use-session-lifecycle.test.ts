@@ -236,8 +236,9 @@ describe("no-op session patches", () => {
       await waitFor(() => expect(hook.result.current.status).toBe("ready"));
       await act(async () => { hook.result.current.patchStep(15, { research_question: "possibly committed" }); await hook.result.current.syncNow().catch(() => {}); });
       await act(async () => { hook.result.current.patchStep(15, { research_question: "original" }); await hook.result.current.syncNow(); });
-      expect(save).toHaveBeenCalledTimes(2);
-      expect(save).toHaveBeenLastCalledWith({ session: initial, base_updated_at: STAMP });
+      expect(save).toHaveBeenCalledTimes(3);
+      expect(save).toHaveBeenLastCalledWith({ session: initial, base_updated_at: NEWER });
+      expect(hook.result.current.unsynced).toBe(false);
     } finally { await finish(hook); get.mockRestore(); save.mockRestore(); }
   });
 
@@ -467,6 +468,65 @@ describe("saving when the tab is hidden or closed", () => {
       });
       expect(save.mock.calls[1]?.[0].base_updated_at).toBe(NEWER);
     } finally { await finish(hook); get.mockRestore(); save.mockRestore(); }
+  });
+
+  test.each([false, true])("a lost response recovers newer edits without overwriting another writer (%s)", async (otherWriter) => {
+    let server = response();
+    let loseResponse = true;
+    const get = spyOn(api.classroom, "session").mockImplementation(async () => server);
+    const save = spyOn(api.classroom, "saveSession").mockImplementation(async ({ session, base_updated_at }) => {
+      if (base_updated_at !== server.updated_at) {
+        throw new ApiError(409, { message: "changed" }, "conflict");
+      }
+      server = response(session, loseResponse ? NEWER : "2026-09-10T00:02:00Z");
+      if (loseResponse) {
+        loseResponse = false;
+        throw new TypeError("Failed to fetch");
+      }
+      return server;
+    });
+    const hook = renderHook(() => useSession(true, "student"));
+    try {
+      await waitFor(() => expect(hook.result.current.status).toBe("ready"));
+      await act(async () => {
+        hook.result.current.patchStep(15, { research_question: "first draft" });
+        await hook.result.current.syncNow().catch(() => {});
+      });
+      if (otherWriter) server = response(patchSessionStep(server.session, 15, { research_question: "other tab" }), "2026-09-10T00:03:00Z");
+      await act(async () => {
+        hook.result.current.patchStep(15, { research_question: "newer draft" });
+        await hook.result.current.syncNow().catch(() => {});
+      });
+      expect(readStep<{ research_question: string }>(server.session, 15)).toEqual({ research_question: otherWriter ? "other tab" : "newer draft" });
+      expect(hook.result.current.syncConflict).toBe(otherWriter);
+      expect(hook.result.current.unsynced).toBe(otherWriter);
+    } finally { hook.unmount(); get.mockRestore(); save.mockRestore(); }
+  });
+
+  test.each([413, 422])("a refused record (%s) can be corrected without replaying the invalid payload", async (status) => {
+    let server = response();
+    const get = spyOn(api.classroom, "session").mockImplementation(async () => server);
+    const save = spyOn(api.classroom, "saveSession").mockImplementation(async ({ session }) => {
+      if (readStep<{ research_question: string }>(session, 15)?.research_question === "invalid") {
+        throw new ApiError(status, { message: "refused" }, "refused");
+      }
+      return server = response(session, NEWER);
+    });
+    const hook = renderHook(() => useSession(true, "student"));
+    try {
+      await waitFor(() => expect(hook.result.current.status).toBe("ready"));
+      await act(async () => {
+        hook.result.current.patchStep(15, { research_question: "invalid" });
+        await hook.result.current.syncNow().catch(() => {});
+      });
+      await act(async () => {
+        hook.result.current.patchStep(15, { research_question: "corrected" });
+        await hook.result.current.syncNow().catch(() => {});
+      });
+      expect(readStep<{ research_question: string }>(server.session, 15)).toEqual({ research_question: "corrected" });
+      expect(hook.result.current.unsynced).toBe(false);
+      expect(hook.result.current.syncError).toBeNull();
+    } finally { hook.unmount(); get.mockRestore(); save.mockRestore(); }
   });
 
   test("a 409 for content the server does not hold is still a conflict", async () => {

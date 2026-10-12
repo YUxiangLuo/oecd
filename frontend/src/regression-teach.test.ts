@@ -11,7 +11,8 @@ import {
 } from "./regression-teach";
 import { api } from "./api";
 import { snapshotOf } from "./regression-workbench-table";
-import type { CoefStat, RegressionOutcome, RegressionResponse } from "./types";
+import optionsFixture from "./regression-workbench-options.fixture.json";
+import type { CoefStat, RegressionOutcome, RegressionResponse, WorkbenchOptions } from "./types";
 
 const coefficient = (coef: number, low: number, high: number): CoefStat => ({
   name: "teaching_tariff_exposure", coef, se: 0.01, t: 1, p: 0.2, stars: "", ci_low: low, ci_high: high,
@@ -271,6 +272,23 @@ describe("ReportedCustomModels", () => {
       overview.mockRestore();
       cleanup();
     }
+  });
+
+  test("discloses selected controls omitted from the actual saved estimate", async () => {
+    const run = withSum(-0.55, -0.57, -0.53);
+    run.result.omitted = [{ name: "teaching_exchange_rate_change", reason: "absorbed", by: "国家×年份" }];
+    const model = {
+      id: "absorbed", name: "国家年份模型", outcome: "trade" as const, baseline: "FVA_share", in_report: true, saved_at: "2026-10-13",
+      spec: { x_lags: [0, 1], controls: [{ name: "teaching_exchange_rate_change", lag: 0 }], fixed_effects: ["country_year"] },
+      snapshot: snapshotOf(run),
+    };
+    const options = spyOn(api, "regressionOptions").mockResolvedValue(optionsFixture as WorkbenchOptions);
+    try {
+      const view = render(createElement(ReportedCustomModels, {
+        getStep: (step: number) => step === 11 ? { run, custom_results: [model] } : undefined,
+      }));
+      await waitFor(() => expect(view.container.textContent).toContain("被国家×年份 FE 吸收：汇率变动"));
+    } finally { cleanup(); options.mockRestore(); }
   });
 
   test("says how to add one when none is marked", () => {

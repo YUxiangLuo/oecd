@@ -497,10 +497,14 @@ describe("session helpers", () => {
     await expect(firstSave).rejects.toThrow("offline");
 
     const retry = queue.drain();
-    expect(values).toEqual(["first", "latest"]);
+    expect(values).toEqual(["first", "first"]);
     expect(bases).toEqual(["2026-08-12T00:00:00Z", "2026-08-12T00:00:00Z"]);
-    requests[1].resolve(response(latest));
+    requests[1].resolve(response());
+    await Promise.resolve();
+    expect(values).toEqual(["first", "first", "latest"]);
+    requests[2].resolve(response(latest));
     await retry;
+    expect(queue.getConfirmedSession()).toEqual(latest);
     expect(errors).toHaveLength(1);
   });
 });

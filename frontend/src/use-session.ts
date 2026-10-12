@@ -312,8 +312,11 @@ export class SessionSaveQueue {
       this.callbacks.onSyncing(true);
       try {
         while (this.pending) {
-          const next = this.pending;
-          this.pending = null;
+          // Resolve the unacknowledged write before sending newer edits: the server may already hold it.
+          // Replaying that exact snapshot lets the 409 handler recognise our commit without overwriting
+          // a different writer's changes. Keep newer edits queued until its version is acknowledged.
+          const next = this.outcomeUncertain && this.sent ? this.sent : this.pending;
+          if (this.pending === next) this.pending = null;
           // Hydration can enqueue intermediate defaults and then return to the
           // acknowledged snapshot before the debounce fires. That is not a write.
           // After a failed response, however, the server may already have changed:
@@ -325,6 +328,11 @@ export class SessionSaveQueue {
           try {
             response = await this.save(next, this.baseUpdatedAt);
           } catch (cause) {
+            // A rejected payload was not committed. Let corrected edits replace it instead of replaying
+            // the same invalid/oversized record forever; keep uncertain network outcomes for recovery.
+            if (cause instanceof ApiError && [400, 413, 422].includes(cause.status)) {
+              this.sent = null;
+            }
             // Edits made during this request are newer; otherwise retain this snapshot.
             this.pending ??= next;
             this.callbacks.onError(cause);
