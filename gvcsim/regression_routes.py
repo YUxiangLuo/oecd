@@ -4,8 +4,11 @@ import json
 import logging
 import threading
 from collections import OrderedDict
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 from typing import Any, cast
 
+import anyio
 import numpy as np
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.requests import Request
@@ -26,6 +29,7 @@ from gvcsim.regression.design import (
 )
 from gvcsim.regression.panel import run_design_with_benchmark
 from gvcsim.regression.spec import ModelSpec
+from gvcsim.regression.spec import DEFAULT_SPEC
 from gvcsim.regression.teaching import (
     BASELINES,
     DISCLAIMER,
@@ -45,15 +49,18 @@ from gvcsim.steps import STEPS
 
 router = APIRouter()
 _LOG = logging.getLogger(__name__)
-_RESULT_CACHE: AsyncSingleFlightCache[tuple[str, str, str], dict[str, Any]] = AsyncSingleFlightCache(maxsize=64)
+_RESULT_CACHE: AsyncSingleFlightCache[tuple[str, str, str], dict[str, Any]] = AsyncSingleFlightCache(maxsize=4096)
+_OVERVIEW_FLIGHTS: AsyncSingleFlightCache[str, dict[str, Any]] = AsyncSingleFlightCache(maxsize=2)
 _RUN_LIMITER = SlidingWindowRateLimiter(app_config.REGRESSION_RUNS_PER_MINUTE)
 
 
 def clear_result_cache() -> None:
     """Clear completed regression results at process and test boundaries."""
     _RESULT_CACHE.clear()
+    _OVERVIEW_FLIGHTS.clear()
     with _RUN_LOCK:
         _RUN_CACHE.clear()
+        _DEFAULT_RUN_CACHE.clear()
     with _OVERVIEW_LOCK:
         _COUNTRY_OVERVIEW_CACHE.clear()
         _ESTIMATE_OVERVIEW_CACHE.clear()
@@ -306,13 +313,15 @@ async def teaching_overview():
     """Steps 11–14: every Y's estimate at once, for the bar chart (the same data for every student, computed
     once per release, so it does not count against the per-student run limit)."""
 
-    def read() -> dict:
-        release = current_release()
-        panel = _read_csv("panel_teaching.csv")
-        return _cached_on_panel(_ESTIMATE_OVERVIEW_CACHE, panel, lambda frame: _estimate_overview(frame, release))
-
     try:
-        return await concurrency.run_cpu_bound(read)
+        release, panel = await concurrency.run_sync(read_teaching_panel)
+
+        async def compute() -> dict:
+            # Singleflight election precedes CPU admission. Waiting overview
+            # requests occupy no CPU slots; each model uses the shared path.
+            return await concurrency.run_report_build(_estimate_overview, panel, release)
+
+        return await _OVERVIEW_FLIGHTS.get_or_compute(release, compute, cancel_when_unobserved=False)
     except (np.linalg.LinAlgError, FloatingPointError, OverflowError, ValueError) as error:
         _LOG.warning("回归总览计算失败：%s", error)
         raise HTTPException(status_code=409, detail="回归总览暂时无法计算，请稍后重试。") from error
@@ -372,8 +381,23 @@ def _run_payload(design: RegressionDesign, result: Any, benchmark: dict[str, Any
 # computed (and let past the student's limit). The release is read before the panel (a run that ends after a swap
 # still carries the release its panel came from). Stored dicts are shared: never changed.
 _RUN_CACHE: list[tuple[str, "OrderedDict[str, dict[str, Any]]"]] = []
+_DEFAULT_RUN_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
 _RUN_LOCK = threading.Lock()
-_RUN_CACHE_SIZE = 256
+_RUN_CACHE_SIZE = 4096
+
+
+def read_teaching_panel() -> tuple[str, Any]:
+    """Bind the identity and CSV to the same immutable, resolved release root.
+
+    Resolving once prevents a processed symlink swap between metadata and CSV
+    reads from tagging the new panel with the previous release's identity.
+    """
+    root = app_config.PROCESSED_DIR.resolve()
+    release = artifacts.release_identity(root)
+    panel = artifacts.read_csv_artifact(root / "panel_teaching.csv")
+    if artifacts.release_identity(root) != release:
+        raise ValueError("课程数据在读取期间发生变化，请重试")
+    return release, panel
 
 
 def current_release() -> str | None:
@@ -385,12 +409,16 @@ def current_release() -> str | None:
 
 def _run_cached(key: str, release: str | None = None) -> bool:
     release = release if release is not None else current_release()
-    with _RUN_LOCK:
-        return bool(_RUN_CACHE) and release is not None and _RUN_CACHE[0][0] == release and key in _RUN_CACHE[0][1]
+    return _cached_payload(key, release) is not None
 
 
 def _cached_payload(key: str, release: str | None) -> dict[str, Any] | None:
+    if release is None:
+        return None
     with _RUN_LOCK:
+        pinned = _DEFAULT_RUN_CACHE.get((release, key))
+        if pinned is not None:
+            return pinned
         if not _RUN_CACHE or release is None or _RUN_CACHE[0][0] != release:
             return None
         results = _RUN_CACHE[0][1]
@@ -399,12 +427,22 @@ def _cached_payload(key: str, release: str | None) -> dict[str, Any] | None:
         return results.get(key)
 
 
-def _store_payload(key: str, payload: dict[str, Any], release: str | None = None) -> None:
+def _store_payload(key: str, payload: dict[str, Any], release: str | None = None, *, pinned: bool = False) -> None:
     """Keep a run; `release` is the one read before its panel was (by default, now). Without one, nothing is kept."""
     release = release if release is not None else current_release()
     if release is None:
         return
     with _RUN_LOCK:
+        if pinned:
+            _DEFAULT_RUN_CACHE[(release, key)] = payload
+            # Retain the current and immediately previous release, including
+            # its in-flight readers, but not every release ever published.
+            releases = list(dict.fromkeys(identity for identity, _ in _DEFAULT_RUN_CACHE))
+            for identity in releases[:-2]:
+                for old in list(_DEFAULT_RUN_CACHE):
+                    if old[0] == identity:
+                        del _DEFAULT_RUN_CACHE[old]
+            return
         if not _RUN_CACHE or _RUN_CACHE[0][0] != release:
             _RUN_CACHE[:] = [(release, OrderedDict())]
         results = _RUN_CACHE[0][1]
@@ -414,18 +452,30 @@ def _store_payload(key: str, payload: dict[str, Any], release: str | None = None
             results.popitem(last=False)
 
 
-def charge_report_runs(account_id: Any, designs: list[RegressionDesign]) -> None:
-    """Report generation recomputes the workbench models it prints: each run not computed yet counts against the
-    student's new calculations of the minute, as on the page (a run the page or an earlier report computed is free).
-    Refused as a whole before anything is computed, so a report is never printed with a model left out."""
+@dataclass
+class ReportBilling:
+    token: object
+    eligible: set[str]
+    computed: set[str] = field(default_factory=set)
+
+
+REPORT_BILLING: ContextVar[ReportBilling | None] = ContextVar("report_billing", default=None)
+
+
+def charge_report_runs(account_id: Any, designs: list[RegressionDesign]) -> ReportBilling | None:
+    """Reserve admission before rendering; only successful, owned work is billed
+    after the report's database save. Cached/shared work and failed reports are
+    free, and one report commits at most 20 events.
+    """
     if isinstance(account_id, bool) or not isinstance(account_id, int):
-        return
+        return None
     release = current_release()
-    missing = len({key for key in map(_run_key, designs) if not _run_cached(key, release)})
+    eligible = {key for key in map(_run_key, designs) if not _run_cached(key, release)}
+    missing = len(eligible)
     if not missing:
-        return
+        return None
     try:
-        _RUN_LIMITER.check(account_id, min(missing, _RUN_LIMITER.limit))
+        return ReportBilling(_RUN_LIMITER.reserve(account_id, min(missing, 20, _RUN_LIMITER.limit)), eligible)
     except RateLimitExceeded as error:
         raise HTTPException(
             status_code=429,
@@ -438,17 +488,80 @@ def charge_report_runs(account_id: Any, designs: list[RegressionDesign]) -> None
 
 
 def cached_run(panel: Any, design: RegressionDesign, release: str | None = None) -> dict[str, Any]:
-    """One run's response on the current panel, computed at most once per release (LRU of 256): the report's
-    recalculation of a model the page already ran reads the same numbers. `release`: read before the panel was."""
+    """Read the shared 4096-entry LRU (default specs are pinned separately).
+
+    Application worker threads bridge to the same async singleflight/CPU path
+    as the page. Offline callers compute synchronously. The caller must bind
+    panel and release together with read_teaching_panel.
+    """
+    concurrency.check_cancelled()
     release = release if release is not None else current_release()
     key = _run_key(design)
     cached = _cached_payload(key, release)
     if cached is not None:
         return cached
+    try:
+        anyio.from_thread.check_cancelled()
+    except RuntimeError:
+        # Offline/test callers have no application loop or admission budget.
+        pass
+    else:
+        return anyio.from_thread.run(shared_run, panel, design, release, None)
     _require_y(panel, design)
     payload = _run_payload(design, *run_design_with_benchmark(panel, design))
-    _store_payload(key, payload, release)
+    _store_payload(key, payload, release, pinned=design.spec == DEFAULT_SPEC)
     return payload
+
+
+def finish_report_runs(billing: ReportBilling | None, *, success: bool) -> None:
+    if billing is not None:
+        _RUN_LIMITER.finish(billing.token, success=success, count=len(billing.computed))
+
+
+async def shared_run(panel: Any, design: RegressionDesign, release: str | None, account_id: int | None) -> dict:
+    """The one model computation path for pages, report body and appendix."""
+    run_key = _run_key(design)
+    cached = _cached_payload(run_key, release)
+    if cached is not None:
+        return cached
+    reservation = None
+    billing = REPORT_BILLING.get() if account_id is None else None
+
+    def admit() -> None:
+        nonlocal reservation
+        if account_id is not None:
+            try:
+                reservation = _RUN_LIMITER.reserve(account_id)
+            except RateLimitExceeded as error:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"计算次数过多，请约 {error.retry_after_header} 秒后再试。",
+                    headers={"Retry-After": error.retry_after_header},
+                ) from error
+
+    async def compute() -> dict:
+        success = False
+        try:
+            _require_y(panel, design)
+            result, benchmark = await concurrency.run_cpu_bound(run_design_with_benchmark, panel, design)
+            payload = _run_payload(design, result, benchmark)
+            _store_payload(run_key, payload, release, pinned=design.spec == DEFAULT_SPEC)
+            if billing is not None and run_key in billing.eligible:
+                billing.computed.add(run_key)
+            success = True
+            return payload
+        finally:
+            if reservation is not None:
+                _RUN_LIMITER.finish(reservation, success=success)
+
+    return await _RESULT_CACHE.get_or_compute(
+        (release or "", "run", run_key),
+        compute,
+        owner=account_id,
+        admit=admit,
+        cache_success=False,
+        cancel_when_unobserved=False,
+    )
 
 
 @router.get("/api/regression/options")
@@ -460,31 +573,11 @@ def regression_options():
 async def regression_run(req: RegressionRequest, request: Request):
     account_id = _require_regression_student(request)
     design = _validate_design(req.outcome, req.baseline, req.spec)
-    run_key = _run_key(design)
-    key = (artifacts.release_identity(), "run", run_key)
-
-    async def compute() -> dict[str, Any]:
-        panel = await concurrency.run_sync(_read_csv, "panel_teaching.csv")
-        cached = _cached_payload(run_key, key[0])
-        if cached is not None:
-            return cached
-        try:
-            _require_y(panel, design)
-        except MissingTeachingY as error:
-            raise HTTPException(status_code=409, detail=str(error)) from error
-        result, benchmark = await concurrency.run_cpu_bound(run_design_with_benchmark, panel, design)
-        payload = _run_payload(design, result, benchmark)
-        # key[0] was read before the panel, at the request's start.
-        _store_payload(run_key, payload, key[0])
-        return payload
-
-    def admit() -> None:
-        # Only a calculation counts against the limit: a run the report (or another request) already computed does not.
-        if not _run_cached(run_key, key[0]):
-            _limit_expensive_request(_RUN_LIMITER, account_id, "计算")
-
     try:
-        return await _RESULT_CACHE.get_or_compute(key, compute, owner=account_id, admit=admit)
+        release, panel = await concurrency.run_sync(read_teaching_panel)
+        return await shared_run(panel, design, release, account_id)
+    except MissingTeachingY as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
     except (np.linalg.LinAlgError, FloatingPointError, OverflowError) as e:
         _LOG.warning("回归线性代数计算失败（%s）：%s", req.outcome, e)
         raise HTTPException(

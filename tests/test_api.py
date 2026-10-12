@@ -132,14 +132,12 @@ def test_session_contract_uses_optimistic_concurrency(teaching_db):
     first["steps"]["15"] = make_record({"research_question": "学生自己的问题"})
     saved = client.put("/api/classroom/session", json={"session": first, "base_updated_at": initial["updated_at"]})
     assert set(saved.json()) == {
-        "session",
         "updated_at",
         "completion",
         "report_current",
         "report_gate",
         "material_gate",
     }
-    assert saved.json()["session"] == first
     assert client.get("/api/classroom/session").json()["session"] == first
 
     second = empty_session()
@@ -174,7 +172,6 @@ def test_session_patch_changes_only_the_sent_steps_of_the_version_it_names(teach
     patched = client.patch("/api/classroom/session", json=patch)
     assert patched.status_code == 200
     assert set(patched.json()) == {
-        "session",
         "updated_at",
         "completion",
         "report_current",
@@ -200,6 +197,23 @@ def test_session_patch_changes_only_the_sent_steps_of_the_version_it_names(teach
     # Only steps, shared entries and the version; the version is required.
     assert client.patch("/api/classroom/session", json={**patch, "session": first}).status_code == 422
     assert client.patch("/api/classroom/session", json={"steps": {}}).status_code == 422
+    # A delta that changes nothing must not invalidate another tab's version.
+    unchanged = client.patch("/api/classroom/session", json={"base_updated_at": stored["updated_at"]})
+    assert unchanged.status_code == 200
+    assert unchanged.json()["updated_at"] == stored["updated_at"]
+    for part, key in (("steps", "99"), ("shared", "unknown")):
+        # Invalid deletions are rejected even with a stale version, just like invalid PUTs.
+        invalid = client.patch("/api/classroom/session", json={part: {key: None}, "base_updated_at": base})
+        assert invalid.status_code == 422
+    oversized = client.patch(
+        "/api/classroom/session",
+        json={
+            "steps": {"15": make_record({"research_question": "a" * 300_000})},
+            "base_updated_at": stored["updated_at"],
+        },
+    )
+    assert oversized.status_code == 422
+    assert client.get("/api/classroom/session").json() == stored
 
 
 @pytest.mark.parametrize("existing_session", [False, True])
@@ -273,7 +287,7 @@ def test_report_state_machine_and_failure_preserves_grade(teaching_db, monkeypat
     async def generated(*_args, **_kwargs):
         return TeachingReport("# 第一版", {"years": [2020], "runs": []}, "report.md")
 
-    monkeypatch.setattr(classroom_routes.concurrency, "run_cpu_bound", generated)
+    monkeypatch.setattr(classroom_routes.concurrency, "run_report_build", generated)
     created = student.post("/api/classroom/report/generate")
     assert created.status_code == 200
     assert created.json()["report"]["state"] == "draft"
@@ -296,7 +310,7 @@ def test_report_state_machine_and_failure_preserves_grade(teaching_db, monkeypat
     async def blocked(*_args, **_kwargs):
         raise ReportGateError([{"step": 1, "title": "数据", "missing": ["证据"]}])
 
-    monkeypatch.setattr(classroom_routes.concurrency, "run_cpu_bound", blocked)
+    monkeypatch.setattr(classroom_routes.concurrency, "run_report_build", blocked)
     denied = student.post("/api/classroom/report/generate")
     assert denied.status_code == 409
     preserved = student.get("/api/classroom/session").json()["report"]
@@ -305,7 +319,7 @@ def test_report_state_machine_and_failure_preserves_grade(teaching_db, monkeypat
     async def regenerated(*_args, **_kwargs):
         return TeachingReport("# 第二版", {"years": [2020], "runs": []}, "report.md")
 
-    monkeypatch.setattr(classroom_routes.concurrency, "run_cpu_bound", regenerated)
+    monkeypatch.setattr(classroom_routes.concurrency, "run_report_build", regenerated)
     for payload in (None, {}, {"expected_report_updated_at": None}):
         rejected = student.post("/api/classroom/report/generate", json=payload)
         assert rejected.status_code == 409
@@ -364,7 +378,7 @@ def test_report_generation_rejects_session_changed_during_cpu_work(teaching_db, 
         db.save_session("student", newer, initial["updated_at"])
         return TeachingReport("# stale", {"years": [2020], "runs": []}, "report.md")
 
-    monkeypatch.setattr(classroom_routes.concurrency, "run_cpu_bound", generated)
+    monkeypatch.setattr(classroom_routes.concurrency, "run_report_build", generated)
     response = student.post("/api/classroom/report/generate")
 
     assert response.status_code == 409

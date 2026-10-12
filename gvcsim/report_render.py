@@ -518,7 +518,7 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
     lines = [
         "### 四项回归结果汇总",
         "",
-        "下表列出四步保存的结果（贸易流、生产、长度、网络），各用自己的单位，表中数值不能直接比较"
+        "下表按四步保存的设定列出服务器计算的结果（贸易流、生产、长度、网络），各用自己的单位，表中数值不能直接比较"
         + ("；表后的图将其统一换算为标准差，以便并列比较。" if qualified else "。"),
         "",
         "| 步骤 | 指标 | X 每高 1 个百分点，Y 两年累计平均相差 | 95% 区间 | 方向 |",
@@ -866,9 +866,10 @@ def _technical_estimate_tables(
         t_value = (
             f"{t:,.2f}" if isinstance(t, (int, float)) and math.isfinite(t) and interval not in ("—", "不显示") else "—"
         )
+        se_value = "—" if suppressed else _fixed4(coefficient.get("se"))
         lines.append(
             f"| {_coefficient_label(coefficient.get('name', '—'), design)} | {per_point} | "
-            f"{_fixed4(coefficient.get('coef'))} | {interval} | {_fixed4(coefficient.get('se'))} | {t_value} | {p_value} |"
+            f"{_fixed4(coefficient.get('coef'))} | {interval} | {se_value} | {t_value} | {p_value} |"
         )
 
     return lines
@@ -895,7 +896,7 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
         "",
         # One source line per paragraph: Markdown joins consecutive lines with a space, which would show
         # after each "。".
-        "以下是你在步骤 11–14 保存的计算结果，生成报告时不会重算。每步通常只有最后一次计算；只有最后一次没有算出可用结果时，才会同时列出用于汇总表的那一次。"
+        "以下按你在步骤 11–14 保存的设定从服务器取得计算结果，已缓存的模型直接复用，未缓存的重新计算，不采用浏览器保存的数字。"
         "系数、标准误和区间保留 4 位小数，与步骤 11–14 页面上的“详细数字”表相同；很小的 p 值显示为 <0.0001，不表示概率为零。",
         "",
         "表中的“系数”对应 X 相差 1（即 100 个百分点）时 Y 平均相差多少；除以 100 即为正文中“X 每高 1 个百分点”对应的数值，"

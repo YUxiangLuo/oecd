@@ -91,7 +91,7 @@ export function parseRoster(text: string) {
       }
     }
     const [first, second] = swapped ? [cells[1], cells[0]] : [cells[0], cells[1]];
-    const username = stripInvisibleEdges(first ?? "");
+    const username = stripInvisibleEdges(first ?? "").toLowerCase();
     const display_name = normalizeLabel(second ?? "");
     if (cells.length !== 2) {
       columnErrors++;

@@ -56,6 +56,7 @@ class AsyncSingleFlightCache(Generic[K, V]):
         admit: Callable[[], None] | None = None,
         owner: Hashable | None = None,
         cache_success: bool = True,
+        cancel_when_unobserved: bool = True,
     ) -> V:
         try:
             value = self._values.pop(key)
@@ -92,14 +93,14 @@ class AsyncSingleFlightCache(Generic[K, V]):
             return await asyncio.shield(flight.task)
         finally:
             flight.waiters -= 1
-            if flight.waiters == 0 and not flight.task.done():
+            if cancel_when_unobserved and flight.waiters == 0 and not flight.task.done():
                 flight.task.cancel()
                 self._forget(key, flight)
 
     async def _compute(self, key: K, factory: Callable[[], Awaitable[V]], *, cache_success: bool) -> V:
         value = await factory()
         flight = self._inflight.get(key)
-        if not cache_success or flight is None or flight.task is not asyncio.current_task() or not flight.waiters:
+        if not cache_success or flight is None or flight.task is not asyncio.current_task():
             return value
         self._values[key] = value
         self._values.move_to_end(key)

@@ -86,7 +86,7 @@ export function clearKeptEdits(storage: KeptStorage): void {
 
 /** Combines one step field changed both on this page and elsewhere (see mergeKeptEdits); `notes` say what of this
  *  page's change was not kept as it was. `place` names the step ("步骤 11"). */
-export type FieldMerger = (base: unknown, server: unknown, local: unknown, place: string) => { value: unknown; notes: string[] };
+export type FieldMerger = (base: unknown, server: unknown, local: unknown, place: string, sent?: unknown) => { value: unknown; notes: string[] };
 export type FieldMergers = Readonly<Record<string, FieldMerger>>;
 
 /**
@@ -123,12 +123,15 @@ export function mergeKeptEdits(
     for (const key of new Set([...changed(base, local), ...(sent ? changed(sent, local) : [])])) {
       // The server holds this page's own save of this step: what the page has since then goes on top of it.
       const own = sent !== undefined && sameJsonValue(current[key], sent[key]);
-      if (sameJsonValue(local[key], own ? sent[key] : base[key])) continue;
+      if (sameJsonValue(local[key], base[key]) && (!sent || sameJsonValue(local[key], sent[key]))) continue;
       if (own || sameJsonValue(current[key], base[key])) {
         put(out, key, local[key]);
         continue;
       }
-      const mine = changed(data(base[key]), data(local[key]));
+      const mine = [...new Set([
+        ...changed(data(base[key]), data(local[key])),
+        ...(sent ? changed(data(sent[key]), data(local[key])) : []),
+      ])];
       // A field the server holds as this page sent it was changed by this page, not elsewhere.
       const theirs = new Set(changed(data(base[key]), data(current[key]))
         .filter((field) => !(sent && sameJsonValue(data(current[key])[field], data(sent[key])[field]))));
@@ -141,7 +144,7 @@ export function mergeKeptEdits(
           put(combined, field, data(local[key])[field]);
           continue;
         }
-        const result = mergers![field](data(base[key])[field], data(current[key])[field], data(local[key])[field], place(key));
+        const result = mergers![field](data(base[key])[field], data(current[key])[field], data(local[key])[field], place(key), sent ? data(sent[key])[field] : undefined);
         put(combined, field, result.value);
         notes?.push(...result.notes);
       }
@@ -328,7 +331,7 @@ export class SessionSaveQueue {
             throw cause;
           }
           this.baseUpdatedAt = response.updated_at;
-          this.setConfirmedSession(response.session);
+          this.setConfirmedSession(next);
           this.callbacks.onSaved(response, next, this.pending !== null);
         }
       } finally {
@@ -410,7 +413,6 @@ export function useSession(enabled: boolean, username?: string, mergers?: FieldM
           const latest = await api.classroom.session().catch(() => null);
           if (latest?.updated_at && latest.release_id === releaseIdRef.current && sameSessionContent(latest.session, value)) {
             return {
-              session: latest.session,
               updated_at: latest.updated_at,
               completion: latest.completion,
               report_current: latest.report_current,
@@ -425,11 +427,11 @@ export function useSession(enabled: boolean, username?: string, mergers?: FieldM
         onSaved: (response, savedSnapshot, hasNewerPending) => {
           // Track every acknowledged snapshot, but only reconcile the optimistic
           // workspace when this response is still the latest queued edit.
-          setConfirmedSession(response.session);
+          setConfirmedSession(savedSnapshot);
           setUpdatedAt(response.updated_at ?? null);
           if (!hasNewerPending && sessionRef.current === savedSnapshot) {
-            sessionRef.current = response.session;
-            setSession(response.session);
+            sessionRef.current = savedSnapshot;
+            setSession(savedSnapshot);
           }
           setCompletion(response.completion);
           setReportCurrent(response.report_current ?? null);
@@ -584,7 +586,7 @@ export function useSession(enabled: boolean, username?: string, mergers?: FieldM
       && !saveFailedRef.current
       && !syncConflictRef.current
       && statusRef.current === "ready";
-    const wholeFits = () => fitsKeepalive({ session: sessionRef.current, base_updated_at: null });
+    const wholeFits = () => fitsKeepalive({ session: sessionRef.current, base_updated_at: queue.current?.getBaseUpdatedAt() ?? null });
     // A record too large for keepalive (a finished one is about 80–105 KB) is sent as the steps changed since the last
     // confirmed save, which outlives the page. Not while a save is on its way: its answer changes the base this would
     // name (that case relies on the kept copy, which a refresh puts back).
@@ -619,7 +621,7 @@ export function useSession(enabled: boolean, username?: string, mergers?: FieldM
       // saved on the way out (offline, a failed save, a conflict, or edits too large to be sent with keepalive
       // even as the changed steps, or a save on its way).
       const canSave = canSaveNow();
-      const fits = wholeFits() || changedSteps() !== null;
+      const fits = !queue.current?.isSaving() && (wholeFits() || changedSteps() !== null);
       // Too large for keepalive: start the normal save now, so it is already on its way while the browser asks.
       if (canSave && !fits) flushBeforeLeaving();
       if (!saved || (!leavingOnPurposeRef.current && !(canSave && fits))) {

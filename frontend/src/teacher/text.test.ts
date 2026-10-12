@@ -18,3 +18,9 @@ test("a search folds full-width punctuation too, so names stored either way are 
   expect(searchKey("２０２４－００１")).toBe("2024-001");
   expect(searchKey(" ＡＢ​c ")).toBe("abc");
 });
+
+test("teacher name keys remove default ignorables and blank-like characters", () => {
+  expect(searchKey("\u3164\u115f\u1160\uffa0\u2800\u034f")).toBe("");
+  expect(searchKey("Ａ（秋）\ufe0f")).toBe(searchKey("a(秋)"));
+  expect(searchKey("ΟΣ")).toBe("οσ");
+});

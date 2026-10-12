@@ -225,11 +225,25 @@ def test_benchmark_binds_exposure_bytes_and_generator_parameters(tmp_path):
     path = tmp_path / "export_exposure_2016.csv"
     exposure.to_csv(path, index=False)
     first = evaluate(tmp_path, range(1000, 1001))
+    assert first["source_panel_sha256"] == hashlib.sha256((tmp_path / "panel_industry.csv").read_bytes()).hexdigest()
+    assert first["source_read_contract"] == {
+        "panel_float_precision": "round_trip",
+        "exposure_float_precision": "default",
+    }
+    row = first["per_seed_results"]["trade:FVA_share"][0]
+    assert row["seed"] == 1000
+    assert abs(row["cumulative"]["estimate"] + 0.55) == pytest.approx(
+        first["summary"]["trade:FVA_share"]["cumulative"]["rmse"]
+    )
     assert first["source_exposure"] == {"path": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
     snapshot = first["generator_snapshots"]["trade"]
     assert snapshot["randomization_version"] == "step10-tariff-teaching-v1"
     assert snapshot["beta"] == -0.55
     assert snapshot["calibration"] == (0.25, 0.30, 0.006)
+    assert snapshot["common_year_trend"] == [-0.4, -0.2, 0.0, 0.2, 0.4]
+    from gvcsim.regression.teaching import simulation_parameters
+
+    assert simulation_parameters()["common_year_trend"]["values"] == snapshot["common_year_trend"]
     assert first["model"] == {
         "x_lags": [0, 1],
         "controls": [{"name": EXCHANGE_RATE_COLUMN, "lag": 0}],

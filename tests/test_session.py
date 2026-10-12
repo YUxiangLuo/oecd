@@ -37,7 +37,7 @@ def _estimate(name: str, coef: float, se: float = 0.1) -> dict:
     }
 
 
-def test_put_session_returns_the_exact_normalized_snapshot_saved(monkeypatch):
+def test_put_session_acknowledges_without_echoing_the_saved_snapshot(monkeypatch):
     outcome = "production"
     run = {
         "design": _design_info(RegressionDesign(outcome, teaching=True)),
@@ -77,10 +77,11 @@ def test_put_session_returns_the_exact_normalized_snapshot_saved(monkeypatch):
         {"sub": "student"},
     )
 
-    assert response["session"] == persisted[0][1]
+    assert "session" not in response
+    assert requested == persisted[0][1]
     assert persisted[0][0] == "student"
     assert persisted[0][2] is None
-    assert response["session"]["steps"]["12"]["data"]["qualified_run"] == run
+    assert persisted[0][1]["steps"]["12"]["data"]["qualified_run"] == run
     assert response["updated_at"] == "saved-at"
 
 

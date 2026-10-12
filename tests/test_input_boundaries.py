@@ -273,8 +273,10 @@ def test_lookalike_semester_and_class_names_collide(teaching_db):
     client = client_for("teacher")
     created = client.post("/api/classroom/semesters", json={"name": "2026  秋"})
     assert created.status_code == 200, created.text
-    assert created.json()["name"] == "2026 秋"
-    for lookalike in ["2026　秋", "２０２６ 秋", "2026 ​秋", " 2026 秋 "]:
+    assert created.json()["name"] == "2026  秋"
+    # Comparison preserves interior whitespace; NFKC, invisibles and edge
+    # whitespace are normalized without collapsing the displayed name.
+    for lookalike in ["2026　　秋", "２０２６  秋", "2026  ​秋", " 2026  秋 "]:
         response = client.post("/api/classroom/semesters", json={"name": lookalike})
         assert response.status_code == 409, (lookalike, response.text)
     term_id = created.json()["id"]
@@ -283,7 +285,7 @@ def test_lookalike_semester_and_class_names_collide(teaching_db):
     duplicate = client.post("/api/classroom/classes", json={"term_id": term_id, "name": "一​班"})
     assert duplicate.status_code == 409, duplicate.text
     other = client.post("/api/classroom/semesters", json={"name": "2027 春"})
-    rename = client.post(f"/api/classroom/semesters/{other.json()['id']}", json={"name": "2026\t秋"})
+    rename = client.post(f"/api/classroom/semesters/{other.json()['id']}", json={"name": "２０２６  秋"})
     assert rename.status_code == 409, rename.text
 
 

@@ -69,9 +69,9 @@ def authenticate(username: str, password: str) -> dict | None:
         supplied = db.hash_password(password, account["pw_salt"])
         if not hmac.compare_digest(account["pw_hash"], supplied):
             return None
-        db.touch_login(username)
+        db.touch_login(account["username"])
         return {
-            "username": username,
+            "username": account["username"],
             "name": account["display_name"],
             "role": account["role"],
             "account_id": account["id"],

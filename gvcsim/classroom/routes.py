@@ -15,9 +15,10 @@ from gvcsim import concurrency, demo_accounts, evidence, quizzes
 from gvcsim import session as session_model
 from gvcsim import report_workbench, teaching_report
 from gvcsim.classroom import db, management, records
+from gvcsim.name_keys import normalize_academic_name, required_name_key
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 from gvcsim.regression.workbench import custom_results_problem
-from gvcsim.regression_routes import charge_report_runs
+from gvcsim.regression_routes import REPORT_BILLING, ReportBilling, charge_report_runs, finish_report_runs
 from gvcsim.report_gate import check_gate
 from gvcsim.report_saved_run import _STEP_OUTCOMES, _parse_saved_run
 from gvcsim.request_validation import TextRequest
@@ -25,9 +26,7 @@ from gvcsim.singleflight import AsyncSingleFlightCache
 from gvcsim.steps import STEPS
 
 router = APIRouter(prefix="/api/classroom")
-_REPORT_FLIGHTS: AsyncSingleFlightCache[
-    tuple[str, str], tuple[dict[str, Any], teaching_report.TeachingReport, datetime]
-] = AsyncSingleFlightCache(maxsize=64)
+_REPORT_FLIGHTS: AsyncSingleFlightCache[tuple[str, str, str], dict[str, Any]] = AsyncSingleFlightCache(maxsize=64)
 
 
 def current_user(request: Request) -> dict[str, Any]:
@@ -174,7 +173,6 @@ def _session_changed() -> HTTPException:
 def _saved_session_response(username: str, payload: dict[str, Any], updated_at: datetime) -> dict[str, Any]:
     report = db.latest_report(username)
     return {
-        "session": payload,
         "updated_at": updated_at,
         **_learning_state(payload, report=report),
     }
@@ -209,6 +207,10 @@ def patch_session(req: SessionPatchRequest, user: dict = Depends(require_student
     saw; the whole result passes the same checks as a PUT."""
 
     def apply(stored: dict[str, Any]) -> dict[str, Any]:
+        if set(req.steps) - {str(step) for step in range(1, session_model.MAX_STEPS + 1)}:
+            raise HTTPException(status_code=422, detail="步骤编号无效")
+        if set(req.shared) - session_model.SHARED_KEYS:
+            raise HTTPException(status_code=422, detail="shared 包含未知字段")
         merged = {**stored, "steps": dict(stored.get("steps") or {}), "shared": dict(stored.get("shared") or {})}
         for part, changes in (("steps", req.steps), ("shared", req.shared)):
             for key, value in changes.items():
@@ -220,6 +222,10 @@ def patch_session(req: SessionPatchRequest, user: dict = Depends(require_student
 
     try:
         result = db.patch_session(user["sub"], apply, req.base_updated_at)
+    except records.SessionMissing as error:
+        raise HTTPException(
+            status_code=409, detail={"code": "session_changed", "message": "尚无已保存的实验记录，请载入后重新保存。"}
+        ) from error
     except records.SessionChanged as error:
         raise _session_changed() from error
     if result is None:
@@ -228,22 +234,34 @@ def patch_session(req: SessionPatchRequest, user: dict = Depends(require_student
     return _saved_session_response(user["sub"], payload, saved["updated_at"])
 
 
-async def _prepare_report(user: dict) -> tuple[dict[str, Any], teaching_report.TeachingReport, datetime]:
+async def _prepare_report(
+    user: dict, bills: list[ReportBilling | None] | None = None
+) -> tuple[dict[str, Any], teaching_report.TeachingReport, datetime]:
     # PostgreSQL pool/row-lock waits must not block unrelated requests on the event loop.
     session, _report, row = await concurrency.run_sync(_workspace, user["sub"])
 
     # The appendix recomputes the workbench models marked 放入报告: a run not computed yet counts against the student's
     # calculations of the minute, as on the page (checked once the gate passes, before anything is computed). The gate
     # grades every quiz and the charge reads the release: off the event loop, as the reads above.
-    def charge() -> None:
+    def charge() -> ReportBilling | None:
         if not check_gate(session):
-            charge_report_runs(user.get("aid"), report_workbench.run_designs(report_workbench.reported_models(session)))
+            return charge_report_runs(
+                user.get("aid"), report_workbench.run_designs(report_workbench.reported_models(session))
+            )
+        return None
 
-    await concurrency.run_sync(charge)
+    billing = await concurrency.run_sync(charge)
+    if bills is not None:
+        bills.append(billing)
+    context = REPORT_BILLING.set(billing)
     try:
-        generated = await concurrency.run_cpu_bound(teaching_report.build, session, user.get("name") or user["sub"])
+        generated = await concurrency.run_report_build(teaching_report.build, session, user.get("name") or user["sub"])
     except teaching_report.ReportGateError as error:
         raise HTTPException(status_code=409, detail={"message": str(error), "blocked": error.missing}) from error
+    finally:
+        REPORT_BILLING.reset(context)
+        if bills is None:
+            finish_report_runs(billing, success=False)
     if row is None:
         raise HTTPException(
             status_code=409,
@@ -258,21 +276,26 @@ async def generate_report(
     request: Request | None = None,
     expected_report_updated_at: datetime | None = None,
 ):
-    async def prepare() -> tuple[dict[str, Any], teaching_report.TeachingReport, datetime]:
+    async def operation() -> dict[str, Any]:
         return await _REPORT_FLIGHTS.get_or_compute(
-            (str(user.get("rid") or ""), user["sub"]),
-            lambda: _prepare_report(user),
+            (str(user.get("rid") or ""), user["sub"], str(expected_report_updated_at)),
+            lambda: _generate_report(user, expected_report_updated_at),
             owner=user.get("aid") or user["sub"],
             cache_success=False,
+            cancel_when_unobserved=False,
         )
 
     if request is None:
-        session, generated, version = await prepare()
-    else:
-        session, generated, version = await concurrency.for_request(request, prepare)
-    # Only preparation observes disconnects. Once persistence begins, retain the
-    # transaction and response bookkeeping even when the response is lost.
+        return await operation()
+    # Disconnecting a waiter never abandons shared computation or persistence.
+    return await concurrency.for_request(request, operation)
+
+
+async def _generate_report(user: dict, expected_report_updated_at: datetime | None) -> dict[str, Any]:
+    bills: list[ReportBilling | None] = []
+    success = False
     try:
+        session, generated, version = await _prepare_report(user, bills)
         saved = await concurrency.run_sync(
             db.save_generated_report,
             user["sub"],
@@ -281,6 +304,13 @@ async def generate_report(
             version,
             expected_report_updated_at,
         )
+        if saved is None:
+            raise HTTPException(status_code=404, detail="学生账号不存在")
+        saved["suggested_filename"] = generated.suggested_filename
+        learning_state = await concurrency.run_sync(lambda: _learning_state(session, report=saved))
+        response = {"report": saved, **learning_state}
+        success = True  # Saved successfully and response bookkeeping completed.
+        return response
     except records.ReportChanged as error:
         raise HTTPException(
             status_code=409,
@@ -291,11 +321,9 @@ async def generate_report(
             status_code=409,
             detail={"message": "报告生成期间实验记录已更新，请基于最新记录重新生成。", "code": "session_changed"},
         ) from error
-    if saved is None:
-        raise HTTPException(status_code=404, detail="学生账号不存在")
-    saved["suggested_filename"] = generated.suggested_filename
-    learning_state = await concurrency.run_sync(lambda: _learning_state(session, report=saved))
-    return {"report": saved, **learning_state}
+    finally:
+        for billing in bills:
+            finish_report_runs(billing, success=success)
 
 
 class ReportGenerateRequest(BaseModel):
@@ -365,13 +393,12 @@ def normalize_label(value: Any) -> Any:
 class AcademicNameRequest(TextRequest):
     name: str = Field(min_length=1, max_length=80)
 
-    _normalize_name = field_validator("name", mode="before")(normalize_label)
+    _normalize_name = field_validator("name", mode="before")(normalize_academic_name)
 
     @field_validator("name")
     @classmethod
     def nonblank_name(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("名称不能为空")
+        required_name_key(value)
         return value.strip()
 
 
@@ -388,7 +415,7 @@ class AcademicUpdateRequest(TextRequest):
             raise ValueError("提交的内容不完整，请刷新页面后重试")
         return value
 
-    _normalize_name = field_validator("name", mode="before")(normalize_label)
+    _normalize_name = field_validator("name", mode="before")(normalize_academic_name)
 
     @field_validator("name")
     @classmethod

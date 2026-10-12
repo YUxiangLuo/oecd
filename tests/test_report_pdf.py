@@ -40,9 +40,14 @@ def test_a_generated_report_passes_the_gate(tmp_path, monkeypatch):
     """The gate reads the report's own summary header: renaming a column fails here, not first in browser CI."""
     from test_teaching_report import _artifacts, _complete
 
-    from gvcsim import config
+    from gvcsim import config, report_build, report_saved_run
     from gvcsim.teaching_report import build
 
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    # This is a rendering gate, not an estimator test: use authoritative
+    # server-result fixtures for the miniature release with zero taxable X.
+    monkeypatch.setattr(
+        report_build, "server_runs", lambda session, _panel, _release: report_saved_run._saved_runs(session)
+    )
     validate_report_text(build(_complete(), "同学").markdown)

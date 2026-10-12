@@ -4,6 +4,8 @@
  * name every term the same way.
  */
 import { groupedFixed } from "./format";
+import { sameJsonValue } from "./session-store";
+import { nameKey } from "./name-keys";
 import {
   chartDisplayScale, depvarKind, estimateDigits, globalInferenceIsSuppressed, signed, withCountUnit,
 } from "./regression-verdict";
@@ -160,7 +162,7 @@ function cell(coefficient: CoefStat | null | undefined, suppressed: boolean): Co
   if (!coefficient) return null;
   return {
     coef: fixed4(coefficient.coef) + (suppressed ? "" : significanceStars(coefficient.p)),
-    se: `(${fixed4(coefficient.se)})`,
+    se: suppressed ? "—" : `(${fixed4(coefficient.se)})`,
   };
 }
 
@@ -316,9 +318,9 @@ export function omittedSummary(snapshot: CustomResultSnapshot, options: Workbenc
 
 /** "结果N", N one more than the largest number among this step's "结果…" names (the count when none). */
 export function nextResultName(saved: readonly Pick<CustomResult, "name">[]): string {
-  const numbers = saved.map((item) => /^结果(\d+)$/.exec(item.name)).filter(Boolean).map((match) => Number(match![1]));
+  const numbers = saved.map((item) => /^结果(\d+)$/.exec(nameKey(item.name))).filter(Boolean).map((match) => Number(match![1])).filter(Number.isSafeInteger);
   let next = Math.max(saved.length, ...numbers, 0) + 1;
-  while (saved.some((item) => item.name === `结果${next}`)) next += 1;
+  while (saved.some((item) => nameKey(item.name) === nameKey(`结果${next}`))) next += 1;
   return `结果${next}`;
 }
 
@@ -344,20 +346,17 @@ function joinerMisplaced(name: string): boolean {
   return false;
 }
 
-/** A name as it reads: names differing only in format characters or U+FE0F are the same (workbench._name_key). */
-const nameKey = (name: string) => name.replace(/[\p{Cf}\uFE0F]/gu, "");
-
 /** Why a name cannot be used (empty, too long, taken in this step), or null. */
 export function nameProblem(
   name: string, saved: readonly Pick<CustomResult, "id" | "name">[], limit: number, selfId?: string,
 ): string | null {
   const trimmed = name.trim();
   // Something visible is needed (a name of zero-width or joining characters alone looks empty).
-  if (!/[^\p{Cc}\p{Cf}\p{Mn}\p{Me}\p{Z}]/u.test(trimmed)) return "请输入名称";
+  if (!nameKey(trimmed) || !/[^\p{Cc}\p{Cf}\p{Mn}\p{Me}\p{Z}]/u.test(trimmed)) return "请输入名称";
   // Control, zero-width, bidi and line-separator characters, as the server refuses them (workbench.name_problem),
   // except the joiners inside one emoji (👩‍💻 U+200D, the tag letters of 🏴 flags). With them gone, JavaScript's
   // trim and Python's strip agree on the rest.
-  if (joinerMisplaced(trimmed) || /(?![\u200d\u{E0020}-\u{E007F}])[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(trimmed)) return "名称不能包含不可见字符";
+  if (joinerMisplaced(trimmed) || /(?![\u200d\u{E0020}-\u{E007F}])[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(trimmed)) return "名称不能包含不可见字符";
   if ([...trimmed].length > limit) return `名称最多 ${limit} 个字符`;
   if (saved.some((item) => nameKey(item.name) === nameKey(trimmed) && item.id !== selfId)) return `本步已有名为“${trimmed}”的模型`;
   return null;
@@ -406,15 +405,17 @@ export const SAVED_LIMITS: { readonly saved: number; readonly in_report: number 
  * this page's models was not kept as it was.
  */
 export function mergeCustomResults(
-  baseValue: unknown, serverValue: unknown, localValue: unknown, place: string,
+  baseValue: unknown, serverValue: unknown, localValue: unknown, place: string, sentValue?: unknown,
 ): { value: CustomResult[]; notes: string[] } {
   const list = (value: unknown) => (Array.isArray(value) ? value as CustomResult[] : []);
-  const same = (first: unknown, second: unknown) => JSON.stringify(first) === JSON.stringify(second);
+  const same = sameJsonValue;
   const base = new Map(list(baseValue).map((item) => [item.id, item]));
+  const sent = new Map(list(sentValue).map((item) => [item.id, item]));
   const local = new Map(list(localValue).map((item) => [item.id, item]));
   const merged: { item: CustomResult; mine: boolean }[] = [];
   for (const item of list(serverValue)) {
-    const before = base.get(item.id);
+    const confirmed = base.get(item.id);
+    const before = same(item, confirmed) ? confirmed : sent.get(item.id) ?? confirmed;
     const mine = local.get(item.id);
     // Deleted here and untouched elsewhere: gone. Changed here only: this page's version.
     if (!mine && before && same(item, before)) continue;
@@ -438,11 +439,11 @@ export function mergeCustomResults(
   // page's changes give way.
   const taken: CustomResult[] = merged.filter(({ mine }) => !mine).map(({ item }) => item);
   let inReport = taken.filter((item) => item.in_report).length;
-  const value = merged.map(({ item, mine }) => {
+  const value = merged.map(({ item, mine }, index) => {
     if (!mine) return item;
     let kept = item;
     if (taken.some((other) => nameKey(other.name) === nameKey(kept.name))) {
-      kept = { ...kept, name: nextResultName(taken) };
+      kept = { ...kept, name: nextResultName([...taken, ...merged.slice(index + 1).map(({ item: pending }) => pending)]) };
       notes.push(`${place}：本页保存的“${item.name}”与另一处保存的模型同名，已改名为“${kept.name}”`);
     }
     if (kept.in_report && inReport >= SAVED_LIMITS.in_report) {

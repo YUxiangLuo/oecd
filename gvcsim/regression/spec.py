@@ -92,14 +92,14 @@ class ModelSpec:
             raise ValueError("控制变量和固定效应应写成名称")
         unknown = [key for key in keys if key not in CONTROLS]
         if unknown:
-            raise ValueError("不提供的控制变量：" + "、".join(unknown))
+            raise ValueError("不提供的控制变量")
         if len(set(keys)) != len(keys):
             raise ValueError("同一个控制变量只能放入一次")
         if any(type(lag) is not int or lag not in CONTROL_LAGS for _, lag in self.controls):
             raise ValueError(f"控制变量的滞后期只能是 {list(CONTROL_LAGS)}")
         unknown_effects = [key for key in self.fixed_effects if key not in FIXED_EFFECTS]
         if unknown_effects:
-            raise ValueError("不提供的固定效应：" + "、".join(unknown_effects))
+            raise ValueError("不提供的固定效应")
         if len(set(self.fixed_effects)) != len(self.fixed_effects):
             raise ValueError("同一项固定效应只能勾选一次")
         chosen = set(self.fixed_effects)

@@ -9,6 +9,7 @@ import psycopg
 
 from gvcsim import config, demo_accounts
 from gvcsim.classroom import records
+from gvcsim.name_keys import required_name_key, username_key
 
 
 class _DatabaseProxy:
@@ -64,8 +65,8 @@ def create_term(name: str, teacher_username: str) -> dict[str, Any]:
             raise PermissionError("教师账号无效")
         return database._required(
             c.execute(
-                "INSERT INTO academic_terms(name) VALUES (%s) RETURNING id,name,is_active,created_at",
-                (name,),
+                "INSERT INTO academic_terms(name,name_key) VALUES (%s,%s) RETURNING id,name,is_active,created_at",
+                (name, required_name_key(name)),
             ).fetchone(),
             "create term",
         )
@@ -78,6 +79,9 @@ def update_term(term_id: int, fields: dict[str, Any], teacher_username: str) -> 
         if key in fields:
             sets.append(f"{key}=%s")
             params.append(fields[key])
+    if "name" in fields:
+        sets.append("name_key=%s")
+        params.append(required_name_key(fields["name"]))
     if not sets:
         return None
     with database.conn() as c:
@@ -99,8 +103,8 @@ def create_class_group(term_id: int, name: str, teacher_username: str) -> dict[s
         if not term["is_active"]:
             raise ValueError("已归档学期不能新建班级，请先恢复学期")
         return c.execute(
-            "INSERT INTO class_groups(term_id,name) VALUES (%s,%s) RETURNING id,term_id,name,is_active,created_at",
-            (term_id, name),
+            "INSERT INTO class_groups(term_id,name,name_key) VALUES (%s,%s,%s) RETURNING id,term_id,name,is_active,created_at",
+            (term_id, name, required_name_key(name)),
         ).fetchone()
 
 
@@ -111,6 +115,9 @@ def update_class_group(class_id: int, fields: dict[str, Any], teacher_username: 
         if key in fields:
             sets.append(f"{key}=%s")
             params.append(fields[key])
+    if "name" in fields:
+        sets.append("name_key=%s")
+        params.append(required_name_key(fields["name"]))
     if not sets:
         return None
     with database.conn() as c:
@@ -195,6 +202,7 @@ def create_student(
     teacher_username: str | None = None,
     class_id: int | None = None,
 ) -> dict[str, Any]:
+    username = username_key(username)
     database._validate_managed_password(password)
     salt = secrets.token_hex(16)
     with database.conn() as c:
@@ -241,6 +249,9 @@ def create_student_batch(
     students: list[dict[str, Any]], class_id: int, teacher_username: str, preview: bool
 ) -> dict[str, Any]:
     """Validate again at commit and create the entire roster in one transaction."""
+    students = [{**student, "username": username_key(student["username"])} for student in students]
+    if len({student["username"] for student in students}) != len(students):
+        raise ValueError("用户名不能重复")
     with database.conn() as c:
         if not _teacher_exists(c, teacher_username):
             raise PermissionError("教师账号无效")

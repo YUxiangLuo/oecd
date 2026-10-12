@@ -67,6 +67,7 @@ TAXED_RULE = {
 }
 # Share of a tariff's relation that shows in its year and in the next; the cumulative relation is β.
 LAG_SHARES = (0.6, 0.4)
+COMMON_YEAR_TREND = (-0.4, -0.2, 0.0, 0.2, 0.4)
 EXCHANGE_RATE_COLUMN = "teaching_exchange_rate_change"
 # Exchange-rate change in percentage points (negative = depreciation): country × year uniform noise with this SD,
 # plus this depreciation for first-wave economies from the first wave's start. Each Y moves by factor × β per point,
@@ -287,7 +288,7 @@ def baseline(outcome: str, key: str | None = None, *, allow_hidden: bool = False
     for item in BASELINES.get(outcome, ()):
         if item.key == key and (allow_hidden or not item.hidden):
             return item
-    raise ValueError(f"{outcome} 没有名为 {key} 的生成基线")
+    raise ValueError("不提供的 Y 生成基线")
 
 
 def y_column(outcome: str, key: str | None = None) -> str:
@@ -382,6 +383,11 @@ def simulation_parameters() -> dict:
         "lag_shares": list(LAG_SHARES),
         "exchange_rate": EXCHANGE_RATE,
         "taxed_rule": TAXED_RULE,
+        "common_year_trend": {
+            "values": list(COMMON_YEAR_TREND),
+            "multiplier": "baseline calibration noise scale",
+            "order": "ascending release years",
+        },
         "betas": BETAS,
         "calibration": {name: list(values) for name, values in CALIBRATION.items()},
         "baselines": baseline_parameters(),
@@ -555,7 +561,7 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
         lambda value: (2 * _unit_number(value, "exchange-rate", seed) - 1) * EXCHANGE_RATE_NOISE_SD * 3**0.5
     ) + EXCHANGE_RATE_DEPRECIATION * (out[WAVE_COLUMN].eq(1) & out.year.ge(first_wave_start))
     effect = LAG_SHARES[0] * out[X_LAG_COLUMNS[0]] + LAG_SHARES[1] * out[X_LAG_COLUMNS[1]]
-    trend = out.year.map(dict(zip(years, (-0.4, -0.2, 0.0, 0.2, 0.4), strict=True)))
+    trend = out.year.map(dict(zip(years, COMMON_YEAR_TREND, strict=True)))
     generated: dict[str, pd.Series] = {}
     for outcome, item in all_baselines:
         if item.combine is not None:
@@ -683,6 +689,7 @@ def model_snapshot(outcome: str, baseline_key: str | None = None, spec: Any = No
         "taxed_rule": TAXED_RULE,
         "exchange_rate": EXCHANGE_RATE,
         "calibration": item.calibration,
+        "common_year_trend": list(COMMON_YEAR_TREND),
         "disclaimer": DISCLAIMER,
     }
 

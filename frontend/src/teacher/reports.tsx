@@ -318,14 +318,15 @@ export function GradeView({ data, grader, semesters = [], backLabel = BACK_TO_LI
   const [saveError, setSaveError] = useState<string | null>(null);
   const [scoreError, setScoreError] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
+  const [adoptedReview, setAdoptedReview] = useState(false);
   const [rubricOpen] = useState(rubricStartsOpen);
   const reviewGuard = useTeacherReviewGuard();
   const dirty = score !== initialScore || feedback !== data.feedback;
   // Re-saving an unchanged grade only moved its timestamp.
   const unchanged = data.state === "graded" && !dirty;
-  const reloaded = initialDraft != null;
+  const reloaded = initialDraft != null && !adoptedReview;
   // The review saved elsewhere that a reload found, when the kept draft differs from it: shown so it is not replaced unseen.
-  const savedElsewhere = reloaded && data.score != null && (initialDraft.score !== initialScore || initialDraft.feedback !== data.feedback);
+  const savedElsewhere = reloaded && initialDraft != null && data.score != null && (initialDraft.score !== initialScore || initialDraft.feedback !== data.feedback);
   const ids = useId();
   const formHeadingId = `${ids}-form`;
   const scoreErrorId = `${ids}-score-error`;
@@ -423,6 +424,8 @@ export function GradeView({ data, grader, semesters = [], backLabel = BACK_TO_LI
                 <button type="button" className="secondary sm" disabled={saving} onClick={() => {
                   setScore(initialScore);
                   setFeedback(data.feedback);
+                  setAdoptedReview(true);
+                  setFeedbackCut(false);
                   setScoreError(null);
                   setSaveError(null);
                   reviewGuard.publish({ dirty: false, saving: false });

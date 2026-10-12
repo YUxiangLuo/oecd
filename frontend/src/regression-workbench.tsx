@@ -183,7 +183,7 @@ export function ColumnDetails({ column, options, perPoint }: {
             <tr key={coef.name}>
               <td>{termLabel(coef.name, options)}</td>
               <td>{fixed4(coef.coef)}{result.suppressed ? "" : significanceStars(coef.p)}</td>
-              <td>({fixed4(coef.se)})</td>
+              <td>{result.suppressed ? "—" : `(${fixed4(coef.se)})`}</td>
               <td>{result.suppressed || coef.t == null ? "—" : groupedFixed(coef.t, 2)}</td>
               <td>{result.suppressed ? "—" : formatPValue(coef.p)}</td>
               <td>{result.suppressed || coef.ci_low == null || coef.ci_high == null ? "—" : `[${fixed4(coef.ci_low)}, ${fixed4(coef.ci_high)}]`}</td>
@@ -219,6 +219,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const [computed, setComputed] = useState<RegressionResponse | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const rateLimitMessage = useRef<string | null>(null);
   const [saveName, setSaveName] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState<CustomResult | null>(null);
@@ -234,7 +235,10 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
     const timer = window.setInterval(() => {
       const current = Date.now();
       setNow(current);
-      if (current >= retryAt) { setRetryAt(null); setError(null); }
+      if (current >= retryAt) {
+        setRetryAt(null);
+        setError((message) => message === rateLimitMessage.current ? null : message);
+      }
     }, 500);
     return () => window.clearInterval(timer);
   }, [retryAt]);
@@ -252,7 +256,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
     const target = rename
       ?? root.current.querySelector<HTMLElement>(".reg-custom-saved h4")
       ?? root.current.querySelector<HTMLElement>(".reg-custom-actions button");
-    target?.focus();
+    target?.focus({ preventScroll: true });
     setPendingFocus(null);
   }, [pendingFocus]);
 
@@ -292,7 +296,8 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         // Not a problem with the model: the student's calculations of the minute are used up.
         setNow(Date.now());
         setRetryAt(Date.now() + cause.retryAfter * 1000);
-        setError(`计算太频繁：每分钟最多算 ${options.limits.runs_per_minute} 个新模型，新的设定请等倒计时结束；已经算过的设定不计次，现在就能算。`);
+        rateLimitMessage.current = `计算太频繁：每分钟最多算 ${options.limits.runs_per_minute} 个新模型，新的设定请等倒计时结束；仍在服务器缓存中的设定不计次，现在就能算。`;
+        setError(rateLimitMessage.current);
       } else if (!(cause instanceof DOMException && cause.name === "AbortError")) {
         setError(userFacingRequestError(cause, "这个模型没有算出结果"));
         if (cause instanceof ApiError && cause.status === 400) setComputed(null);
@@ -356,16 +361,16 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const inReport = saved.filter((item) => item.in_report).length;
   const renameProblem = renaming ? nameProblem(renaming.name, saved, limits.name_length, renaming.id) : null;
 
-  // One table: the default model, the saved models compared, then the model just computed (until it is saved).
+  // Keep the new result next to the default so it is visible without scrolling past saved models.
   const comparedColumns: (TableColumn & { id?: string })[] = [
     { name: DEFAULT_COLUMN, spec: options.default_spec, snapshot: snapshotOf(defaultResponse) },
     ...saved.filter((item) => compare.includes(item.id)).map((item) => ({ id: item.id, name: item.name, spec: item.spec, snapshot: item.snapshot })),
   ];
   const columns: (TableColumn & { id?: string })[] = unsaved
-    ? [...comparedColumns, { name: UNSAVED_COLUMN, spec: unsaved.design.spec!, snapshot: snapshotOf(unsaved) }]
+    ? [comparedColumns[0], { name: UNSAVED_COLUMN, spec: unsaved.design.spec!, snapshot: snapshotOf(unsaved) }, ...comparedColumns.slice(1)]
     : comparedColumns;
   // The column the computed model is: the new one, a saved one it repeats, or the default.
-  const highlighted = unsaved ? columns.length - 1 : isDefault ? 0 : duplicate ? columns.findIndex((column) => column.id === duplicate.id) : -1;
+  const highlighted = unsaved ? 1 : isDefault ? 0 : duplicate ? columns.findIndex((column) => column.id === duplicate.id) : -1;
   const coefficients = coefficientRows(columns, options);
   const pointRow = perPointRow(columns, outcome);
   const summary = summaryRows(columns, options);

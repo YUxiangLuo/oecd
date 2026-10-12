@@ -1,4 +1,5 @@
 /** Client-side twins of the server's text normalization (gvcsim/classroom/routes.py). */
+import { nameKey } from "../name-keys";
 
 const ZERO_WIDTH = /[​‌‍⁠﻿]/g;
 const EDGES = /^[\s​‌‍⁠﻿]+|[\s​‌‍⁠﻿]+$/g;
@@ -27,5 +28,5 @@ export function normalizeLabel(value: string): string {
  * find “王五(转专业)” (and the other way round).
  */
 export function searchKey(value: string): string {
-  return value.normalize("NFKC").replace(ZERO_WIDTH, "").replace(/\s+/g, " ").trim().toLowerCase();
+  return nameKey(value).replace(/\s+/g, " ");
 }

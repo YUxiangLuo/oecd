@@ -1,14 +1,19 @@
 """Release QC of the teaching panel (teaching data v10): τ and the lags of X follow the published tariff schedule."""
 
 import pandas as pd
+import pytest
 
 from gvcsim.data.output_quality import _teaching_panel_contract
 from gvcsim.regression.teaching import (
+    BASELINES,
     EXCHANGE_RATE_COLUMN,
+    EXCHANGE_RATE_DEPRECIATION,
+    SURPLUS_COLUMN,
     TARIFF_RATE,
     WAVE_COLUMN,
     X_LAG_COLUMNS,
     Y_COLUMNS,
+    y_column,
 )
 
 
@@ -25,8 +30,11 @@ def _panel() -> pd.DataFrame:
                     "year": year,
                     "teaching_export_share_w": w,
                     WAVE_COLUMN: wave,
-                    EXCHANGE_RATE_COLUMN: 0.5,
+                    SURPLUS_COLUMN: {1: 15000.0, 2: 1500.0, 0: -500.0}[wave],
+                    EXCHANGE_RATE_COLUMN: 0.5 + (EXCHANGE_RATE_DEPRECIATION if wave == 1 and year >= 2018 else 0),
                     **{column: 0.3 for column in Y_COLUMNS.values()},
+                    y_column("network", "weighted_indegree"): 0.1,
+                    y_column("network", "weighted_outdegree"): 0.2,
                 }
                 for lag, column in X_LAG_COLUMNS.items():
                     taxed = start is not None and industry == "C29" and year - lag >= start
@@ -61,6 +69,55 @@ def test_duplicate_keys_fail_the_check_instead_of_raising():
     panel = _panel()
     result = _check(pd.concat([panel, panel.iloc[:2]], ignore_index=True))
     assert not result["passed"] and "violations=" in result["detail"]
+
+
+@pytest.mark.parametrize(
+    "outcome,item", [(outcome, item) for outcome, items in BASELINES.items() for item in items if item.combine]
+)
+def test_each_family_identity_is_checked_row_by_row(outcome, item):
+    panel = _panel()
+    constant, terms = item.combine
+    expected = pd.Series(constant, index=panel.index, dtype=float)
+    for key, coefficient in terms:
+        part = y_column(outcome, key)
+        if part not in panel:
+            panel[part] = 0.1
+        expected += coefficient * panel[part]
+    target = y_column(outcome, item.key)
+    panel[target] = expected
+    assert _check(panel)["passed"]
+    panel.loc[0, target] += 0.05
+    assert not _check(panel)["passed"]
+
+
+@pytest.mark.parametrize(
+    "mutation", ["wave", "depreciation", "industry_exchange", "identity", "missing_part", "surplus"]
+)
+def test_teaching_structure_mutations_fail(mutation):
+    panel = _panel()
+    if mutation == "wave":
+        # Rewrite the entire schedule consistently; the surplus rule must still reject the new wave.
+        mask = panel.country.eq("AAA")
+        panel.loc[mask, WAVE_COLUMN] = 2
+        for lag, column in X_LAG_COLUMNS.items():
+            panel.loc[mask, column] = (
+                0.2 * TARIFF_RATE * (panel.loc[mask, "industry"].eq("C29") & (panel.loc[mask, "year"] - lag).ge(2019))
+            )
+        panel.loc[mask, "teaching_tariff_rate_tau"] = (
+            panel.loc[mask, X_LAG_COLUMNS[0]] / panel.loc[mask, "teaching_export_share_w"]
+        )
+        panel.loc[mask, "teaching_treated"] = panel.loc[mask, X_LAG_COLUMNS[0]].gt(0).astype(int)
+    elif mutation == "depreciation":
+        panel.loc[panel.country.eq("AAA") & panel.year.ge(2018), EXCHANGE_RATE_COLUMN] -= EXCHANGE_RATE_DEPRECIATION
+    elif mutation == "industry_exchange":
+        panel.loc[0, EXCHANGE_RATE_COLUMN] += 0.1
+    elif mutation == "identity":
+        panel.loc[0, Y_COLUMNS["network"]] += 0.05
+    elif mutation == "missing_part":
+        panel = panel.drop(columns=y_column("network", "weighted_indegree"))
+    else:
+        panel.loc[0, SURPLUS_COLUMN] += 1
+    assert not _check(panel)["passed"]
 
 
 def test_the_weak_y_check_stops_a_release_whose_library_check_fails(monkeypatch):

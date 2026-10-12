@@ -627,8 +627,7 @@ export interface SessionResponse {
 }
 
 export interface SessionSaveResponse {
-  /** Exact server-normalized snapshot persisted by this PUT. */
-  session: ExperimentSession;
+  /** Acknowledges the submitted snapshot without retransmitting its contents. */
   updated_at: string;
   completion: CompletionSummary;
   /** Whether the latest report was generated from this record (absent from older servers). */

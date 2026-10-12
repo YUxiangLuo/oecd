@@ -12,8 +12,6 @@ from typing import Any, cast
 
 import numpy as np
 
-from gvcsim import config
-from gvcsim.artifacts import ArtifactContractError, read_csv_artifact
 from gvcsim.regression import workbench
 from gvcsim.regression.design import RegressionDesign
 from gvcsim.regression.spec import (
@@ -97,19 +95,14 @@ def _run(panel: Any, release: str | None, outcome: str, baseline: str, spec: Mod
         return str(error) or "计算失败"
 
 
-def recompute(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def recompute(models: list[dict[str, Any]], panel: Any = None, release: str | None = None) -> list[dict[str, Any]]:
     """One table per (step, Y): the default model's run, then each reported model's run (or its failure)."""
     if not models:
         return []
-    from gvcsim.regression_routes import current_release
+    from gvcsim.regression_routes import read_teaching_panel
 
-    # Read before the panel: a release swapped in between then tags the runs with the older release (they are charged
-    # again), never the older panel's runs with the newer release.
-    release = current_release()
-    try:
-        panel = read_csv_artifact(config.PROCESSED_DIR / "panel_teaching.csv")
-    except (ArtifactContractError, OSError, ValueError, KeyError, TypeError):
-        panel = None
+    if panel is None:
+        release, panel = read_teaching_panel()
     tables: list[dict[str, Any]] = []
     for model in models:
         key = (model["step"], model["baseline"])
@@ -189,23 +182,24 @@ def _coefficient_rows(columns: list[dict[str, Any]]) -> list[str]:
     names = [name for name in order if name in used]
     rows: list[str] = []
 
-    def cells(pick) -> tuple[str, str]:
-        coefs, ses = [], []
+    def cells(pick) -> str:
+        values = []
         for column in columns:
             run = column["run"]
             if not isinstance(run, dict):
-                coefs.append("")
-                ses.append("")
+                values.append("")
                 continue
             coefficient, omitted = pick(run["result"])
             if coefficient is None:
-                coefs.append("（省略）" if omitted else "")
-                ses.append("")
+                values.append("（省略）" if omitted else "")
                 continue
             stars = "" if _suppressed(run["result"]) else str(coefficient.get("stars") or "")
-            coefs.append(_fixed(coefficient.get("coef"), 4) + _escape(stars))
-            ses.append(f"({_fixed(coefficient.get('se'), 4)})")
-        return " | ".join(coefs), " | ".join(ses)
+            # Inline code renders on its own line in report table cells, without permitting raw HTML.
+            # One row keeps each coefficient together with its SE when printed across pages.
+            value = _fixed(coefficient.get("coef"), 4) + _escape(stars)
+            se = "—" if _suppressed(run["result"]) else f"({_fixed(coefficient.get('se'), 4)})"
+            values.append(value + f" `{se}`")
+        return " | ".join(values)
 
     for name in names:
 
@@ -213,15 +207,13 @@ def _coefficient_rows(columns: list[dict[str, Any]]) -> list[str]:
             found = next((item for item in result.get("coefs", []) if item.get("name") == name), None)
             return found, any(item.get("name") == name for item in result.get("omitted", []))
 
-        coef_cells, se_cells = cells(pick)
-        rows += [f"| {_TERM_LABELS.get(name, _safe(name))} | {coef_cells} |", f"|  | {se_cells} |"]
+        rows.append(f"| {_TERM_LABELS.get(name, _safe(name))} | {cells(pick)} |")
     if any(isinstance(column["run"], dict) and _x_terms(column["run"]["result"]) > 1 for column in columns):
-        coef_cells, se_cells = cells(lambda result: (result.get("cumulative") if _x_terms(result) > 1 else None, False))
-        rows += [f"| X 各项合计（累计效应） | {coef_cells} |", f"|  | {se_cells} |"]
+        total_cells = cells(lambda result: (result.get("cumulative") if _x_terms(result) > 1 else None, False))
+        rows.append(f"| X 各项合计（累计效应） | {total_cells} |")
     rows += _per_point_rows(columns)
     if any(isinstance(column["run"], dict) and column["run"]["result"].get("constant") for column in columns):
-        coef_cells, se_cells = cells(lambda result: (result.get("constant"), False))
-        rows += [f"| 常数项 | {coef_cells} |", f"|  | {se_cells} |"]
+        rows.append(f"| 常数项 | {cells(lambda result: (result.get('constant'), False))} |")
     return rows
 
 

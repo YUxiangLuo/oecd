@@ -224,4 +224,28 @@ def _gate_qualified_runs(session: dict[str, Any]) -> list[dict[str, Any]]:
     return _saved_runs(session)
 
 
+def server_runs(session: dict[str, Any], panel: Any, release: str) -> list[dict[str, Any]]:
+    """Saved runs select completed steps/Ys, never the report's numeric values."""
+    from gvcsim.regression_routes import cached_run
+
+    runs = []
+    seen = set()
+    for saved in _saved_runs(session):
+        design = _course_design(saved["design"])
+        assert design is not None
+        identity = (saved["step"], design.baseline)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        payload = cached_run(panel, design, release)
+        runs.append(
+            {
+                "step": saved["step"],
+                "outcome": saved["outcome"],
+                **{key: payload[key] for key in ("design", "result", "model_snapshot", "variable_catalog")},
+            }
+        )
+    return runs
+
+
 __all__ = ["_gate_qualified_runs", "_parse_saved_run", "_result_is_qualified", "_result_is_reportable", "_saved_runs"]

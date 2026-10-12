@@ -12,6 +12,7 @@ import unicodedata
 from typing import Any
 
 from gvcsim import config
+from gvcsim.name_keys import name_key
 from gvcsim.regression.spec import (
     CONTROL_LAGS,
     CONTROLS,
@@ -59,10 +60,11 @@ HINTS = (
 FOOTNOTE = (
     "注：括号内为按国家聚类的标准误。*** p<0.01, ** p<0.05, * p<0.1。系数为原单位，X 以份额计（0.25 = 25%），"
     "X 增加 1 个百分点时 Y 的变化 = 系数 × 0.01。2018 年以前没有关税，X 的滞后在加税前按 0 处理。"
+    "自由度计入样本内全部固定效应的秩；用 reghdfe/fixest 默认设置复算本课程默认模型时，标准误约小 11%，属于口径差异。"
 )
 SAMPLE_DIFFERS_NOTE = "这几列的样本不同，差异有一部分来自样本，而不只是设定。"
 # Said whatever stopped the inference: the library check (regression.panel) or the design's treatment support.
-SUPPRESSED_NOTE = "未通过估计检查，已隐藏推断结果（p 值、星号与区间）。"
+SUPPRESSED_NOTE = "未通过估计检查，已隐藏推断结果（标准误、t 值、p 值、星号与区间）。"
 
 
 def options() -> dict[str, Any]:
@@ -111,7 +113,7 @@ def options() -> dict[str, Any]:
 
 # Invisible or layout characters (control, zero-width, bidi override, line/paragraph separators): a name made of
 # them looks empty or reorders the text around it in the report. The page refuses the same set (nameProblem).
-_NAME_FORBIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Zl", "Zp"})
+_NAME_FORBIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Zl", "Zp"})
 # Format characters that build one visible emoji (👩‍💻, 👨‍👩‍👧‍👦 joined by U+200D; tag letters of 🏴 flags).
 _EMOJI_JOINERS = frozenset({"\u200d", *map(chr, range(0xE0020, 0xE0080))})
 _INVISIBLE_ALONE = frozenset({"Cc", "Cf", "Mn", "Me", "Zs", "Zl", "Zp"})
@@ -150,13 +152,16 @@ def _joiner_misplaced(name: str) -> bool:
 
 
 def _name_key(name: str) -> str:
-    """A name as it reads: two names differing only in format characters or U+FE0F are the same name."""
-    return "".join(char for char in name if unicodedata.category(char) != "Cf" and char != "\ufe0f")
+    return name_key(name)
 
 
 def name_problem(name: Any) -> str | None:
     """Why a saved model's name cannot be stored, or None; the page's ``nameProblem`` gives the same answers."""
-    if not isinstance(name, str) or not any(unicodedata.category(char) not in _INVISIBLE_ALONE for char in name):
+    if (
+        not isinstance(name, str)
+        or not name_key(name)
+        or not any(unicodedata.category(char) not in _INVISIBLE_ALONE for char in name)
+    ):
         return "请输入名称"
     if _joiner_misplaced(name) or any(
         unicodedata.category(char) in _NAME_FORBIDDEN_CATEGORIES and char not in _EMOJI_JOINERS for char in name

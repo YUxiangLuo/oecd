@@ -46,21 +46,20 @@ from gvcsim.report_render import (
     _qc_release_summary,
     _run_sections,
 )
-from gvcsim.report_saved_run import _saved_runs
+from gvcsim.report_saved_run import server_runs
 from gvcsim.report_workbench import custom_model_sections, recompute, reported_models
 
 
-def _regression_overview() -> dict[str, Any] | None:
+def _regression_overview(panel: Any = None, release: str | None = None) -> dict[str, Any] | None:
     """The course's estimate of every Y (the step 11–14 bars), from the release's teaching panel and computed once
     per release: the same cached panel and result the teaching-overview endpoint serves. A failure leaves each
     chart with the saved Y alone instead of blocking the report."""
-    from gvcsim.regression_routes import _ESTIMATE_OVERVIEW_CACHE, _cached_on_panel, _estimate_overview
+    from gvcsim.regression_routes import _estimate_overview, read_teaching_panel
 
     try:
-        # Resolved at call time (not data_routes' import-time PROCESSED_DIR); the artifact cache returns the same
-        # DataFrame object for the same file, so the overview cache is shared with the endpoint.
-        panel = read_csv_artifact(config.PROCESSED_DIR / "panel_teaching.csv")
-        return _cached_on_panel(_ESTIMATE_OVERVIEW_CACHE, panel, _estimate_overview)
+        if panel is None:
+            release, panel = read_teaching_panel()
+        return _estimate_overview(panel, release)
     except (
         ArtifactContractError,
         OSError,
@@ -206,8 +205,8 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
     years = processed_years()
     if not years:
         raise ReportGateError([{"step": 0, "title": "数据不可用", "missing": ["课程数据暂时不可用，请联系老师。"]}])
-    runs = _saved_runs(session)
-    custom_models = reported_models(session)
+    from gvcsim.regression_routes import read_teaching_panel
+
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     # The pages show server-local wall-clock time (PostgreSQL now()) as "YYYY-MM-DD HH:MM"; the report says the same,
     # without the "+09:00" offset an ISO time carries.
@@ -216,10 +215,20 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
     try:
         validate_release_cached()
         metadata = dataset_metadata()
+        release, panel = read_teaching_panel()
+        if metadata.get("release_id") != release:
+            raise ValueError("课程数据在报告生成期间发生变化，请重试")
     except (ArtifactContractError, OSError, ValueError, TypeError, RuntimeError) as error:
         raise ReportGateError(
             [{"step": 0, "title": "数据不可用", "missing": ["课程数据暂时不可用，请联系老师。"]}]
         ) from error
+    try:
+        runs = server_runs(session, panel, release)
+    except (ValueError, KeyError, np.linalg.LinAlgError, FloatingPointError, OverflowError) as error:
+        raise ReportGateError(
+            [{"step": 0, "title": "回归暂时不可用", "missing": ["服务器暂时无法计算报告中的回归，请稍后重试。"]}]
+        ) from error
+    custom_models = reported_models(session)
     raw_data_sources = metadata.get("data_sources")
     data_sources: dict[str, Any] = raw_data_sources if isinstance(raw_data_sources, dict) else {}
     raw_qc_metadata = metadata.get("qc")
@@ -302,13 +311,13 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
             runs,
             metadata["simulation_contract"]["source_filter_disclosure"],
             teaching_examples,
-            _regression_overview() if runs else None,
+            _regression_overview(panel, release) if runs else None,
             custom_models,
         ),
         *_quiz_sections(session),
         *_experiment_sections(session, scenario),
         *_run_sections(runs),
-        *custom_model_sections(recompute(custom_models)),
+        *custom_model_sections(recompute(custom_models, panel, release)),
         *_qc_disclosure_section(qc_summary, integrity_metadata),
         "## 数据与方法说明",
         "",
@@ -332,7 +341,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "- 多个结果：每个 95% 区间只针对它自己那一项；p 值小也不代表因果关系。",
         "- 控制汇率的原因：同期的汇率变动与加税对象有共同原因（对美顺差大的出口型经济体），又与 Y 有关；不控制它，会把汇率的作用算到关税头上。"
         "本身受关税影响的变量不应作为控制变量。",
-        "- 回归结果来自你在步骤 11–14 保存的计算，生成报告时不会重算；各步图中其余 Y 的条形是课程用同一份数据、"
+        "- 回归结果由服务器按步骤 11–14 保存的设定计算（已计算的模型读取缓存），不使用浏览器保存的数字；各步图中其余 Y 的条形是课程用同一份数据、"
         "同一个模型算出的结果。"
         + ("“学生设计的模型”附录中的模型则按你保存的设定在生成报告时重新计算。" if custom_models else ""),
         f"- 生成时间：{generated_local}。",

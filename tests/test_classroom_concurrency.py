@@ -57,7 +57,7 @@ def test_duplicate_report_requests_share_one_build_but_later_request_rebuilds(mo
         def workspace(_username):
             return {}, None, {"updated_at": "version-1"}
 
-        async def run_cpu_bound(_function, *_args):
+        async def run_report_build(_function, *_args):
             nonlocal builds
             builds += 1
             started.set()
@@ -69,7 +69,7 @@ def test_duplicate_report_requests_share_one_build_but_later_request_rebuilds(mo
 
         monkeypatch.setattr(routes, "_REPORT_FLIGHTS", AsyncSingleFlightCache())
         monkeypatch.setattr(routes, "_workspace", workspace)
-        monkeypatch.setattr(routes.concurrency, "run_cpu_bound", run_cpu_bound)
+        monkeypatch.setattr(routes.concurrency, "run_report_build", run_report_build)
         monkeypatch.setattr(routes.concurrency, "run_sync", run_sync)
         monkeypatch.setattr(routes.db, "save_generated_report", lambda *_args: {"state": "draft"})
         monkeypatch.setattr(routes, "_learning_state", lambda *_args, **_kwargs: {"completion": {}})

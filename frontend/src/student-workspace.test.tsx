@@ -153,10 +153,11 @@ describe("what a merge with the server's record did not keep", () => {
     let dismissed = 0;
     render(<MergeNotes notes={["步骤 11：本页保存的“结果6”没能保留"]} onDismiss={() => { dismissed += 1; }} />);
     expect(screen.getByRole("status").textContent).toContain("步骤 11：本页保存的“结果6”没能保留");
+    expect(screen.getByRole("status").getAttribute("tabindex")).toBe("0");
+    expect(screen.getByRole("status").getAttribute("aria-label")).toContain("可上下滚动");
     screen.getByRole("button", { name: "知道了" }).click();
     expect(dismissed).toBe(1);
     cleanup();
     expect(renderToStaticMarkup(<MergeNotes notes={[]} />)).toBe("");
   });
 });
-

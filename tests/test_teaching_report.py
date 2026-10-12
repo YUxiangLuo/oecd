@@ -38,6 +38,21 @@ from gvcsim.teaching_report import (
 )
 
 
+@pytest.fixture(autouse=True)
+def rendering_server_results(monkeypatch):
+    """These tests isolate formatting/gates with explicit server-result fixtures.
+
+    Their miniature release has no taxable X and cannot estimate the course
+    model. Saved fixtures stand in for authoritative server output here only;
+    test_report_computation covers actual computation and browser tampering.
+    """
+    from gvcsim import report_build
+
+    monkeypatch.setattr(
+        report_build, "server_runs", lambda session, _panel, _release: report_saved_run._saved_runs(session)
+    )
+
+
 @pytest.mark.parametrize(
     ("outcome", "coef", "low", "high", "effect", "interval"),
     [
@@ -1496,7 +1511,9 @@ def test_report_prints_automatically_saved_teaching_row(tmp_path, monkeypatch):
         assert chart["x_label"].endswith("（个百分点）" if step < 13 else "（个标准差）")
 
 
-def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatch):
+def test_report_renders_authoritative_result_fixture_without_calling_estimator(tmp_path, monkeypatch):
+    # rendering_server_results supplies these numbers as server output; this
+    # formatting test does not assert that browser results are trusted.
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
@@ -1523,7 +1540,7 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert report.provenance["course_release"] == config.COURSE_RELEASE
     assert report.provenance["runs"][0]["step"] == 11
     assert report.provenance["runs"][0]["result"]["cumulative"]["coef"] == 1.2
-    assert "1.2" in report.markdown and "生成报告时不会重算" in report.markdown
+    assert "1.2" in report.markdown and "未缓存的重新计算，不采用浏览器保存的数字" in report.markdown
     assert "[0.5721, 1.8279]" in report.markdown
     assert (
         "| X 各项合计（累计效应） | +1.20 个百分点 | 1.2000 | [0.5721, 1.8279] | 0.3000 | 4.00 | 0.0008 |"
@@ -1714,7 +1731,7 @@ def test_qualified_run_on_same_step_still_satisfies_gate_after_insufficient_late
     assert check_gate(session) == []
     report = build(session, "同学")
     assert "四项回归结果汇总" in report.markdown
-    assert "下表列出四步保存的结果" in report.markdown
+    assert "下表按四步保存的设定列出服务器计算的结果" in report.markdown
     assert "这一项不显示 95% 区间" in report.markdown or "受关税影响的国家太少" in report.markdown
     assert X_COLUMN in report.markdown
 
@@ -2044,8 +2061,8 @@ def test_report_marks_suppressed_inference_and_reasons(tmp_path, monkeypatch):
 
     assert "这一项不显示 95% 区间" in report.markdown
     assert "处理聚类不足" in report.markdown
-    assert "| 关税暴露 X | — | -0.1200 | 不显示 | 0.1000 | — | 不显示 |" in report.markdown
-    assert "| X 各项合计（累计效应） | -0.20 个百分点 | -0.2000 | 不显示 | 0.1000 | — | 不显示 |" in report.markdown
+    assert "| 关税暴露 X | — | -0.1200 | 不显示 | — | — | 不显示 |" in report.markdown
+    assert "| X 各项合计（累计效应） | -0.20 个百分点 | -0.2000 | 不显示 | — | — | 不显示 |" in report.markdown
 
 
 def test_report_translates_settings_controls_and_rounds_display_values(tmp_path, monkeypatch):
@@ -2395,7 +2412,7 @@ def test_view_only_keys_never_change_the_experiment_sections():
     assert "记录的单元格" in text
 
 
-def _course_overview(**coefs: float) -> dict:
+def _course_overview(*_args, **coefs: float) -> dict:
     """A stand-in for the course estimate of every Y (``_estimate_overview``): the fixture panel is too small to fit."""
     defaults = {"share": -0.3, "length": -1.5, "position": -0.08, "network": -2000.0}
     stds = {"share": 0.05, "length": 0.58, "position": 0.17, "network": 500.0}
@@ -2430,7 +2447,7 @@ def test_report_draws_every_y_of_each_family_with_the_saved_one_marked(tmp_path,
 
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
-    monkeypatch.setattr(report_build, "_regression_overview", lambda: _course_overview(DVAex_share=0.55))
+    monkeypatch.setattr(report_build, "_regression_overview", lambda *_args: _course_overview(DVAex_share=0.55))
     session = _complete()
     run = session["steps"]["11"]["data"]["run"]
     run["result"]["coefs"][0]["coef"] = -0.55
@@ -2469,7 +2486,8 @@ def test_report_draws_every_y_of_each_family_with_the_saved_one_marked(tmp_path,
     assert network["x_label"] == "X 每高 1 个百分点，Y 两年累计平均相差（个标准差）"
     assert network["items"][1]["text"] == "-20.00（-0.040 个标准差）"
     assert "介数" in [item["label"] for item in network["items"]]
-    assert "生成报告时不会重算" in markdown and "其余 Y 的条形是课程用同一份数据、同一个模型算出的结果" in markdown
+    assert "未缓存的重新计算，不采用浏览器保存的数字" in markdown
+    assert "其余 Y 的条形是课程用同一份数据、同一个模型算出的结果" in markdown
 
 
 def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(tmp_path, monkeypatch):
@@ -2996,8 +3014,6 @@ def test_report_appendix_recomputes_the_models_marked_for_the_report(tmp_path, m
 
     from test_model_spec import _panel
 
-    from gvcsim import report_workbench
-
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     regression_routes.clear_result_cache()
@@ -3011,7 +3027,7 @@ def test_report_appendix_recomputes_the_models_marked_for_the_report(tmp_path, m
     assert "- 结果1：X；无控制变量；年份 FE。这次没能重算：关税暴露 X 在这个设定下无法估计" in lines
     # The rest of this test reads a teaching-shaped panel with two tariff waves.
     panel = _panel()
-    monkeypatch.setattr(report_workbench, "read_csv_artifact", lambda _path: panel)
+    monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: (artifacts.release_identity(tmp_path), panel))
     regression_routes.clear_result_cache()
 
     no_rate = ModelSpec((0, 1), (), ("country_industry", "year"))
@@ -3034,6 +3050,10 @@ def test_report_appendix_recomputes_the_models_marked_for_the_report(tmp_path, m
         x = next(item for item in run["result"]["coefs"] if item["name"] == X_COLUMN)
         assert _fixed4(x["coef"]) in appendix
     assert "99.0000" not in appendix
+    # Coefficient and SE belong to the same printable row/cell, never separate pagination units.
+    x_row = next(line for line in appendix.splitlines() if line.startswith("| X |"))
+    assert x_row.count(" `(") == 3
+    assert not any(line.startswith("|  |") for line in appendix.splitlines())
     # The exchange rate is absorbed by country × year effects and said so; the default column's model is summarised.
     assert (
         "- 国家×年份\\*：X + L1.X；汇率变动；国家×行业 + 国家×年份 FE；已省略（被国家×年份 FE 吸收：汇率变动）"

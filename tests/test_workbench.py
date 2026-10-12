@@ -136,6 +136,24 @@ def test_run_rejects_a_spec_outside_the_whitelist(student_client, spec, status, 
         assert detail in response.json()["detail"]
 
 
+@pytest.mark.parametrize("field", ["controls", "fixed_effects", "baseline"])
+@pytest.mark.parametrize("name", ["\ud800", "x" * 200_000], ids=["surrogate", "200kb"])
+def test_unknown_names_have_bounded_safe_http_errors(student_client, field, name):
+    payload = {"outcome": "trade", "spec": {"x_lags": [0], "controls": [], "fixed_effects": []}}
+    if field == "baseline":
+        payload[field] = name
+    elif field == "controls":
+        payload["spec"][field] = [{"name": name, "lag": 0}]
+    else:
+        payload["spec"][field] = [name]
+    response = student_client.post(
+        "/api/regression/run", content=json.dumps(payload), headers={"Content-Type": "application/json"}
+    )
+    assert response.status_code == 400
+    assert len(response.content) < 200
+    assert name not in response.json()["detail"]
+
+
 def test_a_teacher_cannot_run_a_spec(teaching_db):
     from test_route_adapters import _authenticated_client
 
@@ -165,7 +183,7 @@ def test_the_report_and_the_page_share_one_computed_run(monkeypatch):
     async def direct_cpu(func, *args, **kwargs):
         return func(*args, **kwargs)
 
-    monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: PANEL)
+    monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: (release[0], PANEL))
     monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", direct_cpu)
     import asyncio
 
@@ -256,6 +274,10 @@ def test_saved_models_are_checked_before_the_session_is_stored():
         ([_saved("\u200b")], "请输入名称"),
         ([_saved("结果\u200b")], "不可见字符"),
         ([_saved("\u200d")], "请输入名称"),
+        ([_saved("\u3164")], "请输入名称"),
+        ([_saved("\u2800")], "请输入名称"),
+        ([_saved("结果1"), _saved("结果１\u3164", id="other")], "已有名为"),
+        ([_saved("A（班）"), _saved("a(班)", id="other")], "已有名为"),
         ([_saved("结果\u202e1")], "不可见字符"),
         ([_saved("结果\u001f")], "不可见字符"),
         # A joiner outside an emoji is an invisible mark: "结果1" + U+200D would look like "结果1".
@@ -331,7 +353,10 @@ def test_put_session_refuses_an_invalid_saved_model_and_keeps_a_valid_one(monkey
     response = classroom_routes.put_session(
         classroom_routes.SessionRequest(session=session, base_updated_at=None), {"sub": "student"}
     )
-    assert response["session"]["steps"]["11"]["data"]["custom_results"] == [_saved("结果1")]
+    assert "session" not in response
+    assert response["updated_at"] == "saved-at"
+    assert "completion" in response
+    assert persisted[0][1]["steps"]["11"]["data"]["custom_results"] == [_saved("结果1")]
 
     session["steps"]["11"]["data"]["custom_results"] = [_saved("结果1"), _saved("结果1", id="x")]
     with pytest.raises(classroom_routes.HTTPException) as refused:

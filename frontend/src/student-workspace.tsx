@@ -51,7 +51,7 @@ export function useRestoredEditsToast(restoredEdits: number): void {
 export function MergeNotes({ notes, onDismiss }: { notes?: readonly string[]; onDismiss?: () => void }) {
   if (!notes?.length) return null;
   return (
-    <div className="merge-notes" role="status">
+    <div className="merge-notes" role="status" tabIndex={0} aria-label="合并说明，可上下滚动">
       <b>本页的修改已与服务器上的记录合并，以下几处没能原样保留：</b>
       <ul>{notes.map((note) => <li key={note}>{note}</li>)}</ul>
       {onDismiss && <button type="button" className="secondary sm" onClick={onDismiss}>知道了</button>}

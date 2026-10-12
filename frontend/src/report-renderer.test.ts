@@ -9,12 +9,14 @@ import { NEGATIVE, POSITIVE, UNCERTAIN, ZERO_LINE } from "./viz/regression/palet
 describe("report tables", () => {
   test("the workbench appendix's significance stars and typed model names print literally", () => {
     // As gvcsim/report_workbench.py writes them: stars, "<" and a student's "*" escaped.
-    const markdown = "| 变量 | 默认模型 | 国家×年份\\* |\n|---|---:|---:|\n| X | -0.3298\\*\\*\\* | 0.1043\\* |\n|  | (0.0082) | (0.0653) |\n\n"
+    const markdown = "| 变量 | 默认模型 | 国家×年份\\* |\n|---|---:|---:|\n| X | -0.3298\\*\\*\\* `(0.0082)` | 0.1043\\* `(0.0653)` |\n\n"
       + "注：括号内为按国家聚类的标准误。\\*\\*\\* p\\<0.01, \\*\\* p\\<0.05, \\* p\\<0.1。";
     const element = document.createElement("div");
     element.innerHTML = renderToStaticMarkup(createElement(ReportMarkdown, { markdown }));
     expect([...element.querySelectorAll("th")].map((cell) => cell.textContent)).toEqual(["变量", "默认模型", "国家×年份*"]);
-    expect([...element.querySelectorAll("td")].map((cell) => cell.textContent).slice(0, 3)).toEqual(["X", "-0.3298***", "0.1043*"]);
+    expect([...element.querySelectorAll("td")].map((cell) => cell.textContent)).toEqual(["X", "-0.3298*** (0.0082)", "0.1043* (0.0653)"]);
+    expect(element.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect([...element.querySelectorAll("td code")].map((cell) => cell.textContent)).toEqual(["(0.0082)", "(0.0653)"]);
     expect(element.querySelector("p")?.textContent).toBe("注：括号内为按国家聚类的标准误。*** p<0.01, ** p<0.05, * p<0.1。");
     expect(element.querySelector("em, strong")).toBeNull();
   });

@@ -532,19 +532,6 @@ export function IndicatorTrendChart({
             </text>
           </g>
         ))}
-        {(Array.isArray(markYear) ? markYear : markYear ? [markYear] : [])
-          .filter((mark) => years.includes(mark.year) && mark.year > years[0])
-          .map((mark, index) => (
-            <g key={mark.year} data-mark-year={mark.year}>
-              <line x1={x(mark.year - 0.5)} x2={x(mark.year - 0.5)} y1={34} y2={250} stroke="#4b5563" strokeDasharray="5 4" />
-              {/* Left of the line and halfway up: before the marked year the step 10 X is 0 for every country, so that
-                  area is empty. To the right the taxed line jumps up; at the top-left it touched the jump when X
-                  reached the top of the axis. A later wave's label sits low: left of its line the earlier wave has
-                  already jumped up, while the later one is still at 0 below. */}
-              <text x={x(mark.year - 0.5) - 10} y={index === 0 ? 149 : 228} textAnchor="end" fontSize={12} fill="#374151"
-                stroke="#fff" strokeWidth={3} strokeLinejoin="round" paintOrder="stroke">{mark.label}</text>
-            </g>
-          ))}
         {bandPath && <path d={bandPath} fill={REFERENCE_FILL} fillOpacity={0.22} stroke="none" />}
         {band.length >= 2 && (
           <polyline
@@ -625,6 +612,17 @@ export function IndicatorTrendChart({
             )}
           </g>
         ))}
+        {(Array.isArray(markYear) ? markYear : markYear ? [markYear] : [])
+          .filter((mark) => years.includes(mark.year) && mark.year > years[0])
+          .map((mark, index) => (
+            <g key={mark.year} data-mark-year={mark.year} pointerEvents="none">
+              <line x1={x(mark.year - 0.5)} x2={x(mark.year - 0.5)} y1={34} y2={250} stroke="#4b5563" strokeDasharray="5 4" />
+              {/* Before a tariff wave X is zero, but exchange-rate lines can cross this area.
+                  Draw the label and its white outline after the series so the text stays readable. */}
+              <text x={x(mark.year - 0.5) - 10} y={index === 0 ? 149 : 228} textAnchor="end" fontSize={12} fill="#374151"
+                stroke="#fff" strokeWidth={3} strokeLinejoin="round" paintOrder="stroke">{mark.label}</text>
+            </g>
+          ))}
         {activeYear !== null && (
           <line data-crosshair x1={x(activeYear)} x2={x(activeYear)} y1={40} y2={252} stroke="#1b1f2b" strokeDasharray="3 3" pointerEvents="none" />
         )}

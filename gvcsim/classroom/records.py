@@ -33,6 +33,10 @@ class SessionChanged(RuntimeError):
     pass
 
 
+class SessionMissing(SessionChanged):
+    """A delta cannot create the full record it was based on."""
+
+
 _UNCONDITIONAL_SESSION_WRITE = object()
 
 
@@ -197,14 +201,27 @@ def patch_session(
             "SELECT session,updated_at FROM experiment_sessions WHERE account_id=%s AND release_id=%s FOR UPDATE",
             (account["id"], release_id),
         ).fetchone()
-        if current is None or current["updated_at"] != expected_updated_at:
-            raise SessionChanged("实验记录已被另一个标签页更新")
+        if current is None:
+            from gvcsim.session import empty_session
+
+            apply(empty_session())
+            raise SessionMissing("尚无已保存的实验记录")
         session = apply(current["session"])
+        if session == current["session"]:
+            saved = c.execute(
+                "SELECT updated_at FROM experiment_sessions WHERE account_id=%s AND release_id=%s AND updated_at=%s",
+                (account["id"], release_id, expected_updated_at),
+            ).fetchone()
+            if saved is None:
+                raise SessionChanged("实验记录已被另一个标签页更新")
+            return session, saved
         saved = c.execute(
             "UPDATE experiment_sessions SET session=%s,updated_at=clock_timestamp()"
-            " WHERE account_id=%s AND release_id=%s RETURNING updated_at",
-            (json.dumps(session, ensure_ascii=False), account["id"], release_id),
+            " WHERE account_id=%s AND release_id=%s AND updated_at=%s RETURNING updated_at",
+            (json.dumps(session, ensure_ascii=False), account["id"], release_id, expected_updated_at),
         ).fetchone()
+        if saved is None:
+            raise SessionChanged("实验记录已被另一个标签页更新")
         return session, saved
 
 

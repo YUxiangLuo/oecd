@@ -158,7 +158,7 @@ test("creating, renaming, archiving and restoring each say so in a toast", async
   }
 });
 
-test("the name dialog normalizes the name, focuses its error and returns focus to its opener", async () => {
+test("the name dialog keeps display typography and emoji, focuses its error and returns focus to its opener", async () => {
   const list = spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] });
   const create = spyOn(api.classroom, "createSemester")
     .mockRejectedValueOnce(new ApiError(409, "学期 2026 秋 已存在", "409"))
@@ -171,9 +171,9 @@ test("the name dialog normalizes the name, focuses its error and returns focus t
     fireEvent.click(opener);
     const input = screen.getByLabelText("学期名称");
     expect(document.activeElement).toBe(input);
-    fireEvent.change(input, { target: { value: " ２０２６​　 秋 " } });
+    fireEvent.change(input, { target: { value: " ２０２６（秋）👩‍💻 " } });
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "保存" })); });
-    expect(create).toHaveBeenLastCalledWith("2026 秋");
+    expect(create).toHaveBeenLastCalledWith("２０２６（秋）👩‍💻");
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toBe("保存失败：学期 2026 秋 已存在");
     expect(document.activeElement).toBe(input);

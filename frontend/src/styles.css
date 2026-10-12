@@ -770,6 +770,9 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
 .report-md .data-table td { text-align: left; white-space: normal; vertical-align: top; }
 /* Short column names wrap only between words (“步骤” stays on one line). */
 .report-md .data-table th { word-break: keep-all; }
+.report-md .data-table th:first-child, .report-md .data-table td:first-child { white-space: nowrap; }
+/* Appendix SEs use inline code to keep each estimate and its SE in one Markdown cell, without enabling raw HTML. */
+.report-md .data-table td code { display: block; white-space: nowrap; font: inherit; color: inherit; background: none; padding: 0; }
 .error-box {
   background: #fff5f2; border: 1px solid #f6cabf; border-radius: 12px;
   padding: 14px 18px; color: #b3341f; font-size: 13px;
@@ -993,6 +996,7 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
 .merge-notes {
   margin: 0 0 12px; padding: 10px 14px; border: 1px solid #e8c77b; border-left: 4px solid #d99a2b;
   border-radius: 10px; background: #fff8e8; color: #6b450b; font-size: 13px; line-height: 1.6;
+  max-height: min(180px, 25vh); overflow-y: auto; flex-shrink: 0;
 }
 .merge-notes ul { margin: 6px 0 8px; padding-left: 20px; }
 .sync-problem--compact span { flex: 1; min-width: 0; }

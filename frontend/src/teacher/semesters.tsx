@@ -6,7 +6,7 @@ import { showToast } from "../toast";
 import type { AcademicSemester, ClassGroup } from "../types";
 import { userFacingRequestError } from "../user-facing-error";
 import { StudentBatchModal } from "./student-batch";
-import { normalizeLabel } from "./text";
+import { searchKey } from "./text";
 import { ConfirmModal, EmptyState, LoadFailure, Modal, StatusPill, Toolbar, useFieldErrorFocus } from "./ui";
 
 type Editor =
@@ -221,12 +221,12 @@ export function NameModal({ title, label, initial, onClose, onSubmit }: {
     inputRef.current?.focus();
   };
   const submit = async () => {
-    // Same normalization as the server, so what is checked here is what gets stored.
-    const normalized = normalizeLabel(name);
-    if (!normalized) return invalid(`${label}不能为空`);
-    // Checked on the normalized text (as the server does); no maxLength on the input, which would count pasted
-    // zero-width characters and cut a long name silently.
-    if (normalized.length > 80) return invalid(`${label}不能超过 80 个字符（当前 ${normalized.length} 个）`);
+    // Comparison folds typography; display text must keep the teacher's punctuation and emoji.
+    const normalized = name.trim();
+    if (!searchKey(normalized)) return invalid(`${label}不能为空`);
+    if (/[\p{Cs}\u0000]/u.test(normalized)) return invalid(`${label}包含无效的 Unicode 字符`);
+    const length = [...normalized].length;
+    if (length > 80) return invalid(`${label}不能超过 80 个字符（当前 ${length} 个）`);
     setSaving(true);
     setError(null);
     try {

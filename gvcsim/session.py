@@ -8,7 +8,7 @@ from copy import deepcopy
 from typing import Any
 
 SESSION_VERSION = "experiment-session-simple-v3"
-MAX_SESSION_BYTES = 1_000_000
+MAX_SESSION_BYTES = 300_000
 MAX_STEPS = 15
 SHARED_KEYS = {"regression_settings"}
 
@@ -53,6 +53,8 @@ def _json_value(value: Any, path: str = "session") -> Any:
 def validate_session(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise SessionError("会话必须是对象")
+    if set(payload) != {"version", "steps", "shared"}:
+        raise SessionError("会话必须且只能包含 version、steps、shared")
     if payload.get("version") != SESSION_VERSION:
         raise SessionError(f"会话版本不受支持；当前为 {SESSION_VERSION}")
     raw_steps = payload.get("steps", {})

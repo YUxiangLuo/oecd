@@ -114,7 +114,7 @@ OUTPUT_CHECK_SPECS = (
     OutputCheckSpec(
         "teaching_panel_contract",
         "mathematical",
-        "Teaching panel has unique country-industry-year keys, five continuous years, finite teaching fields, bounded outcomes, X=w*tariff with two zero pre-policy years, lags of X equal to w*tariff of earlier years (zero before the panel), and tariff waves 0/1/2.",
+        "Teaching panel has unique country-industry-year keys, five continuous years, finite teaching fields, bounded outcomes, X=w*tariff with two zero pre-policy years, scheduled lags, tariff waves determined by country goods surplus, country-year exchange noise in its uniform support with first-wave depreciation, and rowwise outcome-family identities.",
     ),
 )
 OUTPUT_QC_EXPECTED_CHECKS = tuple(spec.name for spec in OUTPUT_CHECK_SPECS)
@@ -773,14 +773,20 @@ def _panel_share_economic_domains(frames: dict[str, pd.DataFrame], year: int) ->
 
 def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict:
     from gvcsim.regression.teaching import (
+        BASELINES,
         EXCHANGE_RATE_COLUMN,
+        EXCHANGE_RATE_DEPRECIATION,
+        EXCHANGE_RATE_NOISE_SD,
+        SURPLUS_COLUMN,
         TARIFF_RATE,
         WAVE_COLUMN,
         X_COLUMN,
         X_LAG_COLUMNS,
         Y_COLUMNS,
         _is_goods_sector,
+        tariff_wave,
         wave_start_years,
+        y_column,
     )
 
     frame = frames["panel_teaching"]
@@ -792,6 +798,7 @@ def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict
         "teaching_export_share_w",
         "teaching_tariff_rate_tau",
         "teaching_treated",
+        SURPLUS_COLUMN,
         WAVE_COLUMN,
         EXCHANGE_RATE_COLUMN,
         *X_LAG_COLUMNS.values(),
@@ -822,12 +829,24 @@ def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict
     violations += int((~_close(x, w * tau)).sum())
     violations += int((~numeric["teaching_treated"].isin([0, 1])).sum())
     violations += int((~numeric[WAVE_COLUMN].isin([0, 1, 2])).sum())
+    violations += int((~numeric[WAVE_COLUMN].eq(tariff_wave(numeric[SURPLUS_COLUMN]))).sum())
+    # Surplus and wave are country-level, time-invariant; exchange noise is shared by every industry in a
+    # country-year. Check its support after removing the prescribed first-wave depreciation, not a fixed seed.
+    for column in (SURPLUS_COLUMN, WAVE_COLUMN):
+        violations += int((frame.groupby("country")[column].nunique(dropna=False) != 1).sum())
+    violations += int((frame.groupby(["country", "year"])[EXCHANGE_RATE_COLUMN].nunique(dropna=False) != 1).sum())
     # τ follows the published schedule: the goods industries (ICIO A–C) of a taxed country from its wave's start year.
     # A lag of X is the unit's w × that schedule k years earlier (0 before the panel), so a unit missing a year inside
     # the panel still has its lags checked, as the generator writes them.
     if unique_years:
         starts = numeric[WAVE_COLUMN].map(wave_start_years(int(unique_years[0])))
         goods = _is_goods_sector(frame["industry"])
+        depreciation = EXCHANGE_RATE_DEPRECIATION * (
+            numeric[WAVE_COLUMN].eq(1) & years.ge(wave_start_years(int(unique_years[0]))[1])
+        )
+        noise = numeric[EXCHANGE_RATE_COLUMN] - depreciation
+        bound = EXCHANGE_RATE_NOISE_SD * np.sqrt(3)
+        violations += int((noise.abs() > bound + OUTPUT_QC_ABS_TOLERANCE).sum())
 
         def scheduled(at: pd.Series) -> pd.Series:
             return TARIFF_RATE * (goods & starts.notna() & at.ge(starts)).astype(float)
@@ -842,6 +861,26 @@ def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict
     violations += int((~numeric[Y_COLUMNS["production"]].between(0, 1)).sum())
     violations += int((numeric[Y_COLUMNS["length"]] <= 0).sum())
     violations += int((numeric[Y_COLUMNS["network"]] < 0).sum())
+    for outcome, items in BASELINES.items():
+        for item in items:
+            if item.combine is None:
+                continue
+            column = y_column(outcome, item.key)
+            constant, terms = item.combine
+            columns = [y_column(outcome, key) for key, _ in terms]
+            # Reduced source fixtures need not carry every optional baseline, but an identity must carry all
+            # its parts whenever present. Matching missing masks are required as well as matching values.
+            if column not in numeric:
+                continue
+            if any(part not in numeric for part in columns):
+                violations += 1
+                details.append(f"incomplete_identity={column}")
+                continue
+            expected = pd.Series(constant, index=frame.index, dtype=float)
+            for (_, coefficient), part in zip(terms, columns, strict=True):
+                expected = expected + coefficient * numeric[part]
+            valid = numeric[column].isna() & expected.isna() | _close(numeric[column], expected)
+            violations += int((~valid).sum())
     return _check(
         "teaching_panel_contract",
         violations == 0,

@@ -11,6 +11,99 @@ from gvcsim.regression import panel
 from gvcsim.regression.design import RegressionDesign
 
 
+@pytest.mark.parametrize("effects", [(), ("country",), ("country", "year"), ("country", "industry", "year")])
+@pytest.mark.parametrize("scale", [1e-12, 1e-6, 1e8, 1e12])
+def test_estimates_and_omissions_are_independent_of_column_units(effects, scale):
+    from gvcsim.regression.estimation import within_ols
+    from gvcsim.regression.model import PreparedModel
+
+    rng = np.random.default_rng(12)
+    frame = pd.DataFrame(
+        {
+            "country": np.repeat(np.arange(16), 15),
+            "year": np.tile(np.arange(5), 48),
+            "industry": np.tile(np.repeat(np.arange(3), 5), 16),
+        }
+    )
+    frame = frame.loc[(frame.country + frame.year + frame.industry) % 4 != 0].copy()
+    frame["x"] = rng.normal(size=len(frame))
+    frame["control"] = rng.normal(size=len(frame))
+    frame["constant_control"] = 2.0
+    frame["duplicate"] = 3 * frame.x
+    frame["y"] = 2 * frame.x - frame.control + rng.normal(size=len(frame))
+
+    def fit(data):
+        return within_ols(
+            PreparedModel(
+                data,
+                "y",
+                ["x", "control", "constant_control", "duplicate"],
+                ["x"],
+                "country",
+                "year",
+                "country",
+                [],
+                fe_columns=effects,
+            )
+        )
+
+    expected = fit(frame.copy())
+    scaled = frame.copy()
+    scaled["y"] *= scale
+    scaled["x"] *= 1 / scale
+    scaled["control"] *= scale
+    scaled["constant_control"] *= 1 / scale
+    scaled["duplicate"] *= scale
+    actual = fit(scaled)
+    assert actual.omitted == expected.omitted
+    for index, factor in enumerate((scale**2, 1.0)):
+        np.testing.assert_allclose(
+            [actual.coefs[index].coef / factor, actual.coefs[index].se / factor],
+            [expected.coefs[index].coef, expected.coefs[index].se],
+            rtol=1e-8,
+            atol=1e-10,
+        )
+
+
+def test_nearly_absorbed_non_nested_effects_retain_within_accuracy():
+    from gvcsim.regression.estimation import multiway_demean, within_ols
+    from gvcsim.regression.model import PreparedModel
+
+    rng = np.random.default_rng(21)
+    country = np.repeat(np.arange(20), 5)
+    year = np.tile(np.arange(5), 20)
+    keep = (country + year) % 4 != 0
+    country, year = country[keep], year[keep]
+    base = country / 16 + year / 4
+    values = base + 1e-7 * rng.normal(size=len(base))
+    # Remove the exactly represented, known absorbed component before the independent dummy projection, so
+    # the oracle does not itself lose the small residual by subtracting two fitted large values.
+    delta = values - base
+    dummies = np.column_stack([pd.get_dummies(country, dtype=float), pd.get_dummies(year, dtype=float)])
+    expected = delta - dummies @ np.linalg.lstsq(dummies, delta, rcond=None)[0]
+    actual = multiway_demean(values[:, None], [country, year])[:, 0]
+    assert np.linalg.norm(actual - expected) / np.linalg.norm(expected) < 1e-8
+    frame = pd.DataFrame(
+        {
+            "country": country,
+            "year": year,
+            "control": values,
+            "x": rng.normal(size=len(values)),
+            "y": rng.normal(size=len(values)),
+        }
+    )
+    model = PreparedModel(
+        frame, "y", ["x", "control"], ["x"], "country", "year", "country", [], fe_columns=("country", "year")
+    )
+    raw = frame[["y", "x"]].to_numpy()
+    projected = raw - dummies @ np.linalg.lstsq(dummies, raw, rcond=None)[0]
+    reference = within_ols(model, (projected[:, 0], np.column_stack([projected[:, 1], expected]), ["x", "control"], []))
+    result = within_ols(model)
+    assert not result.omitted
+    np.testing.assert_allclose([c.coef for c in result.coefs], [c.coef for c in reference.coefs], rtol=1e-8)
+    np.testing.assert_allclose([c.se for c in result.coefs], [c.se for c in reference.coefs], rtol=1e-8)
+
+
 @pytest.mark.parametrize("unbalanced", [False, True])
 def test_twoway_demean_matches_independent_dummy_projection(unbalanced):
     rng = np.random.default_rng(20260907)

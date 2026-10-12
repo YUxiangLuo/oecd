@@ -525,10 +525,41 @@ describe("saving when the tab is hidden or closed", () => {
   };
   const unloading = () => pagehide(false);
 
-  test("a large record closing sends only the steps changed since the last save, with keepalive and without asking", async () => {
-    const get = spyOn(api.classroom, "session").mockResolvedValue(response(large));
+  const boundaryBase = patchSessionStep(emptySession(), 11, { notes: "" });
+  const boundaryEdit = patchSessionStep(boundaryBase, 15, { research_question: "typed on a large record" });
+  const boundary = patchSessionStep(boundaryBase, 11, {
+    notes: "a".repeat(64_000 - new TextEncoder().encode(JSON.stringify({ session: boundaryEdit, base_updated_at: null })).length),
+  });
+
+  test("even a small record asks before leaving while its save is still in flight", async () => {
+    const get = spyOn(api.classroom, "session").mockResolvedValue(response());
+    let answer!: (value: SessionSaveResponse) => void;
+    const save = spyOn(api.classroom, "saveSession").mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
+    const hook = renderHook(() => useSession(true, "student"));
+    try {
+      await waitFor(() => expect(hook.result.current.status).toBe("ready"));
+      act(() => {
+        hook.result.current.patchStep(15, { research_question: "first" });
+        window.dispatchEvent(pagehide(true));
+      });
+      expect(save).toHaveBeenCalledTimes(1);
+      const leaving = new Event("beforeunload", { cancelable: true });
+      act(() => {
+        hook.result.current.patchStep(15, { research_question: "newer unsent edit" });
+        window.dispatchEvent(leaving);
+      });
+      expect(leaving.defaultPrevented).toBe(true);
+      expect(readKeptEdits(sessionStorage, "student", RELEASE)?.session)
+        .toEqual(patchSessionStep(emptySession(), 15, { research_question: "newer unsent edit" }));
+      hook.unmount();
+      await act(async () => { answer(response(patchSessionStep(emptySession(), 15, { research_question: "first" }), NEWER)); });
+    } finally { hook.unmount(); get.mockRestore(); save.mockRestore(); }
+  });
+
+  test.each([["large", large], ["fits only with a null timestamp", boundary]] as const)("a %s record closing sends only changed steps with keepalive, without asking", async (_name, record) => {
+    const get = spyOn(api.classroom, "session").mockResolvedValue(response(record));
     const save = spyOn(api.classroom, "saveSession").mockImplementation(async ({ session }) => response(session, NEWER));
-    const patch = spyOn(api.classroom, "patchSession").mockImplementation(async () => response(large, NEWER));
+    const patch = spyOn(api.classroom, "patchSession").mockImplementation(async () => response(record, NEWER));
     const hook = renderHook(() => useSession(true, "student"));
     try {
       await waitFor(() => expect(hook.result.current.status).toBe("ready"));

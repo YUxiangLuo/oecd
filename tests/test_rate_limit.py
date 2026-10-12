@@ -80,7 +80,7 @@ def test_expensive_regression_routes_limit_each_account_before_repeating_work(
     limiter_name,
 ):
     class Uncached:
-        async def get_or_compute(self, _key, factory, *, admit, owner):
+        async def get_or_compute(self, _key, factory, *, admit, owner, **_kwargs):
             admit()
             return await factory()
 
@@ -96,9 +96,9 @@ def test_expensive_regression_routes_limit_each_account_before_repeating_work(
     monkeypatch.setattr(regression_routes, limiter_name, SlidingWindowRateLimiter(1))
     monkeypatch.setattr(regression_routes, "_RESULT_CACHE", Uncached())
     # Neither cache keeps the result, so the second request repeats the work.
-    monkeypatch.setattr(regression_routes, "_store_payload", lambda *_args: None)
+    monkeypatch.setattr(regression_routes, "_store_payload", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: "a" * 32)
-    monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: object())
+    monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: ("a" * 32, object()))
     monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", fake_cpu)
     request = SimpleNamespace(state=SimpleNamespace(user={"role": "student", "sub": "student", "aid": 2}))
 
@@ -114,7 +114,7 @@ def test_a_run_already_computed_does_not_count_against_the_limit(monkeypatch):
     """The report (or another student) computed this model on the same panel: answering it is not a calculation."""
 
     class Uncached:
-        async def get_or_compute(self, _key, factory, *, admit, owner):
+        async def get_or_compute(self, _key, factory, *, admit, owner, **_kwargs):
             admit()
             return await factory()
 
@@ -131,7 +131,7 @@ def test_a_run_already_computed_does_not_count_against_the_limit(monkeypatch):
     monkeypatch.setattr(regression_routes, "_RUN_LIMITER", SlidingWindowRateLimiter(1))
     monkeypatch.setattr(regression_routes, "_RESULT_CACHE", Uncached())
     monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: "a" * 32)
-    monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: panel)
+    monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: ("a" * 32, panel))
     monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", fake_cpu)
     regression_routes.clear_result_cache()
     request = SimpleNamespace(state=SimpleNamespace(user={"role": "student", "sub": "student", "aid": 2}))
@@ -166,7 +166,7 @@ def test_exhausted_initiator_does_not_publish_429_to_49_other_students(monkeypat
         monkeypatch.setattr(regression_routes, "_RUN_LIMITER", limiter)
         monkeypatch.setattr(regression_routes, "_RESULT_CACHE", AsyncSingleFlightCache())
         monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: "a" * 32)
-        monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: object())
+        monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: ("a" * 32, object()))
         computations = []
 
         async def compute(function, *_args, **_kwargs):

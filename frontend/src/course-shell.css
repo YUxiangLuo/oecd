@@ -81,6 +81,7 @@
   padding: 0 28px; background: #fff; border-top: 1px solid #e7e9f0;
 }
 .footer-loc, .footer-next { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
+.footer-loc { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .footer-next { margin-left: auto; }
 button.footer-next { border: 0; background: none; padding: 4px 6px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 11.5px; color: #4b47e0; }
 button.footer-next:hover { text-decoration: underline; }

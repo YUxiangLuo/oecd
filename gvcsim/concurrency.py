@@ -22,6 +22,9 @@ _RAW_LIMITER = anyio.CapacityLimiter(2)
 _RAW_THREADS = anyio.CapacityLimiter(2)
 _RAW_ADMISSION = anyio.CapacityLimiter(64)
 _SYNC_ADMISSION = anyio.CapacityLimiter(64)
+_REPORT_THREADS = anyio.CapacityLimiter(32)
+_REPORT_SLOTS = anyio.CapacityLimiter(32)
+_REPORT_ADMISSION = anyio.CapacityLimiter(32)
 QUEUE_TIMEOUT_SECONDS = 15.0
 WORK_TIMEOUT_SECONDS = 90.0
 
@@ -117,6 +120,12 @@ async def run_cpu_bound(function: Callable[P, T], *args: P.args, **kwargs: P.kwa
 async def run_raw_io(function: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
     # Raw readers never borrow the default thread tokens used by auth and saves.
     return await _run_limited(lambda: function(*args, **kwargs), _RAW_LIMITER, _RAW_ADMISSION, _RAW_THREADS)
+
+
+async def run_report_build(function: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
+    # Renderers wait on per-model async singleflight. They must borrow neither
+    # CPU slots nor the default threads needed to execute those models and saves.
+    return await _run_limited(lambda: function(*args, **kwargs), _REPORT_SLOTS, _REPORT_ADMISSION, _REPORT_THREADS)
 
 
 async def run_sync(function: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:

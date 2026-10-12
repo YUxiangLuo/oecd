@@ -50,7 +50,7 @@ def test_v12_schema_contains_release_auth_and_class_contracts(teaching_db):
         "experiment_sessions",
         "reports",
     }
-    assert db.TEACHING_DB_VERSION == "gvcsim-teaching-db-v12"
+    assert db.TEACHING_DB_VERSION == "gvcsim-teaching-db-v13"
     assert "auth_version" in account_columns
     assert "release_id" in session_columns
 
@@ -68,33 +68,13 @@ def test_schema_mismatch_requires_migration_without_recommending_reset_as_upgrad
     assert "不能用 `uv run gvcsim classroom-init --reset` 代替普通升级" in message
 
 
-def test_v11_schema_migrates_without_losing_accounts_sessions_or_reports(teaching_db):
-    session = empty_session()
-    session["steps"]["1"] = make_record({"value": "preserved by migration"})
-    saved = db.save_session("student", session)
-    assert saved is not None
-    report = db.save_generated_report("student", "preserved report", {"runs": []}, saved["updated_at"])
-    assert report is not None
-    pending = db.submit_report("student")
-    account_id = db.find_account("student")["id"]
-    graded = db.grade_report(account_id, 88, "preserved feedback", "teacher", pending["updated_at"])
-
+def test_old_schema_is_not_silently_migrated(teaching_db):
     with db.conn() as connection:
-        connection.execute("DROP TABLE class_enrollments,class_groups,academic_terms")
         connection.execute("UPDATE schema_meta SET version='gvcsim-teaching-db-v11' WHERE singleton")
     db.shutdown()
     db._schema_ready = False
-
-    applied = db.initialize_schema()
-
-    assert applied == ["迁移 schema gvcsim-teaching-db-v11 → gvcsim-teaching-db-v12"]
-    assert db.find_account("student") is not None
-    assert db.get_session("student")["session"] == session
-    migrated_report = db.get_report(account_id, "teacher")
-    assert migrated_report["markdown"] == "preserved report"
-    assert migrated_report["score"] == graded["score"] == 88
-    assert migrated_report["feedback"] == "preserved feedback"
-    assert db.verify_schema()["schema_version"] == "gvcsim-teaching-db-v12"
+    with pytest.raises(db.SchemaVersionMismatch):
+        db.initialize_schema()
 
 
 def test_readiness_requires_a_teacher_account(teaching_db):

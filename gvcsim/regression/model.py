@@ -164,17 +164,23 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
 
     numeric = [design.depvar, *x_columns, *base_controls, "year", *([design.treated_col] if has_treated else [])]
     for column in dict.fromkeys(numeric):
-        invalid = data[column].notna() & ~data[column].map(
-            lambda value: (
-                isinstance(value, Real) and not isinstance(value, (bool, np.bool_)) and math.isfinite(float(value))
+        values = data[column]
+        if values.dtype.kind in "iuf":
+            invalid = values.notna() & ~np.isfinite(values)
+        else:
+            # Object columns still need strict type checks: coercion would accept
+            # strings and booleans which the public numeric contract rejects.
+            invalid = values.notna() & ~values.map(
+                lambda value: (
+                    isinstance(value, Real) and not isinstance(value, (bool, np.bool_)) and math.isfinite(float(value))
+                )
             )
-        )
         if invalid.any():
             raise ValueError(f"回归数值变量 {column} 非缺失值必须是真实数值且有限")
         data[column] = pd.to_numeric(data[column], errors="coerce")
     if data["year"].isna().any():
         raise ValueError("回归数值变量 year 必须是真实数值且不得缺失")
-    if not data["year"].dropna().map(lambda value: float(value).is_integer()).all():
+    if not np.equal(data["year"], np.floor(data["year"])).all():
         raise ValueError("回归数值变量 year 必须是数学整数")
     if has_treated and not data[design.treated_col].dropna().isin([0, 1]).all():
         raise ValueError(f"处理状态 {design.treated_col} 必须严格为 0/1")

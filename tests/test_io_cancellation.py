@@ -42,7 +42,7 @@ def test_regression_disconnect_during_panel_read_keeps_thread_and_cancels_queued
         limiter.total_tokens = 1
         cache = AsyncSingleFlightCache(max_inflight=1)
         monkeypatch.setattr(regression_routes, "_RESULT_CACHE", cache)
-        monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: "a" * 32)
+        monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda _root=None: "a" * 32)
         started, release, finished = threading.Event(), threading.Event(), threading.Event()
         reads, computations = [], []
 
@@ -61,7 +61,7 @@ def test_regression_disconnect_during_panel_read_keeps_thread_and_cancels_queued
                 return SimpleNamespace(to_dict=lambda: {"status": "ok", "support": {}}), {}
             return {"draws": []}
 
-        monkeypatch.setattr(regression_routes, "_read_csv", read)
+        monkeypatch.setattr(regression_routes.artifacts, "read_csv_artifact", read)
         monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", compute)
         route = regression_routes.regression_run_http
         payload = RegressionRequest(outcome="trade")
@@ -195,31 +195,38 @@ def test_report_disconnect_during_preparation_never_saves(monkeypatch, phase):
 def test_report_disconnect_does_not_cancel_the_commit_phase(monkeypatch):
     async def scenario():
         stub_report(monkeypatch)
-        started, release = threading.Event(), threading.Event()
+        started, release, committed = threading.Event(), threading.Event(), threading.Event()
 
         def save(*args):
             assert args[-2:] == ("version-1", None)
             started.set()
             assert release.wait(5)
+            committed.set()
             return {"state": "draft"}
 
         monkeypatch.setattr(routes.db, "save_generated_report", save)
         disconnected = asyncio.Event()
         request = asyncio.create_task(routes.generate_report_http(student_request(disconnected), {"sub": "student"}))
+        staying = None
         try:
             await until(started.is_set)
+            staying = asyncio.create_task(routes.generate_report({"sub": "student"}))
+            await asyncio.sleep(0)
             disconnected.set()
-            # A lost response must not turn the still-running commit into a
-            # cancelled/untracked request, even though computation is cancellable.
-            with pytest.raises(TimeoutError):
-                await asyncio.wait_for(asyncio.shield(request), 0.05)
+            # The waiter leaves promptly, but shared persistence remains owned.
+            with pytest.raises(HTTPException) as leaving:
+                await request
+            assert leaving.value.status_code == 499
+            assert not committed.is_set()
             release.set()
-            response = await request
+            await until(committed.is_set)
+            await until(lambda: routes._REPORT_FLIGHTS.inflight_count == 0)
+            response = await staying
             assert response["report"] == {"state": "draft", "suggested_filename": "report.md"}
             assert response["completion"] == {}
         finally:
             release.set()
-            await asyncio.gather(request, return_exceptions=True)
+            await asyncio.gather(request, *([staying] if staying is not None else []), return_exceptions=True)
             await concurrency.shutdown()
 
     anyio.run(scenario)
@@ -445,12 +452,15 @@ def test_report_disconnect_during_real_row_lock_preserves_transaction(teaching_d
             try:
                 await until(started.is_set)
                 disconnected.set()
-                with pytest.raises(TimeoutError):
-                    await asyncio.wait_for(asyncio.shield(request), 0.05)
+                with pytest.raises(HTTPException) as leaving:
+                    await request
+                assert leaving.value.status_code == 499
+                assert db.latest_report("student") is None
                 locker.commit()
-                response = await request
-                assert response["report"]["markdown"] == "# committed after disconnect"
-                assert response["report"]["state"] == "draft"
+                await until(lambda: routes._REPORT_FLIGHTS.inflight_count == 0)
+                report = db.latest_report("student")
+                assert report["markdown"] == "# committed after disconnect"
+                assert report["state"] == "draft"
             finally:
                 locker.rollback()
                 await asyncio.gather(request, return_exceptions=True)

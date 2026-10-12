@@ -403,7 +403,7 @@
 .teaching-variables dd { margin: 4px 0 0; color: #3f4759; font-size: 12.5px; line-height: 1.65; }
 .source-tag { display: inline-block; margin: 0 2px 0 6px; padding: 0 6px; border-radius: 999px; background: #eceef8; color: #4b5266; font-size: 11px; font-weight: 650; line-height: 1.7; white-space: nowrap; }
 .teaching-example-body { margin-top: 14px; padding-top: 12px; border-top: 1px solid #eceef3; }
-.teaching-example-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 12px; }
+.teaching-example-charts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .teaching-example-charts > * { min-width: 0; }
 .teaching-table-note { margin: 6px 0 0; font-size: 11.5px; }
 @media (max-width: 600px) { .teaching-tiles { grid-template-columns: minmax(0, 1fr); } }
@@ -590,8 +590,7 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 .reg-custom-table td:not(:first-child) { text-align: right; }
 .reg-custom-compare-table td { text-align: right; line-height: 1.35; }
 .reg-custom-compare-table th[scope="row"] { text-align: left; font-weight: 600; }
-/* With many columns the table scrolls sideways: the variable names stay at the left edge, so the highlighted new
-   column (always last) still reads against its rows. */
+/* Variable names stay visible when comparing many models. The new result follows the default. */
 .reg-custom-compare-table th[scope="row"], .reg-custom-compare-table thead th:first-child {
   position: sticky; left: 0; z-index: 1; background: #fff; box-shadow: 1px 0 0 #e6e9f0;
 }
@@ -603,9 +602,25 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 .reg-custom-stats dd { margin: 0; font-weight: 650; font-variant-numeric: tabular-nums; }
 .reg-custom-omitted { margin: 6px 0 0; font-size: 12px; }
 .reg-custom-save { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
-.reg-custom-save input, .reg-custom-rename input { width: 12em; max-width: 100%; }
+.reg-custom-save input, .reg-custom-rename input { width: 20em; max-width: 100%; }
 .reg-custom-saved h4, .reg-custom-compare h4 { margin: 0 0 6px; font-size: 14px; }
 .reg-custom-saved-table td { vertical-align: top; }
+.reg-custom-saved-table td:nth-child(-n+2),
+.reg-custom-saved-table th { white-space: normal; overflow-wrap: anywhere; }
+.reg-custom-saved-table td:nth-child(2) { min-width: 12em; max-width: 24em; }
+.reg-custom-compare-table thead th:not(:first-child) { white-space: normal; overflow-wrap: anywhere; min-width: 10em; max-width: 20em; }
+.reg-custom-compare-table .reg-custom-summary-start ~ tr td { white-space: normal; }
+.reg-reported-table { table-layout: fixed; min-width: 850px; }
+.reg-reported-table th:nth-child(1), .reg-reported-table td:nth-child(1) {
+  position: sticky; left: 0; z-index: 1; background: #fff; width: 128px; box-sizing: border-box;
+}
+.reg-reported-table th:nth-child(2), .reg-reported-table td:nth-child(2) {
+  position: sticky; left: 128px; z-index: 1; background: #fff; width: 160px; box-sizing: border-box;
+  box-shadow: 1px 0 0 #e6e9f0;
+}
+.reg-reported-table thead th:nth-child(-n+2) { background: #fafbfd; }
+.reg-reported-table th, .reg-reported-table td { white-space: normal; overflow-wrap: anywhere; }
+.reg-reported-table th:nth-child(3), .reg-reported-table td:nth-child(3) { width: 200px; }
 .reg-custom-rename { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .reg-custom-row-actions { white-space: nowrap; }
 .reg-custom .link-button { min-height: 24px; padding: 3px 6px; border: 0; background: none; color: #4b47e0; font-size: 12px; cursor: pointer; text-decoration: underline; }

@@ -168,6 +168,52 @@ curl -fsS "$GVCSIM_BASE_URL/health"
 
 性能验收在进程内经正常登录中间件完成，包含单请求冷启动、8 请求并发冷启动、warm sequential 和 8-concurrent；任一预算失败都会非零退出并阻止放行，此时 API 保持停止并按下文回滚到上一 release。
 
+### 工作台与报告 HTTP 验收（P3-19）
+
+上述冲击面板基准不能代替工作台和报告验收。另在**隔离 staging/test** 上运行
+`scripts/accept_workbench_reports.py`：使用独立数据库、独立 API 及测试账号，经真实 HTTP
+（建议经过与生产相同的 Nginx）计算并保存完整步骤证据及每人 12 个真实附录模型快照。
+它复用 `seed_full_journey.py`，不使用旧 R5 的占位快照，不建库、不 reset、不发布数据。
+必须由操作者显式指定 disposable/demo URL 和 2–20 个空白学生账号；绝不能指向生产或现有学生账号。
+准备阶段发现任何账号已有步骤或报告会拒绝运行。失败后可能留下部分测试记录，重新测量应新建隔离库/账号，
+不要为了重跑清空既有库。脚本不会替操作者证明目标是隔离环境。
+
+先由管理员在新建的空测试库初始化 schema、用教师端创建 20 个测试学生，配置 API 使用该库和
+只读的数据 release 副本。将凭据放在仓库外权限 0600 的 JSON 文件，形如
+`[{"username":"<测试学生账号>","password":"<测试口令>"}, ...]`，不提交、不放入日志。
+
+```bash
+export GVCSIM_ACCEPT_ACCOUNTS="$(cat /secure/path/accept-accounts.json)"
+TEST_URL='https://<隔离测试域名>'
+PYTHONPATH=. .venv/bin/python scripts/accept_workbench_reports.py prepare \
+  --disposable-demo-target "$TEST_URL" --max-seconds 120
+# 仅重启上述隔离 API 的全部 worker，清空进程缓存；不重置数据库。
+# 确认 release 未变、测试账号限流窗口已结束，且没有其他客户端提前暖缓存。
+PYTHONPATH=. .venv/bin/python scripts/accept_workbench_reports.py run \
+  --disposable-demo-target "$TEST_URL" --max-seconds 120
+unset GVCSIM_ACCEPT_ACCOUNTS
+```
+
+`run` 首先并发生成冷报告，再并发生成暖报告，然后请求四步默认模型及自定义模型重复计算，
+验证重复响应一致；非法模型要求 400，过期报告版本要求 409，并读回确认失败没有替换已保存报告。
+输出仅含阶段、状态码和 p50/p95/max 秒数（不含凭据、姓名、会话或报告）。任一意外状态、
+客户端错误、超出 `--max-seconds` 或数据校验失败均非零退出。120 秒只是可调整的验收预算，
+不是生产 SLO；放行应保存机器规格、部署配置、并发人数、重启证据和本次输出，按课程需求收紧预算。
+准备阶段的完整证据采集不是吞吐测量；报告冷启动必须由操作者重启保证，脚本不会远程重启服务。
+
+当前默认模型独立常驻缓存（保留两个 release 身份），自定义模型为每进程 4096 条 LRU；
+重启、release 更换及 LRU 淘汰后仍可能重算，不能承诺任意历史设定永久不计次。
+页面、报告正文、总览与附录共享模型缓存、单飞及 CPU 名额；报告渲染另有有界准入，不再整份占用模型名额。
+计算先保留限流名额、成功才提交；失败释放保留名额。报告仅对实际拥有的新计算计次，
+成功保存并完成应答 bookkeeping 后提交，每份最多 20 次，暖命中不重复计次。
+
+**计次可观测性限制**：公开 HTTP 不暴露限流事件/保留计数，因此本脚本不能把 400/409 后仍能请求
+或数据库未改写当作“未扣次”的证明。隔离服务有计数探针时，应在失败前后核对已提交事件不变、
+pending 回到零；503/排队、渲染、数据库失败及退款由聚焦自动测试另行覆盖，不在该脚本中破坏服务来制造。
+已有 ASGI 20 人 × 12 合法附录模型冷/暖验证不等于真实 DB、代理与小主机容量验收。
+生产课堂人数、混合工作台/自动保存/登录高峰、长期 RSS、多 worker、hash 模式与切换 release 的负载
+仍需在对应部署上实测，不能沿用旧 R5 的每秒 5 次或约 40 人作为修复后的生产上限。
+
 ## 明确的新学期重置
 
 这是独立且破坏性的操作，不得放入普通部署脚本：
@@ -194,7 +240,10 @@ systemctl start gvcsim-api
 
 ## 教学数据库 schema 演进门槛
 
-当前 `gvcsim-teaching-db-v12` 在 v11 基础上增加学期、班级和学生归属表。v11 升级时先停 API 并备份，再执行不带 `--reset` 的 `gvcsim classroom-init`；该兼容迁移保留账号、会话和报告。从 v10 或更早版本升级仍需制定单独迁移或按已批准的新课程清场。普通升级不得用重置代替迁移；其他版本不匹配必须让预检失败。
+当前初始化版本为 `gvcsim-teaching-db-v13`，包含学期/班级名称比较键及账号大小写一致的唯一约束。
+本轮按要求仅提供新库初始化，没有要求或实现历史兼容迁移；不要把不带 `--reset` 的
+`classroom-init` 当作旧库升级器。既有数据库必须保留，schema 不匹配应预检失败，停止放行；
+若要部署到旧库，需另行批准保留记录的迁移方案，不能用重置代替。隔离验收使用新建空库初始化 v13。
 
 ## 数据 release 回滚
 
@@ -242,6 +291,6 @@ psql --dbname=gvcsim_restore_drill -Atc "select version from schema_meta where s
 unset PGPASSWORD
 ```
 
-结果必须为 `gvcsim-teaching-db-v12`。恢复生产库前应停止 API、保留故障库，并先在隔离空库完成摘要、目录和 schema 验证。
+当前版本的恢复结果必须为 `gvcsim-teaching-db-v13`（历史备份须配套历史代码验证，不会自动迁移）。恢复生产库前应停止 API、保留故障库，并先在隔离空库完成摘要、目录和 schema 验证。
 
 本机保留不等于灾难备份。应只同步已同时存在 `.dump` 与 `.dump.sha256` 的完成文件对到异机或对象存储，并对异机副本定期执行同样的摘要与隔离恢复演练。

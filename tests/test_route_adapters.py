@@ -959,7 +959,9 @@ def test_regression_route_coalesces_identical_inflight_work(monkeypatch):
         def to_dict(self):
             return {"status": "ok", "support": {}}
 
-    monkeypatch.setattr(regression_routes, "_read_csv", read_panel)
+    monkeypatch.setattr(
+        regression_routes, "read_teaching_panel", lambda: (release_id, read_panel("panel_teaching.csv"))
+    )
     monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: release_id)
     monkeypatch.setattr(
         regression_routes,
@@ -989,17 +991,17 @@ def test_regression_route_coalesces_identical_inflight_work(monkeypatch):
         assert computations == 1
         release.set()
         results = await asyncio.gather(*waiters)
-        assert reads == 1
+        assert reads == 8  # Every request binds its immutable release; only computation is shared.
         assert all(result is results[0] for result in results)
 
         assert await regression_routes.regression_run(req, request) is results[0]
         assert computations == 1
-        assert reads == 1
+        assert reads == 9
 
         release_id = "c" * 32
         assert await regression_routes.regression_run(req, request) is not results[0]
         assert computations == 2
-        assert reads == 2
+        assert reads == 10
 
     asyncio.run(scenario())
 
@@ -1007,7 +1009,7 @@ def test_regression_route_coalesces_identical_inflight_work(monkeypatch):
 def test_regression_run_discloses_teaching_simulation_and_rejects_retired_contracts(teaching_db, monkeypatch):
     client = _authenticated_client(teaching_db)
     panel = pd.DataFrame({"country": ["AAA"], "entity_id": ["AAA-s1"]})
-    monkeypatch.setattr(regression_routes, "_read_csv", lambda name: panel)
+    monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: ("a" * 32, panel))
 
     class Result:
         def to_dict(self):
@@ -1084,7 +1086,7 @@ def test_regression_runtime_boundary_maps_to_controlled_route_400(teaching_db, m
             for year in range(5)
         ]
     )
-    monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: mutation(panel.copy()))
+    monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: ("a" * 32, mutation(panel.copy())))
 
     async def direct_cpu(func, *args, **kwargs):
         return func(*args, **kwargs)
@@ -1101,7 +1103,9 @@ def test_regression_runtime_boundary_maps_to_controlled_route_400(teaching_db, m
 
 def test_regression_route_maps_numerical_failure_to_chinese_400(teaching_db, monkeypatch):
     client = _authenticated_client(teaching_db)
-    monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: pd.DataFrame({"country": ["AAA"]}))
+    monkeypatch.setattr(
+        regression_routes, "read_teaching_panel", lambda: ("a" * 32, pd.DataFrame({"country": ["AAA"]}))
+    )
 
     async def fail_numerically(*_args, **_kwargs):
         raise np.linalg.LinAlgError("singular")
@@ -1134,7 +1138,7 @@ def test_regression_design_and_run_accept_only_a_same_family_baseline(teaching_d
 
     # A release whose teaching panel lacks the chosen baseline's Y says so instead of estimating.
     panel = pd.DataFrame({"country": ["AAA"], "entity_id": ["AAA-s1"], "teaching_y_trade": [0.2]})
-    monkeypatch.setattr(regression_routes, "_read_csv", lambda name: panel)
+    monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: ("a" * 32, panel))
     missing = client.post("/api/regression/run", json={"outcome": "trade", "baseline": "DVAex_share"})
     assert missing.status_code == 409
     assert "没有这个指标对应的 Y" in missing.json()["detail"]

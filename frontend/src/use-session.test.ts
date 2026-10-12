@@ -25,7 +25,7 @@ afterEach(cleanup);
 const RELEASE_A = "a".repeat(32);
 const RELEASE_B = "b".repeat(32);
 
-function response(session: ExperimentSession = emptySession()): SessionSaveResponse & Pick<SessionResponse, "release_id"> {
+function response(session: ExperimentSession = emptySession()): SessionSaveResponse & Pick<SessionResponse, "release_id" | "session"> {
   return {
     session,
     release_id: RELEASE_A,
@@ -313,6 +313,18 @@ describe("session helpers", () => {
     expect(question(mergeKeptEdits(sameField, { base, sent, session: local }))).toBe("别处的问题");
   });
 
+  test("an edit undone after an unacknowledged save survives another field changing elsewhere", () => {
+    const base = patchSessionStep(emptySession(), 15, { research_question: "原文", reflection: "旧" });
+    const sent = patchSessionStep(base, 15, { research_question: "临时修改" });
+    const server = patchSessionStep(sent, 15, { reflection: "别处" });
+    expect(readStep<Record<string, unknown>>(mergeKeptEdits(server, { base, sent, session: base }), 15))
+      .toEqual({ research_question: "原文", reflection: "别处" });
+    // If the request never landed, an unrelated server edit must still survive.
+    const unsavedServer = patchSessionStep(base, 15, { reflection: "别处" });
+    expect(readStep<Record<string, unknown>>(mergeKeptEdits(unsavedServer, { base, sent, session: base }), 15))
+      .toEqual({ research_question: "原文", reflection: "别处" });
+  });
+
   test("a step's saved models changed on both sides are merged by id; the rest of the step is combined as before", () => {
     const model = (id: string, name: string, effects: string[]) => ({
       id, name, outcome: "trade", baseline: "FVA_share", spec: { x_lags: [0, 1], controls: [], fixed_effects: effects },
@@ -336,6 +348,29 @@ describe("session helpers", () => {
     expect(notes).toEqual(["步骤 11：本页保存的“结果2”与另一处保存的模型同名，已改名为“结果3”"]);
     // Without mergers the server keeps its whole step (the rule for fields recorded together).
     expect(readStep<Record<string, unknown>>(mergeKeptEdits(server, { base, session: local }), 11)).toEqual(readStep(server, 11));
+  });
+
+  test.each(["delete", "rename", "uncheck"])("an unacknowledged new model can be changed locally (%s) while another model is saved elsewhere", (operation) => {
+    const model = (id: string) => ({
+      id, name: id, outcome: "trade", baseline: "FVA_share",
+      spec: { x_lags: [0, 1], controls: [], fixed_effects: id === "mine" ? [] : ["year"] },
+      in_report: true, saved_at: "2026-10-11T09:00:00Z", snapshot: {},
+    });
+    const base = emptySession();
+    const mine = model("mine");
+    const sent = patchSessionStep(base, 11, { custom_results: [mine] });
+    const local = patchSessionStep(sent, 11, { custom_results: operation === "delete" ? [] : [{
+      ...mine, name: operation === "rename" ? "新名" : mine.name, in_report: operation !== "uncheck",
+    }] });
+    // JSONB need not preserve the sent snapshot's property order.
+    const reordered = Object.fromEntries(Object.entries(mine).reverse());
+    const other = model("other");
+    const server = patchSessionStep(sent, 11, { custom_results: [reordered, other] });
+    const merged = mergeKeptEdits(server, { base, sent, session: local }, { mergers: WORKBENCH_FIELD_MERGERS });
+    const items = readStep<{ custom_results: typeof mine[] }>(merged, 11)!.custom_results;
+    expect(items).toEqual(operation === "delete" ? [other] : [{
+      ...mine, name: operation === "rename" ? "新名" : mine.name, in_report: operation !== "uncheck",
+    }, other]);
   });
 
   test("the queue keeps the snapshot it sent until the server confirms one, also after a failure", async () => {
@@ -381,7 +416,7 @@ describe("session helpers", () => {
     expect(readShared<Record<string, number>>(session, "regression_settings")).toEqual({ trade: 1 });
   });
 
-  test("does not reconcile an earlier normalized response over a newer in-flight edit", async () => {
+  test("a minimal acknowledgement confirms its sent snapshot without replacing a newer edit", async () => {
     const requests: ReturnType<typeof deferred<SessionSaveResponse>>[] = [];
     const submitted: Array<{ session: ExperimentSession; base: string | null }> = [];
     const first = patchSessionStep(emptySession(), 12, {
@@ -392,14 +427,6 @@ describe("session helpers", () => {
       research_question: "latest",
       qualified_run: { identity: "new-signature" },
     });
-    const normalizedFirst = patchSessionStep(emptySession(), 12, {
-      research_question: "first",
-      run: { identity: "rotated-signature" },
-    });
-    const normalizedLatest = patchSessionStep(emptySession(), 12, {
-      research_question: "latest",
-      run: { identity: "new-signature" },
-    });
     let optimistic = first;
     let confirmed = emptySession();
     const acknowledgements: Array<{ saved: ExperimentSession; hasNewer: boolean }> = [];
@@ -409,10 +436,10 @@ describe("session helpers", () => {
       requests.push(request);
       return request.promise;
     }, {
-      onSaved: (savedResponse, saved, hasNewer) => {
-        confirmed = savedResponse.session;
+      onSaved: (_savedResponse, saved, hasNewer) => {
+        confirmed = saved;
         acknowledgements.push({ saved, hasNewer });
-        if (!hasNewer && optimistic === saved) optimistic = savedResponse.session;
+        if (!hasNewer && optimistic === saved) optimistic = saved;
       },
       onError: () => {}, onSyncing: () => {}, onUnsynced: () => {},
     });
@@ -422,28 +449,28 @@ describe("session helpers", () => {
     const saving = queue.drain();
     optimistic = latest;
     queue.enqueue(latest);
-    requests[0].resolve(response(normalizedFirst));
+    const { session: _snapshot, release_id: _release, ...acknowledgement } = response();
+    requests[0].resolve(acknowledgement);
     await Promise.resolve();
 
     expect(optimistic).toBe(latest);
-    expect(confirmed).toBe(normalizedFirst);
+    expect(confirmed).toBe(first);
+    expect(queue.getConfirmedSession()).toBe(first);
     expect(acknowledgements[0]).toEqual({ saved: first, hasNewer: true });
     expect(submitted).toEqual([
       { session: first, base: "2026-08-12T00:00:00Z" },
       { session: latest, base: "2026-08-13T00:00:00Z" },
     ]);
 
-    requests[1].resolve(response(normalizedLatest));
+    requests[1].resolve(acknowledgement);
     await saving;
     expect(acknowledgements[1]).toEqual({ saved: latest, hasNewer: false });
-    expect(optimistic).toBe(normalizedLatest);
+    expect(optimistic).toBe(latest);
+    expect(queue.getConfirmedSession()).toBe(latest);
     expect(readStep<Record<string, unknown>>(optimistic, 12)).toEqual({
       research_question: "latest",
-      run: { identity: "new-signature" },
+      qualified_run: { identity: "new-signature" },
     });
-    // RegressionRunLab keys the preserved card from this exact field, so final
-    // server normalization removes the card on reconciliation without a reload.
-    expect(readStep<Record<string, unknown>>(optimistic, 12)?.qualified_run).toBeUndefined();
   });
 
   test("retains the newer pending edit when the in-flight request fails", async () => {

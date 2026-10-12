@@ -17,6 +17,7 @@ from psycopg_pool import ConnectionPool, PoolClosed, PoolTimeout, TooManyRequest
 
 from gvcsim import config, demo_accounts
 from gvcsim.classroom import schema
+from gvcsim.name_keys import username_key
 
 MAX_STEP = 15
 TEACHING_DB_VERSION = schema.TEACHING_DB_VERSION
@@ -116,7 +117,7 @@ def initialize_schema() -> list[str]:
         with c:
             schema.lock_schema(c)
             version = schema.existing_version(c)
-            if version not in {None, "gvcsim-teaching-db-v11", TEACHING_DB_VERSION}:
+            if version not in {None, TEACHING_DB_VERSION}:
                 raise SchemaVersionMismatch(
                     f"教学库 schema 版本为 {version}，当前代码需要 {TEACHING_DB_VERSION}；"
                     "请停止服务并执行经过测试的兼容迁移；"
@@ -127,9 +128,6 @@ def initialize_schema() -> list[str]:
                 c.execute(schema.SCHEMA_SQL)
                 c.execute("INSERT INTO schema_meta(singleton,version) VALUES (true,%s)", (TEACHING_DB_VERSION,))
                 applied.append(f"创建 schema {TEACHING_DB_VERSION}")
-            elif version == "gvcsim-teaching-db-v11":
-                c.execute(schema.MIGRATION_V11_TO_V12_SQL)
-                applied.append("迁移 schema gvcsim-teaching-db-v11 → gvcsim-teaching-db-v12")
             synced = _sync_demo_accounts(c)
             if synced["created"] or synced["updated"]:
                 applied.append(f"同步演示账号(created={synced['created']},updated={synced['updated']})")
@@ -262,8 +260,15 @@ def _sync_demo_accounts(c: psycopg.Connection[dict[str, Any]]) -> dict[str, int]
 
 
 def find_account(username: str) -> dict[str, Any] | None:
+    try:
+        username = username_key(username)
+    except ValueError:
+        return None
     with conn() as c:
-        return c.execute("SELECT * FROM accounts WHERE username=%s", (username,)).fetchone()
+        return c.execute(
+            "SELECT * FROM accounts WHERE translate(username,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=%s",
+            (username,),
+        ).fetchone()
 
 
 def current_auth_subject(
@@ -310,6 +315,7 @@ def touch_login(username: str) -> None:
 
 
 def provision_teacher(username: str, display_name: str, password: str) -> dict[str, Any]:
+    username = username_key(username)
     _validate_managed_password(password)
     salt = secrets.token_hex(16)
     with conn() as c:

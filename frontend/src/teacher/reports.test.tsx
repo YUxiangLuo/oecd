@@ -288,6 +288,9 @@ describe("teacher review flow", () => {
       fireEvent.click(screen.getByRole("button", { name: "改用这份评阅" }));
       expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("70");
       expect((screen.getByRole("textbox", { name: "评语（选填）" }) as HTMLTextAreaElement).value).toBe("另一窗口的评语\n第二行");
+      expect(screen.queryByText(RELOADED_OVER_REVIEW_NOTE)).toBeNull();
+      expect(screen.queryByRole("group", { name: "服务器上当前的评阅" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "改用这份评阅" })).toBeNull();
     } finally {
       spies.forEach((spy) => spy.mockRestore());
     }

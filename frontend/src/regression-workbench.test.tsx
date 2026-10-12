@@ -156,10 +156,10 @@ describe("tables", () => {
     expect(omittedSummary(snapshotOf(absorbed), options)).toEqual(["被国家×年份 FE 吸收：汇率变动"]);
   });
 
-  test("suppressed inference keeps coefficients and SE but drops the stars and F", () => {
+  test("suppressed inference keeps coefficients but drops SE, stars and F", () => {
     const failed = response(NO_RATE, { teaching_tariff_exposure: -0.46, teaching_tariff_exposure_lag1: -0.24 }, { status: "invalid_design" });
     const column: TableColumn = { name: "x", spec: NO_RATE, snapshot: snapshotOf(failed) };
-    expect(coefficientRows([column], options)[0].cells[0]).toEqual({ coef: "-0.4600", se: "(0.0460)" });
+    expect(coefficientRows([column], options)[0].cells[0]).toEqual({ coef: "-0.4600", se: "—" });
     expect(summaryRows([column], options).find((row) => row.key === "f")?.cells).toEqual(["—"]);
   });
 
@@ -285,6 +285,18 @@ const checkbox = (label: RegExp) => screen.getByRole("checkbox", { name: label }
 const tableHeaders = () => [...document.querySelectorAll(".reg-custom-compare-table thead th")].map((cell) => cell.textContent);
 
 describe("the workbench", () => {
+  test("a new calculation stays immediately right of the default with three saved comparisons", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    spyOn(api, "runRegression").mockResolvedValue(NO_RATE_RUN as never);
+    const list = [1, 2, 3].map((i) => saved(`模型${i}`, { ...DEFAULT, x_lags: [0, 2] }, DEFAULT_RUN));
+    render(<Harness initial={{ custom_results: list }} />);
+    const compute = await screen.findByRole("button", { name: "计算这个模型" });
+    fireEvent.click(checkbox(/^汇率变动/));
+    await act(async () => { fireEvent.click(compute); });
+    expect(tableHeaders()).toEqual(["变量", "默认模型", "本次计算（未保存）", "模型1", "模型2", "模型3"]);
+    expect(document.querySelector<HTMLTableCellElement>("th.reg-custom-current")?.cellIndex).toBe(2);
+  });
+
   test("the form sends the canonical spec, and the computed model can be saved once under a checked name", async () => {
     spyOn(api, "regressionOptions").mockResolvedValue(options);
     const run = spyOn(api, "runRegression").mockResolvedValue(NO_RATE_RUN as never);
@@ -352,6 +364,7 @@ describe("the workbench", () => {
   });
 
   test("after a rename or a delete, focus moves to what replaced the button", async () => {
+    const focus = spyOn(HTMLElement.prototype, "focus");
     spyOn(api, "regressionOptions").mockResolvedValue(options);
     render(<Harness initial={{ custom_results: [saved("结果1", NO_RATE, NO_RATE_RUN), saved("结果2", { ...NO_RATE, x_lags: [0] }, NO_RATE_RUN)] }} />);
     fireEvent.click((await screen.findAllByRole("button", { name: "改名" }))[0]);
@@ -359,6 +372,7 @@ describe("the workbench", () => {
     fireEvent.click(screen.getByRole("button", { name: "确定" }));
     await waitFor(() => expect(document.activeElement?.textContent).toBe("改名"));
     expect(document.activeElement?.closest("tr")?.textContent).toContain("去掉汇率");
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: true });
     fireEvent.click(screen.getAllByRole("button", { name: "删除" })[0]);
     fireEvent.click((await screen.findAllByRole("button", { name: "删除" })).at(-1)!);
     await waitFor(() => expect(document.activeElement?.textContent).toBe("已保存的模型（1/6）"));
@@ -442,6 +456,29 @@ describe("the workbench", () => {
 });
 
 describe("the open workbench", () => {
+  test("countdown expiry clears only the rate-limit message, not a later calculation failure", async () => {
+    let tick: (() => void) | undefined;
+    const clock = spyOn(Date, "now").mockReturnValue(1000);
+    const interval = window.setInterval.bind(window);
+    spyOn(window, "setInterval").mockImplementation(((callback: () => void, delay: number) => {
+      if (delay === 500) { tick = callback; return 1; }
+      return interval(callback, delay);
+    }) as typeof window.setInterval);
+    spyOn(window, "clearInterval").mockImplementation(() => {});
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    const run = spyOn(api, "runRegression").mockRejectedValue(new ApiError(429, "稍后再试", "x", 1) as never);
+    render(<Harness />);
+    const compute = await screen.findByRole("button", { name: "计算这个模型" });
+    await act(async () => { fireEvent.click(compute); });
+    expect((await screen.findByRole("alert")).textContent).toContain("计算太频繁");
+    run.mockRejectedValue(new ApiError(400, "样本不足", "x") as never);
+    await act(async () => { fireEvent.click(compute); });
+    clock.mockReturnValue(3000);
+    act(() => { tick!(); });
+    expect(document.querySelector(".reg-custom-wait")).toBeNull();
+    expect(screen.getByRole("alert").textContent).toContain("样本不足");
+  });
+
   test("too many calculations: new models wait out the countdown, a model computed before can still be computed", async () => {
     spyOn(api, "regressionOptions").mockResolvedValue(options);
     const run = spyOn(api, "runRegression").mockRejectedValue(new ApiError(429, "计算次数过多，请约 5 秒后再试。", "x", 5) as never);
@@ -450,7 +487,7 @@ describe("the open workbench", () => {
     fireEvent.click(checkbox(/^汇率变动/));
     await act(async () => { fireEvent.click(compute); });
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toBe("计算太频繁：每分钟最多算 20 个新模型，新的设定请等倒计时结束；已经算过的设定不计次，现在就能算。");
+    expect(alert.textContent).toBe("计算太频繁：每分钟最多算 20 个新模型，新的设定请等倒计时结束；仍在服务器缓存中的设定不计次，现在就能算。");
     expect(alert.textContent).not.toContain("没有算出结果");
     expect(document.querySelector(".reg-custom-wait")?.textContent).toMatch(/^新的设定 \d 秒后可以计算$/);
     // Changing the form during the wait keeps the message next to the countdown.
@@ -534,7 +571,7 @@ describe("one column's full numbers", () => {
     change(run);
     const [first] = cells(run);
     expect(first[1]).toBe("-0.3300");
-    expect([first[3], first[4], first[5]]).toEqual(["—", "—", "—"]);
+    expect([first[2], first[3], first[4], first[5]]).toEqual(["—", "—", "—", "—"]);
   });
 
   test.each([
@@ -560,6 +597,28 @@ describe("saved models changed on this page and elsewhere", () => {
 
   test("the limits are the server's", () => {
     expect(SAVED_LIMITS).toEqual({ saved: options.limits.saved, in_report: options.limits.in_report });
+  });
+
+  test("renaming a conflict reserves pending local names and compares normalized names", () => {
+    const server = [model("结果1", ["country"]), model("结果２️", ["year"])];
+    const local = [model("结果1", ["industry"], { id: "local-1" }), model("结果3", [], { id: "local-3" })];
+    const merged = mergeCustomResults([], server, local, "步骤 11");
+    expect(names(merged.value)).toEqual(["结果1", "结果２️", "结果4", "结果3"]);
+    expect(merged.notes).toHaveLength(1);
+    const variant = mergeCustomResults([], [server[1]], [{ ...local[0], name: "结果2" }], "步骤 11");
+    expect(names(variant.value)).toEqual(["结果２️", "结果3"]);
+  });
+
+  test("database object key ordering cannot undo deletion, renaming or report selection", () => {
+    const original = model("结果1", ["country_industry"], { in_report: true });
+    const reorder = (value: unknown): unknown => Array.isArray(value) ? value.map(reorder)
+      : value !== null && typeof value === "object"
+        ? Object.fromEntries(Object.entries(value).reverse().map(([key, item]) => [key, reorder(item)])) : value;
+    const server = reorder(original) as CustomResult;
+    expect(mergeCustomResults([original], [server], [], "步骤 11").value).toEqual([]);
+    for (const edited of [{ ...original, name: "改名" }, { ...original, in_report: false }]) {
+      expect(mergeCustomResults([original], [server], [edited], "步骤 11").value).toEqual([edited]);
+    }
   });
 
   test("a model each side added is kept; this page's takes the next free name", () => {
@@ -609,4 +668,3 @@ describe("saved models changed on this page and elsewhere", () => {
     expect(notes).toEqual(["步骤 12：“新模型”没能放入报告（每步最多 3 个），已取消勾选"]);
   });
 });
-

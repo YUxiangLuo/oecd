@@ -79,7 +79,7 @@ def _fit(frame: pd.DataFrame, column: str) -> tuple[dict[str, float], dict[str, 
 def evaluate(root: Path, seeds: range) -> dict:
     # Parse and fingerprint the same bytes, including the independently supplied exposure weights and flows.
     source_bytes = (root / "panel_industry.csv").read_bytes()
-    source = pd.read_csv(BytesIO(source_bytes))
+    source = pd.read_csv(BytesIO(source_bytes), float_precision="round_trip")
     years = sorted(source.year.unique())
     exposure_path = f"export_exposure_{years[0]}.csv"
     exposure_bytes = (root / exposure_path).read_bytes()
@@ -105,13 +105,16 @@ def evaluate(root: Path, seeds: range) -> dict:
             targets = _targets(item.beta)
             records[name].append(
                 {
-                    term: {
-                        "estimate": estimates[term],
-                        "se": ses[term],
-                        "covered": bool(abs(estimates[term] - targets[term]) <= critical * ses[term]),
-                        "significant": bool(abs(estimates[term]) > critical * ses[term]),
-                    }
-                    for term in TERMS
+                    "seed": seed,
+                    **{
+                        term: {
+                            "estimate": estimates[term],
+                            "se": ses[term],
+                            "covered": bool(abs(estimates[term] - targets[term]) <= critical * ses[term]),
+                            "significant": bool(abs(estimates[term]) > critical * ses[term]),
+                        }
+                        for term in TERMS
+                    },
                 }
             )
             if seed == seeds.start:
@@ -152,6 +155,7 @@ def evaluate(root: Path, seeds: range) -> dict:
         "version": teaching.VERSION,
         "model": DEFAULT_SPEC.to_dict(),
         "source_panel_sha256": hashlib.sha256(source_bytes).hexdigest(),
+        "source_read_contract": {"panel_float_precision": "round_trip", "exposure_float_precision": "default"},
         "source_exposure": {"path": exposure_path, "sha256": hashlib.sha256(exposure_bytes).hexdigest()},
         "generator_snapshots": {name: teaching.model_snapshot(name) for name in teaching.OUTCOMES},
         "implementation_sha256": {
@@ -159,6 +163,7 @@ def evaluate(root: Path, seeds: range) -> dict:
             "generator": hashlib.sha256(Path(teaching.__file__).read_bytes()).hexdigest(),
         },
         "summary": summary,
+        "per_seed_results": records,
         "independent_benchmark_checks": benchmark_checks,
         "notes": (
             "Paired noise draws; fixed preset relations; the course default model with country-clustered CR1 and "

@@ -92,17 +92,36 @@ def multiway_demean(
         raise ValueError(f"{label}迭代次数必须为正数")
     out = values.astype(float).copy()
     require_finite(f"{label}输入", out)
+    if not groups:
+        return out
+    # Work in column-specific units, including columns smaller than one. Extended precision prevents the first
+    # subtraction of large absorbed levels from destroying the much smaller, estimable within variation.
+    scales = np.max(np.abs(out), axis=0)
+    scales[scales == 0] = 1
+    out = out.astype(np.longdouble) / scales
+    encoded = [pd.factorize(group, sort=False)[0] for group in groups]
+    counts = [np.bincount(code) for code in encoded]
+
+    def means(code, count):
+        sums = np.zeros((len(count), out.shape[1]), dtype=np.longdouble)
+        np.add.at(sums, code, out)
+        return sums / count[:, None]
+
     residual = math.inf
     for iteration in range(1, max_iter + 1):
-        before = out.copy()
-        for group in groups:
-            frame = pd.DataFrame(out)
-            out = (frame - frame.groupby(group).transform("mean")).values
+        check_cancelled()
+        for code, count in zip(encoded, counts, strict=True):
+            out -= means(code, count)[code]
         require_finite(label, out)
-        if np.abs(out - before).max() < tol or iteration == max_iter:
-            residual = max(float(pd.DataFrame(out).groupby(g).mean().abs().to_numpy().max()) for g in groups)
-            if residual < tol:
-                return out
+        # The residual's own scale matters near absorption: a raw-scale tolerance alone can stop with a large
+        # relative error in the remaining signal. The floor is arithmetic roundoff, not an absolute data unit.
+        thresholds = np.maximum(tol * np.max(np.abs(out), axis=0), 32 * np.finfo(np.longdouble).eps)
+        errors = np.max(
+            [np.max(np.abs(means(code, count)), axis=0) for code, count in zip(encoded, counts, strict=True)], axis=0
+        )
+        residual = float(np.max(errors * scales))
+        if np.all(errors <= thresholds):
+            return np.asarray(out * scales, dtype=float)
     raise ValueError(f"{label}在 {max_iter} 次迭代后未收敛（最大组均值残差 {residual:.3g}）；无法继续估计")
 
 
@@ -112,13 +131,14 @@ def twoway_demean(
     return multiway_demean(values, (ent, tim), tol, max_iter, label="双向去均值")
 
 
-def drop_collinear_columns(X, xcols, protected, tol=1e-10):
-    keep = [i for i in range(X.shape[1]) if np.linalg.norm(X[:, i]) > tol]
+def drop_collinear_columns(X, xcols, protected, tol=1e-10, raw=None):
+    norms = np.linalg.norm(X if raw is None else raw, axis=0)
+    keep = [i for i in range(X.shape[1]) if np.linalg.norm(X[:, i]) > tol * norms[i]]
     dropped = [name for i, name in enumerate(xcols) if i not in keep]
     if any(name in protected for name in dropped):
         raise ValueError("核心解释变量被固定效应完全吸收,无法估计")
     X, xcols = X[:, keep], [xcols[i] for i in keep]
-    if not xcols or np.linalg.matrix_rank(X, tol=tol) < len(xcols):
+    if not xcols or np.linalg.matrix_rank(X / np.linalg.norm(X, axis=0), tol=tol) < len(xcols):
         raise ValueError("核心解释变量之间存在完全共线性,无法估计")
     return X, xcols, dropped
 
@@ -139,10 +159,11 @@ def prune_regressors(
         if raw_norm == 0:
             omitted.append({"name": name, "reason": "zero", "by": None})
             continue
-        if float(np.linalg.norm(column)) <= _ABSORBED_RELATIVE_NORM * max(1.0, raw_norm):
+        if float(np.linalg.norm(column)) <= _ABSORBED_RELATIVE_NORM * raw_norm:
             omitted.append({"name": name, "reason": "absorbed", "by": absorbed_by or None})
             continue
         candidate = transformed[:, [*keep, index]]
+        candidate = candidate / np.linalg.norm(candidate, axis=0)
         if np.linalg.matrix_rank(candidate) < len(keep) + 1:
             omitted.append({"name": name, "reason": "collinear", "by": None})
             continue
@@ -166,7 +187,7 @@ def _attribute_absorbed(omitted: list[dict], raw: np.ndarray, xcols: list[str], 
         if item["reason"] != "absorbed":
             continue
         values = raw[:, xcols.index(item["name"])]
-        scale = _ABSORBED_RELATIVE_NORM * max(1.0, float(np.linalg.norm(values)))
+        scale = _ABSORBED_RELATIVE_NORM * float(np.linalg.norm(values))
         for column in effects:
             frame = pd.Series(values)
             within = values - frame.groupby(data[column].to_numpy()).transform("mean").to_numpy()
@@ -213,7 +234,9 @@ def demean_and_prune(model: PreparedModel):
     raw = data[[model.depvar, *model.xcols]].to_numpy(float)
     if model.fe_columns is None:
         transformed = twoway_demean(raw, data[model.entity].values, data[model.time].values)
-        X, names, dropped = drop_collinear_columns(transformed[:, 1:], list(model.xcols), set(model.policy_xcols))
+        X, names, dropped = drop_collinear_columns(
+            transformed[:, 1:], list(model.xcols), set(model.policy_xcols), raw=raw[:, 1:]
+        )
         return transformed[:, 0], X, names, dropped
     if effects:
         groups = [data[column].values for column in effects]
@@ -288,19 +311,25 @@ def _coef(name: str, b: float, se: float, groups: int, critical: float) -> CoefS
 
 def within_ols(model: PreparedModel, prepared=None) -> RegressionResult:
     y, X, names, dropped = prepared or demean_and_prune(model)
-    beta = np.linalg.lstsq(X, y, rcond=None)[0]
-    residual = y - X @ beta
-    bread = np.linalg.inv(X.T @ X)
+    scales = np.linalg.norm(X, axis=0)
+    scaled_X = X / scales
+    scaled_beta = np.linalg.lstsq(scaled_X, y, rcond=None)[0]
+    beta = scaled_beta / scales
+    residual = y - scaled_X @ scaled_beta
+    bread = np.linalg.inv(scaled_X.T @ scaled_X)
     groups = pd.unique(model.data[model.cluster])
     meat = np.zeros((len(names), len(names)))
     for group in groups:
-        score = X[model.data[model.cluster].values == group].T @ residual[model.data[model.cluster].values == group]
+        score = (
+            scaled_X[model.data[model.cluster].values == group].T @ residual[model.data[model.cluster].values == group]
+        )
         meat += np.outer(score, score)
     effects = model.effect_columns
     rank, components = fixed_effect_rank(model.data, effects)
     df = len(y) - len(names) - rank
     correction = len(groups) / (len(groups) - 1) * (len(y) - 1) / df
     covariance = correction * bread @ meat @ bread
+    covariance /= np.outer(scales, scales)
     se = np.sqrt(np.clip(np.diag(covariance), 0, None))
     require_finite("回归估计", beta, se)
     if (se <= 0).any():
