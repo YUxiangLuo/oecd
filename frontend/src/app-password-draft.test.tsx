@@ -3,9 +3,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import App from "./App";
 import { api, AUTH_TOKEN_KEY, getActiveAuthToken, setActiveAuthToken } from "./api";
 import { emptySession } from "./session-store";
-import { KEPT_EDITS_KEY } from "./use-session";
+import { keptEditsKey } from "./use-session";
 
 test("self-service password change preserves the failed-save draft before logout", async () => {
+  const KEPT_EDITS_KEY = keptEditsKey("draft-student", "a".repeat(32));
   const token = sessionStorage.getItem(AUTH_TOKEN_KEY);
   const active = getActiveAuthToken();
   const href = window.location.href;

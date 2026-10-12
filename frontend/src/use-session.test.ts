@@ -3,9 +3,10 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { api, ApiError } from "./api";
 import { emptySession, patchStep } from "./session-store";
 import type { ExperimentSession, SessionResponse, SessionSaveResponse } from "./types";
-import { KEPT_EDITS_KEY, SAVE_RETRY_DELAYS_MS, useSession } from "./use-session";
+import { keptEditsKey, SAVE_RETRY_DELAYS_MS, useSession } from "./use-session";
 
 const RELEASE = "a".repeat(32);
+const KEPT_EDITS_KEY = keptEditsKey("student", RELEASE);
 const STAMP = "2026-09-10T00:00:00Z";
 const NEWER = "2026-09-10T00:01:00Z";
 const delays = [...SAVE_RETRY_DELAYS_MS];
@@ -59,6 +60,8 @@ test("409 stops saves without fetching or merging; cancel preserves the draft, c
   const save = spyOn(api.classroom, "saveSession").mockRejectedValue(new ApiError(409, null, "conflict"));
   const confirm = spyOn(window, "confirm").mockReturnValue(false);
   const reload = spyOn(window.location, "reload").mockImplementation(() => {});
+  const otherKeys = [keptEditsKey("other", RELEASE), keptEditsKey("student", "b".repeat(32))];
+  for (const key of otherKeys) sessionStorage.setItem(key, "unrelated draft");
   const { result } = renderHook(() => useSession(true, "student"));
   await waitFor(() => expect(result.current.status).toBe("ready"));
   await act(async () => {
@@ -79,6 +82,7 @@ test("409 stops saves without fetching or merging; cancel preserves the draft, c
   await act(async () => { await result.current.resolveSyncConflict(); });
   window.dispatchEvent(new Event("beforeunload", { cancelable: true }));
   expect(sessionStorage.getItem(KEPT_EDITS_KEY)).toBeNull();
+  for (const key of otherKeys) expect(sessionStorage.getItem(key)).toBe("unrelated draft");
   expect(reload).toHaveBeenCalled();
   expect(get).toHaveBeenCalledTimes(1);
 });

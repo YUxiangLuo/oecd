@@ -3,9 +3,10 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { api, ApiError } from "./api";
 import { emptySession, patchStep, sameSessionContent } from "./session-store";
 import type { ExperimentSession, SessionResponse, SessionSaveResponse } from "./types";
-import { KEPT_EDITS_KEY, useSession } from "./use-session";
+import { keptEditsKey, hasKeptEdits, useSession } from "./use-session";
 
 const RELEASE = "a".repeat(32);
+const KEPT_EDITS_KEY = keptEditsKey("student", RELEASE);
 const STAMP = "2026-09-10T00:00:00Z";
 const NEWER = "2026-09-10T00:01:00Z";
 function response(session: ExperimentSession = emptySession(), updated_at = STAMP): SessionResponse & SessionSaveResponse {
@@ -171,6 +172,39 @@ test.each(["unmount", "account switch"])("an old in-flight request cannot send q
     expect(hook.result.current.getConfirmedStep<{ research_question: string }>(15)).toEqual({ research_question: "new account" });
     expect(hook.result.current.updatedAt).toBe(NEWER);
   }
+});
+
+test.each(["account", "release"])("another %s saving must not erase an offline draft", async (scope) => {
+  const get = spyOn(api.classroom, "session").mockResolvedValue(response());
+  const save = spyOn(api.classroom, "saveSession").mockRejectedValue(new TypeError("Failed to fetch"));
+  const first = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(first.result.current.status).toBe("ready"));
+  await act(async () => {
+    first.result.current.patchStep(15, { research_question: "offline private draft" });
+    await first.result.current.syncNow().catch(() => {});
+  });
+  expect(hasKeptEdits(sessionStorage, "student")).toBe(true);
+  expect(hasKeptEdits(sessionStorage, "other")).toBe(false);
+  expect(hasKeptEdits(sessionStorage, null)).toBe(false);
+  first.unmount();
+  const otherRelease = scope === "release" ? "b".repeat(32) : RELEASE;
+  get.mockResolvedValue({ ...response(), release_id: otherRelease });
+  save.mockImplementation(async ({ session }) => response(session, NEWER));
+  const other = renderHook(() => useSession(true, scope === "account" ? "other" : "student"));
+  await waitFor(() => expect(other.result.current.status).toBe("ready"));
+  expect(other.result.current.getStep(15)).toBeUndefined();
+  // Step 1 automatically records an observation on first entry, without manual typing.
+  await act(async () => {
+    other.result.current.patchStep(1, { observation: { year: 2020, value: 17 } });
+    await other.result.current.syncNow();
+  });
+  other.unmount();
+  get.mockResolvedValue(response());
+  const returning = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(returning.result.current.status).toBe("ready"));
+  await waitFor(() => expect(returning.result.current.unsynced).toBe(false));
+  expect(returning.result.current.getConfirmedStep<{ research_question: string }>(15)?.research_question)
+    .toBe("offline private draft");
 });
 
 test("storage failure does not block editing or server save and still prompts before leaving", async () => {

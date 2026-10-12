@@ -5,8 +5,12 @@ import type { ClassroomReport, CompletionSummary, ExperimentSession, ReportGateI
 import { isNetworkFailure, userFacingRequestError } from "./user-facing-error";
 
 const SYNC_DEBOUNCE_MS = 800;
-export const KEPT_EDITS_KEY = "gvcsim_kept_edits_v4";
+const KEPT_EDITS_PREFIX = "gvcsim_kept_edits_v4:";
 type KeptStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
+export function keptEditsKey(username: string, releaseId: string): string {
+  return `${KEPT_EDITS_PREFIX}${encodeURIComponent(username)}:${releaseId}`;
+}
 
 /** One tab's latest draft and exact unacknowledged request. Never merged with another record. */
 export interface KeptEdits {
@@ -20,13 +24,13 @@ export interface KeptEdits {
 
 export function keepEdits(storage: KeptStorage, kept: Omit<KeptEdits, "version">): boolean {
   if (!/^[0-9a-f]{32}$/.test(kept.release_id)) return false;
-  try { storage.setItem(KEPT_EDITS_KEY, JSON.stringify({ version: 4, ...kept })); return true; }
+  try { storage.setItem(keptEditsKey(kept.username, kept.release_id), JSON.stringify({ version: 4, ...kept })); return true; }
   catch { return false; }
 }
 
 export function readKeptEdits(storage: KeptStorage, username: string, releaseId: string): KeptEdits | null {
   try {
-    const value = JSON.parse(storage.getItem(KEPT_EDITS_KEY) ?? "null") as Partial<KeptEdits> | null;
+    const value = JSON.parse(storage.getItem(keptEditsKey(username, releaseId)) ?? "null") as Partial<KeptEdits> | null;
     if (value?.version !== 4 || value.username !== username || value.release_id !== releaseId
       || !(value.base_updated_at === null || typeof value.base_updated_at === "string")
       || !isValidSession(value.session) || (value.sent !== undefined && !isValidSession(value.sent))) return null;
@@ -34,10 +38,19 @@ export function readKeptEdits(storage: KeptStorage, username: string, releaseId:
   } catch { return null; }
 }
 
-export function hasKeptEdits(storage: Pick<Storage, "getItem">): boolean {
-  try { return storage.getItem(KEPT_EDITS_KEY) !== null; } catch { return false; }
+export function hasKeptEdits(storage: Pick<Storage, "key" | "length">, username: string | null | undefined): boolean {
+  if (!username) return false;
+  try {
+    const prefix = keptEditsKey(username, "");
+    for (let index = 0; index < storage.length; index++) {
+      if (storage.key(index)?.startsWith(prefix)) return true;
+    }
+    return false;
+  } catch { return false; }
 }
-export function clearKeptEdits(storage: KeptStorage): void { storage.removeItem(KEPT_EDITS_KEY); }
+export function clearKeptEdits(storage: KeptStorage, username: string, releaseId: string): void {
+  storage.removeItem(keptEditsKey(username, releaseId));
+}
 export function expiredLoginNotice(editsKept: boolean): string {
   return editsKept
     ? "登录已失效，请重新登录。未保存的修改已在本页保留，用同一账号重新登录后会恢复并核对保存状态。"
@@ -230,7 +243,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         if (!value) {
           setSaveState(SAVED);
           try {
-            if (username && releaseId.current && readKeptEdits(sessionStorage, username, releaseId.current)) clearKeptEdits(sessionStorage);
+            if (username && releaseId.current) clearKeptEdits(sessionStorage, username, releaseId.current);
             setStorageFailed(false);
           } catch { setStorageFailed(true); }
         } else setSaveState((old) => old.phase === "saved" ? { ...old, phase: "pending" } : old);
@@ -286,7 +299,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         }
         void queue.current!.drain().catch(() => {});
       } else if (kept) {
-        try { clearKeptEdits(sessionStorage); }
+        try { clearKeptEdits(sessionStorage, kept.username, kept.release_id); }
         catch { setStorageFailed(true); }
       }
     }, (cause) => {
@@ -355,11 +368,11 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
 
   const resolveSyncConflict = useCallback(async () => {
     if (!blocked.current || !window.confirm("放弃本页未保存的修改并重新加载？请先复制需要保留的内容。此操作不会合并两份记录。")) return;
-    clearKeptEdits(sessionStorage);
+    if (username && releaseId.current) clearKeptEdits(sessionStorage, username, releaseId.current);
     leavingOnPurpose.current = true;
     // No in-place merge or partially reset workbench: reload the whole student workspace.
     window.location.reload();
-  }, []);
+  }, [username]);
 
   return {
     status, session, report, updatedAt, completion, reportCurrent, reportGate, materialGate, restoredEdits,

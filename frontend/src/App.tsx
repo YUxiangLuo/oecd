@@ -200,7 +200,7 @@ function AppContent() {
       },
       (error) => {
         if (getActiveAuthToken() !== token) return;
-        if (isApiErrorStatus(error, 401)) reloadLoggedOut(expiredLoginNotice(hasKeptEdits(sessionStorage)));
+        if (isApiErrorStatus(error, 401)) reloadLoggedOut(expiredLoginNotice(hasKeptEdits(sessionStorage, sessionStorage.getItem("gvcsim_signed_in_username"))));
         else setAuthCheckError(userFacingRequestError(error, "暂时无法确认登录状态"));
       },
     ).finally(() => setAuthChecked(true));
@@ -256,7 +256,7 @@ function AppContent() {
   useEffect(() => {
     const expired = () => {
       const kept = user?.role === "student" && session.keepUnsavedEdits();
-      reloadLoggedOut(expiredLoginNotice(kept || hasKeptEdits(sessionStorage)), user?.username);
+      reloadLoggedOut(expiredLoginNotice(kept || hasKeptEdits(sessionStorage, user?.username ?? sessionStorage.getItem("gvcsim_signed_in_username"))), user?.username);
     };
     window.addEventListener("gvcsim-auth-expired", expired);
     return () => window.removeEventListener("gvcsim-auth-expired", expired);
