@@ -85,8 +85,12 @@ input[type=checkbox] { width: 3mm; height: 3mm; accent-color: #15786e; vertical-
 .cover article > p:nth-of-type(5) { max-width: 146mm; }
 .cover-route { display: block; width: 100%; height: 44mm; margin-top: 9mm; font-family: "Source Han Sans CN", sans-serif; }
 #page-2 table td:first-child { white-space: nowrap; }
+#page-6 img { max-height: 115mm; }
+#page-16 img { max-height: 125mm; }
+#page-18 img { max-height: 100mm; }
 #page-26 table { font-size: 9pt; }
 #page-26 td, #page-26 th { padding: 2.7mm 2mm; }
+#page-28 td, #page-28 th { padding: 1.3mm 2.2mm; }
 #page-28 .task-list-item { margin-top: .4mm; }
 @media print { html, body { background: white; } .sheet { margin: 0; box-shadow: none; } * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>${body}</body></html>`;

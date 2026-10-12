@@ -33,7 +33,26 @@ bun run frontend/scripts/export-student-manual.ts
 3. 页数变化时，同步正文导航表的页码和本说明的总页数；手册封面与末页的版本说明同步更新。
 4. 截图中的评分只说明流程，不构成评分标准。
 
-## 当前版本：2.21（2026-10-12）
+## 当前版本：2.23（2026-10-12，教学数据 v12）
+
+- 正文与 PDF 同步；保留 A4 28 页、20 张图及原排版。
+- 当前基线 `b3206c7`，运行 release `be37a7cfe40444f09749a77a276f45a3`，2016–2020。GVCPs 逐行取模拟 PLv_GVC / PLy_GVC，无预设恒定 β；其他 Y 未变。
+- 讲清错误设定也能显著、L2.X 可替代遗漏真 X，不要求 GDP／开放度／人口／FDI 显著；无 FE 标准库对照标准化后还原完整协方差，未放宽容差。
+- 恢复草稿是单窗口 sessionStorage 的账号 + release 隔离，不是共享或永久备份。
+- 图 14–16、18 用 agent-browser 重拍并经 view_media 检查；只读专用 student18 已有完成记录及 v12 报告，没有新建报告、评分或修改其他账号。图 15 的例子是中国／美国农业，不是图 13 的历史加拿大／哥斯达黎加汽车业。
+- 其余 16 张保留 v10 历史来源，不冒充 v12 截图；逐图日期、尺寸、SHA-256、release 见清单。清单顶层字段保留历史批次，当前图以逐图字段为准。
+- 本次复用 `build-student-manual.ts` 与 `export-student-manual.ts`，HTML 中间产物写入 `.amp/in/`；构建及导出命令与既有脚本一致，导出前检查逐页溢出。
+
+本次命令（仓库根目录）：
+
+```bash
+bun run frontend/scripts/build-student-manual.ts .amp/in/student-manual-v12.html
+bun run frontend/scripts/export-student-manual.ts .amp/in/student-manual-v12.html 实验手册.pdf
+```
+
+不要直接在当前课堂运行上面的全量截图脚本：它会新建／提交报告和评分。若仅维护截图，使用 agent-browser 在专用已完成账号上浏览已有页面，禁止生成报告或操作其他账号。
+
+## 2.21（2026-10-12）
 
 2.21 版（当前 review 的文字修复，截图未更新）：
 

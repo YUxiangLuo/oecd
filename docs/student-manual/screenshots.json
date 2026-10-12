@@ -11,7 +11,7 @@
   "data_release": "cc257d6ba486432b8b3d47a97accff3b",
   "simulation_contract": "step10-tariff-teaching-v10",
   "source": "Manual 2.17 re-captured all 20 figures (19 kept plus the new step-11 改模型、对比 figure) with headless Chrome driven by frontend/scripts/capture-student-manual.ts at 1280x960 against an independent local classroom (fresh database, plain non-demo build) on release cc257d6ba486432b8b3d47a97accff3b (contract step10-tariff-teaching-v10). The submitted and graded images are element captures. Passwords are not visible. After the pre-PR review fixes, 11-regression-setup was re-captured (MANUAL_ONLY_REG=1, fresh test accounts in a separate local classroom); the other three figures of that run were byte-identical.",
-  "provenance_scope": "Single capture run against an independent local classroom. The complete-course account's learning records for Steps 1–14 were prepared through public APIs (scripts/seed_full_journey.py), then every page was opened in the browser; Step 10's example was selected in the page, and the step-11 workbench model (去掉汇率变动) was computed, saved and marked 放入报告 in the page before the report was generated. Not a pure UI journey.",
+  "provenance_scope": "Mixed historical/current captures: top-level fields describe the retained v10 run, not all images. Manual 2.23 re-captured 11-regression-setup, 11-regression-result, 11-regression-workbench and 15-report on 2026-10-12 using agent-browser and only student18's existing v12 completed records/report at localhost:5179 (API 8019). No report generation, submission or grading was performed. Per-image fields override historical top-level metadata. Other 16 images remain historical v10 evidence.",
   "screenshots": [
     {
       "file": "screenshots/00-login.png",
@@ -60,26 +60,24 @@
     {
       "file": "screenshots/11-regression-setup.png",
       "width": 1280,
-      "height": 960,
-      "sha256": "c1ad1fdd8e0e162f5d9a07a74b2db9ac7db3bf82230860061c061a977bb7502c",
-      "captured_on": "2026-10-11",
-      "capture_url": "http://127.0.0.1:5180",
-      "capture_tool": "headless-chrome-cdp",
-      "journey": "partial-course-browser",
-      "account": "manual_gate2",
-      "capture_note": "Step 12 before running: taxed vs untaxed group chart and run button.",
-      "baseline_commit": "pre-PR review fixes on 96c5616",
-      "data_release": "cc257d6ba486432b8b3d47a97accff3b",
-      "simulation_contract": "step10-tariff-teaching-v10",
+      "height": 1200,
+      "sha256": "520b5f2c845055fc259285697c0f853ec2872172bfc346ed9fdd4cb1dbb30d47",
+      "captured_on": "2026-10-12",
+      "capture_url": "http://localhost:5179/?step=11",
+      "capture_tool": "agent-browser",
+      "journey": "existing-completed-records-browser",
+      "account": "student18",
+      "capture_note": "Step 11 group chart and current default model; already computed/submitted account, no re-computation.",
+      "baseline_commit": "b3206c7",
+      "data_release": "be37a7cfe40444f09749a77a276f45a3",
+      "simulation_contract": "step10-tariff-teaching-v12",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
-          "production_data": true,
-          "release_id": "cc257d6ba486432b8b3d47a97accff3b"
+          "name": "Course-generated teaching panel, ICIO-calibrated",
+          "production_data": false,
+          "release_id": "be37a7cfe40444f09749a77a276f45a3"
         }
-      ],
-      "recapture_note": "Re-captured with MANUAL_ONLY_REG=1 after the pre-PR review fixes: the group-chart caption now says parallel trends hold by design once the exchange-rate change is controlled. The other step 10–12 figures re-captured in the same run were byte-identical and keep their entries. Its code_sources_sha256 (same rule as the top-level field, which stays that of 12b88e7) is the working tree it was captured from.",
-      "code_sources_sha256": "ed65d597adee4cf00d887dac74b40ed651e6d7cf9b53900c72f6e068842d59fd"
+      ]
     },
     {
       "file": "screenshots/01-icio.png",
@@ -331,43 +329,43 @@
       "file": "screenshots/11-regression-result.png",
       "width": 1280,
       "height": 960,
-      "sha256": "2755c38ebdacf97d928dc408264868822b64164e606cb0bb5b8b2fb9356183ec",
-      "captured_on": "2026-10-11",
-      "capture_url": "http://127.0.0.1:5180",
-      "capture_tool": "headless-chrome-cdp",
-      "journey": "api-seeded-then-browser",
-      "account": "manual_student2",
-      "capture_note": "Step 11 after the run: one bar per Y and the two-year headline with its current-year and next-year parts.",
-      "baseline_commit": "12b88e7",
-      "data_release": "cc257d6ba486432b8b3d47a97accff3b",
-      "simulation_contract": "step10-tariff-teaching-v10",
+      "sha256": "3b6ad4c217576994d62fefa0053ed595f6ec28b48990b357b2905a7d9a733716",
+      "captured_on": "2026-10-12",
+      "capture_url": "http://localhost:5179/?step=11",
+      "capture_tool": "agent-browser",
+      "journey": "existing-completed-records-browser",
+      "account": "student18",
+      "capture_note": "Existing default trade result; step-10 saved example is China/USA agriculture, not the historical Canada/Costa Rica example.",
+      "baseline_commit": "b3206c7",
+      "data_release": "be37a7cfe40444f09749a77a276f45a3",
+      "simulation_contract": "step10-tariff-teaching-v12",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
-          "production_data": true,
-          "release_id": "cc257d6ba486432b8b3d47a97accff3b"
+          "name": "Course-generated teaching panel, ICIO-calibrated",
+          "production_data": false,
+          "release_id": "be37a7cfe40444f09749a77a276f45a3"
         }
       ]
     },
     {
       "file": "screenshots/11-regression-workbench.png",
-      "width": 1280,
-      "height": 960,
-      "sha256": "fe842ba86b39b35958528adfebf94442a7ac5e0e9d774ee21a59aad0eab16c0d",
-      "captured_on": "2026-10-11",
-      "capture_url": "http://127.0.0.1:5180",
-      "capture_tool": "headless-chrome-cdp",
-      "journey": "api-seeded-then-browser",
-      "account": "manual_student2",
-      "capture_note": "Step 11 改模型、对比: the model without the exchange-rate control (unsaved, highlighted) beside the default model.",
-      "baseline_commit": "12b88e7",
-      "data_release": "cc257d6ba486432b8b3d47a97accff3b",
-      "simulation_contract": "step10-tariff-teaching-v10",
+      "width": 688,
+      "height": 353,
+      "sha256": "0de28f3df3c36de99694fd90363ce540a21677832c91640fc5de8c9c37e60d64",
+      "captured_on": "2026-10-12",
+      "capture_url": "http://localhost:5179/?step=11",
+      "capture_tool": "agent-browser",
+      "journey": "existing-completed-records-browser",
+      "account": "student18",
+      "capture_note": "Default versus existing saved L2 model with country-industry and country-year FE; macro controls absorbed, no model saved or changed. Captured table element at a 1000x1100 viewport with agent-browser; excerpt (0,0)-(688,353) retains header, X/L1/L2 and three control rows, omitting cumulative/statistic rows for readable print size. No pixel/text substitution.",
+      "baseline_commit": "b3206c7",
+      "data_release": "be37a7cfe40444f09749a77a276f45a3",
+      "simulation_contract": "step10-tariff-teaching-v12",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
-          "production_data": true,
-          "release_id": "cc257d6ba486432b8b3d47a97accff3b"
+          "name": "Course-generated teaching panel, ICIO-calibrated",
+          "production_data": false,
+          "release_id": "be37a7cfe40444f09749a77a276f45a3"
         }
       ]
     },
@@ -397,21 +395,21 @@
       "file": "screenshots/15-report.png",
       "width": 1280,
       "height": 960,
-      "sha256": "497bac01caadeb57a4cd5db917127f52a388c26b7897f22858aad9c79476618a",
-      "captured_on": "2026-10-11",
-      "capture_url": "http://127.0.0.1:5180",
-      "capture_tool": "headless-chrome-cdp",
-      "journey": "api-seeded-then-browser",
-      "account": "manual_student2",
-      "capture_note": "Generated report (draft).",
-      "baseline_commit": "12b88e7",
-      "data_release": "cc257d6ba486432b8b3d47a97accff3b",
-      "simulation_contract": "step10-tariff-teaching-v10",
+      "sha256": "910b4af1d258a93d6e490c16defb304d233483e5e11a4f127bea82d287e97e2e",
+      "captured_on": "2026-10-12",
+      "capture_url": "http://localhost:5179/?step=15",
+      "capture_tool": "agent-browser",
+      "journey": "existing-completed-records-browser",
+      "account": "student18",
+      "capture_note": "Read-only view of existing submitted v12 report; did not generate a new report or grade it.",
+      "baseline_commit": "b3206c7",
+      "data_release": "be37a7cfe40444f09749a77a276f45a3",
+      "simulation_contract": "step10-tariff-teaching-v12",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
-          "production_data": true,
-          "release_id": "cc257d6ba486432b8b3d47a97accff3b"
+          "name": "Observed ICIO indicators and course-generated regression panel",
+          "production_data": false,
+          "release_id": "be37a7cfe40444f09749a77a276f45a3"
         }
       ]
     },
