@@ -1080,6 +1080,8 @@ def test_regression_runtime_boundary_maps_to_controlled_route_400(teaching_db, m
                 "teaching_tariff_exposure": 0.02 * entity * year + 0.01 * (entity % 2),
                 "teaching_tariff_exposure_lag1": 0.02 * entity * max(year - 1, 0) + 0.01 * (entity % 2) * (year > 0),
                 "teaching_exchange_rate_change": 0.5 * ((entity + year) % 3) - 1.0,
+                "teaching_log_gdp": 20 + entity + 0.02 * year,
+                "teaching_trade_openness": 60 + 3 * entity + year,
                 "teaching_treated": int(year > 0 and entity % 2),
             }
             for entity in range(6)

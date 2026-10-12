@@ -246,8 +246,8 @@ def demean_and_prune(model: PreparedModel):
             transformed[:, 1:], raw[:, 1:], list(model.xcols), set(model.policy_xcols), _effects_label(effects)
         )
         _attribute_absorbed(omitted, raw[:, 1:], list(model.xcols), data, effects)
-        model.omitted = omitted
-        return transformed[:, 0], X, names, [item["name"] for item in omitted]
+        model.omitted.extend(omitted)
+        return transformed[:, 0], X, names, [item["name"] for item in model.omitted]
     # No fixed effects: ordinary least squares with a constant column. Which regressors to keep is decided on the
     # mean-centred values, so a regressor that is constant over the sample counts as collinear with the constant.
     regressors = raw[:, 1:]

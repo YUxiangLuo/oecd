@@ -762,7 +762,7 @@ def test_report_statements_are_associations_with_their_number():
     assert evidence == "方向明确：X 越高，Y 越低"
     assert (
         copy
-        == "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动后，关税暴露 X 越高，复杂 GVC 生产份额两年累计平均越低（X 每高 1 个百分点，两年累计约低 0.40 个百分点）。"
+        == "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动、GDP 对数和贸易开放度后，关税暴露 X 越高，复杂 GVC 生产份额两年累计平均越低（X 每高 1 个百分点，两年累计约低 0.40 个百分点）。"
     )
     assert "模拟" not in copy and "真实" not in copy and "下降" not in copy
     assert re.search(r"与.*(?:扩张|收缩)一致", copy) is None
@@ -772,7 +772,7 @@ def test_report_statements_are_associations_with_their_number():
     )
     assert (
         length
-        == "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动后，关税暴露 X 越高，前向 GVC 段长度两年累计平均越短（X 每高 1 个百分点，两年累计约短 0.0182 个长度单位）。"
+        == "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动、GDP 对数和贸易开放度后，关税暴露 X 越高，前向 GVC 段长度两年累计平均越短（X 每高 1 个百分点，两年累计约短 0.0182 个长度单位）。"
     )
     _evidence, network = teaching_report._evidence_reading(
         "network", {"coef": 3969.9979, "ci_low": 3000.0, "ci_high": 4900.0}, False, {}
@@ -1577,11 +1577,11 @@ def test_report_renders_authoritative_result_fixture_without_calling_estimator(t
     assert f"剩下 {disclosure['published_entities']} 个用于四项回归" in report.markdown
     assert "预设" not in report.markdown
     assert (
-        "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动后，关税暴露 X 越高，外国增加值项占比两年累计平均越高（X 每高 1 个百分点，两年累计约高 1.20 个百分点）。"
+        "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动、GDP 对数和贸易开放度后，关税暴露 X 越高，外国增加值项占比两年累计平均越高（X 每高 1 个百分点，两年累计约高 1.20 个百分点）。"
         in report.markdown
     )
     assert (
-        "- **可以支持的表述**：扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动后，关税暴露 X 越高"
+        "- **可以支持的表述**：扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动、GDP 对数和贸易开放度后，关税暴露 X 越高"
         in report.markdown
     )
     # The method notes state the tariff's scope, the parallel-trends premise and the SD basis.
@@ -2112,7 +2112,8 @@ def test_report_translates_settings_controls_and_rounds_display_values(tmp_path,
     assert "关税暴露 X" in markdown
     assert "总增加值规模(log, ICIO GVA proxy)" not in markdown
     assert "0.0013729825631389496" not in markdown
-    assert "Y 当年与次年合计平均相差多少（双向固定效应，TWFE），控制：汇率变动" in markdown
+    assert "并控制同期的汇率变动、GDP 对数和贸易开放度后" in markdown
+    assert "Y 当年与次年合计平均相差多少（双向固定效应，TWFE）" in markdown
     assert "twfe_intensity ×" not in markdown
     assert "icio_derived" not in markdown
 
@@ -3042,7 +3043,9 @@ def test_report_appendix_recomputes_the_models_marked_for_the_report(tmp_path, m
     markdown = report.markdown
     appendix = markdown.split("## 附录：学生设计的模型", 1)[1].split("\n## ", 1)[0]
     assert "| 变量 | 默认模型 | 去掉汇率 | 国家×年份\\* |" in appendix
-    assert "控制变量都是国家层面的逐年数值：汇率变动 = 本币兑美元的年变动（百分点，负为贬值）（课程生成）。" in appendix
+    assert "控制变量都是国家层面的逐年数值：汇率变动 = 本币兑美元的年变动（百分点，负为贬值）（课程生成）" in appendix
+    assert "GDP 对数 = ln（模拟 GDP，美元）；首年以 ICIO 国家增加值规模校准（课程生成）" in appendix
+    assert "贸易开放度 = 模拟进出口总额 / GDP（%），不是 ICIO 出口强度（课程生成）" in appendix
     assert "没放入报告" not in appendix
     # The recomputed numbers, not the snapshot's 99.
     for spec in (DEFAULT_SPEC, no_rate):
@@ -3059,7 +3062,7 @@ def test_report_appendix_recomputes_the_models_marked_for_the_report(tmp_path, m
         "- 国家×年份\\*：X + L1.X；汇率变动；国家×行业 + 国家×年份 FE；已省略（被国家×年份 FE 吸收：汇率变动）"
         in appendix
     )
-    assert "- 默认模型：X + L1.X；汇率变动；国家×行业 + 年份 FE" in appendix
+    assert "- 默认模型：X + L1.X；汇率变动、GDP 对数、贸易开放度；国家×行业 + 年份 FE" in appendix
     assert "| 国家×年份 FE | 否 | 否 | 是 |" in appendix
     assert "| 国家 FE | 是 | 是 | 是 |" in appendix
     assert "| 观测值 |" in appendix and "| 组内 R² |" in appendix and "| F（自由度） |" in appendix
@@ -3163,12 +3166,12 @@ def test_gate_marks_the_steps_where_only_the_quiz_is_missing(monkeypatch):
     assert gate[2]["quiz_only"] is False
 
 
-def test_report_technical_appendix_writes_the_v10_formula():
+def test_report_technical_appendix_writes_the_v11_formula():
     from gvcsim.regression.spec import DEFAULT_SPEC
     from gvcsim.report_render import _formula_line
 
     assert _formula_line({"spec": DEFAULT_SPEC.to_dict()}) == (
-        "- 公式：Y = β₁·X + β₂·L1.X + γ₁·汇率变动 + α（每个国家×行业的平均水平）+ λ（每年的共同变化）+ ε（随机波动）"
+        "- 公式：Y = β₁·X + β₂·L1.X + γ₁·汇率变动 + γ₂·GDP 对数 + γ₃·贸易开放度 + α（每个国家×行业的平均水平）+ λ（每年的共同变化）+ ε（随机波动）"
     )
 
 

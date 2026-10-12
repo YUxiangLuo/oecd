@@ -42,7 +42,7 @@ def _run(outcome: str, *, version: str = VERSION, coefficient: str = X_COLUMN) -
             "n_clusters": 4,
             "support": {"status": "ok", "suppress_inference": False, "reasons": []},
             "diagnostics": {"study_contract": "economics-v2"},
-            "coefs": [estimate(name, coef) for name, coef in zip(names, (0.6, 0.4, 0.1), strict=True)],
+            "coefs": [estimate(name, coef) for name, coef in zip(names, (0.6, 0.4, 0.1, 0.03, 0.001), strict=True)],
             "cumulative": estimate("cumulative", 1.0, 0.2),
         },
         "model_snapshot": snapshot,

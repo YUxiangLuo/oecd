@@ -149,8 +149,10 @@ def report_source_disclosures(data_sources: dict[str, Any] | None) -> list[str]:
     controls = sources["simulated_macro_controls"]
     lines.extend(
         [
-            "- 宏观控制变量：按固定规则生成的教学数据，不是 WDI 或 IMF 的观测数据，不得当作真实宏观统计；"
-            f"本实验的回归没有使用它们（生成器 {controls['generator']}@{controls['generator_version']}）。",
+            "- 数据包中的旧宏观占位列未用于本实验回归"
+            f"（生成器 {controls['generator']}@{controls['generator_version']}）。"
+            "回归工作台的 GDP、人口增长率、贸易开放度、汇率和 FDI 由关税教学生成器独立构造，"
+            "不是 WDI 或 IMF 观测值；各模型实际选用的变量及来源见其设定。",
         ]
     )
     return lines

@@ -114,9 +114,9 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
             # Shares: per 1 percentage point of X in percentage points, the table's interval too.
             assert chart["x_label"].endswith("（个百分点）")
             assert bar["value"] == pytest.approx(coefficient["coef"], rel=1e-3)
-            assert (
-                f"[{_signed(coefficient['ci_low'], 2)}, " in table or f"[{_signed(coefficient['ci_low'], 3)}, " in table
-            )
+            printed_low = re.search(r"\[([+-]?[\d.]+), ", table).group(1)
+            precision = len(printed_low.split(".")[1]) if "." in printed_low else 0
+            assert float(printed_low) == pytest.approx(coefficient["ci_low"], abs=0.51 * 10**-precision)
         else:
             # Mixed units: standard deviations, SD = (β × 0.01) / depvar_within_std, with the native value first.
             assert chart["x_label"].endswith("（个标准差）")

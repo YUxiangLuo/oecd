@@ -16,7 +16,7 @@ afterEach(() => { cleanup(); mock.restore(); });
 const options = optionsFixture as WorkbenchOptions;
 const ER = "teaching_exchange_rate_change";
 const DEFAULT: ModelSpec = options.default_spec;
-const NO_RATE: ModelSpec = { x_lags: [0, 1], controls: [], fixed_effects: ["country_industry", "year"] };
+const NO_RATE: ModelSpec = { ...DEFAULT, controls: DEFAULT.controls.filter((item) => item.name !== ER) };
 
 const coef = (name: string, value: number, p = 0.001): CoefStat => ({
   name, coef: value, se: Math.abs(value) / 10 || 0.01, t: 10, p, stars: significanceStars(p), ci_low: value - 0.1, ci_high: value + 0.1,
@@ -48,8 +48,9 @@ function response(spec: ModelSpec, values: Record<string, number>, extra: Partia
   };
 }
 
-const DEFAULT_RUN = response(DEFAULT, { teaching_tariff_exposure: -0.3298, teaching_tariff_exposure_lag1: -0.2206, [ER]: 0.0052 });
-const NO_RATE_RUN = response(NO_RATE, { teaching_tariff_exposure: -0.4608, teaching_tariff_exposure_lag1: -0.244 }, { f_df: [2, 74], f_stat: 462.88 });
+const macroValues = { teaching_log_gdp: -0.044, teaching_trade_openness: -0.000825 };
+const DEFAULT_RUN = response(DEFAULT, { teaching_tariff_exposure: -0.3298, teaching_tariff_exposure_lag1: -0.2206, [ER]: 0.0052, ...macroValues });
+const NO_RATE_RUN = response(NO_RATE, { teaching_tariff_exposure: -0.4608, teaching_tariff_exposure_lag1: -0.244, ...macroValues }, { f_df: [2, 74], f_stat: 462.88 });
 
 function saved(name: string, spec: ModelSpec, run: RegressionResponse, change: Partial<CustomResult> = {}): CustomResult {
   return {
@@ -60,8 +61,8 @@ function saved(name: string, spec: ModelSpec, run: RegressionResponse, change: P
 
 describe("model wording (the server's ModelSpec.summary and equation)", () => {
   test("a spec reads as the report prints it, contained effects dropped", () => {
-    expect(specSummary(DEFAULT, options)).toBe("X + L1.X；汇率变动；国家×行业 + 年份 FE");
-    expect(equationPreview(DEFAULT, options)).toBe("Y = β₁·X + β₂·L1.X + γ₁·汇率变动 + 国家×行业 FE + 年份 FE + ε");
+    expect(specSummary(DEFAULT, options)).toBe("X + L1.X；汇率变动、GDP 对数、贸易开放度；国家×行业 + 年份 FE");
+    expect(equationPreview(DEFAULT, options)).toBe("Y = β₁·X + β₂·L1.X + γ₁·汇率变动 + γ₂·GDP 对数 + γ₃·贸易开放度 + 国家×行业 FE + 年份 FE + ε");
     const messy: ModelSpec = {
       x_lags: [2, 0], controls: [{ name: "log_gdp_proxy", lag: 1 }, { name: ER, lag: 0 }],
       fixed_effects: ["year", "country", "country_year", "industry"],
@@ -125,9 +126,9 @@ describe("tables", () => {
 
   test("rows are the union of the columns' terms, then each fixed effect and the statistics", () => {
     const rows = coefficientRows(columns, options);
-    expect(rows.map((row) => row.label)).toEqual(["X", "L1.X", "汇率变动", "X 各项合计（累计效应）"]);
+    expect(rows.map((row) => row.label)).toEqual(["X", "L1.X", "汇率变动", "GDP 对数", "贸易开放度", "X 各项合计（累计效应）"]);
     expect(rows[2].cells).toEqual([{ coef: "0.0052***", se: "(0.0005)" }, null]);
-    expect(rows[3].cells[1]).toEqual({ coef: "-0.7048***", se: "(0.0705)" });
+    expect(rows[5].cells[1]).toEqual({ coef: "-0.7048***", se: "(0.0705)" });
     const summary = summaryRows(columns, options);
     expect(summary.slice(0, 5).map((row) => [row.label, ...row.cells])).toEqual([
       ["国家 FE", "是", "是"], ["行业 FE", "是", "是"], ["国家×行业 FE", "是", "是"], ["年份 FE", "是", "是"], ["国家×年份 FE", "否", "否"],
@@ -231,7 +232,7 @@ describe("tables", () => {
     expect(lines).toContain("国家×年份 FE,否,否");
     expect(lines).toContain("合计：X 每高 1 个百分点,-0.55 个百分点（两年累计）,-0.70 个百分点（两年累计）");
     expect(lines).toContain("F（自由度）,\"2,076.70（3, 74）\",\"462.88（2, 74）\"");
-    expect(lines.at(-2)).toBe("设定,X + L1.X；汇率变动；国家×行业 + 年份 FE,X + L1.X；无控制变量；国家×行业 + 年份 FE");
+    expect(lines.at(-2)).toBe("设定,X + L1.X；汇率变动、GDP 对数、贸易开放度；国家×行业 + 年份 FE,X + L1.X；GDP 对数、贸易开放度；国家×行业 + 年份 FE");
     expect(options.footnote).toContain("括号内为按国家聚类的标准误");
     expect(lines.at(-1)).toBe(`"${options.footnote.replace("括号内为按国家聚类的标准误", "“标准误”一行为按国家聚类的标准误")}"`);
     expect(csv).not.toMatch(/,\(\d/);
@@ -302,12 +303,12 @@ describe("the workbench", () => {
     const run = spyOn(api, "runRegression").mockResolvedValue(NO_RATE_RUN as never);
     const saves: Partial<WorkbenchStepState>[] = [];
     render(<Harness onSave={(patch) => saves.push(patch)} />);
-    await screen.findByText("Y = β₁·X + β₂·L1.X + γ₁·汇率变动 + 国家×行业 FE + 年份 FE + ε");
+    await screen.findByText("Y = β₁·X + β₂·L1.X + γ₁·汇率变动 + γ₂·GDP 对数 + γ₃·贸易开放度 + 国家×行业 FE + 年份 FE + ε");
     // 国家×行业 contains 国家 and 行业: shown checked and greyed.
     expect((checkbox(/^国家 FE/) as HTMLInputElement).disabled).toBe(true);
     expect((checkbox(/^国家 FE/) as HTMLInputElement).checked).toBe(true);
     fireEvent.click(checkbox(/^汇率变动/));
-    expect(screen.getByText("Y = β₁·X + β₂·L1.X + 国家×行业 FE + 年份 FE + ε")).toBeTruthy();
+    expect(screen.getByText("Y = β₁·X + β₂·L1.X + γ₁·GDP 对数 + γ₂·贸易开放度 + 国家×行业 FE + 年份 FE + ε")).toBeTruthy();
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "计算这个模型" })); });
     expect(run).toHaveBeenCalledWith("trade", expect.anything(), "FVA_share", NO_RATE);
     // The computed model joins the one table, highlighted, after the default model.
@@ -512,7 +513,7 @@ describe("the open workbench", () => {
     await waitFor(() => expect(tableHeaders()).toContain("本次计算（未保存）"));
     fireEvent.click(checkbox(/^L2\.X/));
     expect(document.querySelector(".reg-stale-note")?.textContent).toBe("设定已更改，下面保留最近计算的结果；点“计算这个模型”查看新结果。");
-    expect(screen.getByRole("region", { name: "当前模型完整结果" }).textContent).toContain("无控制变量");
+    expect(screen.getByRole("region", { name: "当前模型完整结果" }).textContent).toContain("GDP 对数、贸易开放度");
     fireEvent.click(screen.getByRole("button", { name: "恢复默认设定" }));
     expect(document.querySelector(".reg-stale-note")?.textContent).toContain("保留最近计算的结果");
     // Another Y saved by the bars: the note names it.

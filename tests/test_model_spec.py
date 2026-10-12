@@ -46,6 +46,9 @@ def _panel(countries: int = 30, seed: int = 20261010) -> pd.DataFrame:
                 row["manufacturing_va_share"] = 0.2 + 0.01 * rng.normal()
                 rows.append(row)
     panel = pd.DataFrame(rows)
+    macro_rng = np.random.default_rng(seed + 1)
+    for key in ("teaching_log_gdp", "teaching_population_growth", "teaching_trade_openness", "teaching_fdi_gdp"):
+        panel[key] = macro_rng.normal(size=len(panel))
     # Country-level controls are one value per country and year.
     for column in CONTROLS:
         panel[column] = panel.groupby(["country", "year"])[column].transform("first")
@@ -238,14 +241,22 @@ def test_control_lag_is_matched_on_the_year_not_the_row():
 
 
 def test_country_year_effects_absorb_country_controls_and_report_them():
-    spec = ModelSpec((0, 1), ((EXCHANGE_RATE_COLUMN, 0), ("log_gdp_proxy", 0)), ("country_industry", "country_year"))
-    result, benchmark = run_design_with_benchmark(_panel(), RegressionDesign("trade", teaching=True, spec=spec))
+    panel = _panel()
+    panel.loc[panel.country.eq("C00"), "log_gdp_proxy"] = np.nan
+    spec = ModelSpec((0, 1), ((EXCHANGE_RATE_COLUMN, 0), ("log_gdp_proxy", 1)), ("country_industry", "country_year"))
+    result, benchmark = run_design_with_benchmark(panel, RegressionDesign("trade", teaching=True, spec=spec))
     omitted = {item["name"]: item for item in result.omitted}
-    assert set(omitted) == {EXCHANGE_RATE_COLUMN, "log_gdp_proxy"}
+    assert set(omitted) == {EXCHANGE_RATE_COLUMN, "log_gdp_proxy__lag1"}
     assert {item["reason"] for item in omitted.values()} == {"absorbed"}
     assert all("国家×年份" in item["by"] for item in omitted.values())
     assert {c.name for c in result.coefs} == {X_LAG_COLUMNS[0], X_LAG_COLUMNS[1]}
     assert benchmark["benchmark_passed"]
+    plain, _ = run_design_with_benchmark(
+        panel, RegressionDesign("trade", teaching=True, spec=ModelSpec((0, 1), (), spec.fixed_effects))
+    )
+    assert result.n_obs == plain.n_obs == len(panel)
+    assert result.sample_flow["dropped_rows_total"] == 0
+    assert result.cumulative == plain.cumulative
 
 
 def test_a_model_whose_x_terms_are_all_zero_is_refused():

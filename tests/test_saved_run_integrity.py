@@ -46,6 +46,8 @@ def saved_run(outcome="trade"):
                 estimate(X_COLUMN, -1.25, 0.5),
                 estimate(X_LAG_COLUMNS[1], -0.75, 0.5),
                 estimate(EXCHANGE_RATE_COLUMN, 0.25, 0.5),
+                estimate("teaching_log_gdp", 0.03, 0.5),
+                estimate("teaching_trade_openness", 0.001, 0.5),
             ],
             "cumulative": estimate("cumulative", -2.0, 0.5),
         },

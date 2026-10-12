@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
 
+from gvcsim.regression.spec import CONTROLS
+
 
 class StrictContract(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -18,7 +20,7 @@ class ModelSpecPayload(StrictContract):
     """A workbench model (gvcsim.regression.spec.ModelSpec.to_dict()); the whitelist is checked by ModelSpec."""
 
     x_lags: list[StrictInt] = Field(max_length=3)
-    controls: list[SpecControl] = Field(max_length=4)
+    controls: list[SpecControl] = Field(max_length=len(CONTROLS))
     fixed_effects: list[StrictStr] = Field(max_length=5)
 
 

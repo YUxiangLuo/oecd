@@ -53,7 +53,7 @@ import { RegressionModelWorkbench, type WorkbenchStepState } from "./regression-
 import { NEGATIVE, POSITIVE, UNCERTAIN } from "./viz/regression/palette";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
-export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v10";
+export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v11";
 
 /** Reveal a freshly calculated verdict inside the course's scroll container (see content-scroll.ts). */
 export const scrollRegressionVerdict = scrollIntoCourseContent;
@@ -84,6 +84,10 @@ function DesignMeta({ design }: { design: RegressionDesignInfo }) {
 /** Short names of the controls in the equation ("γ₁·汇率_it"). */
 const CONTROL_SYMBOLS: Record<string, string> = {
   teaching_exchange_rate_change: "汇率",
+  teaching_log_gdp: "GDP对数",
+  teaching_population_growth: "人口增长率",
+  teaching_trade_openness: "贸易开放度",
+  teaching_fdi_gdp: "FDI净流入占比",
   log_gdp_proxy: "增加值总额对数",
   export_intensity: "出口强度",
   manufacturing_va_share: "制造业增加值占比",
@@ -520,7 +524,7 @@ export function parallelTrendsNote(years: readonly number[], policyYear: number 
   const count = ["", "一", "两", "三", "四", "五"][before.length] ?? String(before.length);
   const pre = before.length ? `加税前只有 ${before.join("、")} ${count}年可看` : "加税前的年份很少";
   const who = groups > 2 ? "各组" : "两组";
-  return `这张图也用来看回归的前提：如果没有关税，扣掉汇率等同期变化后，${who}的走势应大致平行。${pre}，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，控制汇率变动后这一前提由设计保证。`;
+  return `这张图也用来看回归的前提：如果没有关税，扣掉汇率等同期变化后，${who}的走势应大致平行。${pre}，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，控制汇率、GDP 对数和贸易开放度后条件均值满足这一设计前提。`;
 }
 
 /** Step 14: weighted degree is in-degree + out-degree in every row (the report says the same under its chart). */

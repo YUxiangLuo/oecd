@@ -414,7 +414,7 @@ export function ShockLab({ meta, step: _step, state }: {
       <span className="reg-section-step">举例</span>
       <h3>回归要用到的变量：以一个国家×行业为例</h3>
       <p className="teaching-example-lead">
-        步骤 11–14 的模型用到下面三个变量。选一个国家和一个行业，可再选一个对照国家，在逐年表里看它们怎样变化；默认是被加税的加拿大和未被加税的哥斯达黎加（两国汽车业都主要出口到美国），行业为 C29 汽车及零部件。步骤 11–14 会把回归结果换算到这个例子上。所选例子只用于展示与换算，不是回归样本筛选；回归仍使用课程规定的样本。
+        先在逐年表里认识 X、L1.X 和汇率变动；默认回归还控制 GDP 对数与贸易开放度。选一个国家和一个行业，可再选一个对照国家；默认是被加税的加拿大和未被加税的哥斯达黎加（两国汽车业都主要出口到美国），行业为 C29 汽车及零部件。步骤 11–14 会把回归结果换算到这个例子上。所选例子只用于展示与换算，不是回归样本筛选；回归仍使用课程规定的样本。
       </p>
       <dl className="teaching-variables" aria-label="步骤 11–14 的模型用到的变量">
         <div>
@@ -428,6 +428,10 @@ export function ShockLab({ meta, step: _step, state }: {
         <div>
           <dt>汇率变动</dt>
           <dd>本币兑美元的年变动（百分点，负为贬值），每个国家每年一个值。它和加税同时变化、也会影响 Y，所以模型把它作为控制变量<span className="source-tag">课程生成</span>。</dd>
+        </div>
+        <div>
+          <dt>GDP 对数与贸易开放度</dt>
+          <dd>GDP 对数为 ln（模拟 GDP，美元），开放度为模拟进出口总额 / GDP（%）。它们也是默认控制变量；步骤 11–14 可增减控制，另可选人口增长率、FDI 净流入占比<span className="source-tag">课程生成</span>，以及制造业增加值占比等<span className="source-tag">ICIO 派生</span>。变量多不一定更好。</dd>
         </div>
       </dl>
       <div className="controls" role="group" aria-label="例子的国家与行业">
@@ -576,7 +580,7 @@ export function ShockLab({ meta, step: _step, state }: {
         每条是一个国家 {overview.year} 年各{goodsOnly ? "货物" : ""}行业的平均 X{goodsOnly ? "（服务业不加税，X = 0，不计入）" : ""}。回归样本{goodsOnly ? "（货物和服务业都在内）" : ""}：{overview.countries.length} 国的 {overview.entities.toLocaleString("zh-CN")} 个国家×行业{sampleRows ? ` × ${years.length} 年 = ${sampleRows.toLocaleString("zh-CN")} 条记录` : ""}{overview.entities < overview.countries.length * meta.sectors.length ? `（${overview.countries.length} 国 × ${meta.sectors.length} 个行业中，首年指标无法计算的组合不进入样本，多为当年没有出口或没有增加值的行业，所以${overview.countries.every((row) => row.industries < meta.sectors.length) ? "每个国家进入样本的行业都少于" : "一国的行业数可能少于"} ${meta.sectors.length} 个）` : ""}。
       </p>
       <CountryExposureChart data={overview} />
-      <p className="teaching-one-line">步骤 11–14 用每个国家×行业的 X、上一年的 X 和汇率变动，分别对照四类指标 Y，读“X 每高 1 个百分点，Y 两年累计平均相差多少”。</p>
+      <p className="teaching-one-line">步骤 11–14 用每个国家×行业的 X、上一年的 X，控制汇率变动、GDP 对数和贸易开放度，分别对照四类指标 Y，读“X 每高 1 个百分点，Y 两年累计平均相差多少”。</p>
     </section>}
   </div>;
 }

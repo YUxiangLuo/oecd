@@ -36,7 +36,9 @@ import pandas as pd
 # Lags of X are written from the schedule (exact zeros before the first tariff). The generated domestic-VA export
 # share is calibrated lower so it and the FVA share stay within gross exports, and in/out degree higher so weighted
 # degree stays non-negative with the exchange-rate term. The noise draws are v8's. (v9 was an abandoned attempt.)
-VERSION = "step10-tariff-teaching-v10"
+# v11: country-year macro controls have separate, deterministic innovations. GDP and openness enter Y;
+# population growth and FDI are negative controls. These are teaching constructions, not WDI observations.
+VERSION = "step10-tariff-teaching-v11"
 # Seeds the noise draws only (policy assignment is a data rule since v7); changing it would redraw every Y.
 RANDOMIZATION_VERSION = "step10-tariff-teaching-v1"
 X_COLUMN = "teaching_tariff_exposure"
@@ -82,12 +84,22 @@ EXCHANGE_RATE = {
     "first_wave_depreciation": EXCHANGE_RATE_DEPRECIATION,
     "gamma_factor": EXCHANGE_RATE_GAMMA_FACTOR,
 }
-DISCLAIMER = "课程关税实验数据集：X、汇率变动与各 Y 按课程数据契约生成，不是 OECD 发布结果。"
+GDP_COLUMN = "teaching_log_gdp"
+POPULATION_COLUMN = "teaching_population_growth"
+OPENNESS_COLUMN = "teaching_trade_openness"
+FDI_COLUMN = "teaching_fdi_gdp"
+MACRO_CONTROLS = {
+    GDP_COLUMN: {"unit": "ln(USD)", "gamma_factor": 0.08},
+    POPULATION_COLUMN: {"unit": "percent per year", "gamma_factor": 0.0},
+    OPENNESS_COLUMN: {"unit": "exports plus imports / GDP, percent", "gamma_factor": 0.0015},
+    FDI_COLUMN: {"unit": "net inflows / GDP, percent", "gamma_factor": 0.0},
+}
+DISCLAIMER = "课程关税实验数据集：X、模拟宏观控制变量与各 Y 按课程数据契约生成，不是 OECD 发布结果。"
 # What students and readers see (step 10, the step 11–14 result card and the report); DISCLAIMER above is
 # the release contract value. The frontend keeps the same sentence in regression-lessons.ts.
 GENERATED_DATA_NOTE = (
-    "关税情景、汇率变动与步骤 11–14 的 Y 由课程按设定生成（参照真实指标的量级），"
-    "用于练习读回归，不是真实关税、汇率或 OECD 发布的结果。"
+    "关税情景、GDP、人口增长率、贸易开放度、汇率、FDI 与步骤 11–14 的 Y 由课程按设定生成；"
+    "制造业增加值占比等 ICIO 派生控制另行标注。用于练习建模，不是真实政策效应或官方宏观统计。"
 )
 # Display kinds: shares are shown in percentage points, the others in their own raw units.
 T = TypeVar("T")
@@ -382,6 +394,7 @@ def simulation_parameters() -> dict:
         "tariff_rate": TARIFF_RATE,
         "lag_shares": list(LAG_SHARES),
         "exchange_rate": EXCHANGE_RATE,
+        "macro_controls": MACRO_CONTROLS,
         "taxed_rule": TAXED_RULE,
         "common_year_trend": {
             "values": list(COMMON_YEAR_TREND),
@@ -480,7 +493,7 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
         or (item.combine is not None and all((outcome, key) in drawn for key, _ in item.combine[1]))
     ]
     source_columns = sorted({item.column for _, item in all_baselines if item.derived is None})
-    required = {"country", "industry", "year", "entity_id", *source_columns}
+    required = {"country", "industry", "year", "entity_id", "log_gdp_proxy", *source_columns}
     if missing := required - set(release_panel.columns):
         raise ValueError("教学面板缺少源列:" + "、".join(sorted(missing)))
     years = sorted(int(y) for y in release_panel["year"].unique())
@@ -560,6 +573,28 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
     out[EXCHANGE_RATE_COLUMN] = cluster.map(
         lambda value: (2 * _unit_number(value, "exchange-rate", seed) - 1) * EXCHANGE_RATE_NOISE_SD * 3**0.5
     ) + EXCHANGE_RATE_DEPRECIATION * (out[WAVE_COLUMN].eq(1) & out.year.ge(first_wave_start))
+    # GDP is anchored to first-year national VA, not to an industry's scale. No policy outcome is used to
+    # generate controls. A pre-existing, wave-correlated growth path is a confounder, not a response to tariffs.
+    anchors = release_panel.loc[release_panel.year.eq(years[0]), ["country", "log_gdp_proxy"]].drop_duplicates()
+    if anchors.country.duplicated().any() or not np.isfinite(anchors.log_gdp_proxy).all():
+        raise ValueError("GDP 教学校准要求每国唯一且有限的首年增加值总额对数")
+    gdp_base = out.country.map(anchors.set_index("country").log_gdp_proxy) + np.log(1_000_000.0)
+    t = out.year - years[0]
+
+    def draw(keys: pd.Series, salt: str) -> pd.Series:
+        return keys.map(lambda value: 2 * _unit_number(value, salt, seed) - 1)
+
+    growth = 0.025 * t + 0.012 * t * out[WAVE_COLUMN].eq(1) + 0.025 * draw(cluster, "macro-growth")
+    openness_base = 80 + 45 * draw(out.country, "openness-level")
+    out[GDP_COLUMN] = gdp_base + growth
+    out[POPULATION_COLUMN] = (
+        0.8 + 1.2 * draw(out.country, "population-level") + 0.5 * draw(cluster, "population-growth")
+    )
+    out[OPENNESS_COLUMN] = openness_base + 2 * t * out[WAVE_COLUMN].eq(1) + 4 * draw(cluster, "openness")
+    out[FDI_COLUMN] = 2 + 3 * draw(out.country, "fdi-level") + 4 * draw(cluster, "fdi-flow")
+    macro_effect = MACRO_CONTROLS[GDP_COLUMN]["gamma_factor"] * (out[GDP_COLUMN] - gdp_base) + MACRO_CONTROLS[
+        OPENNESS_COLUMN
+    ]["gamma_factor"] * (out[OPENNESS_COLUMN] - openness_base)
     effect = LAG_SHARES[0] * out[X_LAG_COLUMNS[0]] + LAG_SHARES[1] * out[X_LAG_COLUMNS[1]]
     trend = out.year.map(dict(zip(years, COMMON_YEAR_TREND, strict=True)))
     generated: dict[str, pd.Series] = {}
@@ -576,6 +611,7 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
             out[_baseline_column(outcome, item)]
             + item.beta * effect
             + EXCHANGE_RATE_GAMMA_FACTOR * item.beta * out[EXCHANGE_RATE_COLUMN]
+            + item.beta * macro_effect
             + noise_scale * (noise + trend)
         )
     # Identity Ys are computed from the drawn ones, row by row (missing when any part is missing).
@@ -688,6 +724,7 @@ def model_snapshot(outcome: str, baseline_key: str | None = None, spec: Any = No
         "market": MARKET,
         "taxed_rule": TAXED_RULE,
         "exchange_rate": EXCHANGE_RATE,
+        "macro_controls": MACRO_CONTROLS,
         "calibration": item.calibration,
         "common_year_trend": list(COMMON_YEAR_TREND),
         "disclaimer": DISCLAIMER,

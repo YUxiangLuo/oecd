@@ -32,6 +32,10 @@ def _panel() -> pd.DataFrame:
                     WAVE_COLUMN: wave,
                     SURPLUS_COLUMN: {1: 15000.0, 2: 1500.0, 0: -500.0}[wave],
                     EXCHANGE_RATE_COLUMN: 0.5 + (EXCHANGE_RATE_DEPRECIATION if wave == 1 and year >= 2018 else 0),
+                    "teaching_log_gdp": 20 + wave + 0.02 * (year - 2016),
+                    "teaching_population_growth": -0.2 + wave,
+                    "teaching_trade_openness": 80 + 30 * wave,
+                    "teaching_fdi_gdp": -1 + wave,
                     **{column: 0.3 for column in Y_COLUMNS.values()},
                     y_column("network", "weighted_indegree"): 0.1,
                     y_column("network", "weighted_outdegree"): 0.2,
@@ -91,7 +95,18 @@ def test_each_family_identity_is_checked_row_by_row(outcome, item):
 
 
 @pytest.mark.parametrize(
-    "mutation", ["wave", "depreciation", "industry_exchange", "identity", "missing_part", "surplus"]
+    "mutation",
+    [
+        "wave",
+        "depreciation",
+        "industry_exchange",
+        "identity",
+        "missing_part",
+        "surplus",
+        "industry_gdp",
+        "missing_macro",
+        "negative_openness",
+    ],
 )
 def test_teaching_structure_mutations_fail(mutation):
     panel = _panel()
@@ -115,6 +130,12 @@ def test_teaching_structure_mutations_fail(mutation):
         panel.loc[0, Y_COLUMNS["network"]] += 0.05
     elif mutation == "missing_part":
         panel = panel.drop(columns=y_column("network", "weighted_indegree"))
+    elif mutation == "industry_gdp":
+        panel.loc[0, "teaching_log_gdp"] += 0.1
+    elif mutation == "missing_macro":
+        panel = panel.drop(columns="teaching_fdi_gdp")
+    elif mutation == "negative_openness":
+        panel["teaching_trade_openness"] = -1.0
     else:
         panel.loc[0, SURPLUS_COLUMN] += 1
     assert not _check(panel)["passed"]

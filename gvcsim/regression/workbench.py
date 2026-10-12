@@ -37,13 +37,15 @@ CUSTOM_RESULT_KEYS = frozenset({"id", "name", "outcome", "baseline", "spec", "in
 X_LAG_DESCRIPTIONS = {0: "当期：今年的 X", 1: "滞后 1 期：上一年的 X", 2: "滞后 2 期：两年前的 X"}
 X_LAG_NOTE = "数据只到 2020 年、2018 年起加税，滞后 3 期在样本内全为 0，无法估计。"
 CONTROL_LAG_LABELS = {0: "当期", 1: "滞后 1 期"}
-CONTROL_LAG_NOTE = "控制变量没有 2015 年的数据，选滞后 1 期时样本从 2017 年开始（少一年的记录）。"
+CONTROL_LAG_NOTE = (
+    "控制变量没有 2015 年的数据，参与估计的滞后 1 期控制使样本从 2017 年开始；被国家×年份 FE 吸收的控制不删样本。"
+)
 FIXED_EFFECT_DESCRIPTIONS = {
     "country": "每个国家一个截距",
     "industry": "每个行业一个截距",
     "country_industry": "每个国家的每个行业一个截距，包含国家 FE 和行业 FE",
     "year": "每年一个截距，扣掉所有单位共同的年度变化",
-    "country_year": "每个国家每年一个截距，包含国家 FE 和年份 FE；会吸收所有国家层面的控制变量（4 个控制变量都是）",
+    "country_year": "每个国家每年一个截距，包含国家 FE 和年份 FE；会吸收本页全部国家层面的控制变量（包括滞后项），省略这些变量但不因其缺失删样本",
 }
 NO_FIXED_EFFECTS_NOTE = "都不勾时模型加常数项，表下的设定写作“无固定效应”。"
 # "试一试": one change at a time, each a contrast the course data were built to show; questions only, no answers.
@@ -51,7 +53,8 @@ TRIES = (
     "去掉“汇率变动”：X 各项合计变大还是变小？再改用“国家×年份”固定效应呢？",
     "只放当期 X（去掉 L1.X）：合计和默认模型相差多少？",
     "固定效应改成“国家 + 行业 + 年份”（不勾“国家×行业”）：结果怎样变？",
-    "加上 L2.X，或加上增加值总额对数、出口强度：结论变了吗？",
+    "去掉 GDP 对数或贸易开放度：X 各项合计怎样变化？",
+    "加上人口增长率、FDI 净流入占比，或 L2.X：多放变量是否一定更好？",
 )
 HINTS = (
     "在课程模拟数据中，每次只改一处设定，与第一列的默认模型比较：X 各项的系数和合计变了多少？观测值和年份是否相同？",

@@ -12,7 +12,14 @@ from typing import Any
 
 # The X columns the teaching panel carries, by lag. Lags of X come from the tariff schedule (before the first tariff
 # year τ is 0, so they are exact zeros, not missing); the generator writes them, the estimator only selects them.
-from gvcsim.regression.teaching import EXCHANGE_RATE_COLUMN, X_LAG_COLUMNS
+from gvcsim.regression.teaching import (
+    EXCHANGE_RATE_COLUMN,
+    FDI_COLUMN,
+    GDP_COLUMN,
+    OPENNESS_COLUMN,
+    POPULATION_COLUMN,
+    X_LAG_COLUMNS,
+)
 
 X_LAGS = tuple(X_LAG_COLUMNS)
 CONTROL_LAGS = (0, 1)
@@ -28,9 +35,15 @@ class ControlInfo:
 # Order is the order of the page and of a normalised spec.
 CONTROLS: dict[str, ControlInfo] = {
     EXCHANGE_RATE_COLUMN: ControlInfo("汇率变动", "本币兑美元的年变动（百分点，负为贬值）", "generated"),
-    "log_gdp_proxy": ControlInfo("增加值总额对数", "ln（国家增加值总额，百万美元）；用作 GDP 代理，并非正式 GDP", "icio"),
-    "export_intensity": ControlInfo("出口强度", "总出口 / 增加值总额", "icio"),
+    GDP_COLUMN: ControlInfo("GDP 对数", "ln（模拟 GDP，美元）；首年以 ICIO 国家增加值规模校准", "generated"),
+    POPULATION_COLUMN: ControlInfo("人口增长率", "模拟年度人口增长率（%），独立于 GDP 生成", "generated"),
+    OPENNESS_COLUMN: ControlInfo("贸易开放度", "模拟进出口总额 / GDP（%），不是 ICIO 出口强度", "generated"),
+    FDI_COLUMN: ControlInfo("FDI 净流入占比", "模拟外商直接投资净流入 / GDP（%），可为负", "generated"),
     "manufacturing_va_share": ControlInfo("制造业增加值占比", "制造业增加值 / 增加值总额", "icio"),
+    "log_gdp_proxy": ControlInfo(
+        "增加值总额对数", "ln（国家增加值总额，百万美元）；用作 GDP 代理，并非正式 GDP", "icio"
+    ),
+    "export_intensity": ControlInfo("出口强度", "总出口 / 增加值总额", "icio"),
 }
 
 # Fixed effects in page order. A combined effect contains its parts, so checking it makes them redundant.
@@ -178,6 +191,7 @@ def _subscript(number: int) -> str:
     return str(number).translate(str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉"))
 
 
-# The course default of steps 11–14 for teaching data v10: the tariff's relation shows over two years and the
-# exchange rate confounds it, so the correct model has X, L1.X and the exchange rate with unit and year effects.
-DEFAULT_SPEC = ModelSpec((0, 1), ((EXCHANGE_RATE_COLUMN, 0),), ("country_industry", "year"))
+# Include the three nonzero macro terms in v11's generator. Population growth and FDI are optional null controls.
+DEFAULT_SPEC = ModelSpec(
+    (0, 1), ((EXCHANGE_RATE_COLUMN, 0), (GDP_COLUMN, 0), (OPENNESS_COLUMN, 0)), ("country_industry", "year")
+)

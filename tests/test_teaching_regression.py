@@ -31,6 +31,7 @@ def _source(countries=("AAA", "BBB", "CCC", "DDD")) -> pd.DataFrame:
                         "industry": industry,
                         "entity_id": f"{country}_{industry}",
                         "year": year,
+                        "log_gdp_proxy": 10.0 + countries.index(country) / 10,
                         "gross_exports": industry_index * 10 + year - 2016,
                         "FVA_share": 0.1 + industry_index / 100,
                         "3b_VA_GVC_C_share": 0.05 + industry_index / 100,
@@ -151,6 +152,20 @@ def test_v2_preserves_randomization_and_halves_noise_without_changing_effects():
                 + span * baseline[row.entity_id]
                 + beta * effect
                 - 0.0095 * beta * getattr(row, EXCHANGE_RATE_COLUMN)
+                + beta
+                * (
+                    0.08
+                    * (
+                        0.025 * (row.year - 2016)
+                        + 0.012 * (row.year - 2016) * (getattr(row, WAVE_COLUMN) == 1)
+                        + 0.025 * draw(f"{row.country}|{row.year}", "macro-growth")
+                    )
+                    + 0.0015
+                    * (
+                        2 * (row.year - 2016) * (getattr(row, WAVE_COLUMN) == 1)
+                        + 4 * draw(f"{row.country}|{row.year}", "openness")
+                    )
+                )
                 + scale * (noise + (row.year - 2018) * 0.2)
             )
         np.testing.assert_allclose(panel[Y_COLUMNS[outcome]], expected, rtol=1e-12, atol=1e-12)
@@ -169,7 +184,7 @@ def test_v2_preserves_randomization_and_halves_noise_without_changing_effects():
         atol=1e-9,
     )
     snapshot = model_snapshot("trade")
-    assert snapshot["version"] == "step10-tariff-teaching-v10"
+    assert snapshot["version"] == "step10-tariff-teaching-v11"
     assert snapshot["randomization_version"] == "step10-tariff-teaching-v1"
     assert snapshot["tariff_rate"] == 0.25 and snapshot["lag_shares"] == [0.6, 0.4]
     assert [wave["start_year_offset"] for wave in snapshot["taxed_rule"]["waves"]] == [2, 3]
@@ -246,7 +261,9 @@ def test_benchmark_binds_exposure_bytes_and_generator_parameters(tmp_path):
     assert simulation_parameters()["common_year_trend"]["values"] == snapshot["common_year_trend"]
     assert first["model"] == {
         "x_lags": [0, 1],
-        "controls": [{"name": EXCHANGE_RATE_COLUMN, "lag": 0}],
+        "controls": [
+            {"name": name, "lag": 0} for name in (EXCHANGE_RATE_COLUMN, "teaching_log_gdp", "teaching_trade_openness")
+        ],
         "fixed_effects": ["country_industry", "year"],
     }
     trade = first["summary"]["trade:FVA_share"]
@@ -264,15 +281,33 @@ def test_benchmark_binds_exposure_bytes_and_generator_parameters(tmp_path):
     )
 
 
+def test_macro_controls_are_national_reproducible_and_population_is_not_derived_from_gdp():
+    from gvcsim.regression.teaching import GDP_COLUMN, MACRO_CONTROLS, FDI_COLUMN, POPULATION_COLUMN, OPENNESS_COLUMN
+
+    source = _source(tuple(f"C{i:02}" for i in range(30)))
+    panel = build_teaching_panel(source, _exposure(source))
+    scaled = build_teaching_panel(source.assign(log_gdp_proxy=source.log_gdp_proxy + np.log(2)), _exposure(source))
+    for column in MACRO_CONTROLS:
+        assert np.isfinite(panel[column]).all()
+        assert panel.groupby(["country", "year"])[column].nunique().eq(1).all()
+    np.testing.assert_allclose(scaled[GDP_COLUMN] - panel[GDP_COLUMN], np.log(2))
+    for column in (POPULATION_COLUMN, OPENNESS_COLUMN, FDI_COLUMN, *Y_COLUMNS.values()):
+        np.testing.assert_allclose(scaled[column], panel[column])
+    assert panel[POPULATION_COLUMN].lt(0).any()
+    assert panel[FDI_COLUMN].lt(0).any()
+    assert panel[OPENNESS_COLUMN].gt(100).any() and panel[OPENNESS_COLUMN].gt(0).all()
+
+
 def test_snapshot_publishes_actual_columns_and_prespecified_parameters():
     snapshot = model_snapshot("network")
     assert snapshot["x_columns"] == [X_COLUMN, X_LAG_COLUMNS[1]]
     assert snapshot["y_column"] == Y_COLUMNS["network"]
     assert snapshot["beta"] == BETAS["network"]
-    assert snapshot["controls"] == [EXCHANGE_RATE_COLUMN] and snapshot["interactions"] == []
+    assert snapshot["controls"] == [EXCHANGE_RATE_COLUMN, "teaching_log_gdp", "teaching_trade_openness"]
+    assert snapshot["interactions"] == []
     assert snapshot["fixed_effects"] == ["entity_id", "year"]
     assert model_snapshot("network", spec=SINGLE_X)["x_columns"] == [X_COLUMN]
-    assert "课程" in snapshot["disclaimer"] and "模拟" not in snapshot["disclaimer"]
+    assert "课程" in snapshot["disclaimer"] and "模拟" in snapshot["disclaimer"]
 
 
 def test_step10_filters_before_limiting_and_reads_the_regression_artifact(monkeypatch):

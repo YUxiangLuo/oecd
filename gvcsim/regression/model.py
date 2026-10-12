@@ -184,6 +184,17 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
         raise ValueError("回归数值变量 year 必须是数学整数")
     if has_treated and not data[design.treated_col].dropna().isin([0, 1]).all():
         raise ValueError(f"处理状态 {design.treated_col} 必须严格为 0/1")
+    omitted = []
+    if spec is not None and "country_year" in spec.fixed_effects:
+        # Every offered control is national, including its lag. Remove these structural redundancies before
+        # complete-case selection: an unused control must not delete observations (or the first lag year).
+        for key in base_controls:
+            if data.groupby(["country", "year"])[key].nunique().gt(1).any():
+                raise ValueError(f"国家层面控制变量 {key} 在同一国家年份必须一致")
+        omitted = [{"name": name, "reason": "absorbed", "by": "国家×年份"} for name in spec.control_columns]
+        columns = [name for name in columns if name not in base_controls]
+        regressors = list(x_columns)
+        base_controls, lagged_controls = [], []
     timing = (
         freeze_treatment_timing(data, design.entity, "year", design.cluster, design.treated_col)
         if has_treated
@@ -261,4 +272,5 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
         support=support,
         sample_flow=flow,
         fe_columns=fe_columns,
+        omitted=omitted,
     )

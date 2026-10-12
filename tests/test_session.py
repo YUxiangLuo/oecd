@@ -54,6 +54,8 @@ def test_put_session_acknowledges_without_echoing_the_saved_snapshot(monkeypatch
                 _estimate("teaching_tariff_exposure", -0.3),
                 _estimate("teaching_tariff_exposure_lag1", -0.2),
                 _estimate("teaching_exchange_rate_change", 0.05),
+                _estimate("teaching_log_gdp", 0.03),
+                _estimate("teaching_trade_openness", 0.001),
             ],
             "cumulative": _estimate("cumulative", -0.5),
         },

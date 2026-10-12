@@ -777,6 +777,8 @@ def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict
         EXCHANGE_RATE_COLUMN,
         EXCHANGE_RATE_DEPRECIATION,
         EXCHANGE_RATE_NOISE_SD,
+        MACRO_CONTROLS,
+        OPENNESS_COLUMN,
         SURPLUS_COLUMN,
         TARIFF_RATE,
         WAVE_COLUMN,
@@ -801,6 +803,7 @@ def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict
         SURPLUS_COLUMN,
         WAVE_COLUMN,
         EXCHANGE_RATE_COLUMN,
+        *MACRO_CONTROLS,
         *X_LAG_COLUMNS.values(),
         *Y_COLUMNS.values(),
     }
@@ -834,7 +837,9 @@ def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict
     # country-year. Check its support after removing the prescribed first-wave depreciation, not a fixed seed.
     for column in (SURPLUS_COLUMN, WAVE_COLUMN):
         violations += int((frame.groupby("country")[column].nunique(dropna=False) != 1).sum())
-    violations += int((frame.groupby(["country", "year"])[EXCHANGE_RATE_COLUMN].nunique(dropna=False) != 1).sum())
+    for column in (EXCHANGE_RATE_COLUMN, *MACRO_CONTROLS):
+        violations += int((frame.groupby(["country", "year"])[column].nunique(dropna=False) != 1).sum())
+    violations += int(frame[OPENNESS_COLUMN].le(0).sum())
     # τ follows the published schedule: the goods industries (ICIO A–C) of a taxed country from its wave's start year.
     # A lag of X is the unit's w × that schedule k years earlier (0 before the panel), so a unit missing a year inside
     # the panel still has its lags checked, as the generator writes them.

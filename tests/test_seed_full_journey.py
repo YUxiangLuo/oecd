@@ -45,6 +45,8 @@ def _result(status):
             estimate(X_COLUMN, 0.06),
             estimate(X_LAG_COLUMNS[1], 0.04),
             estimate(EXCHANGE_RATE_COLUMN, 0.01),
+            estimate("teaching_log_gdp", 0.03),
+            estimate("teaching_trade_openness", 0.001),
         ],
         "cumulative": estimate("cumulative", 0.1),
     }

@@ -1,7 +1,7 @@
 """Evaluate the deployed teaching design on paired seeds, never by seed selection.
 
 For every Y a page may choose, each seed regenerates the panel with the production generator and fits the course
-default model (X + L1.X + exchange rate, unit and year effects, country-clustered CR1): the cumulative relation and
+default model (X + L1.X + exchange rate + GDP + openness, unit and year effects, country-clustered CR1): the cumulative relation and
 each term's estimate are compared with the preset values (β split 60/40 over X and L1.X; the exchange rate's slope
 γ = factor × β). Run from the repository root with PYTHONPATH=. and --output <json>.
 
@@ -24,7 +24,7 @@ from gvcsim.regression.design import RegressionDesign
 from gvcsim.regression.panel import run_design_with_benchmark
 from gvcsim.regression.spec import DEFAULT_SPEC
 
-TERMS = ("cumulative", "x", "lag1", "exchange_rate")
+TERMS = ("cumulative", "x", "lag1", "exchange_rate", "gdp", "openness")
 
 
 def _targets(beta: float) -> dict[str, float]:
@@ -33,6 +33,8 @@ def _targets(beta: float) -> dict[str, float]:
         "x": teaching.LAG_SHARES[0] * beta,
         "lag1": teaching.LAG_SHARES[1] * beta,
         "exchange_rate": teaching.EXCHANGE_RATE_GAMMA_FACTOR * beta,
+        "gdp": teaching.MACRO_CONTROLS[teaching.GDP_COLUMN]["gamma_factor"] * beta,
+        "openness": teaching.MACRO_CONTROLS[teaching.OPENNESS_COLUMN]["gamma_factor"] * beta,
     }
 
 
@@ -43,7 +45,7 @@ def _fit(frame: pd.DataFrame, column: str) -> tuple[dict[str, float], dict[str, 
     n = len(frame)
     codes, countries = pd.factorize(frame.country)
     groups = len(countries)
-    regressors = [teaching.X_LAG_COLUMNS[0], teaching.X_LAG_COLUMNS[1], teaching.EXCHANGE_RATE_COLUMN]
+    regressors = [*DEFAULT_SPEC.x_columns, *DEFAULT_SPEC.control_columns]
     cube = frame[[column, *regressors]].to_numpy(float).reshape(entities, periods, -1)
     within = (
         cube
@@ -60,18 +62,22 @@ def _fit(frame: pd.DataFrame, column: str) -> tuple[dict[str, float], dict[str, 
     rank = entities + periods - 1
     correction = groups / (groups - 1) * (n - 1) / (n - X.shape[1] - rank)
     covariance = correction * bread @ (scores.T @ scores) @ bread
-    weights = np.array([1.0, 1.0, 0.0])
+    weights = np.array([1.0, 1.0, 0.0, 0.0, 0.0])
     estimates = {
         "cumulative": float(weights @ beta),
         "x": float(beta[0]),
         "lag1": float(beta[1]),
         "exchange_rate": float(beta[2]),
+        "gdp": float(beta[3]),
+        "openness": float(beta[4]),
     }
     ses = {
         "cumulative": float(np.sqrt(weights @ covariance @ weights)),
         "x": float(np.sqrt(covariance[0, 0])),
         "lag1": float(np.sqrt(covariance[1, 1])),
         "exchange_rate": float(np.sqrt(covariance[2, 2])),
+        "gdp": float(np.sqrt(covariance[3, 3])),
+        "openness": float(np.sqrt(covariance[4, 4])),
     }
     return estimates, ses, groups
 

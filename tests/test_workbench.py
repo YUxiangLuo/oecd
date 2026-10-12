@@ -46,20 +46,24 @@ def test_options_list_every_choice_in_page_order_with_the_default_and_the_limits
     assert options["default_spec"] == DEFAULT_SPEC.to_dict()
     assert [item["label"] for item in options["x_lags"]] == ["X", "L1.X", "L2.X"]
     assert "滞后 3 期" in options["x_lag_note"]
-    assert [item["label"] for item in options["controls"]] == ["汇率变动", "增加值总额对数", "出口强度", "制造业增加值占比"]
-    assert "用作 GDP 代理，并非正式 GDP" in options["controls"][1]["definition"]
-    assert [item["source"] for item in options["controls"]] == [
-        "课程生成",
-        "按 ICIO 计算",
-        "按 ICIO 计算",
-        "按 ICIO 计算",
+    assert [item["label"] for item in options["controls"]] == [
+        "汇率变动",
+        "GDP 对数",
+        "人口增长率",
+        "贸易开放度",
+        "FDI 净流入占比",
+        "制造业增加值占比",
+        "增加值总额对数",
+        "出口强度",
     ]
+    assert "用作 GDP 代理，并非正式 GDP" in options["controls"][6]["definition"]
+    assert [item["source"] for item in options["controls"]] == ["课程生成"] * 5 + ["按 ICIO 计算"] * 3
     assert [item["lag"] for item in options["control_lags"]] == [0, 1]
     effects = {item["key"]: item for item in options["fixed_effects"]}
     assert list(effects) == ["country", "industry", "country_industry", "year", "country_year"]
     assert effects["country_industry"]["includes"] == ["country", "industry"]
     assert effects["country_year"]["includes"] == ["country", "year"]
-    assert "吸收所有国家层面的控制变量" in effects["country_year"]["description"]
+    assert "吸收本页全部国家层面的控制变量" in effects["country_year"]["description"]
     assert options["limits"] == {"saved": 6, "in_report": 3, "compared": 4, "name_length": 20, "runs_per_minute": 20}
     assert len(options["hints"]) == 2 and options["footnote"].startswith("注：括号内为按国家聚类的标准误。")
 
@@ -68,7 +72,7 @@ def test_options_list_every_choice_in_page_order_with_the_default_and_the_limits
 def student_client(teaching_db, monkeypatch):
     from test_route_adapters import _authenticated_client
 
-    monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: PANEL)
+    monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: ("a" * 32, PANEL))
 
     async def direct_cpu(func, *args, **kwargs):
         return func(*args, **kwargs)
@@ -114,6 +118,27 @@ def test_run_takes_a_spec_and_an_omitted_spec_is_the_default_model(student_clien
     assert plain["constant"]["name"] == "_constant"
     assert {"r2", "r2_adj", "f_stat", "f_df", "f_p"} <= set(plain)
     assert plain["sample_flow"]["years"] == [2016, 2020]
+
+
+def test_run_accepts_every_offered_control_together(student_client):
+    options = student_client.get("/api/regression/options").json()
+    controls = [{"name": item["name"], "lag": 1} for item in options["controls"]]
+    response = student_client.post(
+        "/api/regression/run",
+        json={
+            "outcome": "trade",
+            "spec": {
+                "x_lags": [0, 1],
+                "controls": controls,
+                "fixed_effects": ["country_industry", "country_year"],
+            },
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert len(body["design"]["spec"]["controls"]) == 8
+    assert body["result"]["sample_flow"]["years"] == [2016, 2020]
+    assert body["benchmark"]["benchmark_passed"] is True
 
 
 @pytest.mark.parametrize(
