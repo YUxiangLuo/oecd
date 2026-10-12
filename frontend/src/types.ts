@@ -807,7 +807,8 @@ export interface RegressionResponse {
     controls: string[];
     interactions: string[];
     seed: number;
-    beta: number;
+    beta: number | null;
+    ratio?: string[] | null;
     tariff_path: number[];
     disclaimer: string;
     baseline?: string;

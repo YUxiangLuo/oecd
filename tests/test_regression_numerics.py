@@ -11,6 +11,37 @@ from gvcsim.regression import panel
 from gvcsim.regression.design import RegressionDesign
 
 
+def test_no_effect_library_benchmark_preserves_level_coefficients_and_clustered_se():
+    from gvcsim.regression.benchmark import absorbing_estimate, summarize_benchmark
+    from gvcsim.regression.estimation import CONSTANT, within_ols
+    from gvcsim.regression.model import PreparedModel
+
+    rng = np.random.default_rng(41)
+    n = 600
+    x = rng.normal(size=n)
+    frame = pd.DataFrame(
+        {
+            "country": np.repeat(np.arange(30), 20),
+            "year": np.tile(np.arange(20), 30),
+            "x": x,
+            "control": 20 + 0.01 * x + 0.001 * rng.normal(size=n),
+            "small": 1e-6 * rng.normal(size=n),
+        }
+    )
+    frame["y"] = 4000 + 200 * x - 150 * frame.control + 3e6 * frame.small + rng.normal(size=n)
+    model = PreparedModel(frame, "y", ["x", "control", "small"], ["x"], "country", "year", "country", [], fe_columns=())
+    own = within_ols(model)
+    reference = absorbing_estimate(model, ["x", "control", "small", CONSTANT], [])
+    benchmark = summarize_benchmark(model, own, reference)
+    assert benchmark["backend"] == "linearmodels.IV2SLS"
+    assert benchmark["benchmark_passed"]
+    assert len(benchmark["policy_coefs"]) == 4
+    # In particular the level intercept SE needs slope/intercept cross-covariances.
+    intercept = next(c for c in reference.coefs if c.name == CONSTANT)
+    np.testing.assert_allclose([intercept.coef, intercept.se], [own.constant.coef, own.constant.se], rtol=1e-6)
+    assert reference.r2 == pytest.approx(own.r2, abs=1e-12)
+
+
 @pytest.mark.parametrize("effects", [(), ("country",), ("country", "year"), ("country", "industry", "year")])
 @pytest.mark.parametrize("scale", [1e-12, 1e-6, 1e8, 1e12])
 def test_estimates_and_omissions_are_independent_of_column_units(effects, scale):

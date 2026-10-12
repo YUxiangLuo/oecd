@@ -57,6 +57,19 @@ def test_a_panel_on_the_schedule_passes():
     assert _check(_panel())["passed"]
 
 
+def test_position_ratio_identity_rejects_corruption_and_missing_parts():
+    panel = _panel()
+    target = y_column("length", "GVCPs")
+    denominator = y_column("length", "PLy_GVC")
+    panel[denominator] = 0.6
+    panel[target] = 0.5
+    assert _check(panel)["passed"]
+    panel.loc[0, target] = 0.7
+    assert not _check(panel)["passed"]
+    panel.loc[0, target] = 0.5
+    assert not _check(panel.drop(columns=denominator))["passed"]
+
+
 def test_a_unit_missing_a_year_keeps_its_scheduled_lags():
     panel = _panel()
     gap = panel.drop(panel.index[panel["entity_id"].eq("AAA_C29") & panel["year"].eq(2018)])

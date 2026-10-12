@@ -184,7 +184,7 @@ def test_v2_preserves_randomization_and_halves_noise_without_changing_effects():
         atol=1e-9,
     )
     snapshot = model_snapshot("trade")
-    assert snapshot["version"] == "step10-tariff-teaching-v11"
+    assert snapshot["version"] == "step10-tariff-teaching-v12"
     assert snapshot["randomization_version"] == "step10-tariff-teaching-v1"
     assert snapshot["tariff_rate"] == 0.25 and snapshot["lag_shares"] == [0.6, 0.4]
     assert [wave["start_year_offset"] for wave in snapshot["taxed_rule"]["waves"]] == [2, 3]
@@ -538,6 +538,19 @@ def test_alternative_baselines_add_their_own_y_without_changing_the_family_defau
     share = panel[Y_COLUMNS["trade"]] + panel["teaching_y_trade_DVAex_share"]
     np.testing.assert_allclose(share, 1 - panel["teaching_y_trade_trade_rest_share"], atol=1e-12)
     assert share.lt(1).all()
+
+
+def test_position_is_generated_length_ratio_without_a_linear_target():
+    from gvcsim.regression.teaching import variable_catalog, y_column
+
+    full = _full_source().drop(columns="GVCPs")
+    full.loc[full.entity_id.eq("AAA_C1"), "PLy_GVC"] = np.nan
+    panel = build_teaching_panel(full, _exposure(full))
+    expected = panel[y_column("length", "PLv_GVC")] / panel[y_column("length", "PLy_GVC")]
+    np.testing.assert_allclose(panel[y_column("length", "GVCPs")], expected, equal_nan=True)
+    assert expected.isna().sum() == 5
+    assert model_snapshot("length", "GVCPs")["beta"] is None
+    assert "÷" in variable_catalog("length", "GVCPs")[-1]["source"]
 
 
 def test_out_of_domain_alternative_source_leaves_only_that_y_missing_for_that_unit():

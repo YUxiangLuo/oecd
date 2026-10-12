@@ -868,11 +868,15 @@ def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict
     violations += int((numeric[Y_COLUMNS["network"]] < 0).sum())
     for outcome, items in BASELINES.items():
         for item in items:
-            if item.combine is None:
+            if item.combine is None and item.ratio is None:
                 continue
             column = y_column(outcome, item.key)
-            constant, terms = item.combine
-            columns = [y_column(outcome, key) for key, _ in terms]
+            constant, terms = item.combine or (0.0, ())
+            columns = (
+                [y_column(outcome, key) for key in item.ratio]
+                if item.ratio
+                else [y_column(outcome, key) for key, _ in terms]
+            )
             # Reduced source fixtures need not carry every optional baseline, but an identity must carry all
             # its parts whenever present. Matching missing masks are required as well as matching values.
             if column not in numeric:
@@ -882,8 +886,12 @@ def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict
                 details.append(f"incomplete_identity={column}")
                 continue
             expected = pd.Series(constant, index=frame.index, dtype=float)
-            for (_, coefficient), part in zip(terms, columns, strict=True):
-                expected = expected + coefficient * numeric[part]
+            if item.ratio:
+                numerator, denominator = (numeric[part] for part in columns)
+                expected = numerator / denominator.where(denominator.gt(0))
+            else:
+                for (_, coefficient), part in zip(terms, columns, strict=True):
+                    expected = expected + coefficient * numeric[part]
             valid = numeric[column].isna() & expected.isna() | _close(numeric[column], expected)
             violations += int((~valid).sum())
     return _check(

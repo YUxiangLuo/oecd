@@ -108,7 +108,7 @@ def evaluate(root: Path, seeds: range) -> dict:
             sizes[name] = int(frame.entity_id.nunique())
             estimates, ses, groups = _fit(frame, column)
             critical = stats.t.ppf(0.975, groups - 1)
-            targets = _targets(item.beta)
+            targets = _targets(item.beta) if item.beta is not None else None
             records[name].append(
                 {
                     "seed": seed,
@@ -116,7 +116,9 @@ def evaluate(root: Path, seeds: range) -> dict:
                         term: {
                             "estimate": estimates[term],
                             "se": ses[term],
-                            "covered": bool(abs(estimates[term] - targets[term]) <= critical * ses[term]),
+                            "covered": bool(abs(estimates[term] - targets[term]) <= critical * ses[term])
+                            if targets is not None
+                            else None,
                             "significant": bool(abs(estimates[term]) > critical * ses[term]),
                         }
                         for term in TERMS
@@ -143,15 +145,15 @@ def evaluate(root: Path, seeds: range) -> dict:
             continue
         outcome, key = name.split(":", 1)
         beta = teaching.baseline(outcome, key).beta
-        targets = _targets(beta)
+        targets = _targets(beta) if beta is not None else None
         summary[name] = {"beta": beta, "entities": sizes[name]}
         for term in TERMS:
             estimates = np.array([row[term]["estimate"] for row in rows])
             summary[name][term] = {
-                "target": targets[term],
-                "mean_bias": float((estimates - targets[term]).mean()),
-                "rmse": float(np.sqrt(((estimates - targets[term]) ** 2).mean())),
-                "coverage_95": float(np.mean([row[term]["covered"] for row in rows])),
+                "target": targets[term] if targets is not None else None,
+                "mean_bias": float((estimates - targets[term]).mean()) if targets is not None else None,
+                "rmse": float(np.sqrt(((estimates - targets[term]) ** 2).mean())) if targets is not None else None,
+                "coverage_95": float(np.mean([row[term]["covered"] for row in rows])) if targets is not None else None,
                 # With a zero target (the weak Y) this is the false-positive rate.
                 "significant_share": float(np.mean([row[term]["significant"] for row in rows])),
             }

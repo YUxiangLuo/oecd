@@ -38,7 +38,8 @@ import pandas as pd
 # degree stays non-negative with the exchange-rate term. The noise draws are v8's. (v9 was an abandoned attempt.)
 # v11: country-year macro controls have separate, deterministic innovations. GDP and openness enter Y;
 # population growth and FDI are negative controls. These are teaching constructions, not WDI observations.
-VERSION = "step10-tariff-teaching-v11"
+# v12: position is the ratio of generated lengths, not an independently drawn linear outcome.
+VERSION = "step10-tariff-teaching-v12"
 # Seeds the noise draws only (policy assignment is a data rule since v7); changing it would redraw every Y.
 RANDOMIZATION_VERSION = "step10-tariff-teaching-v1"
 X_COLUMN = "teaching_tariff_exposure"
@@ -129,11 +130,13 @@ class Baseline:
     key: str
     label: str
     kind: str
-    beta: float
+    beta: float | None
     calibration: tuple[float, float, float]
     source: str | None = None
     derived: tuple[str | tuple[str, ...], str] | None = None
     combine: tuple[float, tuple[tuple[str, float], ...]] | None = None
+    # Nonlinear identity: no constant linear generation coefficient exists.
+    ratio: tuple[str, str] | None = None
     hidden: bool = False
     # A source that is a signed account (it can be slightly negative) is only ranked, so any finite value is valid;
     # the generated Y keeps its kind's domain.
@@ -255,8 +258,7 @@ BASELINES: dict[str, tuple[Baseline, ...]] = {
     "length": (
         Baseline("PLv_GVC", "前向 GVC 段长度", "length", -1.8, (3.0, 2.0, 0.030)),
         Baseline("PLy_GVC", "后向 GVC 段长度", "length", -1.5, (3.0, 2.0, 0.030)),
-        # Forward ÷ backward length, so it sits near 1; β is what the two lengths' relations imply at typical levels.
-        Baseline("GVCPs", "GVC 位置指数", "position", -0.08, (0.70, 0.60, 0.010)),
+        Baseline("GVCPs", "GVC 位置指数", "position", None, (0.0, 0.0, 0.0), ratio=("PLv_GVC", "PLy_GVC")),
     ),
     # Weighted degree is in-degree + out-degree in every row.
     "network": (
@@ -311,6 +313,8 @@ def y_column(outcome: str, key: str | None = None) -> str:
 def sources_present(item: Baseline, columns) -> bool:
     """Whether a release panel carries what this baseline is calibrated from."""
     names = set(columns)
+    if item.ratio:
+        return set(item.ratio).issubset(names)
     return set(item.derived_columns).issubset(names) if item.derived else item.column in names
 
 
@@ -359,6 +363,7 @@ def baseline_parameters() -> dict[str, list[dict[str, object]]]:
                 "hidden": item.hidden,
                 "beta": item.beta,
                 "calibration": list(item.calibration),
+                "ratio": list(item.ratio) if item.ratio else None,
                 "combine": (
                     {"constant": item.combine[0], "terms": [[key, coef] for key, coef in item.combine[1]]}
                     if item.combine
@@ -483,6 +488,7 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
         for outcome, items in BASELINES.items()
         for item in items
         if item.combine is None
+        and item.ratio is None
         and (item is items[0] or (outcome, item.key) in required_parts or sources_present(item, release_panel.columns))
     }
     all_baselines = [
@@ -491,8 +497,9 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
         for item in items
         if (outcome, item.key) in drawn
         or (item.combine is not None and all((outcome, key) in drawn for key, _ in item.combine[1]))
+        or (item.ratio is not None and all((outcome, key) in drawn for key in item.ratio))
     ]
-    source_columns = sorted({item.column for _, item in all_baselines if item.derived is None})
+    source_columns = sorted({item.column for _, item in all_baselines if item.derived is None and item.ratio is None})
     required = {"country", "industry", "year", "entity_id", "log_gdp_proxy", *source_columns}
     if missing := required - set(release_panel.columns):
         raise ValueError("教学面板缺少源列:" + "、".join(sorted(missing)))
@@ -536,7 +543,7 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
         raise ValueError("无有效冲击前指标与目的地份额，无法生成教学面板")
     baseline_columns = []
     for outcome, item in all_baselines:
-        if item.combine is not None:
+        if item.combine is not None or item.ratio is not None:
             continue
         low, span, _ = item.calibration
         values = base[item.column].where(item.source_valid(base[item.column]))
@@ -599,8 +606,9 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
     trend = out.year.map(dict(zip(years, COMMON_YEAR_TREND, strict=True)))
     generated: dict[str, pd.Series] = {}
     for outcome, item in all_baselines:
-        if item.combine is not None:
+        if item.combine is not None or item.ratio is not None:
             continue
+        assert item.beta is not None
         salt = _noise_salt(outcome, item)
         noise_scale = item.calibration[2]
         # Include country-year noise so clustered uncertainty is meaningful.
@@ -616,6 +624,10 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
         )
     # Identity Ys are computed from the drawn ones, row by row (missing when any part is missing).
     for outcome, item in all_baselines:
+        if item.ratio is not None:
+            numerator, denominator = (generated[y_column(outcome, key)] for key in item.ratio)
+            generated[y_column(outcome, item.key)] = numerator / denominator.where(denominator.gt(0))
+            continue
         if item.combine is None:
             continue
         constant, terms = item.combine
@@ -674,7 +686,9 @@ def variable_catalog(outcome: str, baseline_key: str | None = None, spec: Any = 
             "label": item.label,
             "unit": item.unit,
             "source": (
-                "由同家族其他 Y 按核算恒等式算出：" + _combine_text(outcome, item)
+                "由模拟前向 GVC 段长度 ÷ 模拟后向 GVC 段长度计算；没有预设的恒定线性系数"
+                if item.ratio
+                else "由同家族其他 Y 按核算恒等式算出：" + _combine_text(outcome, item)
                 if item.combine
                 else f"按首年指标 {item.column} 的排名校准生成"
             ),
@@ -719,6 +733,7 @@ def model_snapshot(outcome: str, baseline_key: str | None = None, spec: Any = No
         "spec": model.to_dict(),
         "seed": SEED,
         "beta": item.beta,
+        "ratio": list(item.ratio) if item.ratio else None,
         "lag_shares": list(LAG_SHARES),
         "tariff_rate": TARIFF_RATE,
         "market": MARKET,

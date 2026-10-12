@@ -7,6 +7,7 @@ effects against linearmodels.AbsorbingLS, and one without fixed effects against 
 import math
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from linearmodels.iv import IV2SLS
 from linearmodels.iv.absorbing import AbsorbingLS
@@ -90,6 +91,7 @@ def absorbing_estimate(model: PreparedModel, keep: list[str], dropped: list[str]
     clusters = pd.Categorical(data[model.cluster].astype(str))
     effects = model.effect_columns
     result: Any
+    transform = None
     if effects:
         absorb = pd.DataFrame(
             {column: pd.Categorical(data[column].astype(str)) for column in effects}, index=data.index
@@ -99,10 +101,27 @@ def absorbing_estimate(model: PreparedModel, keep: list[str], dropped: list[str]
         )
         backend, k = "linearmodels.AbsorbingLS", len(names)
     else:
-        result = IV2SLS(y, X.assign(**{CONSTANT: 1.0}), None, None).fit(
+        # IV2SLS forms and inverts normal equations, unlike the production SVD
+        # least-squares solver. Center and standardize the independent library
+        # inputs so large levels and disparate units do not amplify roundoff.
+        # This is an invertible reparameterization, not another estimator.
+        means, units = X.mean(), X.std(ddof=0)
+        y_mean, y_unit = float(y.mean()), float(y.std(ddof=0))
+        result = IV2SLS((y - y_mean) / y_unit, ((X - means) / units).assign(**{CONSTANT: 1.0}), None, None).fit(
             cov_type="clustered", clusters=clusters, debiased=True
         )
+        transform = np.eye(len(names) + 1) * y_unit
+        transform[:-1, :-1] = np.diag(y_unit / units.to_numpy())
+        transform[-1, :-1] = -means.to_numpy() * y_unit / units.to_numpy()
         backend, k = "linearmodels.IV2SLS", len(names) + 1
+    params, covariance = result.params, result.cov
+    if transform is not None:
+        params = pd.Series(transform @ params.to_numpy(), index=params.index)
+        params[CONSTANT] += y_mean
+        # The intercept mixes all slopes: transforming only marginal SE is wrong.
+        covariance = pd.DataFrame(
+            transform @ covariance.to_numpy() @ transform.T, index=params.index, columns=params.index
+        )
     rank, _ = fixed_effect_rank(data, effects)
     n = int(result.nobs)
     scale = math.sqrt((n - k) / (n - k - rank)) if rank else 1.0
@@ -112,7 +131,7 @@ def absorbing_estimate(model: PreparedModel, keep: list[str], dropped: list[str]
     for name in keep:
         if name not in result.params.index:
             continue
-        b, se = float(result.params[name]), float(result.std_errors[name]) * scale
+        b, se = float(params[name]), math.sqrt(float(covariance.loc[name, name])) * scale
         require_finite(f"{backend} 系数 {name}", b, se)
         if se <= 0:
             raise ValueError(f"{backend} 系数 {name} 的聚类稳健标准误必须为正")
