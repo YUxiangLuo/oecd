@@ -142,7 +142,7 @@
 .reg-evidence-matrix-head { margin-bottom: 11px; }
 .reg-evidence-matrix-head p { max-width: 360px; margin: 0; color: #5d6575; font-size: 11.5px; line-height: 1.5; text-align: right; }
 .reg-evidence-matrix .table-wrap { background: #fff; }
-.reg-evidence-table { width: 100%; min-width: 0; table-layout: fixed; }
+.reg-evidence-table { width: 100%; min-width: 900px; table-layout: fixed; }
 .reg-evidence-table td, .reg-evidence-table th {
   padding: 8px 7px; vertical-align: top; white-space: normal; overflow-wrap: anywhere; text-align: left;
 }
@@ -564,6 +564,11 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 .verdict-card p.reg-verdict-direction .reg-interval-words { color: #4f586b; font-weight: 500; font-size: 12.5px; }
 
 /* 自己设计模型（选做）, steps 11–14: the form's three groups sit side by side and stack when the step is narrow. */
+.reg-page-links { display: flex; flex-wrap: wrap; gap: 10px 20px; margin: 10px 0; font-size: 13px; }
+.reg-page-links a { color: #4b47e0; text-decoration: underline; text-underline-offset: 3px; }
+.reg-page-links a:focus-visible { outline: 2px solid #4b47e0; outline-offset: 3px; }
+#regression-results, #regression-model, #report-submit-actions, #report-preview { scroll-margin-top: 12px; }
+.reg-custom-details > summary { cursor: pointer; font-weight: 650; padding: 8px 0; }
 .reg-custom-details[open] > summary { margin-bottom: 10px; }
 .reg-custom { display: grid; gap: 12px; min-width: 0; }
 /* Grid items keep min-width:auto by default: a wide regression table would widen its card (and the whole content

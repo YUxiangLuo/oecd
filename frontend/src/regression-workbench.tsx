@@ -161,6 +161,7 @@ function ModelForm({ options, spec, onChange }: {
           );
         })}
         <p className="muted reg-custom-note">{options.no_fixed_effects_note}</p>
+        {spec.fixed_effects.includes("country_year") && <p className="reg-custom-note">吸收不等于没有控制：国家年度变化由固定效应扣除，因此不再单独估计这些控制变量的系数。</p>}
       </fieldset>
     </div>
   );
@@ -416,7 +417,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const pointRow = perPointRow(columns, outcome);
   const summary = summaryRows(columns, options);
   const latest: TableColumn | null = computed && computed.design.baseline === baseline && computed.design.spec
-    ? { name: "最近计算结果", spec: computed.design.spec, snapshot: snapshotOf(computed) } : null;
+    ? { name: !current ? "上次计算（设定已更改）" : unsaved ? UNSAVED_COLUMN : duplicate ? `已保存：${duplicate.name}` : DEFAULT_COLUMN, spec: computed.design.spec, snapshot: snapshotOf(computed) } : null;
   const detailColumns = latest ? [latest, ...columns.filter((column) => !sameSpec(column.spec, latest.spec, options))] : columns;
   const shownDetail = Math.min(detailColumn, detailColumns.length - 1);
   const reportChanged = Boolean(state.materialLocked && reportOutdated && customReportChanged(stepNumber, saved, reportCustomResults));
@@ -427,6 +428,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       <p className="reg-custom-y">因变量：<b>{depvarLabel}</b>（本步保存的 Y；在上面的条形图上点另一条可以换 Y）</p>
       <div className="reg-custom-tries">
         <b>试一试：每次只改一处设定，算出后和表中第一列的默认模型比较</b>
+        <p className="muted">先核对 Y、累计跨度、观测数和年份，再比较数字；只改一项也可能改变样本。</p>
         <ol>{options.tries.map((item) => <li key={item}>{item}</li>)}</ol>
       </div>
       <ModelForm options={options} spec={spec} onChange={changeSpec} />
@@ -442,19 +444,20 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       {error && <div className="error-box async-error" role="alert">{error}</div>}
       {staleMessage && <p className="reg-stale-note" role="note">{staleMessage}</p>}
 
-      <section className="reg-custom-details" aria-label="当前模型完整结果">
-        <h4>当前模型的完整数字</h4>
+      <details className="reg-custom-details" role="region" aria-label="单模型详细数字">
+        <summary>查看单模型详细数字（系数、t 值与区间）{staleMessage ? " · 当前设定待重算" : ""}</summary>
         <label className="reg-custom-detail-pick">查看
           <select value={shownDetail} onChange={(event) => setDetailColumn(Number(event.target.value))}>
             {detailColumns.map((column, index) => <option key={index} value={index}>{column.name}</option>)}
           </select>
         </label>
         <p><b>{detailColumns[shownDetail].name}</b>：{specSummary(detailColumns[shownDetail].spec, options)}</p>
+        {staleMessage && <p className="reg-stale-note">当前设定待重算；以下数字仅对应上方选中的结果及其设定。</p>}
         <ColumnDetails column={detailColumns[shownDetail]} options={options} perPoint={perPoint} />
         {detailColumns[shownDetail].snapshot.result.suppressed && <p className="reg-stale-note">{options.suppressed_note}</p>}
         {omittedSummary(detailColumns[shownDetail].snapshot, options).map((note) => <p className="muted" key={note}>{note}</p>)}
         <p className="muted">系数按 X 以份额计（1 = 100 个百分点）；最后一列换算为 X 每高 1 个百分点。{xSpanLabel(detailColumns[shownDetail].spec)}；括号内为标准误，星号含义见表下注释。</p>
-      </section>
+      </details>
       <ModelComparisonChart columns={columns} outcome={outcome} />
 
       <div className="reg-custom-compare">

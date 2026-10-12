@@ -5,7 +5,7 @@ import type {
 export type EvidenceState = "negative" | "positive" | "insufficient" | "suppressed";
 
 /** The interval named with its meaning, where a result first mentions it (not "where the estimate may fall"). */
-export const INTERVAL_FIRST_MENTION = "95% 区间（真实系数的合理取值范围）";
+export const INTERVAL_FIRST_MENTION = "95% 区间（模型系数的不确定性范围）";
 
 /** What a standard deviation of Y is, said once where a size in standard deviations first appears. */
 export const SD_DEFINITION = "标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏";

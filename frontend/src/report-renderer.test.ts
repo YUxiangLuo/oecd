@@ -552,6 +552,9 @@ describe("regression bar charts (steps 11–14 and the summary)", () => {
     const element = renderChart({ ...REGRESSION_CHARTS.summary, items });
     const svg = element.querySelector("svg")!;
     const reportTicks = [...svg.querySelectorAll("text")].filter((node) => /^-?[\d.]+$/.test(node.textContent ?? "")).map((node) => Number(node.textContent));
+    // These long-label release charts have a narrow plotting area in print: seven labels crowded together.
+    expect(reportTicks.length).toBeLessThanOrEqual(5);
+    expect(reportTicks).toContain(0);
     const reportLines = Math.max(...[...svg.querySelectorAll("[data-bar-label]")].map((label) => Math.max(1, label.querySelectorAll("tspan[data-line]").length)));
     // The report draws 720 units with 15-unit text: the page's 12 px text on a 576 px drawing.
     const page = layoutDivergingBars(items.map((item, index) => ({

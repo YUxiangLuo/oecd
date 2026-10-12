@@ -515,7 +515,12 @@ describe("the open workbench", () => {
     expect(document.querySelector(".reg-stale-note")?.textContent).toBe("设定已更改，下面保留最近计算的结果；点“计算这个模型”查看新结果。");
     expect(screen.getAllByRole("status").some((node) => node.textContent === "设定已更改，下面保留最近计算的结果；点“计算这个模型”查看新结果。")).toBe(true);
     expect(screen.queryByText("已算出这个模型，结果在下面的回归结果表中。")).toBeNull();
-    expect(screen.getByRole("region", { name: "当前模型完整结果" }).textContent).toContain("GDP 对数、贸易开放度");
+    const details = screen.getByRole("region", { name: "单模型详细数字" });
+    expect(details.hasAttribute("open")).toBe(false);
+    fireEvent.click(details.querySelector("summary")!);
+    expect(details.textContent).toContain("GDP 对数、贸易开放度");
+    expect(details.textContent).toContain("上次计算（设定已更改）");
+    expect(details.textContent).toContain("当前设定待重算");
     fireEvent.click(screen.getByRole("button", { name: "恢复默认设定" }));
     expect(document.querySelector(".reg-stale-note")?.textContent).toContain("保留最近计算的结果");
     // Another Y saved by the bars: the note names it.

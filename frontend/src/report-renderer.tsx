@@ -629,11 +629,19 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
 
   // The data's range; as many ticks as on the page (one per 110 px of it there, its text 12/15 of the size here).
   const visible = divergingAxis(ends, Math.round((scale * (range.hi - range.lo)) / ((110 * AXIS_FONT) / 12)));
-  const ticks = visible.ticks.filter((tick) => x(tick) >= plotLeft - 0.5 && x(tick) <= plotRight + 0.5);
+  const candidates = visible.ticks.filter((tick) => x(tick) >= plotLeft - 0.5 && x(tick) <= plotRight + 0.5);
   const stepSize = visible.ticks.length > 1 ? visible.ticks[1] - visible.ticks[0] : 1;
   // As many decimals as the step has ("0.025" → 3), so a tick never prints rounded (-0.125, not -0.13).
   const tickDigits = Math.min(6, (String(Number(stepSize.toPrecision(6))).split(".")[1] ?? "").length);
   const tickText = (value: number) => (value === 0 ? "0" : String(Number(value.toFixed(tickDigits))));
+  // A shared axis may require more ticks than fit its printed labels. Keep the range and zero, then admit
+  // interior labels only with a readable gap; thinning labels must never change the data scale.
+  const ticks = candidates.filter((tick, index) => tick === 0 || index === 0 || index === candidates.length - 1);
+  for (const tick of candidates) {
+    if (ticks.includes(tick)) continue;
+    if (ticks.every((other) => Math.abs(x(tick) - x(other)) >= (textWidth(tickText(tick), AXIS_FONT) + textWidth(tickText(other), AXIS_FONT)) / 2 + 16)) ticks.push(tick);
+  }
+  ticks.sort((a, b) => a - b);
 
   const summary = rows.map((row) => `${row.item.label}${row.item.sub ? `（${row.item.sub}）` : ""}：${row.label.replace(" · ", "，")}${row.item.saved ? `，${SAVED_TAG}` : ""}`).join("；");
   // The page's legend: only the colours the chart uses.

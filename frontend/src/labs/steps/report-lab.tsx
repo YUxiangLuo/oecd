@@ -57,7 +57,7 @@ const REFLECTION_FIELDS: {
   min: number;
 }[] = [
   { key: "research_question", label: "研究问题", prompt: "我比较了哪些国家、行业和年份？我想了解哪项指标的变化？请区分步骤 1–9 的真实 ICIO 指标探索与步骤 10–14 的课程模拟关税回归；所选例子不是回归样本筛选。", starter: "句式参考：本实验用真实 ICIO 指标比较了……和……的……，想了解……；再用课程模拟回归看关税暴露 X 每高 1 个百分点，Y 在默认模型中两年累计平均高还是低。", min: 12 },
-  { key: "evidence_interpretation", label: "结果解释", prompt: "引用保存的数字，注明对象、年份、指标、方向和区间，并标明是真实指标还是模拟回归。比较四项默认回归的两年累计结果；自定义模型按所选 X 滞后覆盖跨度（仅当年／两年累计／三年累计）解释，不能一律写两年累计。方向不确定或没算出估计值时写明原因，不要写成“没有关联”。改过模型时，写明改了什么、X 各项合计怎样变、样本是否相同及原因。", starter: "句式参考：真实 ICIO 指标探索的步骤……显示，……在……年的……为……；课程模拟的步骤 11 默认模型估计 X 每高 1 个百分点，Y 两年累计平均高（或低）……，95% 区间为……；自定义模型覆盖……，合计为……。", min: 40 },
+  { key: "evidence_interpretation", label: "结果解释", prompt: "引用保存的数字，注明对象、年份、指标、方向和区间，并标明是真实指标还是模拟回归。比较四步当前保存的 Y 在默认模型设定下的两年累计结果；更换过 Y 时注明指标名称。自定义模型按所选 X 滞后覆盖跨度（仅当年／两年累计／三年累计）解释，不能一律写两年累计。方向不确定或没算出估计值时写明原因，不要写成“没有关联”。改过模型时，写明改了什么、X 各项合计怎样变、样本是否相同及原因。", starter: "句式参考：真实 ICIO 指标探索的步骤……显示，……在……年的……为……；课程模拟的步骤 11 默认模型估计 X 每高 1 个百分点，Y 两年累计平均高（或低）……，95% 区间为……；自定义模型覆盖……，合计为……。", min: 40 },
   { key: "limitations", label: "局限与反思", prompt: "真实指标比较和模拟回归各有哪些限制？模拟结果不能当作真实政策效应；选例子换算也不是对该国家行业单独估计。控制变量、固定效应、滞后期及样本变化会怎样影响结论？下一步需要什么真实数据或检验？", starter: "句式参考：课程模拟回归展示 X 与 Y 的关联，不能推出真实政策效应；换一种固定效应或去掉……后结论会……；真实指标比较只覆盖……；若要进一步验证，需要……。", min: 30 },
 ];
 
@@ -851,6 +851,11 @@ export function ReportLab({
           <li><b>2 · 写你的分析</b><span>{writtenCount} / 3 段达到最低字数 · 内容仍需自己核对</span></li>
           <li><b>3 · 提交给老师</b><span>{report && report.state !== "draft" && reportOutdated ? "报告需更新：之后的修改还没交给老师，请点“更新报告并提交给老师”" : report?.state === "pending" ? "已提交，等待评阅" : report?.state === "graded" ? <a href="#report-status-card" onClick={(event) => { event.preventDefault(); statusCardRef.current?.scrollIntoView?.({ block: "center" }); statusCardRef.current?.focus({ preventScroll: true }); }}>{report.feedback?.trim() ? "已评阅，查看分数与评语" : "已评阅，查看分数"}</a> : report ? (reportOutdated ? "草稿需更新，尚未提交" : "已有草稿，尚未提交") : "生成报告不等于提交"}</span></li>
         </ol>
+        <nav className="reg-page-links" aria-label="报告页快捷入口">
+          <a href={`#${REPORT_REFLECTION_TITLE_ID}`}>写分析</a>
+          <a href="#report-submit-actions">提交与导出</a>
+          {report && <a href="#report-preview">查看报告正文</a>}
+        </nav>
       </section>
       {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} flash={gateFlash} verb={reportGateVerb(report)} />}
       {/* Open: the four steps' results and the models marked for the report are what the analysis below cites. */}
@@ -955,7 +960,7 @@ export function ReportLab({
       {/* A plain status line gets its own padded card, so focus (after the receipt closes) outlines a deliberate box;
           a graded report shows its score card instead. */}
       {report && <section className={report.state === "graded" ? "submit-card" : "submit-card submit-card-plain"} id="report-status-card" ref={statusCardRef} tabIndex={-1} aria-label="报告状态"><ReportStatus report={report} /></section>}
-      <section className="report-submit-panel" aria-label="提交报告">
+      <section className="report-submit-panel" aria-label="提交报告" id="report-submit-actions" tabIndex={-1}>
         <h3>{report && report.state !== "draft" ? (reportOutdated ? "报告需更新后重新提交" : "报告已交给老师") : "核对完毕后，完成提交"}</h3>
         {/* Once the current version is with the teacher, the pre-submit line no longer applies; only the PDF caveat does. */}
         <p>{report && report.state !== "draft" && !reportOutdated ? "导出 PDF 仅供个人留存，不能代替提交。" : "提交前会先保存文字并检查材料；导出 PDF 仅供个人留存，不能代替提交。"}</p>
@@ -998,7 +1003,7 @@ export function ReportLab({
       {error && <div ref={errorRef} className="error-box report-error" role="alert">{error}</div>}
 
       {report ? (
-        <div className="report-body" ref={previewRef} tabIndex={-1} role="region" aria-label="报告正文"><ReportPrintGrade report={report} /><ReportMarkdown markdown={report.markdown} /></div>
+        <div className="report-body" id="report-preview" ref={previewRef} tabIndex={-1} role="region" aria-label="报告正文"><ReportPrintGrade report={report} /><ReportMarkdown markdown={report.markdown} /></div>
       ) : (
         <p className="muted">{gated ? "补齐上方清单中的缺项后，可以先生成草稿预览，再提交。" : "可以先生成草稿预览，再提交。"}区间包含 0、或者没算出估计值的结果，也要写进报告。</p>
       )}

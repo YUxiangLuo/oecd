@@ -958,6 +958,11 @@ test("offline, the two report buttons read differently", () => {
 test("the writing area shows the autosave state and says formatting marks stay as typed", () => {
   const { rerender } = render(<ReportLab {...finishProps} />);
   expect(screen.getByText("已保存")).toBeTruthy();
+  for (const label of ["写分析", "提交与导出"]) {
+    const target = screen.getByRole("link", { name: label }).getAttribute("href")!;
+    expect(document.querySelector(target)?.getAttribute("tabindex")).toBe("-1");
+  }
+  expect(screen.getByText(/比较四步当前保存的 Y 在默认模型设定下/)).toBeTruthy();
   expect(screen.getByText(/“#”“\*\*”等符号不会变成标题或粗体/)).toBeTruthy();
   rerender(<ReportLab {...finishProps} sessionSyncing />);
   expect(screen.getByText("保存中…")).toBeTruthy();

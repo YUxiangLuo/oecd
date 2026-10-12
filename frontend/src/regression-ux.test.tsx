@@ -172,7 +172,7 @@ describe("simple regression workbench", () => {
       .toEqual(["先看数据", "默认模型", "改模型、对比（选做）"]);
     // Folded: the chart's per-year table, the model's data facts, and one column's full numbers.
     await waitFor(() => expect([...document.querySelectorAll("details > summary")].map((node) => node.textContent))
-      .toEqual(["各组逐年读数", "数据、样本和区间的算法"]));
+      .toEqual(["各组逐年读数", "数据、样本和区间的算法", "查看单模型详细数字（系数、t 值与区间）"]));
     fireEvent.click(screen.getByRole("button", { name: DVA_BAR }));
     await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高 0.56 个百分点"));
     expect(run.mock.calls[1][2]).toBe("DVAex_share");
@@ -260,7 +260,9 @@ describe("simple regression workbench", () => {
     cleanup();
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
     await screen.findByText("换一种模型试试：每次改一处，和默认模型比较");
-    expect(screen.getByRole("region", { name: "当前模型完整结果" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "单模型详细数字" }).hasAttribute("open")).toBe(false);
+    expect(screen.getByRole("link", { name: "查看已保存结果" }).getAttribute("href")).toBe("#regression-results");
+    expect(screen.getByRole("link", { name: "修改模型（选做）" }).getAttribute("href")).toBe("#regression-model");
     expect(await screen.findByRole("button", { name: "计算这个模型" })).toBeTruthy();
     expect([...document.querySelectorAll(".reg-custom-compare-table thead th")].map((cell) => cell.textContent)).toEqual(["变量", "默认模型"]);
   });

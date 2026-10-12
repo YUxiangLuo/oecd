@@ -26,7 +26,7 @@ describe("fixed teaching regression reading", () => {
     expect(dom.querySelector(".reg-plain-verdict")?.textContent).toBe("关税暴露 X 每高 1 个百分点，外国增加值项占比平均高 2.00 个百分点");
     expect(dom.querySelector(".reg-plain-verdict")?.textContent).not.toMatch(/→|X 每增加|上升/);
     expect(dom.querySelector(".reg-direction-badge")?.textContent).toBe("方向明确");
-    expect(dom.querySelector(".reg-interval-words")?.textContent).toBe("95% 区间（真实系数的合理取值范围）为 [+1.00, +3.00] 个百分点，整个区间都在 0 的一侧，所以方向是明确的。");
+    expect(dom.querySelector(".reg-interval-words")?.textContent).toBe("95% 区间（模型系数的不确定性范围）为 [+1.00, +3.00] 个百分点，整个区间都在 0 的一侧，所以方向是明确的。");
     expect(html).not.toContain("模拟");
     // The charts are above the card (bars, trend), not in it: no plot, no 本步重点, no reading cards.
     expect(dom.querySelectorAll("svg")).toHaveLength(0);
@@ -153,7 +153,7 @@ describe("fixed teaching regression reading", () => {
     );
     expect(container.querySelector(".reg-direction-badge")?.textContent).toBe("方向不确定");
     expect(container.querySelector(".reg-interval-words")?.textContent).toBe(
-      "95% 区间（真实系数的合理取值范围）为 [-0.30, +0.54] 个百分点，包含 0：不能说“没有关联”，只能说方向还不确定。",
+      "95% 区间（模型系数的不确定性范围）为 [-0.30, +0.54] 个百分点，包含 0：不能说“没有关联”，只能说方向还不确定。",
     );
     expect(container.querySelector(".reg-example-effect")?.textContent).toBe(
       "按你在步骤 10 选的例子换算：CAN 加拿大·C29 的 X 为 23.25 个百分点，按估计与 X 相关的差异约为 +2.79 个百分点，但区间包含 0，差异的高低方向并不确定；"
@@ -230,5 +230,4 @@ describe("fixed teaching regression reading", () => {
 
 
 });
-
 

@@ -143,7 +143,7 @@ function DesignEquation({ design }: { design: RegressionDesignInfo }) {
       {/* Three points, always visible (a hover-only gloss went unnoticed). */}
       <ul className="model-eq-terms" aria-label="公式里各项的意思">
         {lagged
-          ? <li><b>β₁·X + β₂·L1.X</b>：当年和上一年的关税暴露。关税的影响可能分两年显现，β₁ 是当年的关联，β₂ 是次年再出现的关联，<b>两者之和是两年累计关联</b>，即本步的主结果。</li>
+          ? <li><b>β₁·X + β₂·L1.X</b>：当年和上一年的关税暴露。关税的影响可能分两年显现，β₁ 是当年的关联，β₂ 是次年再出现的关联，<b>两者之和是两年累计关联</b>，即本步的主结果。累计的是系数，不是把图上两个年份的 Y 变化相加。</li>
           : <li><b>β·X</b>：关税暴露（首年对美出口份额 w × 加征税率 τ）；β 是 X 每高 1 个百分点时 Y 平均相差多少。</li>}
         {controls.length > 0 && (
           <li><b>γ·{controls.join("、")}</b>：控制变量。它与加税同时变化、又与 Y 有关，放进模型是为了不把它的作用算到关税头上。</li>
@@ -308,6 +308,7 @@ export function RegressionResultCard({ outcome, response, examples = [], example
               ? "换一个向美国出口的被加税国家或行业（如加拿大的汽车行业）"
               : examples.length === 1 ? "换成被加税的国家（如加拿大），或再选一个被加税的对照国家" : "选一个被加税的国家（如加拿大）"}。`}</li>;
         })()}
+        {!suppressed && verdict.coefficient && examples.some((example) => !example.imposer && example.x > 0) && <li className="muted">例子换算使用全样本系数，以 X=0 为比较基准；不是两国实际差或该行业的实际前后变化。</li>}
         {/* As the report says next to the number: step 14's unit is not the 百万美元 of steps 5 and 9. */}
         {kind === "network" && <li className="muted reg-unit-note">{NETWORK_UNIT_NOTE}</li>}
         <li className="reg-caveat"><b>解释限制</b> {lesson.dontClaim}</li>
@@ -814,6 +815,10 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
 
   return (
     <div className="reg-workbench">
+      {result && <nav className="reg-page-links" aria-label="回归页快捷入口">
+        <a href="#regression-results">查看已保存结果</a>
+        <a href="#regression-model">修改模型（选做）</a>
+      </nav>}
       {/* 1 · The data first: the question and the three groups before and after the tariffs. */}
       <section className="reg-run-card">
         <span className="reg-section-step">先看数据</span>
@@ -904,7 +909,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
               onClose={() => setPendingUncertain(null)}
             />
           )}
-          <div ref={verdictAnchorRef} className="verdict-anchor">
+          <div ref={verdictAnchorRef} className="verdict-anchor" id="regression-results" tabIndex={-1}>
             {bars ? (
               <div className="reg-family-bars">
                 <DivergingBarChart
@@ -964,7 +969,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
 
       {/* 3 · Change one setting at a time and read it next to the default model (open; optional for completion). */}
       {result && (
-        <section className="reg-run-card reg-custom-section">
+        <section className="reg-run-card reg-custom-section" id="regression-model" tabIndex={-1}>
           <span className="reg-section-step">改模型、对比（选做）</span>
           <h3>换一种模型试试：每次改一处，和默认模型比较</h3>
           <RegressionModelWorkbench
