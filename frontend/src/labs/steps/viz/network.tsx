@@ -6,6 +6,7 @@
  *   流量与路径  一国各行业的加权总度(对数)×介数散点
  *   买入与卖出  一国各行业的加权入度与出度蝴蝶图
  *   贸易伙伴    国家级贸易网络读成自我中心图、伙伴榜、区域流向矩阵与伙伴集中度
+ *   全球贸易网络图  国家间贸易流的有向网络，按预设地理区域摆放
  *   全部指标表  折叠在"行业排名"视角里,一个国家全部行业节点的多项网络指标,可排序
  *
  * 口径:国家级贸易图是完全图 → 无权中心性(度 / 介数 …)恒为常数、无区分度,
@@ -15,7 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { LabeledControl } from "../../../a11y";
 import { api } from "../../../api";
 import type { IndustryPage, Meta, Step, StepStateApi } from "../../../types";
-import { HeatTableViz, countryLabel } from "../../../viz";
+import { HeatTableViz, NetworkViz, countryLabel } from "../../../viz";
 import {
   HEAT_COVERAGE_OPTIONS,
   HEAT_SORT_OPTIONS,
@@ -32,6 +33,7 @@ import { carriedCountryNote } from "../indicator/indicator-table";
 import { TradePartners } from "./trade-partners";
 import {
   ChartStory,
+  currentReleaseId,
   observationRequestKey,
   YearSelect,
   useVizLab,
@@ -41,9 +43,35 @@ import {
 
 type Lens = "heat" | "network";
 
-/** The step's main chart is the two-country industry comparison; the network overview is a modal. */
+/** The step opens on the industry comparison; the global network is an exploration view. */
 export const STEP10_DEFAULT_LENS: Lens = "heat";
 const STEP10_LENS_KEYS: Lens[] = ["heat", "network"];
+
+function TradeNetworkOverview({ meta, year, onYear }: {
+  meta: Meta;
+  year: number;
+  onYear: (year: number) => void;
+}) {
+  const requestKey = `${currentReleaseId(meta)}:trade-network:${year}`;
+  const query = useAsync(() => api.network(year), [requestKey], { requestKey });
+  return (
+    <ChartStory
+      eyebrow="国家间贸易"
+      title="全球贸易网络图"
+      what={<>节点是经济体，箭头从出口方指向进口方，表示跨国的中间品和最终品贸易（不含国内）。边越粗，贸易流量越大；节点大小默认表示 GVC 生产份额，可切换指标。</>}
+      read={<>悬停国家查看贸易伙伴，点击节点进入大图，查看主要流入、流出伙伴。节点按预设地理区域摆放，不是算法聚类结果。</>}
+      find={<>比较中国、美国、德国的主要贸易联系，观察区域内和区域间的流向。</>}
+      note="本图展示全球经济体，只供探索，不记录报告材料。数据包含完整跨国贸易边，默认按阈值筛选显示；调整显示比例不改变伙伴详情的贸易额或完整网络上的中心性。国家级贸易图不能直接解释国家×行业的中心性。"
+    >
+      <div className="controls" style={{ marginBottom: 12 }}>
+        <YearSelect years={meta.years} year={year} onChange={onYear} />
+      </div>
+      {query.status !== "success" ? (
+        <AsyncStateMessage status={query.status} error={query.error} loadingLabel={`加载 ${year} 年贸易网络中…`} onRetry={query.retry} />
+      ) : query.data ? <NetworkViz data={query.data} /> : <p className="muted">该年份暂无网络数据。</p>}
+    </ChartStory>
+  );
+}
 
 function IndustryHeatTable({ meta, year, onYear, drill, heatSort, heatCoverage, onDrill, onSort, onCoverage }: {
   meta: Meta;
@@ -163,8 +191,10 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
           pickCountries(countries);
           state.save({ compared: countries, metric: records[0]?.metric, observations: records });
         }}
-        extraLenses={[{ key: "partners", label: "贸易伙伴" }]}
-        renderExtra={(_key, countries, trendYear, onTrendYear) => <TradePartners meta={meta} countries={countries} year={trendYear} onYear={onTrendYear} />}
+        extraLenses={[{ key: "partners", label: "贸易伙伴" }, { key: "global-network", label: "全球贸易网络图" }]}
+        renderExtra={(key, countries, trendYear, onTrendYear) => key === "global-network"
+          ? <TradeNetworkOverview meta={meta} year={trendYear} onYear={onTrendYear} />
+          : <TradePartners meta={meta} countries={countries} year={trendYear} onYear={onTrendYear} />}
         renderTable={(trendYear, onTrendYear) => (
           <IndustryHeatTable
             meta={meta} year={trendYear} onYear={onTrendYear} drill={drill} heatSort={heatSort} heatCoverage={heatCoverage}

@@ -235,7 +235,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   return <section className="reg-section-card" aria-label="行业网络指标趋势">
     <h3>行业的网络位置怎样变化？在全部经济体的同一行业中处于什么位置？</h3>
     {shownCarriedNote && <p className="muted indicator-carried-note" role="note">{shownCarriedNote}</p>}
-    <div className="controls" role="group" aria-label="所选国家">
+    {view !== "global-network" && <div className="controls" role="group" aria-label="所选国家">
       <LabeledControl label="国家 A">{(id) => <select id={id} ref={firstRef} name="network-country-a" value={first} onChange={(event) => {
         const next = event.target.value;
         // Choosing a comparison country as A swaps it with the old A rather than dropping it.
@@ -271,7 +271,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       )}
       {selected.length >= MAX_ENTITIES && <MaxCountriesNote />}
       {swapNote && <span className="muted" role="status">{swapNote}</span>}
-    </div>
+    </div>}
     {/* The two recording views lead, in the task card's order (① 历年变化, ② 行业排名); exploration follows. */}
     <LensNav
       lenses={[
@@ -310,7 +310,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         { label: "年份", value: view === "trend" ? `${years[0]}–${years.at(-1)}` : String(year) },
         { label: "指标", value: label },
       ] : [
-        { label: "所选国家", value: joinCountries(selected) },
+        { label: "所选国家", value: view === "global-network" ? "全球经济体" : joinCountries(selected) },
         { label: "年份", value: String(year) },
         { label: "视角", value: view === "topology" ? "流量与路径" : view === "flows" ? "买入与卖出" : extraLenses.find((lens) => lens.key === view)?.label ?? view },
         { label: "材料", value: "探索视角，不记录报告材料" },

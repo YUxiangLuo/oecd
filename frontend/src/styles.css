@@ -666,16 +666,25 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
 }
 .network-fullscreen-scrim {
   position: fixed; inset: 0; z-index: 80; min-width: var(--desktop-min-width);
-  display: flex; padding: 16px;
+  display: flex; padding: 64px 16px 16px;
   background: rgba(20, 24, 40, 0.62);
 }
 .network-card.network-card--fullscreen {
   flex: 1; width: 100%; height: 100%; min-width: 0; min-height: 0;
+  display: grid; grid-template-columns: minmax(0, 1fr) 430px;
+  grid-template-rows: repeat(5, max-content);
+  align-content: start; align-items: start; overflow: auto;
   box-shadow: 0 24px 80px rgba(10, 14, 30, 0.34);
 }
-.network-card--fullscreen .network-toolbar { right: 132px; }
+.network-card--fullscreen:not(:has(.network-detail)) { grid-template-columns: minmax(0, 1fr); }
+.network-card--fullscreen .network-toolbar { grid-column: 1 / -1; grid-row: 1; }
+.network-card--fullscreen > svg { grid-column: 1; grid-row: 3; min-width: 0; }
+.network-card--fullscreen .network-legend { grid-column: 1 / -1; grid-row: 2; }
+.network-card--fullscreen .network-detail { grid-column: 2; grid-row: 3; margin: 0 12px 12px 0; }
+.network-card--fullscreen .network-edge-disclosure { grid-column: 1 / -1; grid-row: 4; }
+.network-card--fullscreen .network-caption { grid-column: 1 / -1; grid-row: 5; }
 .network-fullscreen-exit {
-  position: absolute; right: 24px; top: 22px; z-index: 7;
+  position: fixed; right: 40px; top: 22px; z-index: 7;
   height: 30px; padding: 0 12px; border: 1px solid #cfd4e2; border-radius: 8px;
   background: #fff; color: #3a4050; font-size: 12px; font-weight: 700;
   box-shadow: 0 3px 12px rgba(20, 24, 40, 0.1);
@@ -683,7 +692,7 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
 .network-fullscreen-exit:hover { border-color: #4b47e0; color: #4b47e0; }
 .network-fullscreen-exit:focus-visible { outline: 3px solid #4b47e0; outline-offset: 2px; }
 .network-toolbar {
-  position: absolute; left: 18px; right: 18px; top: 14px; z-index: 4;
+  position: static; margin: 14px 18px 8px;
   display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
   max-width: calc(100% - 36px);
   padding: 8px 10px; border: 1px solid rgba(231, 233, 240, 0.9);
@@ -702,27 +711,17 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
   background: #fff; color: #5a6070; font-size: 11.5px;
 }
 .network-legend {
-  position: absolute; left: 18px; top: 68px; z-index: 3; max-width: 360px;
+  position: static; margin: 0 18px 6px;
 }
 .network-caption {
-  position: absolute; right: 18px; bottom: 14px;
-  color: var(--text-muted); font-size: 10.5px; line-height: 1.6; text-align: right;
+  position: static; margin: 4px 18px 14px;
+  color: var(--text-muted); font-size: 10.5px; line-height: 1.6; text-align: left;
 }
-/* The inline chart can be as narrow as 550px at the supported 1200px viewport.
-   Keep controls and explanatory chrome in normal flow there, so they never
-   intercept pointer events intended for SVG nodes. The fullscreen chart has
-   enough room and retains the compact overlay treatment. */
-.network-card:not(.network-card--fullscreen) .network-toolbar {
-  position: static; max-width: none; margin: 14px 18px 8px;
-}
-.network-card:not(.network-card--fullscreen) .network-legend {
-  position: static; max-width: none; margin: 0 18px 6px;
-}
-.network-card:not(.network-card--fullscreen) .network-caption {
-  position: static; margin: 4px 18px 14px; text-align: left;
+.network-edge-disclosure {
+  margin: 8px 18px; max-height: 300px; overflow: auto;
 }
 .network-detail {
-  position: absolute; right: 18px; top: 72px; z-index: 4; width: min(430px, calc(100% - 36px));
+  position: static; min-width: 0; margin: 12px 18px;
   background: rgba(255, 255, 255, 0.96); border: 1px solid #e7e9f0; border-radius: 8px;
   box-shadow: 0 14px 36px rgba(20, 24, 40, 0.14); overflow: hidden;
 }
@@ -746,6 +745,7 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums;
 }
 .network-detail table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.network-detail caption { padding: 8px 12px; text-align: left; color: var(--text-muted); }
 .network-detail th, .network-detail td { padding: 6px 12px; border-bottom: 1px solid #f4f5f8; }
 .network-detail th { color: var(--text-muted); font-weight: 600; text-align: left; }
 .network-detail th:not(:first-child), .network-detail td:not(:first-child) {

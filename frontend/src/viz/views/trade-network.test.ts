@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { addInspectedCountry } from "../../labs/steps/viz/scaffold";
 import {
   NetworkViz,
@@ -16,6 +17,33 @@ import {
 } from "./trade-network";
 
 describe("network fullscreen activation", () => {
+  test("partner amounts use full trade when one direction or the entire pair is hidden", () => {
+    const data = {
+      nodes: ["CHN", "USA", "IND"].map((country) => ({ country, gvc_production_share: 0.2 })),
+      edges: [
+        { source: "CHN", target: "USA", flow: 100 },
+        { source: "USA", target: "CHN", flow: 12 },
+        { source: "CHN", target: "IND", flow: 8 },
+        { source: "IND", target: "CHN", flow: 4 },
+      ],
+    };
+    try {
+      render(createElement(NetworkViz, { data }));
+      fireEvent.click(screen.getByRole("button", { name: /^CHN 中国，/ }));
+      const dialog = screen.getByRole("dialog");
+      const table = within(dialog).getByRole("table", { name: /按完整双向贸易额/ });
+      expect(within(table).getAllByRole("row").slice(1).map((row) => row.textContent)).toEqual([
+        "USA 美国10012 †112", "IND 印度8 †4 †12",
+      ]);
+      fireEvent.change(within(dialog).getByRole("slider"), { target: { value: "0" } });
+      expect(within(table).getAllByRole("row").slice(1).map((row) => row.textContent)).toEqual([
+        "USA 美国10012112", "IND 印度8412",
+      ]);
+    } finally {
+      cleanup();
+    }
+  });
+
   test("an inline node always opens the large view with that node selected", () => {
     expect(networkNodeActivation(null, "CHN", false)).toEqual({ selected: "CHN", expanded: true });
     expect(networkNodeActivation("CHN", "CHN", false)).toEqual({ selected: "CHN", expanded: true });
@@ -85,7 +113,7 @@ describe("network threshold semantics", () => {
     expect(html).toContain("按预设地理区域摆放（不是算法聚类）");
     expect(html).toContain("区域内和区域间的流向");
     expect(html).toContain("边流量不低于最大边流量的 15%");
-    expect(html).toContain("当前显示 1/1 条主要贸易边");
+    expect(html).toContain("当前显示 1/1 条贸易边");
     expect(html).not.toMatch(/source|target|Top 边/);
     expect(html).toContain("显示全部 1 条");
     expect(DEFAULT_NETWORK_EDGE_THRESHOLD).toBe(0.15);

@@ -282,6 +282,7 @@ export function NetworkViz({
     () => thresholdedNetworkModel(data.edges, edgeThreshold),
     [data.edges, edgeThreshold],
   );
+  const fullModel = useMemo(() => thresholdedNetworkModel(data.edges, 0), [data.edges]);
 
   const { W, H, pos, metrics, byRegion } = model;
   const { visibleEdges, neighbors, maxFlow } = thresholdModel;
@@ -320,19 +321,15 @@ export function NetworkViz({
     );
   }
   const hasUnavailableContext = Object.keys(pos).some((country) => !hasSelectedMetrics(country));
-  const labeledEdges = new Set(selected
-    ? visibleEdges.filter((edge) => String(edge.source) === selected || String(edge.target) === selected)
-      .sort((a, b) => num(b.flow) - num(a.flow)).slice(0, 5)
-    : []);
   const metricMeta = Object.fromEntries(NETWORK_METRICS.map((m) => [m.key, m])) as Record<NetworkMetric, typeof NETWORK_METRICS[number]>;
   const nodeRadius = (country: string) => nodeEncodingModel.nodes[country]?.radius ?? 3.5;
   const nodeColor = (country: string) => nodeEncodingModel.nodes[country]?.color ?? NETWORK_UNAVAILABLE_COLOR;
   const tooltipLines = (c: string): [string, string][] => [
     ["", `${countryLabel(c)} · 预设地理区域：${REGIONS[REGION_OF[c] ?? 5]}`],
     ...NETWORK_METRICS.map((m) => [m.label, networkMetricDisplay(metrics[m.key][c], m.format)] as [string, string]),
-    ["主要伙伴", (neighbors[c] ?? []).slice(0, 4).map((n) => n.c).join("、") || "—"],
+    ["主要伙伴（完整贸易额）", (fullModel.neighbors[c] ?? []).slice(0, 4).map((n) => n.c).join("、") || "—"],
   ];
-  const selectedNeighbors = selected ? neighbors[selected] ?? [] : [];
+  const selectedNeighbors = selected ? fullModel.neighbors[selected] ?? [] : [];
   const nodeOrder = Object.keys(pos);
   const tabbableNode = keyboardFocus && pos[keyboardFocus]
     ? keyboardFocus
@@ -371,7 +368,7 @@ export function NetworkViz({
     <div
       ref={wrapRef}
       className={`network-card${expanded ? " network-card--fullscreen" : ""}`}
-      style={{ ...cardStyle, padding: 0, overflow: "hidden" }}
+      style={{ ...cardStyle, padding: 0 }}
       role={expanded ? "dialog" : undefined}
       aria-modal={expanded ? "true" : undefined}
       aria-labelledby={expanded ? dialogTitleId : undefined}
@@ -435,7 +432,7 @@ export function NetworkViz({
       </div>
       <svg
         viewBox={`0 0 ${W} ${H}`}
-        style={{ display: "block", width: "100%", height: expanded ? "100%" : "auto" }}
+        style={{ display: "block", width: "100%", height: "auto" }}
         role="group"
         aria-label={expanded
           ? "贸易网络大图。节点位置采用预设地理区域布局，不是社区检测结果。"
@@ -469,8 +466,6 @@ export function NetworkViz({
             const startY = p1.y + ((controlY - p1.y) / startLength) * startGap;
             const endX = p2.x - ((p2.x - controlX) / endLength) * endGap;
             const endY = p2.y - ((p2.y - controlY) / endLength) * endGap;
-            const labelX = (startX + 2 * controlX + endX) / 4;
-            const labelY = (startY + 2 * controlY + endY) / 4;
             const opacity = active ? 0.16 + f * 0.48 : 0.025;
             return (
               <g key={`${s}-${t}-${i}`}>
@@ -479,12 +474,6 @@ export function NetworkViz({
                 d={`M${startX} ${startY} Q${controlX} ${controlY} ${endX} ${endY}`}
                 opacity={opacity} markerEnd={`url(#${markerId})`}
                 strokeWidth={0.7 + f * 3.8} strokeLinecap="round" />
-              {labeledEdges.has(e) && (
-                <text x={labelX} y={labelY - 4} textAnchor="middle" fontSize={10.5} fontWeight={700} fill="#3a4050"
-                  stroke="#fff" strokeWidth={3.5} paintOrder="stroke" style={{ pointerEvents: "none" }}>
-                  {s}→{t} · {fmtNetworkMetric(num(e.flow), "amount")}
-                </text>
-              )}
               </g>
             );
           })}
@@ -572,10 +561,10 @@ export function NetworkViz({
       <details className="chart-data-disclosure network-edge-disclosure">
         <summary>查看当前显示的有向边文本表（{visibleEdges.length} 条）</summary>
         {visibleEdges.length === 0 ? (
-          <p className="muted" role="status">当前截止比例下没有可显示的已发布 Top 边。</p>
+          <p className="muted" role="status">当前阈值下没有可显示的贸易边。</p>
         ) : (
           <table className="data-table">
-            <caption>当前阈值下绘制、伙伴高亮与详情共同使用的有向边</caption>
+            <caption>当前阈值下绘制的有向边（伙伴详情使用完整贸易额）</caption>
             <thead><tr><th scope="col">源经济体</th><th scope="col">目标经济体</th><th scope="col">流量（百万美元）</th></tr></thead>
             <tbody>
               {visibleEdges.map((edge, index) => (
@@ -619,16 +608,17 @@ export function NetworkViz({
             ))}
           </div>
           {selectedNeighbors.length === 0 ? (
-            <p className="muted" role="status">当前显示截止下没有与该节点相连的可见伙伴。</p>
+            <p className="muted" role="status">该经济体没有正贸易流量的伙伴。</p>
           ) : (
             <table>
+              <caption>按完整双向贸易额排列的前 8 个伙伴（百万美元）；† 表示该方向有贸易，但低于绘图阈值。</caption>
               <thead><tr><th>伙伴</th><th>流出（该国→伙伴）</th><th>流入（伙伴→该国）</th><th>合计</th></tr></thead>
               <tbody>
                 {selectedNeighbors.slice(0, 8).map((n) => (
                   <tr key={n.c}>
                     <td>{countryLabel(n.c)}</td>
-                    <td>{fmtNetworkMetric(n.outflow, "amount")}</td>
-                    <td>{fmtNetworkMetric(n.inflow, "amount")}</td>
+                    <td>{fmtNetworkMetric(n.outflow, "amount")}{n.outflow > 0 && n.outflow < thresholdModel.cutoff ? " †" : ""}</td>
+                    <td>{fmtNetworkMetric(n.inflow, "amount")}{n.inflow > 0 && n.inflow < thresholdModel.cutoff ? " †" : ""}</td>
                     <td>{fmtNetworkMetric(n.total, "amount")}</td>
                   </tr>
                 ))}
@@ -642,8 +632,8 @@ export function NetworkViz({
         节点位置 = 按预设地理区域摆放（不是算法聚类），便于比较区域内和区域间的流向<br />
         节点大小 = {metricMeta[sizeMetric].label} · 节点颜色 = {colorMode === "region" ? "预设地理区域" : metricMeta[colorMode].label}<br />
         {hasUnavailableContext && <>所选指标不可用节点 = 灰色虚线、固定最小尺寸（仅保留网络上下文）<br /></>}
-        显示条件：边流量不低于最大边流量的 {(edgeThreshold * 100).toFixed(0)}%，当前显示 {visibleEdges.length}/{thresholdModel.publishedEdges.length} 条主要贸易边；默认 15% 只为读图清晰，不影响计算；箭头从出口方指向进口方<br />
-        显示比例只影响画出哪些边和伙伴高亮，完整网络上的中心性不变
+        显示条件：边流量不低于最大边流量的 {(edgeThreshold * 100).toFixed(0)}%，当前显示 {visibleEdges.length}/{thresholdModel.publishedEdges.length} 条贸易边；默认 15% 只为读图清晰；箭头从出口方指向进口方<br />
+        数据包含完整跨国贸易边；显示比例只影响画出哪些边和伙伴高亮，伙伴详情的贸易额与完整网络上的中心性不变
       </div>
       {Tip}
     </div>

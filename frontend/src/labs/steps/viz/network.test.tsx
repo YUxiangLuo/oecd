@@ -39,7 +39,7 @@ test("step 9 records the main comparison automatically; the exploration views si
   // One view bar: the two recording views in the task order, then the exploration views; no modals.
   const bar = screen.getByRole("group", { name: "图表视角" });
   expect(within(bar).getAllByRole("button").map((button) => button.textContent)).toEqual([
-    "历年变化", "行业排名", "流量与路径", "买入与卖出", "贸易伙伴",
+    "历年变化", "行业排名", "流量与路径", "买入与卖出", "贸易伙伴", "全球贸易网络图",
   ]);
   expect(screen.queryByRole("group", { name: "补充图表" })).toBeNull();
   // The full-indicator table folds into 行业排名.
@@ -62,6 +62,14 @@ test("step 9 records the main comparison automatically; the exploration views si
   expect(screen.getAllByRole("region", { name: /行业买入与卖出/ })).toHaveLength(2);
   fireEvent.click(within(bar).getByRole("button", { name: "流量与路径" }));
   expect(screen.getAllByText(/行业的流量与路径/)).toHaveLength(2);
+  const beforeNetwork = save.mock.calls.length;
+  fireEvent.click(within(bar).getByRole("button", { name: "全球贸易网络图" }));
+  expect(await screen.findByText("贸易网络当前没有可显示的数据。")).toBeTruthy();
+  expect(screen.queryByLabelText("国家 A")).toBeNull();
+  expect(screen.getByLabelText("当前图表范围").textContent).toContain("全球经济体");
+  fireEvent.change(screen.getByLabelText("年份"), { target: { value: "2019" } });
+  await waitFor(() => expect(api.network).toHaveBeenLastCalledWith(2019));
+  expect(save.mock.calls.length).toBe(beforeNetwork);
   fireEvent.click(within(bar).getByRole("button", { name: "历年变化" }));
   expect(screen.getByLabelText("当前图表范围").textContent).toContain("C26");
 });
