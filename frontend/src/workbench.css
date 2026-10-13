@@ -453,6 +453,8 @@
 .scope-chip:focus-visible { box-shadow: 0 0 0 2px #4b47e0; }
 .scope-chip span { font-size: 10.5px; line-height: 1.2; color: #616b7d; }
 .scope-chip b { font-size: 13px; line-height: 1.3; color: #293342; }
+.scope-chip .scope-country { display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; font: inherit; color: inherit; }
+.scope-country svg { flex: none; }
 .scope-note { flex-basis: 100%; color: #616b7d; font-size: 11px; }
 /* "报告材料已更新为：…" after an automatic replacement; the component clears it after a few seconds. */
 .scope-flash { display: inline-block; padding: 2px 8px; border-radius: 6px; background: #e8f5ee; color: #17603a; font-size: 12px; font-weight: 600; animation: scope-flash-in .25s ease-out; }
@@ -575,7 +577,7 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 .reg-custom > * { min-width: 0; }
 .reg-custom-y { margin: 0; }
 .reg-custom-hints { margin: 0; padding: 8px 10px 8px 26px; border-radius: 7px; background: #f4f5fb; color: #3d4556; font-size: 12px; line-height: 1.6; }
-.reg-custom-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 10px; }
+.reg-custom-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .reg-custom-form fieldset { min-width: 0; margin: 0; padding: 9px 11px 10px; border: 1px solid #e1e5ee; border-radius: 9px; background: #fbfcff; }
 .reg-custom-form legend { padding: 0 4px; color: #2f3747; font-weight: 750; font-size: 13px; }
 .reg-custom-choice { display: flex; gap: 7px; align-items: flex-start; margin: 6px 0; cursor: pointer; }

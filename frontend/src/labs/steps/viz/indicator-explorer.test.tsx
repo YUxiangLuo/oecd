@@ -378,6 +378,11 @@ describe("indicator explorer with automatic report material", () => {
     expect(
       view.getByRole("img", { name: /前向与后向 GVC 段长度历年轨迹/ }),
     ).toBeTruthy();
+    const scope = view.getByRole("group", { name: "当前图表范围" });
+    const keys = [...scope.querySelectorAll(".scope-country")];
+    expect(keys.map((key) => key.textContent)).toEqual(["CHN 中国", "USA 美国"]);
+    expect(keys.map((key) => key.querySelector("circle")?.getAttribute("fill"))).toEqual(["#216cc0", "#1baf7a"]);
+    expect(keys.map((key) => key.querySelector("line")?.getAttribute("stroke-dasharray"))).toEqual([null, "7 4"]);
     rows.mockRestore();
     schema.mockRestore();
   });
@@ -503,6 +508,13 @@ describe("material of one to five economies (design doc 4.1)", () => {
       // Choosing a comparison country as A swaps it with the old A instead of dropping it.
       fireEvent.change(view.getByLabelText("国家 A"), { target: { value: "DEU" } });
       await waitFor(() => expect(view.saves.at(-1)?.compared).toEqual(["DEU", "USA", "CHN"]));
+      const scope = view.getByRole("group", { name: "当前图表范围" });
+      const keys = [...scope.querySelectorAll(".scope-country")];
+      expect(keys.map((key) => key.textContent)).toEqual(["DEU 德国", "USA 美国", "CHN 中国"]);
+      expect(keys.map((key) => key.querySelector("circle")?.getAttribute("fill"))).toEqual(["#216cc0", "#1baf7a", "#eda100"]);
+      expect(keys.map((key) => key.querySelector("line")?.getAttribute("stroke-dasharray"))).toEqual([null, "7 4", "7 4"]);
+      fireEvent.click(view.getByRole("button", { name: "出口构成" }));
+      expect(scope.querySelector(".scope-country")).toBeNull();
     } finally { rows.mockRestore(); schema.mockRestore(); }
   });
 });

@@ -305,6 +305,40 @@ def test_student_list_uses_verified_completion_and_report_state(teaching_db):
     assert row["report_outdated"] is True
 
 
+def test_teacher_reports_follow_current_record_without_blocking_grades(teaching_db):
+    original = empty_session()
+    db.save_session("student", original)
+    _save_report("submitted version", {"years": [2020], "runs": []})
+    submitted = db.submit_report("student")
+    account_id = db.find_account("student")["id"]
+
+    def check(outdated):
+        listed = db.list_reports("teacher")[0]
+        detail = db.get_report(account_id, "teacher")
+        for row in (listed, detail):
+            assert row["report_outdated"] is outdated
+            assert "source_session" not in row
+        assert listed == detail
+        return detail
+
+    check(False)
+    changed = empty_session()
+    changed["steps"]["1"] = make_record({"value": "edited"})
+    db.save_session("student", changed)
+    assert check(True)["markdown"] == "submitted version"
+    assert db.grade_report(account_id, 88, "好", "teacher", submitted["updated_at"]) is not None
+    assert check(True)["score"] == 88
+    db.save_session("student", original)
+    check(False)
+    db.save_session("student", changed)
+    check(True)
+    _save_report("regenerated version", {"years": [2020], "runs": []})
+    regenerated = check(False)
+    assert regenerated["state"] == "pending" and regenerated["score"] is None
+    db.submit_report("student")
+    assert check(False)["markdown"] == "regenerated version"
+
+
 def test_grading_does_not_count_as_student_activity(teaching_db):
     db.save_session("student", empty_session())
     _save_report("draft", {"years": [2020], "runs": []})

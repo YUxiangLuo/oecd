@@ -14,6 +14,9 @@ import { LEAVE_MESSAGE, useTeacherReviewGuard } from "./review-guard";
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
 type Filter = "pending" | "graded" | "all";
 
+export const OUTDATED_REPORT_NOTE = "学生提交后改过记录，尚未重新提交；当前评阅的是已提交版本，仍可评分。";
+export const OUTDATED_REPORT_LABEL = "记录已变更，未重新提交";
+
 /**
  * Empty list copy: "no match" only when a search or class filter is active, not when all pending work is done.
  * `pendingElsewhere`: reports still to grade that the filter or search leaves out (the sidebar badge counts them).
@@ -240,7 +243,8 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh, onReturn 
             <td className="class-memberships">{report.enrollments.length
               ? report.enrollments.map((item) => { const label = enrollmentLabel(item, semesters); return <span key={item.term_id} title={label}>{label}</span>; })
               : "未分班"}</td><td>{fmtTime(report.submitted_at)}</td>
-            <td>{report.state === "graded" ? <StatusPill tone="ok">已评阅</StatusPill> : <StatusPill tone="warn">待评阅</StatusPill>}</td><td>{report.score ?? "—"}</td>
+            <td>{report.state === "graded" ? <StatusPill tone="ok">已评阅</StatusPill> : <StatusPill tone="warn">待评阅</StatusPill>}
+              {report.report_outdated && <small className="report-outdated-note" title={OUTDATED_REPORT_NOTE}>{OUTDATED_REPORT_LABEL}</small>}</td><td>{report.score ?? "—"}</td>
             <td><ReportRowAction report={report} onOpen={() => open(report.account_id)} /></td>
           </tr>)}
         </tbody></table>
@@ -400,6 +404,7 @@ export function GradeView({ data, grader, semesters = [], backLabel = BACK_TO_LI
         <h3 ref={headingRef} tabIndex={-1} className="stage-chip review-student">{data.display_name}（{data.username}）</h3>
         <span className="muted">{data.enrollments.map((item) => enrollmentLabel(item, semesters)).join("；") || "未分班"} · 提交于 {fmtTime(data.submitted_at)}</span>
       </div>
+      {data.report_outdated && <p className="muted">{OUTDATED_REPORT_NOTE}</p>}
       <div className="grade-split">
         <div className="grade-doc"><ReportMarkdown markdown={data.markdown} /></div>
         <aside className="grade-side"><div className="panel grade-panel">

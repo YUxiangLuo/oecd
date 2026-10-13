@@ -887,6 +887,8 @@ export interface StudentRow {
 export interface TeacherReport extends ClassroomReport {
   account_id: number;
   state: "pending" | "graded";
+  /** Current records differ from the submitted version; absent on grade responses. */
+  report_outdated?: boolean;
   username: string;
   display_name: string;
   student_no: string;

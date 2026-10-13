@@ -6,7 +6,7 @@ import type { TeacherReport } from "../types";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   GRADE_RUBRIC, GradeView, RELOADED_OVER_REVIEW_NOTE, RELOADED_REVIEW_NOTE, REPORT_FILTER_LABELS, ReportRowAction, STALE_REVIEW_HINT, UNCHANGED_REVIEW_HINT, reportRowAction, reportsEmptyState,
-  reviewPosition,
+  reviewPosition, OUTDATED_REPORT_NOTE, OUTDATED_REPORT_LABEL,
 } from "./reports";
 
 afterEach(cleanup);
@@ -227,6 +227,38 @@ describe("teacher review flow", () => {
       showPasswordChange={false} onRequestPasswordChange={() => {}} onClosePasswordChange={() => {}}
       onPasswordChanged={() => {}} onLogout={() => {}} />);
   }
+
+  test("outdated records are secondary context in the list and review, not a grading lock", async () => {
+    const outdated = { ...pendingReport, report_outdated: true };
+    const reports = spyOn(api.classroom, "reports").mockResolvedValue({ reports: [pendingReport] });
+    const grade = spyOn(api.classroom, "grade").mockResolvedValue({ ...outdated, state: "graded" });
+    const spies = [reports, grade,
+      spyOn(api.classroom, "reportDetail").mockResolvedValue(outdated),
+      spyOn(api.classroom, "students").mockResolvedValue({ students: [] }),
+      spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] }),
+    ];
+    try {
+      renderReports();
+      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+      await screen.findByRole("button", { name: "评阅报告：学生" });
+      expect(screen.queryByText(OUTDATED_REPORT_LABEL)).toBeNull();
+      reports.mockResolvedValue({ reports: [outdated] });
+      fireEvent.click(screen.getByRole("button", { name: "刷新列表" }));
+      expect((await screen.findByText(OUTDATED_REPORT_LABEL)).title).toBe(OUTDATED_REPORT_NOTE);
+      fireEvent.click(screen.getByRole("button", { name: "评阅报告：学生" }));
+      await screen.findByRole("spinbutton");
+      expect(screen.getByText(OUTDATED_REPORT_NOTE).className).toBe("muted");
+      fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "88" } });
+      fireEvent.click(screen.getByRole("button", { name: "提交评阅" }));
+      await screen.findByRole("button", { name: "评阅报告：学生" });
+      expect(screen.queryByRole("spinbutton")).toBeNull();
+      reports.mockResolvedValue({ reports: [{ ...pendingReport, report_outdated: false }] });
+      fireEvent.click(screen.getByRole("button", { name: "刷新列表" }));
+      await waitFor(() => expect(screen.queryAllByText(OUTDATED_REPORT_LABEL).length).toBe(0));
+    } finally {
+      spies.forEach((spy) => spy.mockRestore());
+    }
+  });
 
   test("a 409 reload keeps the typed score and feedback and says so", async () => {
     const newer = { ...pendingReport, markdown: "# newer", updated_at: "2026-08-14T00:00:00Z" };

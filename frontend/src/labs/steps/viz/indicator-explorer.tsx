@@ -968,7 +968,18 @@ export function IndicatorExplorer({
       <ScopeCard
         ref={scopeRef}
         items={[
-          { label: "所选国家", value: joinCountries(selected), onJump: jump(entityRef) },
+          { label: "所选国家", value: view === "trend" || view === "directions" ? selected.map((country, index) => (
+            <Fragment key={country}>
+              {index > 0 && (selected.length === 2 ? " 与 " : "、")}
+              <span className="scope-country">
+                <svg width="20" height="12" aria-hidden="true">
+                  <line x1="0" x2="20" y1="6" y2="6" stroke={CAT[index]} strokeWidth="2" strokeDasharray={index ? "7 4" : undefined} />
+                  <circle cx="10" cy="6" r="3" fill={CAT[index]} />
+                </svg>
+                {countryLabel(country)}
+              </span>
+            </Fragment>
+          )) : joinCountries(selected), onJump: jump(entityRef) },
           {
             label: "范围",
             value: view === "industry" ? "所选国家各行业" : view === "structure" ? "所选国家全部行业" : industry ? sectorLabel(industry) : "国家整体",

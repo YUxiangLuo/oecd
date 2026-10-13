@@ -521,6 +521,13 @@ describe("the open workbench", () => {
     expect(details.textContent).toContain("GDP 对数、贸易开放度");
     expect(details.textContent).toContain("上次计算（设定已更改）");
     expect(details.textContent).toContain("当前设定待重算");
+    for (const input of screen.getByRole("group", { name: "关税暴露 X（至少选一项）" }).querySelectorAll<HTMLInputElement>("input:checked")) {
+      fireEvent.click(input);
+    }
+    expect(document.querySelector(".reg-stale-note")?.textContent).toBe("下面保留最近计算的结果；请先选择至少一项关税暴露 X，再计算当前设定。");
+    expect(screen.getByRole("button", { name: "计算这个模型" }).getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(checkbox(/^L2\.X/));
+    expect(document.querySelector(".reg-stale-note")?.textContent).toContain("点“计算这个模型”查看新结果");
     fireEvent.click(screen.getByRole("button", { name: "恢复默认设定" }));
     expect(document.querySelector(".reg-stale-note")?.textContent).toContain("保留最近计算的结果");
     // Another Y saved by the bars: the note names it.

@@ -311,12 +311,14 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   };
   // The computed model belongs to this Y and this form; otherwise it is kept but marked out of date.
   const current = Boolean(computed && computed.design.baseline === baseline && sameSpec(computed.design.spec!, spec, options));
+  const noX = spec.x_lags.length === 0;
   const staleMessage = computed && !current
-    ? computed.design.baseline !== baseline
+    ? noX
+      ? "下面保留最近计算的结果；请先选择至少一项关税暴露 X，再计算当前设定。"
+      : computed.design.baseline !== baseline
       ? `因变量已换成“${depvarLabel}”，点“计算这个模型”在新的 Y 上计算。`
       : "设定已更改，下面保留最近计算的结果；点“计算这个模型”查看新结果。"
     : "";
-  const noX = spec.x_lags.length === 0;
   const run = async () => {
     if (running || noX) return;
     controller.current?.abort();

@@ -296,19 +296,28 @@ def submit_report(username: str) -> dict[str, Any] | None:
         ).fetchone()
 
 
+def _teacher_report(row: dict[str, Any]) -> dict[str, Any]:
+    # Read the source session in the report query, not once per student. Never expose it.
+    session = row.pop("source_session")
+    row["report_outdated"] = not report_matches_session(session if session is not None else {"steps": {}}, row)
+    return row
+
+
 def list_reports(teacher_username: str) -> list[dict[str, Any]]:
     release_id = database.current_release_id()
     with database.conn() as c:
         if not _teacher_exists(c, teacher_username):
             return []
-        return c.execute(
+        rows = c.execute(
             f"SELECT a.id AS account_id,a.username,a.display_name,a.student_no,{_REPORT_COLUMNS},"
-            f"{_REPORT_ENROLLMENTS}"
+            f"{_REPORT_ENROLLMENTS},s.session AS source_session"
             " FROM reports r JOIN accounts a ON a.id=r.account_id"
+            " LEFT JOIN experiment_sessions s ON s.account_id=r.account_id AND s.release_id=r.release_id"
             " WHERE r.release_id=%s AND r.state IN ('pending','graded')"
             " ORDER BY CASE r.state WHEN 'pending' THEN 0 ELSE 1 END,r.submitted_at DESC,a.username",
             (release_id,),
         ).fetchall()
+        return [_teacher_report(row) for row in rows]
 
 
 def get_report(account_id: int, teacher_username: str) -> dict[str, Any] | None:
@@ -316,13 +325,15 @@ def get_report(account_id: int, teacher_username: str) -> dict[str, Any] | None:
     with database.conn() as c:
         if not _teacher_exists(c, teacher_username):
             return None
-        return c.execute(
+        row = c.execute(
             f"SELECT a.id AS account_id,a.username,a.display_name,a.student_no,{_REPORT_COLUMNS},"
-            f"{_REPORT_ENROLLMENTS}"
+            f"{_REPORT_ENROLLMENTS},s.session AS source_session"
             " FROM reports r JOIN accounts a ON a.id=r.account_id"
+            " LEFT JOIN experiment_sessions s ON s.account_id=r.account_id AND s.release_id=r.release_id"
             " WHERE a.id=%s AND r.release_id=%s AND r.state IN ('pending','graded')",
             (account_id, release_id),
         ).fetchone()
+        return _teacher_report(row) if row is not None else None
 
 
 def grade_report(
