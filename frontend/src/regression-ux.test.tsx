@@ -260,7 +260,7 @@ describe("simple regression workbench", () => {
     cleanup();
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
     await screen.findByText("换一种模型试试：每次改一处，和默认模型比较");
-    expect(screen.getByRole("region", { name: "单模型详细数字" }).hasAttribute("open")).toBe(false);
+    expect(screen.getByRole("group", { name: "单模型详细数字" }).hasAttribute("open")).toBe(false);
     expect(screen.getByRole("link", { name: "查看已保存结果" }).getAttribute("href")).toBe("#regression-results");
     expect(screen.getByRole("link", { name: "修改模型（选做）" }).getAttribute("href")).toBe("#regression-model");
     expect(await screen.findByRole("button", { name: "计算这个模型" })).toBeTruthy();

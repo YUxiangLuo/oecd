@@ -3,7 +3,7 @@
  * read (not only a mouse `title`), and the measured width of a sticky first column, so a second sticky column
  * or a sticky band label can sit right after it.
  */
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cjkJoin } from "./format";
 
@@ -11,13 +11,26 @@ const TIP_WIDTH = 280;
 
 /**
  * A focusable ⓘ after a column name. Its text is the button's accessible description, and it shows as a small
- * box while the button is focused or hovered (a tap focuses it on touch screens). Escape is left alone: inside a
- * fullscreen table it closes the fullscreen, and moving focus away hides the box anyway.
+ * box while the button is focused or hovered (a tap focuses it on touch screens). Escape dismisses the box
+ * before the enclosing fullscreen panel, without moving keyboard focus.
  */
 export function ColumnInfo({ label, text }: { label: string; text: string }) {
   const tipId = `column-info-${useId().replaceAll(":", "")}`;
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [place, setPlace] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    if (!place) return;
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setPlace(null);
+    };
+    // Run before the dialog's document capture listener, including for hover-only tips.
+    window.addEventListener("keydown", dismiss, true);
+    return () => window.removeEventListener("keydown", dismiss, true);
+  }, [place]);
 
   const show = () => {
     const rect = buttonRef.current?.getBoundingClientRect();

@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { FullscreenPanel, FullscreenTriggerSlot, lockFullscreenScroll } from "./fullscreen-panel";
 import { SyncProblemContext } from "./sync-problem";
+import { ColumnInfo } from "./table-aids";
 
 function scrollTarget(overflow = "", overflowY = "") {
   return { style: { overflow, overflowY } };
@@ -94,6 +95,26 @@ describe("FullscreenPanel save problems", () => {
 
 describe("FullscreenPanel keyboard place", () => {
   afterEach(cleanup);
+
+  test("Escape dismisses focused and hover-only column tips before closing fullscreen", () => {
+    render(<FullscreenPanel title="数据表"><ColumnInfo label="合计" text="按未舍入数值相加" /></FullscreenPanel>);
+    fireEvent.click(screen.getByRole("button", { name: "全屏探索：数据表" }));
+    const info = screen.getByRole("button", { name: "合计的说明" });
+    act(() => info.focus());
+    expect(screen.getByRole("tooltip").className).toBe("column-info-tip");
+    fireEvent.keyDown(info, { key: "Escape" });
+    expect(screen.getByRole("tooltip").className).toBe("sr-only");
+    expect(document.activeElement).toBe(info);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    act(() => info.blur());
+    fireEvent.mouseEnter(info);
+    expect(screen.getByRole("tooltip").className).toBe("column-info-tip");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.getByRole("tooltip").className).toBe("sr-only");
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
 
   test("opening from a cell keeps focus on it, and Escape returns to the cell the reader is on", async () => {
     const cells = <table><tbody><tr><td><button>格 A</button></td><td><button>格 B</button></td></tr></tbody></table>;

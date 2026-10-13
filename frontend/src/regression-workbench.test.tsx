@@ -515,7 +515,7 @@ describe("the open workbench", () => {
     expect(document.querySelector(".reg-stale-note")?.textContent).toBe("设定已更改，下面保留最近计算的结果；点“计算这个模型”查看新结果。");
     expect(screen.getAllByRole("status").some((node) => node.textContent === "设定已更改，下面保留最近计算的结果；点“计算这个模型”查看新结果。")).toBe(true);
     expect(screen.queryByText("已算出这个模型，结果在下面的回归结果表中。")).toBeNull();
-    const details = screen.getByRole("region", { name: "单模型详细数字" });
+    const details = screen.getByRole("group", { name: "单模型详细数字" });
     expect(details.hasAttribute("open")).toBe(false);
     fireEvent.click(details.querySelector("summary")!);
     expect(details.textContent).toContain("GDP 对数、贸易开放度");

@@ -444,7 +444,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       {error && <div className="error-box async-error" role="alert">{error}</div>}
       {staleMessage && <p className="reg-stale-note" role="note">{staleMessage}</p>}
 
-      <details className="reg-custom-details" role="region" aria-label="单模型详细数字">
+      <details className="reg-custom-details" aria-label="单模型详细数字">
         <summary>查看单模型详细数字（系数、t 值与区间）{staleMessage ? " · 当前设定待重算" : ""}</summary>
         <label className="reg-custom-detail-pick">查看
           <select value={shownDetail} onChange={(event) => setDetailColumn(Number(event.target.value))}>

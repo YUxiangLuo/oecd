@@ -14,6 +14,11 @@ test("Excel roster preserves leading zeros, Unicode and spaces within names", ()
   expect(parseRoster("\uFEFF学号\t姓名\r\n0012\t 张 三 \r\n\r\n0098\t李四")).toEqual([
     { username: "0012", display_name: "张 三" }, { username: "0098", display_name: "李四" },
   ]);
+  for (const character of ["名", "𠮷", "😀"]) {
+    const name = character.repeat(60);
+    expect(parseRoster(`0012\t${name}`)).toEqual([{ username: "0012", display_name: name }]);
+    expect(() => parseRoster(`0012\t${name}${character}`)).toThrow("姓名不能超过 60 字");
+  }
 });
 
 test("rejects duplicates, missing cells, extra columns and oversized rosters", () => {
@@ -269,4 +274,3 @@ test("a pasted roster or a typed student is not dropped by a click beside the di
     confirm.mockRestore();
   }
 });
-

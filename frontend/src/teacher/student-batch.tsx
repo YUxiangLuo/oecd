@@ -98,7 +98,7 @@ export function parseRoster(text: string) {
       // Three or more words: most likely a name with a space ("Li Si"), which only a tab or comma can keep whole.
       const words = stripInvisibleEdges(line).split(/\s+/).filter(Boolean).length;
       errors.push(`第 ${number} 行：需要学号和姓名两列${words > 2 ? "（姓名含空格时，请用制表符或逗号分隔学号和姓名）" : ""}`);
-    } else if (display_name.length > 60) {
+    } else if (Array.from(display_name).length > 60) {
       errors.push(`第 ${number} 行：姓名不能超过 60 字`);
     } else if (!/^[a-zA-Z0-9_.-]{2,40}$/.test(username)) {
       errors.push(`第 ${number} 行：学号须为 2–40 位字母、数字、下划线、点或连字符`);
