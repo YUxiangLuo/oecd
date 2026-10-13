@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from gvcsim import concurrency, demo_accounts, evidence, quizzes
 from gvcsim import session as session_model
 from gvcsim import report_workbench, teaching_report
-from gvcsim.classroom import db, management, records
+from gvcsim.classroom import db, management, quiz_config, records
 from gvcsim.name_keys import normalize_academic_name, required_name_key
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 from gvcsim.regression.workbench import custom_results_problem
@@ -59,10 +59,17 @@ def _workspace(username: str) -> tuple[dict[str, Any], dict[str, Any] | None, di
 def _learning_state(session: dict[str, Any], *, report: dict[str, Any] | None) -> dict[str, Any]:
     """Authoritative quiz completion and report-material readiness for one snapshot, and whether the latest report
     was generated from it (``report_current``: the page's "报告需更新" signal, separate from step 15's completion)."""
+    bank = quiz_config.load_bank()
     return {
-        "completion": evidence.completion_summary(session, report_exists=records.report_handed_in(report)),
-        "report_current": records.report_matches_session(session, report),
-        "report_gate": teaching_report.check_gate(session),
+        "quiz_revision": bank["revision"],
+        "quizzes": {str(step): quizzes.public_quiz(step, bank) for step in range(1, 15)},
+        "completion": evidence.completion_summary(
+            session, report_exists=records.report_handed_in(report), quiz_bank=bank
+        ),
+        "report_current": report is not None
+        and records.report_matches_session(session, report)
+        and (records.report_handed_in(report) or report["provenance"].get("quiz_revision", 0) == bank["revision"]),
+        "report_gate": teaching_report.check_gate(session, quiz_bank=bank),
         "material_gate": teaching_report.check_material_gate(session),
     }
 
@@ -87,14 +94,62 @@ class QuizSubmitRequest(BaseModel):
 
 @router.post("/quiz/submit")
 def submit_quiz(req: QuizSubmitRequest, _user: dict = Depends(require_student)):
+    bank = quiz_config.load_bank()
+    if req.version != quizzes.quiz_version(req.step, bank):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "quiz_changed", "message": "老师已更新本步理解题，请载入最新题目后重新作答。"},
+        )
     try:
-        passed, normalized, results = quizzes.grade(req.step, req.version, req.answers)
+        passed, normalized, results = quizzes.grade(req.step, req.version, req.answers, bank)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    response: dict[str, Any] = {"passed": passed, "version": quizzes.quiz_version(req.step), "results": results}
+    response: dict[str, Any] = {"passed": passed, "version": quizzes.quiz_version(req.step, bank), "results": results}
     if passed:
-        response["quiz"] = {"version": quizzes.quiz_version(req.step), "answers": normalized}
+        response["quiz"] = {"version": quizzes.quiz_version(req.step, bank), "answers": normalized}
     return response
+
+
+def _teacher_bank(bank: dict[str, Any]) -> dict[str, Any]:
+    defaults = quizzes.default_bank()
+    return {
+        "revision": bank["revision"],
+        "steps": [
+            {
+                "step": step["n"],
+                "title": step["title"],
+                **bank["steps"][str(step["n"])],
+                "defaults": defaults["steps"][str(step["n"])]["questions"],
+                "is_default": bank["steps"][str(step["n"])]["questions"]
+                == defaults["steps"][str(step["n"])]["questions"],
+            }
+            for step in STEPS
+            if step["n"] in range(1, 15)
+        ],
+    }
+
+
+@router.get("/quizzes")
+def teacher_quizzes(_user: dict = Depends(require_teacher)):
+    return _teacher_bank(quiz_config.load_bank())
+
+
+class QuizEditRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: str = Field(min_length=1, max_length=80)
+    questions: list[dict[str, Any]] = Field(min_length=1, max_length=3)
+
+
+@router.put("/quizzes/{step}")
+def save_quiz(step: int, req: QuizEditRequest, user: dict = Depends(require_teacher)):
+    try:
+        return _teacher_bank(quiz_config.save_step(step, req.questions, req.version, user["sub"]))
+    except quiz_config.QuizChanged as error:
+        raise HTTPException(status_code=409, detail={"code": "quiz_changed", "message": str(error)}) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
 
 
 class SessionRequest(BaseModel):
@@ -194,12 +249,13 @@ async def _prepare_report(
 ) -> tuple[dict[str, Any], teaching_report.TeachingReport, datetime]:
     # PostgreSQL pool/row-lock waits must not block unrelated requests on the event loop.
     session, _report, row = await concurrency.run_sync(_workspace, user["sub"])
+    bank = await concurrency.run_sync(quiz_config.load_bank)
 
     # The appendix recomputes the workbench models marked 放入报告: a run not computed yet counts against the student's
     # calculations of the minute, as on the page (checked once the gate passes, before anything is computed). The gate
     # grades every quiz and the charge reads the release: off the event loop, as the reads above.
     def charge() -> ReportBilling | None:
-        if not check_gate(session):
+        if not check_gate(session, quiz_bank=bank):
             return charge_report_runs(
                 user.get("aid"), report_workbench.run_designs(report_workbench.reported_models(session))
             )
@@ -210,7 +266,9 @@ async def _prepare_report(
         bills.append(billing)
     context = REPORT_BILLING.set(billing)
     try:
-        generated = await concurrency.run_report_build(teaching_report.build, session, user.get("name") or user["sub"])
+        generated = await concurrency.run_report_build(
+            teaching_report.build, session, user.get("name") or user["sub"], quiz_bank=bank
+        )
     except teaching_report.ReportGateError as error:
         raise HTTPException(status_code=409, detail={"message": str(error), "blocked": error.missing}) from error
     finally:
@@ -266,6 +324,8 @@ async def _generate_report(user: dict, expected_report_updated_at: datetime | No
         response = {"report": saved, **learning_state}
         success = True  # Saved successfully and response bookkeeping completed.
         return response
+    except quiz_config.QuizChanged as error:
+        raise HTTPException(status_code=409, detail={"message": str(error), "code": "quiz_changed"}) from error
     except records.ReportChanged as error:
         raise HTTPException(
             status_code=409,
@@ -303,6 +363,8 @@ async def generate_report_http(
 def submit_report(user: dict = Depends(require_student)):
     try:
         report = db.submit_report(user["sub"])
+    except quiz_config.QuizChanged as error:
+        raise HTTPException(status_code=409, detail={"message": str(error), "code": "quiz_changed"}) from error
     except db.ReportChanged as error:
         raise HTTPException(
             status_code=409,

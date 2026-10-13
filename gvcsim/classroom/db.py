@@ -13,9 +13,10 @@ from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool, PoolClosed, PoolTimeout, TooManyRequests
 
-from gvcsim import config, demo_accounts
+from gvcsim import config, demo_accounts, quizzes
 from gvcsim.classroom import schema
 from gvcsim.name_keys import username_key
 
@@ -126,6 +127,11 @@ def initialize_schema() -> list[str]:
                 )
             if version is None:
                 c.execute(schema.SCHEMA_SQL)
+                bank = quizzes.default_bank()
+                c.execute(
+                    "INSERT INTO quiz_config(singleton,revision,steps) VALUES (true,%s,%s)",
+                    (bank["revision"], Jsonb(bank["steps"])),
+                )
                 c.execute("INSERT INTO schema_meta(singleton,version) VALUES (true,%s)", (TEACHING_DB_VERSION,))
                 applied.append(f"创建 schema {TEACHING_DB_VERSION}")
             synced = _sync_demo_accounts(c)

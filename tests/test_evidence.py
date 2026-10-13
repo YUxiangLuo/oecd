@@ -48,9 +48,9 @@ def test_question_upgrade_invalidates_only_the_rewritten_step():
     }
     for step in range(1, 15):
         if step != 11:
-            # Steps 10–14 were re-questioned for the v10 model; steps 1–9 keep v8.
+            # Steps 10–14 use simpler v11 defaults; steps 1–9 keep v8.
             assert session["steps"][str(step)]["data"]["quiz"]["version"] == (
-                "course-quiz-v10" if 10 <= step <= 14 else "course-quiz-v8"
+                "course-quiz-v11" if 10 <= step <= 14 else "course-quiz-v8"
             )
     assert evidence.completion_summary(session)["completed"] == [step for step in range(1, 15) if step != 11]
     session["steps"]["11"]["data"]["quiz"] = quizzes.correct_quiz(11)

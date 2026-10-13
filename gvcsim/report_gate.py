@@ -372,14 +372,16 @@ def reflection_length(value: str) -> int:
     return len(" ".join(word for word in words if word))
 
 
-def check_gate(session: dict[str, Any], **_unused: Any) -> list[dict[str, Any]]:
+def check_gate(
+    session: dict[str, Any], *, quiz_bank: dict[str, Any] | None = None, **_unused: Any
+) -> list[dict[str, Any]]:
     """Return the combined quiz and report-material gate used for generation. ``quiz_only``: the step's material is
     complete and only its quiz is not (never answered, answered wrong, or saved for an older version), so the page's
     link goes to the quiz rather than the top of the step."""
     blocked: list[dict[str, Any]] = []
     quiz_missing: dict[int, list[str]] = {}
     for step in GATE_STEPS:
-        result = evidence.evaluate_step(step, session)
+        result = evidence.evaluate_step(step, session, quiz_bank=quiz_bank)
         if not result.complete:
             blocked.append({"step": step, "title": _STEP_TITLES.get(step, ""), "missing": result.missing})
             quiz_missing[step] = list(result.missing)

@@ -22,7 +22,14 @@ class StepCompletion:
 STEP_LABS: dict[int, str] = {cast(int, step["n"]): cast(str, step["lab"]) for step in STEPS}
 
 
-def evaluate_step(step: int, session: dict[str, Any], *, report_exists: bool = False, **_unused: Any) -> StepCompletion:
+def evaluate_step(
+    step: int,
+    session: dict[str, Any],
+    *,
+    report_exists: bool = False,
+    quiz_bank: dict[str, Any] | None = None,
+    **_unused: Any,
+) -> StepCompletion:
     lab = STEP_LABS.get(step)
     if lab is None:
         raise ValueError(f"未知步骤:{step}")
@@ -35,7 +42,9 @@ def evaluate_step(step: int, session: dict[str, Any], *, report_exists: bool = F
     if not isinstance(quiz, dict):
         return StepCompletion(step, False, ["请答对本步全部理解题"])
     try:
-        passed, normalized, _results = quizzes.grade(step, str(quiz.get("version") or ""), quiz.get("answers"))
+        passed, normalized, _results = quizzes.grade(
+            step, str(quiz.get("version") or ""), quiz.get("answers"), quiz_bank
+        )
     except ValueError as error:
         return StepCompletion(step, False, [str(error)])
     valid = passed and normalized == quiz.get("answers")

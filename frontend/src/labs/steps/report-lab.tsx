@@ -617,11 +617,12 @@ export function ReportLab({
    * itself, so unsaved edits here stay. Resolves with the server's report, or undefined when the request failed.
    */
   const refreshReport = async (): Promise<ClassroomReport | null | undefined> => {
+    const seen = reportRef.current;
     const latest = await api.classroom.session().catch(() => null);
     if (!latest) return undefined;
     // A generate or submit started meanwhile owns the report; its own response is newer than this read.
-    if (latest.report && !operationRef.current && reportStatusChanged(reportRef.current, latest.report)) {
-      reportChangedRef.current({ report: latest.report, completion: latest.completion, report_gate: latest.report_gate, material_gate: latest.material_gate });
+    if (latest.report && !operationRef.current && reportRef.current === seen && reportStatusChanged(seen, latest.report)) {
+      reportChangedRef.current({ ...latest, report: latest.report });
     }
     return latest.report;
   };
@@ -720,7 +721,7 @@ export function ReportLab({
         // The report changed under us: the teacher graded it, or it was submitted or regenerated in another
         // tab. Show the current state instead of a stale page, and say which of these happened.
         const latest = await api.classroom.session().catch(() => null);
-        if (latest?.report) onReportChanged({ report: latest.report, completion: latest.completion, report_gate: latest.report_gate, material_gate: latest.material_gate });
+        if (latest?.report) onReportChanged({ ...latest, report: latest.report });
         const reason = reportConflictMessage(report, latest?.report ?? null) ?? userFacingRequestError(cause, "报告生成失败");
         setError(reason);
         revealConflict.current = "error";

@@ -2,7 +2,7 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { api, ApiError } from "./api";
 import { emptySession, patchStep } from "./session-store";
-import type { ExperimentSession, SessionResponse, SessionSaveResponse } from "./types";
+import type { ClassroomReport, ExperimentSession, SessionResponse, SessionSaveResponse } from "./types";
 import { keptEditsKey, SAVE_RETRY_DELAYS_MS, useSession } from "./use-session";
 
 const RELEASE = "a".repeat(32);
@@ -178,4 +178,89 @@ test("returning to the confirmed value before sending makes no server revision a
   expect(save).not.toHaveBeenCalled();
   expect(result.current.unsynced).toBe(false);
   expect(sessionStorage.getItem(KEPT_EDITS_KEY)).toBeNull();
+});
+
+test("refreshing teacher questions preserves unsaved experiment edits and rejects an older bank response", async () => {
+  const initial = { ...response(), quiz_revision: 0, quizzes: {} };
+  const get = spyOn(api.classroom, "session").mockResolvedValue(initial);
+  const saving = deferred<SessionSaveResponse>();
+  spyOn(api.classroom, "saveSession").mockImplementation(() => saving.promise);
+  const { result } = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  let pending!: Promise<void>;
+  act(() => {
+    result.current.patchStep(15, { research_question: "尚未保存的研究问题" });
+    pending = result.current.syncNow();
+  });
+  const quiz = { version: "quiz-step-2-r1", questions: [{ id: "tf", kind: "true_false" as const, prompt: "新题目", options: [{ id: "true", label: "正确" }, { id: "false", label: "错误" }] }] };
+  get.mockResolvedValue({ ...initial, quiz_revision: 1, quizzes: { "2": quiz } });
+  await act(async () => { await result.current.refreshLearning!(); });
+  expect(result.current.getStep<{ research_question: string }>(15)).toEqual({ research_question: "尚未保存的研究问题" });
+  expect(result.current.unsynced).toBe(true);
+  expect(result.current.quizzes?.["2"]).toEqual(quiz);
+  await act(async () => { saving.resolve({ ...initial, updated_at: NEWER }); await pending; });
+  expect(result.current.quizzes?.["2"]).toEqual(quiz);
+  expect(result.current.quiz_revision).toBe(1);
+  expect(result.current.getConfirmedStep<{ research_question: string }>(15)).toEqual({ research_question: "尚未保存的研究问题" });
+});
+
+test("a metadata refresh overtaken by a save cannot roll back completion", async () => {
+  const get = spyOn(api.classroom, "session").mockResolvedValue(response());
+  spyOn(api.classroom, "saveSession").mockResolvedValue({ ...response(undefined, NEWER), completion: { completed: [1], completed_count: 1, total: 15, steps: [] } });
+  const { result } = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  const stale = deferred<SessionResponse>();
+  get.mockImplementation(() => stale.promise);
+  const refreshing = result.current.refreshLearning!();
+  await act(async () => {
+    result.current.patchStep(1, { quiz: { version: "current", answers: { q: "a" } } });
+    await result.current.syncNow();
+  });
+  await act(async () => { stale.resolve(response()); await refreshing; });
+  expect(result.current.completion?.completed).toEqual([1]);
+});
+
+test("an old step's saved callback cannot overwrite answers after the teacher changes its version", async () => {
+  const initial = { ...response(), quiz_revision: 0, quizzes: { "1": { version: "v1", questions: [] } } };
+  const get = spyOn(api.classroom, "session").mockResolvedValue(initial);
+  let stored = emptySession();
+  const updated = { ...initial, quiz_revision: 1, quizzes: { "1": { version: "v2", questions: [] } } };
+  spyOn(api.classroom, "saveSession").mockImplementation(async ({ session }) => {
+    stored = session;
+    return { ...updated, updated_at: NEWER };
+  });
+  const { result } = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  // This is the callback retained by a QuizPanel after navigating away and unmounting it.
+  const oldSave = result.current.patchStep;
+  const oldQuiz = { version: "v1", answers: { q: "a" } };
+  await act(async () => { oldSave(1, { quiz: oldQuiz }); await result.current.syncNow(); });
+  expect(stored.steps["1"].data).toEqual({ quiz: oldQuiz }); // Same-version late success is still accepted.
+  get.mockResolvedValue({ ...updated, updated_at: NEWER });
+  await act(async () => { await result.current.refreshLearning!(); });
+  const newQuiz = { version: "v2", answers: { q: "b" } };
+  await act(async () => { result.current.patchStep(1, { quiz: newQuiz }); await result.current.syncNow(); });
+  await act(async () => { oldSave(1, { quiz: oldQuiz }); await result.current.syncNow(); });
+  expect(stored.steps["1"].data).toEqual({ quiz: newQuiz });
+  expect(result.current.getStep<{ quiz: unknown }>(1)?.quiz).toEqual(newQuiz);
+});
+
+test("a delayed learning read cannot undo report submission with the same session timestamp", async () => {
+  const initial = { ...response(), quiz_revision: 0, quizzes: {}, report_current: false };
+  const get = spyOn(api.classroom, "session").mockResolvedValue(initial);
+  const { result } = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  const stale = deferred<SessionResponse>();
+  get.mockImplementation(() => stale.promise);
+  const refreshing = result.current.refreshLearning!();
+  const report: ClassroomReport = {
+    state: "pending", markdown: "submitted", score: null, feedback: "", graded_by: null,
+    generated_at: NEWER, updated_at: NEWER, submitted_at: NEWER, graded_at: null,
+    provenance: { session_version: "test", generated_at: NEWER, years: [2020], session_fingerprint: "test", runs: [] },
+  };
+  act(() => result.current.applyReportMutation({ ...initial, report, report_current: true, completion: { completed: [15], completed_count: 1, total: 15, steps: [] } }));
+  await act(async () => { stale.resolve(initial); await refreshing; });
+  expect(result.current.report).toEqual(report);
+  expect(result.current.completion?.completed).toEqual([15]);
+  expect(result.current.reportCurrent).toBe(true);
 });

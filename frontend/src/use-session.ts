@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, isApiErrorStatus, RequestTimeoutError } from "./api";
 import { emptySession, isValidSession, patchStep as patchStoredStep, readStep, sameSessionContent } from "./session-store";
-import type { ClassroomReport, CompletionSummary, ExperimentSession, ReportGateItem, ReportMutationResponse, SessionSaveResponse } from "./types";
+import type { ClassroomReport, CompletionSummary, ExperimentSession, QuizLearningState, ReportGateItem, ReportMutationResponse, SessionSaveResponse } from "./types";
 import { isNetworkFailure, userFacingRequestError } from "./user-facing-error";
 
 const SYNC_DEBOUNCE_MS = 800;
@@ -64,7 +64,7 @@ export function isTransientSaveFailure(cause: unknown): boolean {
   return cause instanceof RequestTimeoutError || isNetworkFailure(cause);
 }
 
-export interface SessionApi {
+export interface SessionApi extends QuizLearningState {
   status: SessionStatus;
   session: ExperimentSession;
   report: ClassroomReport | null;
@@ -88,6 +88,7 @@ export interface SessionApi {
   keepUnsavedEdits: () => boolean;
   resolveSyncConflict: () => Promise<void>;
   applyReportMutation: (response: ReportMutationResponse) => void;
+  refreshLearning?: () => Promise<void>;
 }
 
 interface SaveQueueCallbacks {
@@ -190,6 +191,10 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const leavingOnPurpose = useRef(false);
   const mounted = useRef(true);
   const queue = useRef<SessionSaveQueue | null>(null);
+  const [quizState, setQuizState] = useState<QuizLearningState>({});
+  const quizRevision = useRef(-1);
+  const currentQuizzes = useRef<QuizLearningState["quizzes"]>(undefined);
+  const reportMutation = useRef(0);
 
   const persistDraft = useCallback(() => {
     if (!enabled || !username || !releaseId.current || !queue.current) return false;
@@ -203,7 +208,12 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   // The queue outlives individual renders, but uses the current account's draft writer.
   const persistRef = useRef(persistDraft);
   persistRef.current = persistDraft;
-  const applyLearningState = (response: Pick<SessionSaveResponse, "completion" | "report_current" | "report_gate" | "material_gate">) => {
+  const applyLearningState = (response: Pick<SessionSaveResponse, "completion" | "report_current" | "report_gate" | "material_gate" | "quiz_revision" | "quizzes">) => {
+    // A delayed save response must not revive a quiz version already replaced by the teacher.
+    if (response.quiz_revision !== undefined && response.quiz_revision < quizRevision.current) return;
+    if (response.quiz_revision !== undefined) quizRevision.current = response.quiz_revision;
+    currentQuizzes.current = response.quizzes;
+    setQuizState({ quiz_revision: response.quiz_revision, quizzes: response.quizzes });
     setCompletion(response.completion);
     setReportCurrent(response.report_current ?? null);
     setReportGate(response.report_gate);
@@ -263,6 +273,9 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     retries.current = 0;
     leavingOnPurpose.current = false;
     releaseId.current = null;
+    quizRevision.current = -1;
+    currentQuizzes.current = undefined;
+    setQuizState({});
   }, [enabled, username]);
 
   useEffect(() => {
@@ -321,8 +334,36 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     await queue.current!.drain();
   }, [status]);
 
+  const refreshLearning = useCallback(async () => {
+    if (!enabled || status !== "ready") return;
+    const ownedQueue = queue.current;
+    const reportVersion = reportMutation.current;
+    const response = await api.classroom.session();
+    if (!mounted.current || queue.current !== ownedQueue || reportMutation.current !== reportVersion) return;
+    // Refresh only metadata for the acknowledged snapshot, never overwrite local edits or
+    // allow a read overtaken by a save to restore outdated completion/report gates.
+    if ((response.updated_at ?? null) !== ownedQueue?.getBaseUpdatedAt()) return;
+    applyLearningState(response);
+  }, [enabled, status, username]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") void refreshLearning().catch(() => {});
+    };
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("online", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("online", refresh);
+    };
+  }, [refreshLearning]);
+
   const patchStep = useCallback(<T extends object,>(step: number, patch: Partial<T>) => {
     if (!enabled || status !== "ready") return;
+    // A grading callback survives step navigation. Compare against the live bank here,
+    // not the old QuizPanel's frozen props, before it can replace a newer saved answer.
+    if ("quiz" in patch && currentQuizzes.current
+      && (patch.quiz as { version?: string } | undefined)?.version !== currentQuizzes.current[String(step)]?.version) return;
     const next = patchStoredStep(sessionRef.current, step, patch);
     if (sameSessionContent(next, sessionRef.current)) return;
     sessionRef.current = next;
@@ -375,7 +416,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   }, [username]);
 
   return {
-    status, session, report, updatedAt, completion, reportCurrent, reportGate, materialGate, restoredEdits,
+    status, session, report, updatedAt, completion, reportCurrent, reportGate, materialGate, restoredEdits, ...quizState, refreshLearning,
     syncing: saveState.phase === "saving", unsynced: saveState.phase !== "saved" && status === "ready",
     syncError: saveState.error ?? (storageFailed ? "本标签页草稿备份失败，刷新前请等待服务器保存成功。" : null),
     syncConflict: saveState.blocked, autoRetry: retryAt !== null,
@@ -383,6 +424,10 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     getConfirmedStep: useCallback(<T,>(step: number) => readStep<T>(confirmed, step), [confirmed]),
     patchStep, syncNow, keepUnsavedEdits, resolveSyncConflict,
     retryLoad: useCallback(() => setLoadAttempt((n) => n + 1), []), loadAttempts: loadAttempt,
-    applyReportMutation: useCallback((response: ReportMutationResponse) => { setReport(response.report); applyLearningState(response); }, []),
+    applyReportMutation: useCallback((response: ReportMutationResponse) => {
+      reportMutation.current++;
+      setReport(response.report);
+      applyLearningState(response);
+    }, []),
   };
 }

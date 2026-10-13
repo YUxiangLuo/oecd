@@ -54,16 +54,24 @@ def _result(status):
 
 @pytest.fixture
 def api(monkeypatch):
-    state = {"results": {}, "saved": None, "report_gate": [], "material_gate": []}
+    state = {
+        "results": {},
+        "saved": None,
+        "report_gate": [],
+        "material_gate": [],
+        "requests": [],
+        "quizzes": {str(step): journey.quizzes.public_quiz(step) for step in range(1, 15)},
+    }
 
     def request(_base_url, method, path, **kwargs):
+        state["requests"].append((method, path))
         if path == "/api/auth/login":
             return {"token": "test-token", "user": {"name": "Journey student"}}
         if path == "/api/meta":
             return {"years": [2016, 2020], "countries": ["CHN", "USA"], "dataset": {"release_id": "a" * 32}}
         if path == "/api/classroom/session":
             if method == "GET":
-                return {"report": None, "updated_at": "initial-revision"}
+                return {"report": None, "updated_at": "initial-revision", "quizzes": state["quizzes"]}
             assert kwargs["payload"]["base_updated_at"] == "initial-revision"
             state["saved"] = deepcopy(kwargs["payload"]["session"])
             return {
@@ -107,6 +115,28 @@ def api(monkeypatch):
 
     monkeypatch.setattr(journey, "_request_json_value", request)
     return state
+
+
+@pytest.mark.parametrize("change", ["missing", "version", "prompt", "options", "kind", "step"])
+def test_seed_rejects_nondefault_public_quizzes_before_work(api, change):
+    if change == "missing":
+        api["quizzes"] = None
+    elif change == "step":
+        api["quizzes"].pop("14")
+    elif change == "version":
+        # Even restored default content retains a newer step version.
+        api["quizzes"]["1"]["version"] = "quiz-step-1-r2"
+    else:
+        question = api["quizzes"]["1"]["questions"][0]
+        question[change] = {"prompt": "Changed", "options": [], "kind": "true_false"}[change]
+    with pytest.raises(RuntimeError, match="requires current default quiz versions"):
+        journey.seed_full_journey("http://test", "student", "test-password")
+    assert api["saved"] is None
+    assert api["requests"] == [
+        ("POST", "/api/auth/login"),
+        ("GET", "/api/meta"),
+        ("GET", "/api/classroom/session"),
+    ]
 
 
 def test_seed_json_helpers_enforce_expected_shape(api, monkeypatch):

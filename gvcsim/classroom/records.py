@@ -10,6 +10,7 @@ from typing import Any
 
 import psycopg
 
+from gvcsim.classroom import quiz_config
 from gvcsim.steps import STEPS
 
 
@@ -246,6 +247,7 @@ def save_generated_report(
         ).fetchone()
         if (current_report["updated_at"] if current_report else None) != expected_report_updated_at:
             raise ReportChanged("报告或评分已更新，请刷新页面核对后再确认重新生成")
+        quiz_config.assert_revision(c, provenance.get("quiz_revision", 0))
         stored_provenance = {
             **provenance,
             "session_fingerprint": _session_fingerprint(current_session["session"]),
@@ -285,6 +287,7 @@ def submit_report(username: str) -> dict[str, Any] | None:
         if row["state"] == "draft":
             if current_session is None or not report_matches_session(current_session["session"], row):
                 raise ReportChanged("实验记录已更新，请重新生成报告")
+            quiz_config.assert_revision(c, row["provenance"].get("quiz_revision", 0))
             c.execute(
                 "UPDATE reports SET state='pending',submitted_at=now(),updated_at=now()"
                 " WHERE account_id=%s AND release_id=%s",

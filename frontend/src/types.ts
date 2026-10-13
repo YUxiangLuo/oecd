@@ -1,5 +1,30 @@
 export type RegressionOutcome = "trade" | "production" | "length" | "network";
 
+/** Private teacher contract; never exposed through the public student quiz. */
+export interface TeacherQuizQuestion {
+  id: string;
+  kind: "single_choice" | "true_false";
+  prompt: string;
+  options: { id: string; label: string }[];
+  correct: string;
+  explanation: string;
+  hint: string;
+}
+
+export interface TeacherQuizBank {
+  revision: number;
+  steps: {
+    step: number;
+    title: string;
+    version: string;
+    questions: TeacherQuizQuestion[];
+    defaults: TeacherQuizQuestion[];
+    is_default: boolean;
+    updated_at: string | null;
+    updated_by: string | null;
+  }[];
+}
+
 interface QuizOption {
   id: string;
   label: string;
@@ -7,6 +32,7 @@ interface QuizOption {
 
 interface QuizQuestion {
   id: string;
+  kind?: "single_choice" | "true_false";
   prompt: string;
   options: QuizOption[];
 }
@@ -37,11 +63,12 @@ export interface Step {
     action: string;
     output: string;
   };
-  /** 步骤 1–14 的固定理解检查；第 15 步以报告生成作为完成条件。 */
+  /** 步骤 1–14 的教师配置理解题；第 15 步以提交报告作为完成条件。 */
   quiz?: StepQuiz;
 }
 
 export interface StepsResponse {
+  quiz_revision?: number;
   stages: Record<string, string>;
   steps: Step[];
 }
@@ -601,7 +628,12 @@ interface ReportRun {
   result: RegressionResponse["result"];
 }
 
-export interface SessionResponse {
+export interface QuizLearningState {
+  quiz_revision?: number;
+  quizzes?: Record<string, StepQuiz>;
+}
+
+export interface SessionResponse extends QuizLearningState {
   /** Data release authenticated by the server for this workspace. */
   release_id: string;
   session: ExperimentSession;
@@ -614,7 +646,7 @@ export interface SessionResponse {
   report: ClassroomReport | null;
 }
 
-export interface SessionSaveResponse {
+export interface SessionSaveResponse extends QuizLearningState {
   /** Acknowledges the submitted snapshot without retransmitting its contents. */
   updated_at: string;
   completion: CompletionSummary;
@@ -624,7 +656,7 @@ export interface SessionSaveResponse {
   material_gate: ReportGateItem[];
 }
 
-export interface ReportMutationResponse {
+export interface ReportMutationResponse extends QuizLearningState {
   report: ClassroomReport;
   completion: CompletionSummary;
   /** Whether the latest report was generated from this record (absent from older servers). */

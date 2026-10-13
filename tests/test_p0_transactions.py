@@ -42,7 +42,7 @@ def test_stale_student_generation_preserves_grade_and_allows_confirmed_retry(
         nonlocal graded
         graded = db.grade_report(account_id, 96, "preserve this feedback", "teacher", viewed["updated_at"])
 
-    def build(_session, _name):
+    def build(_session, _name, *, quiz_bank):
         if grade_during_build and graded is None:
             grade()
         return teaching_report.TeachingReport("replacement", {}, "test.md")
@@ -73,7 +73,7 @@ def test_session_saved_during_report_build_rejects_stale_source(teaching_db, mon
     original = db.latest_report("student")
     entered, release = threading.Event(), threading.Event()
 
-    def blocked_build(_session, _name):
+    def blocked_build(_session, _name, *, quiz_bank):
         entered.set()
         assert release.wait(10)
         return teaching_report.TeachingReport("stale report", {}, "test.md")
@@ -158,7 +158,7 @@ def test_grade_and_regeneration_have_a_legal_serial_outcome(teaching_db, monkeyp
     teacher = client("teacher")
     student = client()
     monkeypatch.setattr(
-        teaching_report, "build", lambda *_args: teaching_report.TeachingReport("new report", {}, "test.md")
+        teaching_report, "build", lambda *_args, quiz_bank: teaching_report.TeachingReport("new report", {}, "test.md")
     )
 
     def grade():

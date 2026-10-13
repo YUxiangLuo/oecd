@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from test_model_spec import _panel
 
-from gvcsim import regression_routes
+from gvcsim import quizzes, regression_routes
 from gvcsim.api import app
 from gvcsim.classroom import records
 from gvcsim.classroom import routes as classroom_routes
@@ -515,16 +515,17 @@ def test_report_generation_charges_the_reported_models_once_the_gate_passes(monk
     charged = []
     session = empty_session()
     session["steps"]["11"] = make_record({"custom_results": [_saved("结果1", in_report=True)]})
+    monkeypatch.setattr(classroom_routes.quiz_config, "load_bank", quizzes.default_bank)
     monkeypatch.setattr(classroom_routes, "_workspace", lambda _sub: (session, None, None))
     monkeypatch.setattr(
         classroom_routes, "charge_report_runs", lambda account, designs: charged.append((account, designs))
     )
-    monkeypatch.setattr(classroom_routes.teaching_report, "build", lambda *_args: "built")
-    monkeypatch.setattr(classroom_routes, "check_gate", lambda _session: [{"step": 1}])
+    monkeypatch.setattr(classroom_routes.teaching_report, "build", lambda *_args, quiz_bank: "built")
+    monkeypatch.setattr(classroom_routes, "check_gate", lambda _session, *, quiz_bank: [{"step": 1}])
     with pytest.raises(classroom_routes.HTTPException):
         asyncio.run(classroom_routes._prepare_report({"sub": "student", "aid": 3}))
     assert charged == []  # blocked by the gate: nothing to compute, nothing charged
-    monkeypatch.setattr(classroom_routes, "check_gate", lambda _session: [])
+    monkeypatch.setattr(classroom_routes, "check_gate", lambda _session, *, quiz_bank: [])
     with pytest.raises(classroom_routes.HTTPException):  # the row is missing in this stub
         asyncio.run(classroom_routes._prepare_report({"sub": "student", "aid": 3}))
     [(account, designs)] = charged

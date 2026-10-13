@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import anyio
 
-from gvcsim import concurrency
+from gvcsim import concurrency, quizzes
 from gvcsim.classroom import routes
 from gvcsim.singleflight import AsyncSingleFlightCache
 
@@ -24,8 +24,13 @@ def test_report_database_and_learning_state_run_outside_event_loop(monkeypatch):
             check("workspace")
             return {}, None, {"updated_at": "version-1"}
 
-        def build(session, name):
+        def bank():
+            check("bank")
+            return quizzes.default_bank()
+
+        def build(session, name, **kwargs):
             check("build")
+            assert kwargs["quiz_bank"] == quizzes.default_bank()
             return SimpleNamespace(markdown="# report", provenance={}, suggested_filename="report.md")
 
         def save(*args):
@@ -38,12 +43,13 @@ def test_report_database_and_learning_state_run_outside_event_loop(monkeypatch):
             return {"completion": {}}
 
         monkeypatch.setattr(routes, "_workspace", workspace)
+        monkeypatch.setattr(routes.quiz_config, "load_bank", bank)
         monkeypatch.setattr(routes.teaching_report, "build", build)
         monkeypatch.setattr(routes.db, "save_generated_report", save)
         monkeypatch.setattr(routes, "_learning_state", learning)
         response = await routes.generate_report({"sub": "student"})
         assert response["report"]["state"] == "draft"
-        assert observed == ["workspace", "build", "save", "learning"]
+        assert observed == ["workspace", "bank", "build", "save", "learning"]
 
     anyio.run(scenario)
 
@@ -57,7 +63,7 @@ def test_duplicate_report_requests_share_one_build_but_later_request_rebuilds(mo
         def workspace(_username):
             return {}, None, {"updated_at": "version-1"}
 
-        async def run_report_build(_function, *_args):
+        async def run_report_build(_function, *_args, **_kwargs):
             nonlocal builds
             builds += 1
             started.set()
@@ -69,6 +75,7 @@ def test_duplicate_report_requests_share_one_build_but_later_request_rebuilds(mo
 
         monkeypatch.setattr(routes, "_REPORT_FLIGHTS", AsyncSingleFlightCache())
         monkeypatch.setattr(routes, "_workspace", workspace)
+        monkeypatch.setattr(routes.quiz_config, "load_bank", quizzes.default_bank)
         monkeypatch.setattr(routes.concurrency, "run_report_build", run_report_build)
         monkeypatch.setattr(routes.concurrency, "run_sync", run_sync)
         monkeypatch.setattr(routes.db, "save_generated_report", lambda *_args: {"state": "draft"})

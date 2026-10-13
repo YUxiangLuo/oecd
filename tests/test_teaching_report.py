@@ -1535,7 +1535,7 @@ def test_report_renders_authoritative_result_fixture_without_calling_estimator(t
     assert report.provenance["release_id"] == "2" * 32
     assert report.provenance["quiz_version"] == quizzes.QUIZ_VERSION
     assert report.provenance["quiz_versions"] == {
-        str(step): "course-quiz-v10" if 10 <= step <= 14 else "course-quiz-v8" for step in range(1, 15)
+        str(step): "course-quiz-v11" if 10 <= step <= 14 else "course-quiz-v8" for step in range(1, 15)
     }
     assert report.provenance["course_release"] == config.COURSE_RELEASE
     assert report.provenance["runs"][0]["step"] == 11

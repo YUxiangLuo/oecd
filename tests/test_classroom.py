@@ -50,7 +50,7 @@ def test_concurrent_first_session_saves_are_content_idempotent(teaching_db, same
     assert stored["session"] in (first, second)
 
 
-def test_v12_schema_contains_release_auth_and_class_contracts(teaching_db):
+def test_v14_schema_contains_release_auth_class_and_quiz_contracts(teaching_db):
     with db.conn() as connection:
         names = {
             row["tablename"]
@@ -76,8 +76,9 @@ def test_v12_schema_contains_release_auth_and_class_contracts(teaching_db):
         "class_enrollments",
         "experiment_sessions",
         "reports",
+        "quiz_config",
     }
-    assert db.TEACHING_DB_VERSION == "gvcsim-teaching-db-v13"
+    assert db.TEACHING_DB_VERSION == "gvcsim-teaching-db-v14"
     assert "auth_version" in account_columns
     assert "release_id" in session_columns
 
@@ -279,7 +280,7 @@ def test_student_list_query_count_is_constant(teaching_db, monkeypatch):
     rows = db.list_students("teacher")
 
     assert len(rows) == 4
-    assert query_count == 2
+    assert query_count == 3  # teacher authorization, one bank snapshot, and the entire roster
 
 
 def test_student_list_uses_verified_completion_and_report_state(teaching_db):
@@ -412,7 +413,7 @@ def test_archived_academic_groups_keep_history_but_reject_new_activity(teaching_
         db.set_student_enrollment(account_id, 999_999, None, "teacher")
 
 
-def test_teacher_progress_counts_step_15_only_for_a_handed_in_report():
+def test_teacher_progress_counts_step_15_only_for_a_handed_in_report(teaching_db):
     from gvcsim.classroom import management, records
 
     empty = {"steps": {}}

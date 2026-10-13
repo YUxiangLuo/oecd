@@ -4,7 +4,9 @@
 The helper is intentionally a test harness: it imports the server-owned quiz key,
 runs all four public regression endpoints, records real release-bound evidence, and
 saves through the same optimistic-concurrency session route used by the browser.
-It never writes PostgreSQL directly and refuses a pre-existing report.
+It never writes PostgreSQL directly and refuses a pre-existing report. Before
+using the bundled default answers, it checks all current public quizzes against
+the defaults, including step versions; it never fetches teacher/private answers.
 """
 
 from __future__ import annotations
@@ -239,6 +241,12 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
     workspace = _request_json(base_url, "GET", "/api/classroom/session", token=token, timeout=20.0)
     if workspace.get("report") is not None:
         raise RuntimeError("full-journey seed requires a student without an existing report")
+    defaults = {str(step): quizzes.public_quiz(step) for step in range(1, 15)}
+    if workspace.get("quizzes") != defaults:
+        raise RuntimeError(
+            "full-journey seed requires current default quiz versions and public questions for Steps 1-14; "
+            "customized or missing quizzes are unsupported (restoring defaults does not restore their versions)"
+        )
     years = meta.get("years")
     if not isinstance(years, list) or not years or not all(isinstance(year, int) for year in years):
         raise RuntimeError("active release metadata has no valid years")

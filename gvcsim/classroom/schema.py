@@ -5,10 +5,15 @@ from typing import Any
 import psycopg
 
 _SCHEMA_LOCK_ID = 736_861_016
-TEACHING_DB_VERSION = "gvcsim-teaching-db-v13"
+TEACHING_DB_VERSION = "gvcsim-teaching-db-v14"
 
 
 SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS quiz_config (
+  singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+  revision bigint NOT NULL CHECK (revision >= 0),
+  steps jsonb NOT NULL CHECK (jsonb_typeof(steps) = 'object')
+);
 CREATE TABLE IF NOT EXISTS schema_meta (
   singleton  boolean PRIMARY KEY DEFAULT true CHECK (singleton),
   version    text NOT NULL,

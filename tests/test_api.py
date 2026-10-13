@@ -123,6 +123,59 @@ def test_quiz_returns_normalized_answers(teaching_db):
     assert response.json()["quiz"] == correct
 
 
+def test_teacher_quiz_api_changes_only_one_step_and_student_sees_no_answers(teaching_db):
+    student = _client(teaching_db)
+    teacher = _client(teaching_db, "teacher")
+    bank = teacher.get("/api/classroom/quizzes").json()
+    assert [entry["step"] for entry in bank["steps"]] == list(range(1, 15))
+    assert sum(len(entry["questions"]) for entry in bank["steps"]) == 24
+    version = bank["steps"][0]["version"]
+    question = {
+        "id": "custom-true-false",
+        "kind": "true_false",
+        "prompt": "中间投入表记录跨行业投入。",
+        "options": [{"id": "true", "label": "正确"}, {"id": "false", "label": "错误"}],
+        "correct": "true",
+        "hint": "请查看表头",
+        "explanation": "包含国内与跨境投入",
+    }
+    body = {"version": version, "questions": [question]}
+    assert student.get("/api/classroom/quizzes").status_code == 403
+    assert student.put("/api/classroom/quizzes/1", json=body).status_code == 403
+    for step in (0, 15):
+        assert teacher.put(f"/api/classroom/quizzes/{step}", json=body).status_code == 422
+    session = empty_session()
+    for step in (1, 2):
+        session["steps"][str(step)] = make_record({"quiz": quizzes.correct_quiz(step), "country": "CHN"})
+    student.put("/api/classroom/session", json={"session": session, "base_updated_at": None}).raise_for_status()
+    changed = teacher.put("/api/classroom/quizzes/1", json=body)
+    assert changed.status_code == 200
+    new_bank = changed.json()
+    assert new_bank["revision"] == 1
+    assert new_bank["steps"][1:] == bank["steps"][1:]
+    body["version"] = new_bank["steps"][0]["version"]
+    assert teacher.put("/api/classroom/quizzes/1", json=body).json() == new_bank
+    public = student.get("/api/steps").json()["steps"][0]["quiz"]["questions"][0]
+    assert set(public) == {"id", "kind", "prompt", "options"}
+    workspace = student.get("/api/classroom/session").json()
+    assert workspace["quizzes"]["1"]["questions"][0] == public
+    assert workspace["completion"]["completed"] == [2]
+    assert workspace["session"] == session
+    stale = student.post("/api/classroom/quiz/submit", json={"step": 1, **quizzes.correct_quiz(1)})
+    assert stale.status_code == 409 and stale.json()["detail"]["code"] == "quiz_changed"
+    wrong = student.post(
+        "/api/classroom/quiz/submit", json={"step": 1, "version": body["version"], "answers": {question["id"]: "false"}}
+    ).json()
+    assert wrong["passed"] is False and wrong["results"][0]["explanation"] == question["hint"]
+    right = student.post(
+        "/api/classroom/quiz/submit", json={"step": 1, "version": body["version"], "answers": {question["id"]: "true"}}
+    ).json()
+    assert right["passed"] is True and right["results"][0]["explanation"] == question["explanation"]
+    session["steps"]["1"]["data"]["quiz"] = right["quiz"]
+    saved = student.put("/api/classroom/session", json={"session": session, "base_updated_at": workspace["updated_at"]})
+    assert saved.json()["completion"]["completed"] == [1, 2]
+
+
 def test_session_contract_uses_optimistic_concurrency(teaching_db):
     client = _client(teaching_db)
     initial = client.get("/api/classroom/session").json()
@@ -137,6 +190,8 @@ def test_session_contract_uses_optimistic_concurrency(teaching_db):
         "report_current",
         "report_gate",
         "material_gate",
+        "quiz_revision",
+        "quizzes",
     }
     assert client.get("/api/classroom/session").json()["session"] == first
 

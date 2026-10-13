@@ -86,6 +86,10 @@ function AppContent() {
     user?.role === "student" ? user.username : undefined,
   );
 
+  useEffect(() => {
+    void session.refreshLearning?.().catch(() => {});
+  }, [current, session.refreshLearning]);
+
   const completedSteps = new Set(session.completion?.completed ?? []);
   const currentCompletion = session.completion?.steps.find((item) => item.step === current);
   const stepState: StepStateApi = {
@@ -415,7 +419,7 @@ function AppContent() {
     <StudentWorkspace
       user={user}
       meta={meta}
-      stepsData={stepsData}
+      stepsData={session.quizzes ? { ...stepsData, steps: stepsData.steps.map((step) => ({ ...step, quiz: session.quizzes![String(step.n)] })) } : stepsData}
       current={current}
       session={session}
       stepState={stepState}

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { api } from "./api";
+import { api, ApiError } from "./api";
 import { QuizPanel, type QuizDraftStore } from "./step-quiz";
 import type { Step, StepStateApi } from "./types";
 
@@ -258,5 +258,42 @@ test("after a correct answer, focus returns to the submit button once completion
     // …but returns as soon as the save finishes and the button is usable.
     act(() => finishSave());
     expect(document.activeElement?.textContent).toBe("重新检查答案");
+  } finally { api.classroom.submitQuiz = original; }
+});
+
+test("a teacher revision discards old selections and late grading, then allows a new true/false answer", async () => {
+  const original = api.classroom.submitQuiz;
+  const pending = pendingGrade();
+  let saved: unknown = null;
+  api.classroom.submitQuiz = () => pending.promise;
+  const student = { ...state, complete: true, save: (patch: unknown) => { saved = patch; } };
+  const updated: Step = { ...step, quiz: { version: "v2", questions: [{ id: "tf", kind: "true_false", prompt: "通过检查才发布。", options: [{ id: "true", label: "正确" }, { id: "false", label: "错误" }] }] } };
+  try {
+    const { rerender } = render(<QuizPanel step={step} state={student} />);
+    fireEvent.click(screen.getByRole("button", { name: "重新检查答案" }));
+    rerender(<QuizPanel step={updated} state={student} />);
+    await act(async () => { pending.resolve(passed); });
+    expect(saved).toBeNull();
+    expect(screen.queryByText("✓ 理解题已完成")).toBeNull();
+    expect(screen.getByText(/老师已更新本步题目/)).toBeTruthy();
+    expect(screen.getByText(/【判断题】/)).toBeTruthy();
+    expect((screen.getByLabelText("正确") as HTMLInputElement).checked).toBe(false);
+    api.classroom.submitQuiz = async () => ({ passed: true, version: "v2", quiz: { version: "v2", answers: { tf: "true" } }, results: [{ question_id: "tf", correct: true, explanation: "新解析" }] });
+    fireEvent.click(screen.getByLabelText("正确"));
+    fireEvent.click(screen.getByRole("button", { name: "提交答案" }));
+    await waitFor(() => expect(saved).toEqual({ quiz: { version: "v2", answers: { tf: "true" } } }));
+  } finally { api.classroom.submitQuiz = original; }
+});
+
+test("stale quiz rejection offers metadata reload instead of reloading the student's workspace", async () => {
+  const original = api.classroom.submitQuiz;
+  api.classroom.submitQuiz = async () => { throw new ApiError(409, { message: "老师已更新题目" }, ""); };
+  let refreshed = false;
+  try {
+    render(<QuizPanel step={step} state={state} onRefresh={async () => { refreshed = true; }} />);
+    fireEvent.click(screen.getByRole("button", { name: "重新提交答案" }));
+    fireEvent.click(await screen.findByRole("button", { name: "载入最新题目" }));
+    await waitFor(() => expect(refreshed).toBe(true));
+    expect((screen.getByLabelText("通过后") as HTMLInputElement).checked).toBe(true);
   } finally { api.classroom.submitQuiz = original; }
 });

@@ -884,6 +884,49 @@ const sessionWith = (latest: ReportMutationResponse, steps: Record<string, unkno
 });
 const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
 
+for (const path of ["refresh", "generate conflict"] as const) {
+  test(`${path} preserves the server's complete learning state`, async () => {
+    const latest = { ...sessionWith(mutation("graded")), quiz_revision: 7, quizzes: {}, report_current: false };
+    const session = spyOn(api.classroom, "session").mockResolvedValue(latest);
+    const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new ApiError(409, "报告已更新", "Conflict"));
+    const changed: ReportMutationResponse[] = [];
+    try {
+      render(<ReportLab {...finishProps} report={report("pending")} onReportChanged={(response) => changed.push(response)} />);
+      await act(async () => {
+        if (path === "refresh") window.dispatchEvent(new Event("focus"));
+        else fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" }));
+      });
+      expect(session).toHaveBeenCalledTimes(1);
+      expect(generate).toHaveBeenCalledTimes(path === "refresh" ? 0 : 1);
+      expect(changed).toHaveLength(1);
+      expect(changed[0]).toMatchObject({ report: latest.report, quiz_revision: 7, quizzes: {}, report_current: false });
+    } finally { session.mockRestore(); generate.mockRestore(); }
+  });
+}
+
+test("a delayed refresh cannot replace a generation and submission that already completed", async () => {
+  let resolveRead!: (value: ReturnType<typeof sessionWith>) => void;
+  const session = spyOn(api.classroom, "session").mockImplementation(() => new Promise((resolve) => { resolveRead = resolve; }));
+  const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("draft"));
+  const submit = spyOn(api.classroom, "submitReport").mockResolvedValue(mutation("pending"));
+  const changed: ClassroomReport["state"][] = [];
+  function Harness() {
+    const [current, setCurrent] = useState<ClassroomReport | null>(null);
+    return <ReportLab {...finishProps} report={current} onReportChanged={(response) => {
+      changed.push(response.report.state);
+      setCurrent(response.report);
+    }} />;
+  }
+  try {
+    render(<Harness />);
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "生成并提交报告" })); });
+    expect(changed).toEqual(["draft", "pending"]);
+    await act(async () => { resolveRead(sessionWith(mutation("graded"))); });
+    expect(changed).toEqual(["draft", "pending"]);
+  } finally { session.mockRestore(); generate.mockRestore(); submit.mockRestore(); }
+});
+
 test("once a submitted report exists, an unfinished answer blocks updating it, not generating it", () => {
   const gate = [{ step: 15, title: "你的分析", missing: ["填写研究问题"] }];
   render(<ReportLab {...finishProps} report={report("pending")} reportGate={gate} sessionUpdatedAt="2026-08-14T00:00:00Z" />);

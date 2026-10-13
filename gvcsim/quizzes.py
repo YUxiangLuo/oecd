@@ -1,23 +1,21 @@
-"""课程步骤的固定单选题题库。
-
-题干和选项可以公开给前端；正确答案与反馈只在服务端判题后返回。题库版本
-随不兼容的题目/答案变更按步骤提升；仅澄清措辞且题目 ID、选项 ID 和正确答案不变时
-保持版本，避免让学生无意义地重答其他步骤。
-"""
+"""Default quizzes and pure grading against an explicit teacher-configured snapshot."""
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from gvcsim.indicator_schema import PRODUCTION_LENGTH_OPERATIONAL_DEFINITION
 
 QUIZ_VERSION = "course-quiz-v8"
-# Steps 10–14 were rewritten for the v10 model (two-year relation, exchange-rate control, the workbench).
-STEP_QUIZ_VERSIONS = {step: "course-quiz-v10" for step in range(10, 15)}
+# Regression defaults check basic concepts without requiring optional model experiments.
+STEP_QUIZ_VERSIONS = {step: "course-quiz-v11" for step in range(10, 15)}
 
 
-def quiz_version(step: int) -> str:
+def quiz_version(step: int, bank: dict[str, Any] | None = None) -> str:
     """未修改的步骤沿用默认版本，局部换题只使本步旧答案失效。"""
+    if bank is not None:
+        return str(bank["steps"][str(step)]["version"])
     return STEP_QUIZ_VERSIONS.get(step, QUIZ_VERSION)
 
 
@@ -173,34 +171,31 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
         ),
         _question(
             "s10-lag-v10",
-            "第二批国家从 2019 年起被加征 25% 关税。它的一个货物行业首年对美出口份额 w 为 40%。"
-            "2019 年这个国家×行业的 X 和上一年的 X（L1.X）分别是多少？",
+            "上一年的 X（L1.X）指什么？",
             [
-                _option("a", "X = 10 个百分点，L1.X = 10 个百分点"),
-                _option("b", "X = 10 个百分点，L1.X = 0"),
-                _option("c", "X = 0，L1.X = 10 个百分点"),
+                _option("a", "下一年的关税暴露"),
+                _option("b", "同一个国家和行业上一年的关税暴露"),
+                _option("c", "当年的关税暴露乘以 2"),
             ],
             "b",
-            "2019 年 X = 40% × 25% = 10 个百分点；L1.X 是上一年（2018 年）的 X，那时这个国家还没被加税，τ = 0，"
-            "所以 L1.X = 0。到 2020 年，L1.X 才变成 10 个百分点。",
+            "L1.X 就是上一年的 X。例如，2020 年这一行的 L1.X，取同一国家和行业在 2019 年的 X。",
         ),
         _question(
             "s10-fixed-w-v10",
-            "为什么 w 固定用 2016 年（加税前）的对美出口份额？",
+            "计算 X 时，出口份额 w 使用哪一年的数据？",
             [
-                _option("a", "因为 2016 年的数据比其他年份更准确"),
-                _option("b", "因为 2016 年以后各国不再向美国出口"),
-                _option("c", "加税后出口去向可能改变；固定用加税前的份额，X 的变化就只来自税率"),
+                _option("a", "每一年的当年数据"),
+                _option("b", "加税结束后的数据"),
+                _option("c", "固定使用首年（加税前）的数据"),
             ],
             "c",
-            "关税本身可能改变出口去向。如果每年都用当年的对美出口份额，X 里就混进了关税带来的变化；"
-            "固定用加税前的 w，X 的变化只来自税率 τ。",
+            "w 固定使用首年、加税前的对美出口份额。对同一国家和行业，之后 X 的变化只来自税率 τ。",
         ),
     ],
     11: [
         _question(
             "s11-cumulative-v10",
-            "步骤 11–14 的主结果“两年累计”是什么？",
+            "默认模型的“两年累计”怎样得到？",
             [
                 _option("a", "当年 X 的系数与上一年 X（L1.X）的系数之和"),
                 _option("b", "当年 X 的系数乘以 2"),
@@ -211,29 +206,25 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
         ),
         _question(
             "s11-control-v10",
-            "默认模型为什么放入汇率变动？",
+            "汇率变动等控制变量有什么作用？",
             [
                 _option("a", "为了让 R² 变大"),
                 _option("b", "因为汇率变动是关税暴露 X 的一部分"),
-                _option("c", "它与加税同时变化，又与 Y 有关；不放进去，会把它的作用算到关税头上"),
+                _option("c", "在比较 X 与 Y 时，也考虑汇率等其他因素"),
             ],
             "c",
-            "一个变量如果既与 X 同时变化、又影响 Y，它的作用就会混进 X 的估计。把它作为控制变量放进模型，"
-            "X 的系数才是扣掉它之后的关联。可以在“改模型、对比”里去掉它，看看 X 各项合计怎样变。",
+            "控制变量用于考虑其他相关因素，减少把它们与 Y 的关联混到 X 上。加入控制变量并不自动证明因果关系。",
         ),
         _question(
             "s11-reading-v10",
-            "独立读数练习：两年累计为 −1.20 个百分点（X 每高 1 个百分点，Y 两年累计平均相差多少），"
-            "95% 区间为 [−1.50, −0.90] 个百分点。哪种表述正确？",
+            "外国增加值项占比从 20% 变为 18%，相差多少个百分点？",
             [
-                _option("a", "X 每高 1 个百分点，Y 两年累计相对低 1.20%"),
-                _option("b", "X 每高 1 个百分点，Y 两年累计平均低 1.20 个百分点"),
-                _option("c", "X 每高 1 个百分点，Y 两年累计平均低 1.50 个百分点"),
+                _option("a", "高 2 个百分点"),
+                _option("b", "低 2 个百分点"),
+                _option("c", "低 18 个百分点"),
             ],
             "b",
-            "−1.20 表示 X 每高 1 个百分点，Y 两年累计平均低 1.20 个百分点，不是相对低 1.20%。"
-            "整个区间都低于 0，方向明确；−1.50 只是区间的一端，不是平均差异。"
-            "这是独立算例，不是你本次回归的实际结果。",
+            "18% − 20% = −2 个百分点。“百分点”表示两个比例的差，不是相对变化的百分比。这是单位练习，不是本次回归结果。",
         ),
     ],
     12: [
@@ -250,7 +241,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
         ),
         _question(
             "s12-compare",
-            "本步条形图里灰色的“方向不确定”那一条（悬停或用键盘移到它上面看区间，不用点击），95% 区间包含 0。这时应该怎样表述？",
+            "回归结果的 95% 区间包含 0，应该怎样表述？",
             [
                 _option("a", "已经证明完全没有关联"),
                 _option("b", "方向还不确定，不能判断 X 越高时 Y 越高还是越低"),
@@ -260,17 +251,15 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "区间包含 0 表示方向还不确定，不等于证明没有关联。",
         ),
         _question(
-            "s12-omitted-v10",
-            "在“改模型、对比”里去掉一个控制变量后，X 各项合计明显变化；加入另一个变量后几乎不变。前一种情况说明什么？",
+            "s12-share-v11",
+            "复杂 GVC 生产份额较低，能直接说明其生产总量较小吗？",
             [
-                _option("a", "被去掉的变量本身不重要"),
-                _option("b", "X 的估计值越大越可信"),
-                _option("c", "被去掉的变量既与 X 同时变化、又影响 Y，漏掉它会使 X 的估计偏离"),
+                _option("a", "能，份额和总量是同一个数"),
+                _option("b", "能，份额较低就表示没有跨境生产"),
+                _option("c", "不能，份额是比例，不等于生产总量"),
             ],
             "c",
-            "这叫遗漏变量偏误：一个变量与 X 相关、又影响 Y，不放进模型时，它的作用会被算到 X 头上。"
-            "加入后几乎不变，说明这个变量与 X 几乎不相关、或对 Y 几乎没有作用（两者有一个接近 0 就不会造成偏误），"
-            "结论对它是稳健的。",
+            "份额只说明这类生产活动占多大比例。判断绝对量，还要知道作为分母的总量。",
         ),
     ],
     13: [
@@ -298,15 +287,14 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
         ),
         _question(
             "s13-effects-v10",
-            "固定效应只勾“国家、行业、年份”，不勾“国家×行业”时，模型没有扣掉的是什么？",
+            "“国家×行业”固定效应主要扣除什么差异？",
             [
                 _option("a", "每一年所有国家共同的变化"),
-                _option("b", "同一个国家里各个行业自己的平均水平差异"),
-                _option("c", "各国之间平均水平的差异"),
+                _option("b", "各个国家和行业组合长期不变的水平差异"),
+                _option("c", "所有年份的关税变化"),
             ],
             "b",
-            "国家 FE 和行业 FE 分别扣掉国家和行业的平均水平，但“某国某行业”特有的水平（例如加拿大汽车业比加拿大其他行业高出多少）"
-            "仍留在模型里；它若与 X 有关，估计就会偏离。国家×行业 FE 给每个国家×行业一个截距，才能扣掉它。",
+            "每个国家×行业可以有自己的固定起点，模型扣除这些长期不变的差异。每年共同的变化由年份固定效应处理。",
         ),
     ],
     14: [
@@ -333,30 +321,34 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "四步结果都应报告；单位不同的结果换算成标准差后再并列，看不出明确方向的结果也要保留，并说明各自的限制。",
         ),
         _question(
-            "s14-lag2-v10",
-            "在“改模型、对比”里加入两年前的 X（L2.X）后，它的 95% 区间包含 0。应该怎样写？",
+            "s14-source-v11",
+            "本课程的模拟回归结果，可以直接当作真实关税政策的证据吗？",
             [
-                _option("a", "已经证明两年后完全没有关联"),
-                _option("b", "说明 L1.X 的估计是错的"),
-                _option("c", "没有证据显示两年后还有额外的关联，但不能写成已证明没有关联"),
+                _option("a", "可以，只要结果显著"),
+                _option("b", "可以，只要样本数量多"),
+                _option("c", "不可以，这些结果用于教学练习"),
             ],
             "c",
-            "区间包含 0 表示方向不确定：只能说没有看到两年后额外关联的证据，不能写成已证明没有关联。"
-            "默认模型只放到 L1.X，与这一结果一致。",
+            "关税情景和回归的 Y 由课程设定或生成，用来练习建模和读结果，不能据此判断真实政策效果。",
         ),
     ],
 }
 
 
-def public_quiz(step: int) -> dict[str, Any] | None:
+def public_quiz(step: int, bank: dict[str, Any] | None = None) -> dict[str, Any] | None:
     """返回不含答案与反馈的前端题目。"""
-    questions = STEP_QUIZZES.get(step)
+    questions = _questions(step, bank)
     if not questions:
         return None
     return {
-        "version": quiz_version(step),
+        "version": quiz_version(step, bank),
         "questions": [
-            {"id": question["id"], "prompt": question["prompt"], "options": question["options"]}
+            {
+                "id": question["id"],
+                "kind": question.get("kind", "single_choice"),
+                "prompt": question["prompt"],
+                "options": deepcopy(question["options"]),
+            }
             for question in questions
         ],
     }
@@ -376,29 +368,31 @@ HINTS: dict[str, str] = {
     "s08-length-viz": "提示：回忆步骤 4：前向 GVC 段长度 ÷ 后向 GVC 段长度（GVC 位置指数）大于 1 时，经济体更靠上游还是下游？",
     "s09-network-viz": "提示：中心性是在哪张网络上计算的？回看步骤 5 的计算方法，想想换选国家时这张网络本身有没有变。",
     "s10-x-definition-v8": "提示：回看本步“关税暴露 X”一节和所选例子的逐年读数：X 要同时反映对美出口占多大比重、加征的税率有多高，这两个量怎样组合？其中任一项为 0 时，X 应该是多少？",
-    "s10-lag-v10": "提示：先算 2019 年的 X；L1.X 是哪一年的 X？那一年这个国家被加税了吗？",
-    "s10-fixed-w-v10": "提示：如果每年都用当年的对美出口份额，关税本身会不会改变这个份额？",
+    "s10-lag-v10": "提示：对照逐年读数中 X 和 L1.X 两列，看看相邻两行的数值。",
+    "s10-fixed-w-v10": "提示：回看本步对 w 的说明，留意“首年”两个字。",
     "s11-cumulative-v10": "提示：回看“默认模型”的方程，β₁ 和 β₂ 分别乘的是什么？",
-    "s11-control-v10": "提示：先点“计算贸易流回归”，再在下面出现的“改模型、对比”里去掉汇率变动再算一次，看 X 各项合计怎样变；想想为什么会这样。",
-    "s11-reading-v10": "提示：分清“个百分点”和“%”；估计值和区间端点，哪个才是平均差异？",
+    "s11-control-v10": "提示：除了关税暴露，出口价值构成还可能与哪些因素有关？",
+    "s11-reading-v10": "提示：先判断 18% 比 20% 高还是低，再用两者相减。",
     "s12-metric": "提示：复杂 GVC 生产份额的分子是哪类生产活动？回看步骤 3 的四类生产活动。",
-    "s12-compare": "提示：区间包含 0 时，正负两个方向都在区间内。这能说明“没有关联”吗？",
-    "s12-omitted-v10": "提示：回看步骤 11 关于汇率变动的题：一个变量要同时满足哪两个条件，漏掉它才会让 X 的估计偏离？",
+    "s12-compare": "提示：想一想，区间里仍然有 0 时，能不能排除没有差异的可能？",
+    "s12-share-v11": "提示：10% 和 20% 如果对应不同大小的总量，能只看比例比较绝对量吗？",
     "s13-metric": "提示：回看步骤 4：生产长度由累计总产出除以关联增加值得到，它是什么的平均数？",
     "s13-compare": "提示：比较两个数的大小之前要先确认什么？想想步骤 11–14 的条形图为什么都换算成“个标准差”再并排画。",
-    "s13-effects-v10": "提示：国家 FE 加行业 FE，等于给每个国家×行业一个截距吗？想想加拿大汽车业和加拿大其他行业的差别算在哪里。",
+    "s13-effects-v10": "提示：想一想，“固定”描述的是每年都在变化的因素，还是各组合各自的起点？",
     "s14-metric-v9": "提示：回看步骤 5：加权总度把哪两个方向的流量加在一起？它衡量的是流量规模，还是最短路线？",
     "s14-compare-v10": "提示：只挑一部分结果会让结论产生什么偏差？单位不同的结果怎样才能并排比较？",
-    "s14-lag2-v10": "提示：回看步骤 12 灰色那一条的题：区间包含 0 时应怎样表述？",
+    "s14-source-v11": "提示：回看结果卡上的“教学数据”说明，确认这些数据是怎样得到的。",
 }
 
 
-def grade(step: int, version: str, answers: Any) -> tuple[bool, dict[str, str], list[dict[str, Any]]]:
+def grade(
+    step: int, version: str, answers: Any, bank: dict[str, Any] | None = None
+) -> tuple[bool, dict[str, str], list[dict[str, Any]]]:
     """校验一整步的答案，返回是否全对、稳定化答案和逐题反馈。"""
-    questions = STEP_QUIZZES.get(step)
+    questions = _questions(step, bank)
     if not questions:
         raise ValueError(f"步骤 {step} 没有理解检查题")
-    if version != quiz_version(step):
+    if version != quiz_version(step, bank):
         raise ValueError("题目版本已更新，请刷新页面后重新作答")
     if not isinstance(answers, dict):
         raise ValueError("answers 必须是题号到选项的对象")
@@ -425,35 +419,40 @@ def grade(step: int, version: str, answers: Any) -> tuple[bool, dict[str, str], 
             {
                 "question_id": question_id,
                 "correct": answer == question["correct"],
-                "explanation": question["explanation"] if answer == question["correct"] else HINTS[question_id],
+                "explanation": (question.get("explanation") or "回答正确。")
+                if answer == question["correct"]
+                else (
+                    question.get("hint", HINTS.get(question_id) if bank is None else None)
+                    or "回答不正确，请重新阅读题目与选项后再试。"
+                ),
             }
         )
     return all(result["correct"] for result in results), normalized, results
 
 
-def correct_quiz(step: int) -> dict[str, Any]:
+def correct_quiz(step: int, bank: dict[str, Any] | None = None) -> dict[str, Any]:
     """返回服务端/测试构造完整会话时使用的规范答案载荷。"""
-    questions = STEP_QUIZZES.get(step)
+    questions = _questions(step, bank)
     if not questions:
         raise ValueError(f"步骤 {step} 没有理解检查题")
     return {
-        "version": quiz_version(step),
+        "version": quiz_version(step, bank),
         "answers": {str(question["id"]): str(question["correct"]) for question in questions},
     }
 
 
-def selected_answers(step: int, quiz: Any) -> list[dict[str, str]]:
+def selected_answers(step: int, quiz: Any, bank: dict[str, Any] | None = None) -> list[dict[str, str]]:
     """把已通过的稳定答案解析成报告可读的题干与选项文案。"""
     if not isinstance(quiz, dict):
         return []
     try:
-        passed, normalized, _ = grade(step, str(quiz.get("version") or ""), quiz.get("answers"))
+        passed, normalized, _ = grade(step, str(quiz.get("version") or ""), quiz.get("answers"), bank)
     except ValueError:
         return []
     if not passed:
         return []
     rendered = []
-    for question in STEP_QUIZZES[step]:
+    for question in _questions(step, bank):
         answer = normalized[str(question["id"])]
         label = next(str(option["label"]) for option in question["options"] if option["id"] == answer)
         rendered.append({"question": str(question["prompt"]), "answer": label})
@@ -481,6 +480,81 @@ def validate_bank() -> None:
                 raise RuntimeError(f"题目 {question['id']} 的正确答案不属于选项")
             if not HINTS.get(str(question["id"])):
                 raise RuntimeError(f"题目 {question['id']} 缺少答错时的提示")
+
+
+def _questions(step: int, bank: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if type(step) is not int or not 1 <= step <= 14:
+        return []
+    return STEP_QUIZZES[step] if bank is None else bank["steps"][str(step)]["questions"]
+
+
+def default_bank() -> dict[str, Any]:
+    """Return an independent, complete default snapshot; never consult storage."""
+    return {
+        "revision": 0,
+        "steps": {
+            str(step): {
+                "version": quiz_version(step),
+                "questions": [{**deepcopy(q), "kind": "single_choice", "hint": HINTS[q["id"]]} for q in questions],
+                "updated_at": None,
+                "updated_by": None,
+            }
+            for step, questions in STEP_QUIZZES.items()
+        },
+    }
+
+
+def validate_questions(step: int, raw: Any) -> list[dict[str, Any]]:
+    """Normalize teacher input: IDs ≤80, prompts ≤500, feedback ≤1000, labels ≤200 characters."""
+    if type(step) is not int or not 1 <= step <= 14:
+        raise ValueError("步骤必须为 1–14")
+    if not isinstance(raw, list) or not 1 <= len(raw) <= 3:
+        raise ValueError("每步必须有 1–3 题")
+
+    def text(value: Any, limit: int, optional: bool = False) -> str:
+        if optional and value is None:
+            return ""
+        if not isinstance(value, str) or len(value) > limit or (not optional and not value.strip()):
+            raise ValueError("字段为空或超过长度限制")
+        return value.strip()
+
+    normalized = []
+    ids: set[str] = set()
+    for q in raw:
+        required = {"id", "kind", "prompt", "options", "correct"}
+        if not isinstance(q, dict) or not required <= q.keys() or q.keys() - required - {"hint", "explanation"}:
+            raise ValueError("题目字段缺失或包含未知字段")
+        item = {key: text(q[key], 80 if key in {"id", "correct"} else 500) for key in ("id", "prompt", "correct")}
+        if item["id"] in ids:
+            raise ValueError("题目 ID 重复")
+        ids.add(item["id"])
+        kind = q["kind"]
+        if kind not in ("true_false", "single_choice"):
+            raise ValueError("无法识别的题型")
+        options = q["options"]
+        if not isinstance(options, list) or not 2 <= len(options) <= 4:
+            raise ValueError("选项必须有 2–4 个")
+        opts = []
+        for option in options:
+            if not isinstance(option, dict) or set(option) != {"id", "label"}:
+                raise ValueError("选项包含未知或缺失字段")
+            opts.append({"id": text(option["id"], 80), "label": text(option["label"], 200)})
+        if len({o["id"] for o in opts}) != len(opts) or len({o["label"] for o in opts}) != len(opts):
+            raise ValueError("选项重复")
+        if kind == "true_false" and opts != [{"id": "true", "label": "正确"}, {"id": "false", "label": "错误"}]:
+            raise ValueError("判断题选项必须固定为 true/false 正确/错误")
+        if item["correct"] not in {o["id"] for o in opts}:
+            raise ValueError("答案不属于选项")
+        normalized.append(
+            {
+                **item,
+                "kind": kind,
+                "options": opts,
+                "explanation": text(q.get("explanation", ""), 1000, True),
+                "hint": text(q.get("hint", ""), 1000, True),
+            }
+        )
+    return normalized
 
 
 validate_bank()

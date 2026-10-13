@@ -373,6 +373,7 @@ export function StudentWorkspace({
                     draftStore={quizDrafts}
                     step={step}
                     state={stepState}
+                    onRefresh={session.refreshLearning}
                     materialStatus={materialStatus}
                     onRecordMaterials={step.n >= 2 && step.n <= 4
                       ? () => { focusStepPrimaryAction(contentRef.current, STEP_MATERIAL_ACTION_ID); }

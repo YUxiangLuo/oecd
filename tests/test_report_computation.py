@@ -13,7 +13,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from test_model_spec import _panel
 
-from gvcsim import concurrency, regression_routes as runs, teaching_report
+from gvcsim import concurrency, quizzes, regression_routes as runs, teaching_report
 from gvcsim.classroom import records, routes
 from gvcsim.rate_limit import RateLimitExceeded, SlidingWindowRateLimiter
 from gvcsim.regression.contracts import RegressionRequest
@@ -144,15 +144,16 @@ def test_vectorized_numeric_validation_still_rejects_non_real_values(value):
 def test_report_http_charges_only_after_database_success(computation, monkeypatch, failure):
     session = empty_session()
     version = datetime.now(timezone.utc)
+    monkeypatch.setattr(routes.quiz_config, "load_bank", quizzes.default_bank)
     monkeypatch.setattr(routes, "_workspace", lambda _: (session, None, {"updated_at": version}))
-    monkeypatch.setattr(routes, "check_gate", lambda _: [])
+    monkeypatch.setattr(routes, "check_gate", lambda _, *, quiz_bank: [])
     monkeypatch.setattr(routes.report_workbench, "reported_models", lambda _: [{}])
     design = RegressionDesign("trade", teaching=True, spec=SPEC)
     monkeypatch.setattr(routes.report_workbench, "run_designs", lambda _: [design])
     limiter = SlidingWindowRateLimiter(1)
     monkeypatch.setattr(runs, "_RUN_LIMITER", limiter)
 
-    def build(*_args):
+    def build(*_args, quiz_bank):
         if failure == "render":
             raise teaching_report.ReportGateError([{"step": 11, "missing": ["测试"]}])
         if failure == "queue":
@@ -251,8 +252,9 @@ def test_report_reserves_before_work_caps_charge_and_shared_retry_is_free(comput
         )
     ]
     session = empty_session()
+    monkeypatch.setattr(routes.quiz_config, "load_bank", quizzes.default_bank)
     monkeypatch.setattr(routes, "_workspace", lambda _: (session, None, {"updated_at": datetime.now(timezone.utc)}))
-    monkeypatch.setattr(routes, "check_gate", lambda _: [])
+    monkeypatch.setattr(routes, "check_gate", lambda _, *, quiz_bank: [])
     monkeypatch.setattr(routes.report_workbench, "reported_models", lambda _: [{}])
     monkeypatch.setattr(routes.report_workbench, "run_designs", lambda _: designs)
     monkeypatch.setattr(routes, "_learning_state", lambda *_args, **_kwargs: {})
@@ -260,7 +262,7 @@ def test_report_reserves_before_work_caps_charge_and_shared_retry_is_free(comput
     monkeypatch.setattr(runs, "_RUN_LIMITER", limiter)
     builds, saves = [], []
 
-    def build(*_args):
+    def build(*_args, quiz_bank):
         builds.append(1)
         # Admission includes all pending reservations before any calculation.
         with pytest.raises(RateLimitExceeded):
@@ -292,14 +294,14 @@ def test_database_conflict_does_not_bill_rendered_report(teaching_db, computatio
     session = empty_session()
     teaching_db.save_session("student", session)
     design = RegressionDesign("trade", teaching=True, spec=SPEC)
-    monkeypatch.setattr(routes, "check_gate", lambda _: [])
+    monkeypatch.setattr(routes, "check_gate", lambda _, *, quiz_bank: [])
     monkeypatch.setattr(routes.report_workbench, "reported_models", lambda _: [{}])
     monkeypatch.setattr(routes.report_workbench, "run_designs", lambda _: [design])
     monkeypatch.setattr(routes, "_learning_state", lambda *_args, **_kwargs: {})
     limiter = SlidingWindowRateLimiter(20)
     monkeypatch.setattr(runs, "_RUN_LIMITER", limiter)
 
-    def build(*_args):
+    def build(*_args, quiz_bank):
         runs.cached_run(computation, design, RELEASE)
         return TeachingReport("# stored", {}, "report.md")
 

@@ -198,8 +198,14 @@ def _teaching_scenario(session: dict[str, Any]) -> tuple[dict[str, Any] | None, 
     return scenario, examples if observation in examples else recorded
 
 
-def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: Any) -> TeachingReport:
-    blocked = check_gate(session)
+def build(
+    session: dict[str, Any],
+    student: str,
+    *_unused: Any,
+    quiz_bank: dict[str, Any] | None = None,
+    **_unused_kw: Any,
+) -> TeachingReport:
+    blocked = check_gate(session, quiz_bank=quiz_bank)
     if blocked:
         raise ReportGateError(blocked)
     years = processed_years()
@@ -251,7 +257,8 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "years": years,
         "session_version": SESSION_VERSION,
         "quiz_version": quizzes.QUIZ_VERSION,
-        "quiz_versions": {str(step): quizzes.quiz_version(step) for step in quizzes.STEP_QUIZZES},
+        "quiz_revision": quiz_bank["revision"] if quiz_bank is not None else 0,
+        "quiz_versions": {str(step): quizzes.quiz_version(step, quiz_bank) for step in quizzes.STEP_QUIZZES},
         "course_release": COURSE_RELEASE,
         "teaching_panel_version": TEACHING_VERSION,
         "session_fingerprint": fingerprint,
@@ -314,7 +321,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
             _regression_overview(panel, release) if runs else None,
             custom_models,
         ),
-        *_quiz_sections(session),
+        *_quiz_sections(session, quiz_bank),
         *_experiment_sections(session, scenario),
         *_run_sections(runs),
         *custom_model_sections(recompute(custom_models, panel, release)),

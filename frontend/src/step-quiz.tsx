@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api } from "./api";
+import { api, isApiErrorStatus } from "./api";
 import { MATERIAL_STATUS_LABELS, STEP_MATERIAL_ACTION_ID, type StepMaterialStatus } from "./step-task-card";
 import type { QuizCompletionState, Step, StepStateApi } from "./types";
 import { userFacingRequestError } from "./user-facing-error";
@@ -21,9 +21,10 @@ interface QuizPanelProps {
   /** The step after this one: once the quiz is done, the panel's main action moves on to it. */
   next?: Pick<Step, "n" | "title">;
   onNavigate?: (step: number) => void;
+  onRefresh?: () => Promise<void>;
 }
 
-/** 步骤 1–14 的唯一完成条件：答对本步全部固定单选题。 */
+/** 步骤 1–14 的唯一完成条件：答对本步当前版本的全部理解题。 */
 export function QuizPanel(props: QuizPanelProps) {
   // A step without a quiz renders nothing; the body's hooks then never run conditionally.
   return props.step.quiz ? <QuizPanelBody {...props} quiz={props.step.quiz} /> : null;
@@ -38,11 +39,20 @@ function QuizPanelBody({
   onRecordMaterials,
   next,
   onNavigate,
+  onRefresh,
 }: QuizPanelProps & { quiz: NonNullable<Step["quiz"]> }) {
   const data = state.data as (QuizCompletionState & Record<string, unknown>) | undefined;
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<QuizFeedback[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
+  const currentVersion = useRef(quiz.version);
+  currentVersion.current = quiz.version;
+  useEffect(() => {
+    setFeedback([]);
+    setError(null);
+    setStale(false);
+  }, [quiz.version]);
   const savedAnswers = useMemo(() => {
     if (!quiz || data?.quiz?.version !== quiz.version) return {};
     return data.quiz.answers ?? {};
@@ -57,7 +67,7 @@ function QuizPanelBody({
 
   const answeredAll = quiz.questions.every((question) => Boolean(draftAnswers[question.id]));
   const locallyPassed = data?.quiz?.version === quiz.version;
-  const complete = state.complete;
+  const complete = state.complete && locallyPassed;
   const awaitingSave = locallyPassed && !state.complete && state.syncing;
   const choicesLocked = submitting || awaitingSave;
   const draftChanged = quiz.questions.some((question) => draftAnswers[question.id] !== savedAnswers[question.id]);
@@ -74,7 +84,7 @@ function QuizPanelBody({
   // A ref, not the state: two clicks before the next render would both see submitting === false and post twice.
   const submittingRef = useRef(false);
   const submit = async () => {
-    if (!answeredAll || submitting || submittingRef.current) return;
+    if (!answeredAll || stale || submitting || submittingRef.current) return;
     submittingRef.current = true;
     setSubmitting(true);
     setError(null);
@@ -84,6 +94,7 @@ function QuizPanelBody({
         version: quiz.version,
         answers: draftAnswers,
       });
+      if (currentVersion.current !== quiz.version) return;
       setFeedback(result.results);
       if (result.passed) {
         // A student may navigate away and edit a newer draft before this reply.
@@ -100,7 +111,9 @@ function QuizPanelBody({
         state.syncNow();
       }
     } catch (cause) {
+      if (currentVersion.current !== quiz.version) return;
       setError(userFacingRequestError(cause, "答案提交失败，选择已保留，可重试"));
+      if (isApiErrorStatus(cause, 409)) setStale(true);
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -109,7 +122,7 @@ function QuizPanelBody({
   };
   // The button is disabled while grading and, after a correct answer, while completion saves; that drops
   // keyboard focus to <body>. Give it back once the button is usable again, not one frame after grading.
-  const submitDisabled = !answeredAll || submitting || awaitingSave;
+  const submitDisabled = !answeredAll || stale || submitting || awaitingSave;
   useEffect(() => {
     if (!refocusSubmit.current || submitDisabled) return;
     refocusSubmit.current = false;
@@ -141,19 +154,20 @@ function QuizPanelBody({
       <div className="quiz-head">
         <div>
           <span className="kicker">理解题</span>
-          <h3 id={`quiz-title-${step.n}`} tabIndex={-1}>答对本步 {quiz.questions.length} 道单选题</h3>
+          <h3 id={`quiz-title-${step.n}`} tabIndex={-1}>答对本步 {quiz.questions.length} 道理解题</h3>
         </div>
         {/* The draft-persistence rule is reference detail, so it lives in the badge's tooltip. */}
         <span className="quiz-note" title="未提交的选择只在本次登录的页面内暂存，切换步骤会保留；刷新或退出登录后不保留。答对并提交后才保存完成状态。">
           不限重试 · 全部答对即完成
         </span>
       </div>
+      {data?.quiz && data.quiz.version !== quiz.version && <p role="status" className="muted">老师已更新本步题目，请重新作答。实验记录和已提交报告不会被删除。</p>}
       <div className="quiz-questions">
         {quiz.questions.map((question, index) => {
           const result = feedbackByQuestion.get(question.id);
           return (
             <fieldset key={question.id} disabled={choicesLocked} className={`quiz-question${result ? result.correct ? " correct" : " incorrect" : ""}`}>
-              <legend>{index + 1}. {question.prompt}</legend>
+              <legend>{index + 1}. 【{question.kind === "true_false" ? "判断题" : "单选题"}】{question.prompt}</legend>
               <div className="quiz-options">
                 {question.options.map((option) => (
                   <label key={option.id}>
@@ -213,6 +227,12 @@ function QuizPanelBody({
         </button>}
       </div>}
       {error && <div className="error-box" role="alert">{error}</div>}
+      {stale && onRefresh && <button type="button" className="secondary" disabled={submitting} onClick={async () => {
+        setSubmitting(true);
+        try { await onRefresh(); }
+        catch (cause) { setError(userFacingRequestError(cause, "载入题目失败，请重试")); }
+        finally { setSubmitting(false); }
+      }}>载入最新题目</button>}
     </section>
   );
 }

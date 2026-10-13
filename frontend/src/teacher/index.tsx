@@ -3,6 +3,7 @@ import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import type { AuthUser, TeacherReport } from "../types";
 import { ReportsTab } from "./reports";
+import { QuizzesTab } from "./quizzes";
 import { SemestersTab } from "./semesters";
 import { StudentsTab } from "./students";
 import { useTeacherReviewGuard } from "./review-guard";
@@ -10,12 +11,14 @@ import { useRefetchOnVisible } from "./ui";
 
 /** Line icons drawn like the student sidebar's (24-unit box, 1.6 stroke in the text colour), not emoji. */
 const NAV_ICONS = {
+  quizzes: <><path d="M6 4h12v16H6zM9 8h6M9 12h6M9 16h3" /></>,
   semesters: <><rect x="3.5" y="5" width="17" height="15" rx="2.5" /><path d="M3.5 10h17M8 3v4M16 3v4" /></>,
   students: <><circle cx="9" cy="8.5" r="3.2" /><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5" /><circle cx="16.5" cy="9.5" r="2.5" /><path d="M16 14.2c2.3.1 3.9 1.7 4.5 4.3" /></>,
   reports: <><path d="M6.5 3.5h8l4 4v13h-12z" /><path d="M14.5 3.5v4h4M9.5 12.5h6M9.5 16h4" /></>,
 } as const;
 
 const NAV = [
+  { key: "quizzes", label: "理解题配置", sub: "系统统一题库" },
   { key: "semesters", label: "学期与班级", sub: "建学期、分班" },
   { key: "students", label: "学生与进度", sub: "账号与进度" },
   { key: "reports", label: "报告评阅", sub: "评阅与打分" },
@@ -100,10 +103,10 @@ export function TeacherDashboard({ user, onChangePassword }: { user: AuthUser; o
       <main ref={mainRef} className="teacher-main">
         <div ref={headerRef} className="dash-header">
           <div>
-            <h2 ref={headingRef} tabIndex={-1}>{tab === "semesters" ? "学期与班级" : tab === "students" ? "学生与进度" : "报告评阅"}</h2>
+            <h2 ref={headingRef} tabIndex={-1}>{NAV.find((item) => item.key === tab)!.label}</h2>
             <p>{tab === "semesters" ? "新建学期和班级，管理学生分班"
               : tab === "students" ? "创建账号、分配班级并查看学生已完成的步骤"
-                : "评阅学生提交的实验报告"}</p>
+                : tab === "quizzes" ? "配置步骤 1–14 的系统统一理解题" : "评阅学生提交的实验报告"}</p>
           </div>
         </div>
         <div className="teacher-content">
@@ -111,7 +114,7 @@ export function TeacherDashboard({ user, onChangePassword }: { user: AuthUser; o
             <span>{INITIAL_PASSWORD_HINT}</span>
             <button type="button" className="sm" onClick={onChangePassword}>立即修改密码</button>
           </div>}
-          {tab === "semesters" ? <SemestersTab /> : tab === "students" ? (
+          {tab === "quizzes" ? <QuizzesTab /> : tab === "semesters" ? <SemestersTab /> : tab === "students" ? (
             <StudentsTab onOpenReport={(accountId, queue) => { setReportRequest({ accountId, queue }); setTab("reports"); }}
               onGoToSemesters={() => setTab("semesters")} onRefresh={() => setReviewBump((value) => value + 1)} />
           ) : (

@@ -14,6 +14,7 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from gvcsim import concurrency, quizzes, shocks
+from gvcsim.classroom import quiz_config
 from gvcsim.artifacts import (
     ArtifactContractError,
     dataset_metadata,
@@ -79,12 +80,14 @@ def meta():
 
 @router.get("/api/steps")
 def steps():
+    bank = quiz_config.load_bank()
     return {
+        "quiz_revision": bank["revision"],
         "stages": STAGE_NAMES,
         "steps": [
             {
                 **step,
-                **({"quiz": quiz} if (quiz := quizzes.public_quiz(cast(int, step["n"]))) is not None else {}),
+                **({"quiz": quiz} if (quiz := quizzes.public_quiz(cast(int, step["n"]), bank)) is not None else {}),
             }
             for step in STEPS
         ],

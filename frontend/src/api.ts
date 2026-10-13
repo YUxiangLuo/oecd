@@ -366,6 +366,9 @@ export const api = {
   /** The workbench's choices; the same for every student and release, fetched once. */
   regressionOptions: () => getOnce<import("./types").WorkbenchOptions>("/api/regression/options"),
   classroom: {
+    quizBank: () => get<import("./types").TeacherQuizBank>("/api/classroom/quizzes"),
+    saveQuizStep: (step: number, body: { version: string; questions: import("./types").TeacherQuizQuestion[] }) =>
+      post<import("./types").TeacherQuizBank>(`/api/classroom/quizzes/${step}`, body, "PUT"),
     submitQuiz: (body: { step: number; version: string; answers: Record<string, string> }) =>
       post<{
         passed: boolean;

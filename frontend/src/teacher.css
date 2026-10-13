@@ -438,3 +438,20 @@
   border-radius: 8px; background: #fff8e8; color: #6b450b; font-size: 12px; line-height: 1.6;
 }
 .grade-current-feedback { margin: 4px 0 6px; white-space: pre-wrap; max-height: 9em; overflow: auto; color: var(--text, #1f2937); }
+
+/* System-wide understanding question editor. */
+.quiz-editor { border: 0; padding: 0; min-width: 0; }
+.teacher-quiz-card, .teacher-quiz-preview { background: #fff; border: 1px solid #e7e9f0; border-radius: 10px; padding: 18px; margin: 16px 0; }
+.teacher-quiz-card > label { display: grid; gap: 6px; margin: 12px 0; }
+.teacher-quiz-card :is(input, select, textarea) {
+  padding: 8px 11px; border-radius: 8px; border: 1px solid #e0e3ea; background: #fff;
+  font-size: 13px; font-family: inherit; width: 100%; min-width: 0;
+}
+.teacher-quiz-card textarea { min-height: 70px; resize: vertical; width: 100%; }
+.teacher-quiz-option { display: flex; align-items: end; gap: 10px; margin: 10px 0; }
+.teacher-quiz-option label { flex: 1; min-width: 0; display: grid; gap: 6px; }
+.teacher-quizzes [aria-current="step"] { background: #edecfd; color: #2c2a6b; }
+.teacher-quiz-preview fieldset { margin: 12px 0; border: 1px solid #e7e9f0; border-radius: 8px; }
+.teacher-quiz-preview .quiz-options { display: grid; gap: 7px; }
+.teacher-quiz-preview .quiz-options label { display: flex; gap: 8px; padding: 7px 9px; cursor: pointer; }
+.teacher-quiz-preview .quiz-options input { accent-color: #4b47e0; }

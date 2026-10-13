@@ -8,7 +8,7 @@ from typing import Any
 import psycopg
 
 from gvcsim import config, demo_accounts
-from gvcsim.classroom import records
+from gvcsim.classroom import quiz_config, records
 from gvcsim.name_keys import required_name_key, username_key
 
 
@@ -342,14 +342,17 @@ def update_student(
 def _learning_status(
     session: dict[str, Any] | None,
     report: dict[str, Any] | None,
+    quiz_bank: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     from gvcsim import evidence
 
+    if quiz_bank is None:
+        quiz_bank = quiz_config.load_bank()
     session_payload = session["session"] if session else {"steps": {}}
     # Step 15 counts once the report is handed in, as in the student's own progress count (records.report_handed_in);
     # a record changed since then is said separately (report_outdated), the teacher still holding the submitted one.
     handed_in = records.report_handed_in(report)
-    summary = evidence.completion_summary(session_payload, report_exists=handed_in)
+    summary = evidence.completion_summary(session_payload, report_exists=handed_in, quiz_bank=quiz_bank)
     # Only the student's own actions count; grading also bumps reports.updated_at.
     timestamps = [
         value
@@ -386,7 +389,7 @@ def _learning_status_in_conn(c: psycopg.Connection[dict[str, Any]], account_id: 
         " WHERE account_id=%s AND release_id=%s",
         (account_id, release_id),
     ).fetchone()
-    return _learning_status(session, report)
+    return _learning_status(session, report, quiz_config.load_bank(c))
 
 
 def list_students(teacher_username: str | None = None) -> list[dict[str, Any]]:
@@ -394,6 +397,7 @@ def list_students(teacher_username: str | None = None) -> list[dict[str, Any]]:
     with database.conn() as c:
         if teacher_username and not _teacher_exists(c, teacher_username):
             return []
+        quiz_bank = quiz_config.load_bank(c)
         rows = c.execute(
             f"SELECT {_STUDENT_COLS},s.session AS learning_session,s.updated_at AS session_updated_at,"
             "r.state AS learning_report_state,r.score AS report_score,r.generated_at AS report_generated_at,"
@@ -425,6 +429,8 @@ def list_students(teacher_username: str | None = None) -> list[dict[str, Any]]:
             }
             session = {"session": session_payload, "updated_at": session_updated_at}
             row.update(
-                _learning_status(session if session_payload is not None else None, report if report_state else None)
+                _learning_status(
+                    session if session_payload is not None else None, report if report_state else None, quiz_bank
+                )
             )
         return rows

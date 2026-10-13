@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, typ
 
 const LEAVE_MESSAGE = "当前评阅尚未保存，离开将丢失分数或评语。确定离开吗？";
 
-type ReviewState = { dirty: boolean; saving: boolean };
+type ReviewState = { dirty: boolean; saving: boolean; message?: string };
 type ReviewGuard = {
   publish: (state: ReviewState) => void;
   clear: () => void;
@@ -23,7 +23,7 @@ export function TeacherReviewGuardProvider({ children }: { children: ReactNode }
   const clear = useCallback(() => { state.current = { dirty: false, saving: false }; }, []);
   const attempt = useCallback((leave: () => void) => {
     if (state.current.saving) return false;
-    if (state.current.dirty && !window.confirm(LEAVE_MESSAGE)) return false;
+    if (state.current.dirty && !window.confirm(state.current.message ?? LEAVE_MESSAGE)) return false;
     leave();
     return true;
   }, []);

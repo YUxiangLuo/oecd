@@ -11,7 +11,7 @@ import pytest
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
 
-from gvcsim import api, concurrency, config, regression_routes
+from gvcsim import api, concurrency, config, quizzes, regression_routes
 from gvcsim.classroom import routes
 from gvcsim.regression.contracts import RegressionRequest
 from gvcsim.session import empty_session
@@ -107,11 +107,12 @@ def test_regression_disconnect_during_panel_read_keeps_thread_and_cancels_queued
 
 
 def stub_report(monkeypatch):
+    monkeypatch.setattr(routes.quiz_config, "load_bank", quizzes.default_bank)
     monkeypatch.setattr(routes, "_workspace", lambda _username: ({}, None, {"updated_at": "version-1"}))
     monkeypatch.setattr(
         routes.teaching_report,
         "build",
-        lambda *_args: SimpleNamespace(markdown="# report", provenance={}, suggested_filename="report.md"),
+        lambda *_args, quiz_bank: SimpleNamespace(markdown="# report", provenance={}, suggested_filename="report.md"),
     )
     monkeypatch.setattr(routes.db, "save_generated_report", lambda *_args: {"state": "draft"})
     monkeypatch.setattr(routes, "_learning_state", lambda *_args, **_kwargs: {"completion": {}})
@@ -167,10 +168,10 @@ def test_report_disconnect_during_preparation_never_saves(monkeypatch, phase):
         original = getattr(target, name)
         saves = []
 
-        def held(*args):
+        def held(*args, **kwargs):
             started.set()
             assert release.wait(5)
-            return original(*args)
+            return original(*args, **kwargs)
 
         monkeypatch.setattr(target, name, held)
         monkeypatch.setattr(routes.db, "save_generated_report", lambda *args: saves.append(args))
@@ -426,7 +427,7 @@ def test_report_disconnect_during_real_row_lock_preserves_transaction(teaching_d
     monkeypatch.setattr(
         routes.teaching_report,
         "build",
-        lambda *_args: SimpleNamespace(
+        lambda *_args, quiz_bank: SimpleNamespace(
             markdown="# committed after disconnect", provenance={}, suggested_filename="r.md"
         ),
     )

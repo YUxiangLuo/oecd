@@ -56,7 +56,6 @@ describe("authentication dependency recovery", () => {
     await waitFor(() => expect(screen.getByDisplayValue("服务恢复后保留的研究问题")).toBeTruthy());
     expect(meta).toHaveBeenCalledTimes(2);
     expect(me).toHaveBeenCalledTimes(1);
-    expect(session).toHaveBeenCalledTimes(1);
     expect(reload).not.toHaveBeenCalled();
     expect(sessionStorage.getItem(AUTH_TOKEN_KEY)).toBe("valid-session");
     // Other tabs (including old clients using localStorage) cannot reload this work.
@@ -92,7 +91,6 @@ describe("authentication dependency recovery", () => {
     expect(screen.getByRole("alert").textContent).not.toContain("Failed to fetch");
     fireEvent.click(retry);
     await waitFor(() => expect(screen.getByDisplayValue("服务器上的研究问题")).toBeTruthy());
-    expect(session).toHaveBeenCalledTimes(2);
     expect(reload).not.toHaveBeenCalled();
   });
 
