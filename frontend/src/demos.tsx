@@ -28,6 +28,7 @@ import { userFacingRequestError } from "./user-facing-error";
 import { countryLabel, sectorLabel } from "./viz";
 import { COMPONENT_COLORS } from "./viz/shared";
 import { signedDomain, signedStack } from "./viz/signed-layout";
+import { PATH_UNDEFINED_LABEL } from "./viz/views/network-heat";
 import type { IndustryPage, Meta } from "./types";
 
 type Row = Record<string, string | number | null>;
@@ -1082,6 +1083,7 @@ function networkDemoMetricValue(
 
 function networkDemoMetricText(value: number, mode: NetworkDemoMode): string {
   // Path counts are whole numbers in this small network; only closeness is a ratio.
+  if (mode === "closeness" && value === 0) return PATH_UNDEFINED_LABEL;
   return mode === "closeness" ? value.toFixed(3) : String(Number(value.toFixed(3)));
 }
 
@@ -1423,7 +1425,7 @@ export function NetworkCentralityDemo() {
               <div className="ndp-calc">
                 {reachablePaths.length > 0
                   ? <>= {reachablePaths.length} / {distanceSum} = <b>{C.closeness[sel].toFixed(3)}</b></>
-                  : <>沿箭头无法到达任何节点，记为 <b>0</b></>}
+                  : <>沿出边无法到达其他节点，接近中心性无法定义。</>}
               </div>
               <p className="ndp-note">高亮的是从 {sel} 沿箭头出发的最短路线；无法到达的节点不计入分子和分母。</p>
               <ScrollableRegion
