@@ -25,6 +25,10 @@ test("step 9 records the main comparison automatically; the exploration views si
   ] };
   const save = mock((_patch: Partial<VizStepState>) => {});
   render(<NetworkVizStep meta={meta} step={step} state={{ data, save, syncing: false, syncError: null, syncNow: () => {}, complete: false }} />);
+  await screen.findByText("贸易网络当前没有可显示的数据。");
+  expect(screen.getByRole("button", { name: "全球贸易网络图" }).getAttribute("aria-pressed")).toBe("true");
+  expect(save.mock.calls.some(([patch]) => "observations" in patch)).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "历年变化" }));
   await screen.findByRole("img");
   // Legacy observations without a release do not restore the trend selection;
   // the saved comparison pair (CHN, USA) supplies the initial comparison instead.
@@ -36,10 +40,10 @@ test("step 9 records the main comparison automatically; the exploration views si
   expect(recorded.compared).toEqual(["CHN", "USA"]);
   expect(recorded.observations!.every((item) => item.release === meta.dataset!.release_id && item.source === "explicit-network-trend")).toBe(true);
 
-  // One view bar: the two recording views in the task order, then the exploration views; no modals.
+  // The global overview leads; the remaining views retain their order.
   const bar = screen.getByRole("group", { name: "图表视角" });
   expect(within(bar).getAllByRole("button").map((button) => button.textContent)).toEqual([
-    "历年变化", "行业排名", "流量与路径", "买入与卖出", "贸易伙伴", "全球贸易网络图",
+    "全球贸易网络图", "历年变化", "行业排名", "流量与路径", "买入与卖出", "贸易伙伴",
   ]);
   expect(screen.queryByRole("group", { name: "补充图表" })).toBeNull();
   // The full-indicator table folds into 行业排名.

@@ -43,7 +43,7 @@ import {
 
 type Lens = "heat" | "network";
 
-/** The step opens on the industry comparison; the global network is an exploration view. */
+/** The scaffold's material lens; NetworkTrend owns the initial visible exploration view. */
 export const STEP10_DEFAULT_LENS: Lens = "heat";
 const STEP10_LENS_KEYS: Lens[] = ["heat", "network"];
 

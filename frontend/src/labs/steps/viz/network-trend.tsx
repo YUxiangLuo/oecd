@@ -76,9 +76,10 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   const [industry, setIndustry] = useState([browse?.industry, trendIndustry, "C26", meta.sectors[0]]
     .find((sector) => sector && meta.sectors.includes(sector)) ?? "");
   const [pickedMetric, setMetric] = useState(browse?.metric || (restored[0]?.metric ?? "weighted degree"));
-  // 历年变化 opens first so a first visit records material; saved material reopens on the view that recorded it,
-  // and a view the student left (recorded or not) reopens as it was.
-  const [view, setView] = useState<string>(browse?.view || (restored[0]?.source === "explicit-network-ranking" ? "ranking" : "trend"));
+  // Open the global overview on first visit; preserve saved browsing and material views.
+  const [view, setView] = useState<string>(browse?.view || (restored.length
+    ? restored[0].source === "explicit-network-ranking" ? "ranking" : "trend"
+    : extraLenses.some((lens) => lens.key === "global-network") ? "global-network" : "trend"));
   const [countriesChosen, setCountriesChosen] = useState(false);
   // Recorded on request after submission: the confirmation then says to update the report on step 15.
   const [rechosen, setRechosen] = useState(false);
@@ -272,14 +273,15 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       {selected.length >= MAX_ENTITIES && <MaxCountriesNote />}
       {swapNote && <span className="muted" role="status">{swapNote}</span>}
     </div>}
-    {/* The two recording views lead, in the task card's order (① 历年变化, ② 行业排名); exploration follows. */}
+    {/* Start with the global overview, followed by comparisons and other exploration views. */}
     <LensNav
       lenses={[
+        ...extraLenses.filter((lens) => lens.key === "global-network"),
         { key: "trend", label: "历年变化" },
         { key: "ranking", label: "行业排名" },
         { key: "topology", label: "流量与路径" },
         { key: "flows", label: "买入与卖出" },
-        ...extraLenses,
+        ...extraLenses.filter((lens) => lens.key !== "global-network"),
       ]}
       active={view}
       onPick={setView}
