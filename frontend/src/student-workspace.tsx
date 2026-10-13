@@ -248,6 +248,13 @@ export function StudentWorkspace({
   const materialStatus = step.lab === "rep"
     ? reportMaterialStatus(session.reportGate, session.unsynced || session.syncing, Boolean(session.syncError))
     : materialStatusForStep(step.n, session.materialGate, session.unsynced || session.syncing, Boolean(session.syncError));
+  const quiz = <QuizPanel key={`quiz:${step.n}`} draftStore={quizDrafts} step={step} state={stepState}
+    onRefresh={session.refreshLearning} materialStatus={materialStatus}
+    onRecordMaterials={step.n >= 2 && step.n <= 4 ? () => { focusStepPrimaryAction(contentRef.current, STEP_MATERIAL_ACTION_ID); } : undefined}
+    next={nextStep} onNavigate={(n) => {
+      onNavigateStep(n);
+      window.requestAnimationFrame(() => contentRef.current?.focus({ preventScroll: true }));
+    }} />;
   const currentComparison = session.getStep<{ compared?: string[] }>(step.n)?.compared ?? [];
   // Steps 3–9 record their country (steps 3–5) or comparison (steps 6–9) as soon as they open, so a step
   // visited for the first time starts from the country used in the latest earlier step instead of the default
@@ -351,6 +358,7 @@ export function StudentWorkspace({
                       <LabRouter
                         key={`lab:${step.n}`}
                         step={step}
+                        quiz={step.lab === "reg" ? quiz : undefined}
                         meta={meta}
                         state={labState}
                         report={session.report}
@@ -368,23 +376,7 @@ export function StudentWorkspace({
                       />
                     </StepErrorBoundary>
                   </div>
-                  <QuizPanel
-                    key={`quiz:${step.n}`}
-                    draftStore={quizDrafts}
-                    step={step}
-                    state={stepState}
-                    onRefresh={session.refreshLearning}
-                    materialStatus={materialStatus}
-                    onRecordMaterials={step.n >= 2 && step.n <= 4
-                      ? () => { focusStepPrimaryAction(contentRef.current, STEP_MATERIAL_ACTION_ID); }
-                      : undefined}
-                    next={nextStep}
-                    onNavigate={(n) => {
-                      // Like the footer: the button leaves with the old step, so focus starts at the new step's top.
-                      onNavigateStep(n);
-                      window.requestAnimationFrame(() => contentRef.current?.focus({ preventScroll: true }));
-                    }}
-                  />
+                  {step.lab !== "reg" && quiz}
                 </div>
               </main>
 

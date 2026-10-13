@@ -540,11 +540,14 @@ describe("the open workbench", () => {
     expect(screen.queryByText("已算出这个模型，结果在下面的回归结果表中。")).toBeNull();
   });
 
-  test("it shows the four tries from the server and the default model's column before anything is computed", async () => {
+  test("it keeps suggestions and full coefficients available without presenting a one-model comparison", async () => {
     spyOn(api, "regressionOptions").mockResolvedValue(options);
     render(<Harness />);
-    await screen.findByText(/试一试/);
+    await screen.findByText(/本步建议/);
     expect([...document.querySelectorAll(".reg-custom-tries li")].map((item) => item.textContent)).toEqual(options.tries);
+    expect(screen.queryByRole("region", { name: "同一因变量的模型比较" })).toBeNull();
+    expect(document.querySelector(".reg-custom-compare")?.hasAttribute("open")).toBe(false);
+    fireEvent.click(screen.getByText("完整回归结果表与 CSV"));
     expect(tableHeaders()).toEqual(["变量", "默认模型"]);
     expect(document.querySelector(".reg-custom-point-row")?.textContent).toBe("合计：X 每高 1 个百分点-0.55 个百分点（两年累计）");
   });

@@ -251,13 +251,13 @@ export function barColor(row: Pick<DivergingBarRow, "uncertain" | "value">): str
 }
 
 /** The tooltip of one bar: its value and interval, and on a selectable chart what a click does (or that it is saved). */
-export function barTip(row: DivergingBarRow, interactive: boolean): [string, string][] {
+export function barTip(row: DivergingBarRow, interactive: boolean, preview = false): [string, string][] {
   return [
     ["", row.label],
     ["估计值", row.valueLabel],
     ["95% 区间", row.intervalLabel ?? "—"],
     ...(row.note ? [["说明", row.note] as [string, string]] : []),
-    ...(interactive ? [row.selected ? ["状态", SAVED_TIP] as [string, string] : ["操作", SELECT_TIP] as [string, string]] : []),
+    ...(interactive ? [row.selected ? ["状态", preview ? "正在查看（不替换报告材料）" : SAVED_TIP] as [string, string] : ["操作", preview ? "点击预览此 Y，不替换报告材料" : SELECT_TIP] as [string, string]] : []),
   ];
 }
 
@@ -400,7 +400,7 @@ export function DivergingBarChart({
                 onFocus: (event: FocusEvent<SVGGElement>) => {
                   setFocused(row.key);
                   const box = event.currentTarget.getBoundingClientRect();
-                  show({ clientX: box.left + box.width * 0.55, clientY: box.top } as Parameters<typeof show>[0], barTip(row, interactive), box);
+                  show({ clientX: box.left + box.width * 0.55, clientY: box.top } as Parameters<typeof show>[0], barTip(row, interactive, highlight === "正在查看"), box);
                 },
                 onBlur: () => {
                   setFocused((current) => (current === row.key ? null : current));
@@ -408,8 +408,8 @@ export function DivergingBarChart({
                 },
               } : {})}
               style={{ cursor: interactive ? (disabled ? "progress" : row.selected ? "default" : "pointer") : undefined, outline: "none" }}
-              onMouseEnter={(event) => show(event, barTip(row, interactive))}
-              onMouseMove={(event) => show(event, barTip(row, interactive))}
+              onMouseEnter={(event) => show(event, barTip(row, interactive, highlight === "正在查看"))}
+              onMouseMove={(event) => show(event, barTip(row, interactive, highlight === "正在查看"))}
               onMouseLeave={hide}
             >
               {/* The whole row is the hit area; the selected one is tinted. */}

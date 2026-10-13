@@ -636,7 +636,14 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 .reg-custom-legend { margin: 6px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.6; }
 .reg-custom-footnote { margin: 0; font-size: 11.5px; line-height: 1.6; }
 
-/* Steps 11–14: the default model above its run button, and the open change-the-model section. */
+/* Steps 11–14: the required learning path and optional, progressively disclosed model experiments. */
+.reg-workbench summary, .report-reference summary { cursor: pointer; color: #4b47e0; font-size: 13px; font-weight: 650; padding: 6px 0; }
+.reg-workbench summary:focus-visible, .report-reference summary:focus-visible { outline: 2px solid #4b47e0; outline-offset: 3px; }
+.reg-custom-section > summary { font-size: 15px; }
+.reg-custom-control details { margin: 0 0 6px 22px; }
+.reg-custom-control summary { font-size: 11px; font-weight: 500; padding: 0; }
+.reg-material-status { font-size: 13px; color: #4f586b; }
+.reg-material-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0 20px; }
 .reg-model-box { margin: 6px 0 12px; }
 .reg-model-box .model-eq-terms { margin: 8px 0 6px; }
 .reg-model-facts { margin: 4px 0 0; font-size: 12px; }

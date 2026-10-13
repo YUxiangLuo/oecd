@@ -132,8 +132,9 @@ function ModelForm({ options, spec, onChange }: {
             <div key={item.name} className="reg-custom-control">
               <label className="reg-custom-choice">
                 <input type="checkbox" checked={Boolean(chosen)} onChange={() => toggleControl(item.name)} />
-                <span><b>{item.label}</b><small>{item.definition}（{item.source}）</small></span>
+                <span><b>{item.label}</b></span>
               </label>
+              <details><summary>{item.label}：定义与来源</summary><p className="muted">{item.definition}（{item.source}）</p></details>
               {chosen && (
                 <select aria-label={`${item.label}的期数`} value={chosen.lag} onChange={(event) => setControlLag(item.name, Number(event.target.value))}>
                   {options.control_lags.map((lag) => <option key={lag.lag} value={lag.lag}>{lag.label}</option>)}
@@ -427,13 +428,18 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
 
   return (
     <div className="reg-custom" ref={root}>
-      <p className="reg-custom-y">因变量：<b>{depvarLabel}</b>（本步保存的 Y；在上面的条形图上点另一条可以换 Y）</p>
+      <p className="reg-custom-y">因变量：<b>{depvarLabel}</b>（本步已记录的 Y；如需更换，先查看其他 Y，再明确替换本步报告材料。仅预览不会改变这里的模型。）</p>
       <div className="reg-custom-tries">
-        <b>试一试：每次只改一处设定，算出后和表中第一列的默认模型比较</b>
+        <b>本步建议：{outcome === "trade" ? "去掉汇率变动，看关税暴露的估计怎样变化。" : outcome === "production" ? "去掉一个控制变量，与同一 Y 的默认模型比较。" : outcome === "length" ? "把国家×行业固定效应改成国家、行业、年份，观察结果变化。" : "加入两年前的 X（L2.X），观察区间及估计跨度。"}</b>
         <p className="muted">先核对 Y、累计跨度、观测数和年份，再比较数字；只改一项也可能改变样本。</p>
-        <ol>{options.tries.map((item) => <li key={item}>{item}</li>)}</ol>
+        <details><summary>更多实验建议</summary><ol>{options.tries.map((item) => <li key={item}>{item}</li>)}</ol></details>
       </div>
       <ModelForm options={options} spec={spec} onChange={changeSpec} />
+      <p className="muted">{sameSpec(spec, options.default_spec, options) ? "当前设定与默认模型相同。" : `相较默认模型已调整：${[
+        !sameJsonValue(spec.x_lags, options.default_spec.x_lags) && "X 的期数",
+        !sameJsonValue(spec.controls, options.default_spec.controls) && "控制变量或其期数",
+        !sameJsonValue(spec.fixed_effects, options.default_spec.fixed_effects) && "固定效应",
+      ].filter(Boolean).join("、")}。`}</p>
       <p className="reg-custom-equation" aria-live="polite">{noX ? "至少选一项关税暴露 X。" : equationPreview(spec, options)}</p>
       <div className="reg-custom-actions">
         <button type="button" className="run-btn" aria-disabled={running || noX || undefined} onClick={() => void run()}>
@@ -460,9 +466,10 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         {omittedSummary(detailColumns[shownDetail].snapshot, options).map((note) => <p className="muted" key={note}>{note}</p>)}
         <p className="muted">系数按 X 以份额计（1 = 100 个百分点）；最后一列换算为 X 每高 1 个百分点。{xSpanLabel(detailColumns[shownDetail].spec)}；括号内为标准误，星号含义见表下注释。</p>
       </details>
-      <ModelComparisonChart columns={columns} outcome={outcome} />
+      {columns.length > 1 && <ModelComparisonChart columns={columns} outcome={outcome} />}
 
-      <div className="reg-custom-compare">
+      <details className="reg-custom-compare">
+        <summary>完整回归结果表与 CSV</summary>
         <div className="reg-custom-compare-head">
           <h4>回归结果表（因变量：{depvarLabel}）</h4>
           <button type="button" className="secondary" onClick={() => download(comparisonCsv(columns, options, depvarLabel, pointRow), `步骤${stepNumber}-回归对比.csv`)}>
@@ -516,7 +523,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
           })}
         </ul>
         {samplesDiffer(columns) && <p className="reg-boundary" role="note">{options.sample_differs_note}</p>}
-      </div>
+      </details>
 
       {current && computed && (
         <div className="reg-custom-save">

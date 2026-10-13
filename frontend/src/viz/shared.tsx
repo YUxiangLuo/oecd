@@ -6,7 +6,7 @@
  * 可见标签 + 表格视图补偿);细标记、段间 2px 留白、悬停 tooltip 不设门槛
  * (所有数值同时可在表格视图读取);文本一律用文字色,不穿系列色。
  */
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 // 固定顺序的类别槽位(经校验的默认调色板,前 6 位)
 export const CAT = ["#216cc0", "#1baf7a", "#eda100", "#008300", "#4a3aa7", "#e34948"];
@@ -179,6 +179,7 @@ export function useTip() {
     const r = wrap.getBoundingClientRect();
     // Measured at the left edge, where nothing squeezes it: the tip flips to the pointer's left when its own
     // width would not fit on the right (a fixed 190px guess squeezed wider tips and broke their lines).
+    box.style.display = "block";
     box.style.left = "0px";
     const width = box.offsetWidth || 190;
     let x = e.clientX - r.left + 14, y = e.clientY - r.top + 12;
@@ -191,10 +192,20 @@ export function useTip() {
     }
     box.style.left = `${x}px`; box.style.top = `${y}px`; box.style.opacity = "1";
   };
-  const hide = () => { if (boxRef.current) boxRef.current.style.opacity = "0"; };
+  const hide = () => {
+    if (!boxRef.current) return;
+    boxRef.current.style.opacity = "0";
+    // Transparent absolute boxes still contribute to scroll overflow.
+    boxRef.current.style.display = "none";
+  };
+  useEffect(() => {
+    // A tip's coordinates belong to the old viewport; show() measures again on next interaction.
+    window.addEventListener("resize", hide);
+    return () => window.removeEventListener("resize", hide);
+  }, []);
   const Tip = (
     <div ref={boxRef} style={{
-      position: "absolute", pointerEvents: "none", opacity: 0, transition: "opacity .12s",
+      position: "absolute", pointerEvents: "none", opacity: 0, display: "none",
       background: "#1b1f2b", color: "#fff", padding: "9px 12px", borderRadius: 10,
       fontSize: 11.5, lineHeight: 1.75, boxShadow: "0 8px 24px rgba(0,0,0,.22)", zIndex: 6, minWidth: 150, maxWidth: 320,
     }} />

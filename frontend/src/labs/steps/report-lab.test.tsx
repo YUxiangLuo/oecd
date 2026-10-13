@@ -4,7 +4,7 @@ import { api, ApiError } from "../../api";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ToastHost } from "../../toast";
 import { ReportOutro } from "../../report-outro";
-import type { ClassroomReport, ReportMutationResponse } from "../../types";
+import type { ClassroomReport, CustomResult, ReportMutationResponse } from "../../types";
 import {
   GateCard,
   REPORT_REFLECTION_INCOMPLETE_SELECTOR,
@@ -415,6 +415,44 @@ const finishProps = {
   report: null, reportGate: [], sessionStatus: "ready" as const, sessionUnsynced: false, sessionSyncing: false,
   onFlushSession: async () => {}, onNavigateStep: () => {}, onReportChanged: (_response: ReportMutationResponse) => {},
 };
+
+test("report evidence stays visible while optional comparisons start collapsed", () => {
+  const view = render(<ReportLab {...finishProps} />);
+  const reference = view.container.querySelector(".report-reference")!;
+  expect(reference.querySelector(".reg-evidence-matrix")?.closest("details")).toBeNull();
+  expect(reference.querySelector(".reg-evidence-table")).not.toBeNull();
+  const chart = reference.querySelector("details")!;
+  expect(chart.open).toBe(false);
+  expect(chart.querySelector("summary")?.textContent).toBe("查看标准差比较图");
+  expect(chart.querySelector(".reg-family-missing")?.textContent).toContain("还没计算");
+  expect(reference.textContent).toContain("自定义模型（选做）：未添加。");
+  expect(reference.querySelector(".reg-reported-models")).toBeNull();
+  expect(reference.textContent).toContain("不是该例子的单独估计");
+});
+
+test("custom model disclosure counts only report selections across all four steps", () => {
+  const model = (id: string, in_report: boolean): CustomResult => ({
+    id, name: id, outcome: "trade", baseline: "FVA_share", in_report, saved_at: "2026-10-13",
+    spec: { x_lags: [0, 1], controls: [], fixed_effects: [] },
+    snapshot: {
+      depvar_label: "FVA", depvar_kind: "share",
+      result: { coefs: [], omitted: [], n_obs: 0, n_entities: 0, n_times: 0, n_clusters: 0,
+        r2_within: null, status: "ok", years: null, suppressed: true },
+    },
+  });
+  const navigated: number[] = [];
+  const view = render(<ReportLab {...finishProps} onNavigateStep={(step) => navigated.push(step)} getStep={(step) => ({
+    custom_results: [model(`选入-${step}`, true), model(`未选-${step}`, false)],
+  })} />);
+  const details = view.container.querySelector(".reg-reported-models")!.closest("details")!;
+  expect(details.open).toBe(false);
+  expect(details.querySelector("summary")?.textContent).toBe("查看自定义模型详细表（已选入报告 4 个）");
+  expect(details.querySelectorAll("tbody tr")).toHaveLength(4);
+  expect(details.textContent).not.toContain("未选-");
+  details.open = true;
+  fireEvent.click(within(details).getByRole("button", { name: "步骤 11 · 贸易流" }));
+  expect(navigated).toEqual([11]);
+});
 
 test("one-click finish flushes then generates then submits; outro appears only after acknowledged submission", async () => {
   const order: string[] = [];

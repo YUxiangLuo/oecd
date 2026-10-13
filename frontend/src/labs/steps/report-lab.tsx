@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, isApiErrorStatus } from "../../api";
 import { RegressionEvidenceMatrix, RegressionSummaryBars, ReportedCustomModels, type SiblingStepData } from "../../regression-teach";
+import { REGRESSION_FAMILIES } from "../../regression-lessons";
 import { revealFocusedWhileSettling, scrollIntoCourseContent } from "../../content-scroll";
 import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-lazy";
 import { ReportOutro } from "../../report-outro";
@@ -559,6 +560,8 @@ export function ReportLab({
   }, [blocked]);
 
   const reflection = (state.data ?? {}) as ReportReflectionState;
+  const reportedModelCount = REGRESSION_FAMILIES.reduce((count, { step }) =>
+    count + (getStep?.(step)?.custom_results ?? []).filter((model) => model.in_report).length, 0);
   const writtenCount = REFLECTION_FIELDS.filter((field) => reflectionLength(String(reflection[field.key] ?? "")) >= field.min).length;
   // A paste beyond the limit is cut by the browser; say so instead of losing the end silently.
   const [pasteCut, setPasteCut] = useState<{ key: string; wide: boolean; replaced?: boolean; none?: boolean } | null>(null);
@@ -817,13 +820,21 @@ export function ReportLab({
         </nav>
       </section>
       {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} flash={gateFlash} verb={reportGateVerb(report)} />}
-      {/* Open: the four steps' results and the models marked for the report are what the analysis below cites. */}
+      {/* Keep the evidence visible for writing; supplementary comparisons can be opened as needed. */}
       <section className="report-reference" aria-labelledby="report-regression-results-title">
         <h3 id="report-regression-results-title" className="report-reference-title">四步回归结果</h3>
-        <p className="muted">四个 Y 的单位不同，条长都换算成标准差；条末先写各自单位的值。</p>
-        <RegressionSummaryBars getStep={getStep} />
         <RegressionEvidenceMatrix getStep={getStep} />
-        <ReportedCustomModels getStep={getStep} onNavigateStep={onNavigateStep} />
+        <details>
+          <summary>查看标准差比较图</summary>
+          <p className="muted">四个 Y 的单位不同，条长都换算成标准差；条末先写各自单位的值。</p>
+          <RegressionSummaryBars getStep={getStep} />
+        </details>
+        {reportedModelCount > 0 ? (
+          <details>
+            <summary>查看自定义模型详细表（已选入报告 {reportedModelCount} 个）</summary>
+            <ReportedCustomModels getStep={getStep} onNavigateStep={onNavigateStep} />
+          </details>
+        ) : <p className="muted">自定义模型（选做）：未添加。</p>}
         <p className="muted">课程模拟回归按你的例子换算的结果在步骤 11–14，不是该例子的单独估计；步骤 6–9 的真实 ICIO 图表读数会自动写进报告。这里只列出已保存的结果，结论要你自己写；自定义模型的解释跨度以所选 X 滞后为准。</p>
       </section>
       <section className="report-reflection" aria-labelledby={REPORT_REFLECTION_TITLE_ID}>

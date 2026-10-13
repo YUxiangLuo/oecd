@@ -5,8 +5,10 @@ import {
 import type { SiblingStepData } from "./regression-teach";
 import type { ClassroomReport, Meta, ReportGateItem, ReportMutationResponse, Step, StepStateApi } from "./types";
 import type { SessionStatus } from "./use-session";
+import type { ReactNode } from "react";
 
 interface LabRouterProps {
+  quiz?: ReactNode;
   step: Step;
   meta: Meta | null;
   state: StepStateApi;
@@ -41,6 +43,7 @@ export function LabRouter({
   onNavigateStep,
   getStep,
   getConfirmedStep,
+  quiz,
 }: LabRouterProps) {
   if (step.lab === "db") return <DbLab state={state} releaseMeta={meta} />;
   if (step.lab === "shock") return meta ? <ShockLab meta={meta} step={step} state={state} /> : null;
@@ -52,6 +55,7 @@ export function LabRouter({
       <RegressionRunLab
         key={step.regression_outcome}
         step={step}
+        quiz={quiz}
         meta={meta}
         state={state}
         getStep={getStep}

@@ -272,6 +272,21 @@ describe("DivergingBarChart", () => {
     expect(tip.style.opacity).toBe("0");
   });
 
+  test("hidden and resized tooltips leave layout, and can be shown again", () => {
+    const { container } = render(<DivergingBarChart rows={STEP11} unitTitle="个百分点" onSelect={() => {}} width={650} />);
+    const tip = container.querySelector<HTMLElement>(".diverging-bars > div[style*='pointer-events']")!;
+    const bar = container.querySelector<SVGGElement>('[role="button"]')!;
+    expect(getComputedStyle(tip).display).toBe("none");
+    fireEvent.focus(bar);
+    expect(getComputedStyle(tip).display).not.toBe("none");
+    fireEvent(window, new Event("resize"));
+    expect(getComputedStyle(tip).display).toBe("none");
+    fireEvent.mouseEnter(bar, { clientX: 200, clientY: 100 });
+    expect(getComputedStyle(tip).display).not.toBe("none");
+    fireEvent.mouseLeave(bar);
+    expect(getComputedStyle(tip).display).toBe("none");
+  });
+
   test("keyboard focus puts the tooltip above the row, not over the lines under the chart", () => {
     const { container } = render(<DivergingBarChart rows={STEP11} unitTitle="个百分点" onSelect={() => {}} width={650}><p>合计 100%</p></DivergingBarChart>);
     const wrap = container.querySelector<HTMLElement>(".diverging-bars")!;

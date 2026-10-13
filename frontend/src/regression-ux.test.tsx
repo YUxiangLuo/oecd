@@ -116,6 +116,67 @@ const mockApis = () => {
 };
 
 describe("simple regression workbench", () => {
+  test("slow trend loading restores recorded material without replacing an earlier preview", async () => {
+    mockApis();
+    let resolveGroups!: (value: TeachingGroupsResponse) => void;
+    spyOn(api, "teachingGroups").mockImplementation(() => new Promise(resolve => { resolveGroups = resolve; }));
+    spyOn(api, "runRegression").mockResolvedValue({ ...FVA(), benchmark } as never);
+    const save = mock(() => {});
+    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, save, data: { run: DVA() } as never }} />);
+    fireEvent.click(await screen.findByRole("button", { name: "计算贸易流回归" }));
+    await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("外国增加值项占比平均低"));
+    await act(async () => { resolveGroups(groups); });
+    await waitFor(() => expect(document.querySelector(".reg-material-status")?.textContent).toBe("正在查看：外国增加值项占比；已记录：国内增加值出口占比"));
+    expect(document.querySelector(".reg-custom-y b")?.textContent).toBe("国内增加值出口占比");
+    fireEvent.click(screen.getByRole("button", { name: "返回已记录结果" }));
+    expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高");
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  test("returning to the recorded result needs no request and never changes report material", async () => {
+    mockApis();
+    const run = spyOn(api, "runRegression").mockResolvedValue({ ...DVA(), benchmark } as never);
+    const save = mock(() => {});
+    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, save, data: { run: FVA() } as never }} />);
+    fireEvent.click(await screen.findByRole("button", { name: DVA_BAR }));
+    fireEvent.click(await screen.findByRole("button", { name: "返回已记录结果" }));
+    expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("外国增加值项占比平均低");
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
+    expect((screen.getByRole("button", { name: "用此结果替换本步报告材料" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  test("preview leaves materials and workbench Y intact; failed preview retains it; refresh restores recorded Y; quiz precedes mounted optional models", async () => {
+    mockApis();
+    const run = spyOn(api, "runRegression").mockResolvedValue({ ...DVA(), benchmark } as never);
+    const save = mock(() => {});
+    const props = { step, meta, state: { ...state, save, data: { run: FVA() } as never }, quiz: <section aria-label="理解题测试">理解题</section> };
+    const view = render(<RegressionRunLab {...props} />);
+    fireEvent.click(await screen.findByRole("button", { name: DVA_BAR }));
+    await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高"));
+    expect(save).not.toHaveBeenCalled();
+    expect(document.querySelector(".reg-custom-y b")?.textContent).toBe("外国增加值项占比");
+    const optional = document.querySelector<HTMLDetailsElement>("#regression-model")!;
+    expect(optional.open).toBe(false);
+    expect(screen.getAllByRole("region", { name: "理解题测试" })).toHaveLength(1);
+    expect(screen.getByRole("region", { name: "理解题测试" }).compareDocumentPosition(optional) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(document.querySelector(".verdict-card")!.compareDocumentPosition(document.querySelector(".reg-family-bars")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const mountedWorkbench = optional.querySelector(".reg-custom-y");
+    fireEvent.click(optional.querySelector("summary")!);
+    fireEvent.click(optional.querySelector("summary")!);
+    expect(optional.querySelector(".reg-custom-y")).toBe(mountedWorkbench);
+    run.mockRejectedValue(new TypeError("Failed to fetch"));
+    fireEvent.click(screen.getByRole("button", { name: FVA_BAR }));
+    await screen.findByRole("alert");
+    expect(save).not.toHaveBeenCalled();
+    expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高");
+    view.unmount();
+    render(<RegressionRunLab {...props} />);
+    await screen.findByRole("button", { name: `${FVA_BAR}，正在查看` });
+    expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("外国增加值项占比平均低");
+    expect(save).not.toHaveBeenCalled();
+  });
+
   test("before data arrives: one action, no Y dropdown, no step focus, no exercises or folds", () => {
     for (const outcome of ["trade", "production", "length", "network"] as RegressionOutcome[]) {
       const html = renderToStaticMarkup(<RegressionRunLab step={{ ...step, regression_outcome: outcome }} meta={meta} state={state} />);
@@ -147,7 +208,7 @@ describe("simple regression workbench", () => {
     expect(document.querySelector(".reg-data-note-before")?.textContent).toBe(GENERATED_DATA_NOTE);
   });
 
-  test("one run saves the default Y and draws one bar per Y; clicking another bar runs and saves that Y", async () => {
+  test("first run records the default; other Y is previewed until explicit replacement", async () => {
     mockApis();
     const run = spyOn(api, "runRegression").mockImplementation(async (_outcome, _signal, baseline) =>
       ({ ...(baseline === "DVAex_share" ? DVA() : FVA()), benchmark }) as never);
@@ -159,7 +220,7 @@ describe("simple regression workbench", () => {
     expect((saves[0].run as { design: { baseline: string } }).design.baseline).toBe("FVA_share");
     const pressed = screen.getAllByRole("button", { pressed: true });
     expect(pressed).toHaveLength(1);
-    expect(pressed[0].getAttribute("aria-label")).toBe(`${FVA_BAR}，已保存`);
+    expect(pressed[0].getAttribute("aria-label")).toBe(`${FVA_BAR}，正在查看`);
     // The saved bar's label is the headline's number.
     expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("外国增加值项占比平均低 0.55 个百分点");
     // The result card opens with the generated-data disclosure, before the headline.
@@ -169,15 +230,16 @@ describe("simple regression workbench", () => {
     expect(screen.getByRole("group", { name: /X 每高 1 个百分点，Y 两年累计平均相差（个百分点）/ })).toBeTruthy();
     // Three sections: the data, the default model (said above its run button), then the open change-the-model one.
     expect([...document.querySelectorAll(".reg-workbench > section > .reg-section-step")].map((node) => node.textContent))
-      .toEqual(["先看数据", "默认模型", "改模型、对比（选做）"]);
+      .toEqual(["先看数据", "默认模型"]);
     // Folded: the chart's per-year table, the model's data facts, and one column's full numbers.
-    await waitFor(() => expect([...document.querySelectorAll("details > summary")].map((node) => node.textContent))
-      .toEqual(["各组逐年读数", "数据、样本和区间的算法", "查看单模型详细数字（系数、t 值与区间）"]));
+    expect(document.querySelector<HTMLDetailsElement>("#regression-model")?.open).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: DVA_BAR }));
     await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高 0.56 个百分点"));
     expect(run.mock.calls[1][2]).toBe("DVAex_share");
+    expect(saves).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "用此结果替换本步报告材料" }));
     expect((saves[1].run as { design: { baseline: string } }).design.baseline).toBe("DVAex_share");
-    expect(screen.getByRole("button", { pressed: true }).getAttribute("aria-label")).toBe(`${DVA_BAR}，已保存`);
+    expect(screen.getByRole("button", { pressed: true }).getAttribute("aria-label")).toBe(`${DVA_BAR}，正在查看`);
     // The trend chart and the question follow the saved Y.
     expect(screen.getByRole("img", { name: /加税前后：各组国内增加值出口占比的平均变化/ })).toBeTruthy();
     expect(screen.getByRole("heading", { name: /国内增加值出口占比（Y）/ })).toBeTruthy();
@@ -186,7 +248,7 @@ describe("simple regression workbench", () => {
     expect(run).toHaveBeenCalledTimes(2);
   });
 
-  test("a click on a grey (方向不确定) bar asks before saving it; 取消 keeps the saved Y", async () => {
+  test("a grey (方向不确定) bar previews without confirmation or saving until explicit replacement", async () => {
     mockApis();
     // DVA's interval includes 0 here: its bar is grey.
     spyOn(api, "teachingOverview").mockResolvedValue({ ...overview, outcomes: { ...overview.outcomes, trade: [
@@ -196,14 +258,7 @@ describe("simple regression workbench", () => {
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
     const grey = await screen.findByRole("button", { name: /^国内增加值出口占比：/ });
     fireEvent.click(grey);
-    const dialog = await screen.findByRole("dialog");
-    expect(dialog.textContent).toContain("改为保存方向不确定的这一项？");
-    expect(dialog.textContent).toContain("“国内增加值出口占比”的 95% 区间包含 0");
-    fireEvent.click(screen.getByRole("button", { name: "取消" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(run).not.toHaveBeenCalled();
-    fireEvent.click(grey);
-    fireEvent.click(await screen.findByRole("button", { name: "改为保存" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
     await waitFor(() => expect(run).toHaveBeenCalledTimes(1));
     expect(run.mock.calls[0][2]).toBe("DVAex_share");
   });
@@ -216,7 +271,7 @@ describe("simple regression workbench", () => {
     const other = await screen.findByRole("button", { name: DVA_BAR });
     fireEvent.click(other);
     await waitFor(() => expect(other.getAttribute("aria-disabled")).toBe("true"));
-    fireEvent.click(screen.getByRole("button", { name: `${FVA_BAR}，已保存` }));
+    fireEvent.click(screen.getByRole("button", { name: `${FVA_BAR}，正在查看` }));
     fireEvent.keyDown(other, { key: "Enter" });
     expect(run).toHaveBeenCalledTimes(1);
     finish({ ...DVA(), benchmark });
@@ -228,7 +283,7 @@ describe("simple regression workbench", () => {
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: savedRun("DVAex_share", "国内增加值出口占比") } as never }} />);
     await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高 0.50 个百分点"));
     // The saved run, not the overview, is the selected bar: page and report agree.
-    await screen.findByRole("button", { name: "国内增加值出口占比：+0.50 个百分点，95% 区间 [+0.40, +0.60]，已保存" });
+    await screen.findByRole("button", { name: "国内增加值出口占比：+0.50 个百分点，95% 区间 [+0.40, +0.60]，正在查看" });
     expect(document.body.textContent).not.toContain("教学模拟");
     cleanup();
     const getStep = ((n: number) => n === 6 ? { indicator_selection: { metric: "DVAex_share" } } : undefined) as <T>(step: number) => T | undefined;
@@ -260,9 +315,9 @@ describe("simple regression workbench", () => {
     cleanup();
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
     await screen.findByText("换一种模型试试：每次改一处，和默认模型比较");
-    expect(screen.getByRole("group", { name: "单模型详细数字" }).hasAttribute("open")).toBe(false);
-    expect(screen.getByRole("link", { name: "查看已保存结果" }).getAttribute("href")).toBe("#regression-results");
-    expect(screen.getByRole("link", { name: "修改模型（选做）" }).getAttribute("href")).toBe("#regression-model");
+    expect((await screen.findByRole("group", { name: "单模型详细数字" })).hasAttribute("open")).toBe(false);
+    expect(screen.getByRole("link", { name: "查看结果" }).getAttribute("href")).toBe("#regression-results");
+    expect(screen.queryByRole("link", { name: "修改模型（选做）" })).toBeNull();
     expect(await screen.findByRole("button", { name: "计算这个模型" })).toBeTruthy();
     expect([...document.querySelectorAll(".reg-custom-compare-table thead th")].map((cell) => cell.textContent)).toEqual(["变量", "默认模型"]);
   });
@@ -274,13 +329,13 @@ describe("simple regression workbench", () => {
     const rerun = await screen.findByRole("button", { name: "重新计算贸易流回归" });
     expect(rerun.className).toBe("run-btn secondary");
     // A submitted report: the warning is a callout, not a grey footnote.
-    expect(document.querySelector(".reg-rerun-warning")?.textContent).toContain("重新计算或点击另一条，会替换报告材料里保存的结果");
+    expect(document.querySelector(".reg-rerun-warning")?.textContent).toContain("点击另一条或重新计算仅预览");
     fireEvent.click(rerun);
     await screen.findByRole("alert");
     expect(screen.getByRole("alert").textContent).toBe("贸易流回归未完成：网络连接中断，请检查连接后重试。");
     // The run button is the one retry action; the old result stays, said to be the last saved one.
     expect(screen.getByRole("button", { name: "重试：计算贸易流回归" }).className).toBe("run-btn");
-    expect(document.querySelector(".reg-stale-note")?.textContent).toBe("这次计算没有成功；下面仍是上次保存的结果。");
+    expect(document.querySelector(".reg-stale-note")?.textContent).toBe("这次计算没有成功；下面仍是上次查看的结果，已记录材料未改变。");
     expect(document.querySelector(".reg-results-stale .reg-plain-verdict")).not.toBeNull();
   });
 
@@ -289,7 +344,7 @@ describe("simple regression workbench", () => {
     const run = spyOn(api, "runRegression").mockRejectedValue(new TypeError("Failed to fetch"));
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
     fireEvent.click(await screen.findByRole("button", { name: /^国内增加值出口占比：/ }));
-    const retry = await screen.findByRole("button", { name: "重试：保存“国内增加值出口占比”" });
+    const retry = await screen.findByRole("button", { name: "重试：预览“国内增加值出口占比”" });
     run.mockResolvedValue({ ...DVA(), benchmark } as never);
     fireEvent.click(retry);
     await waitFor(() => expect(run).toHaveBeenCalledTimes(2));
@@ -309,11 +364,11 @@ describe("simple regression workbench", () => {
       fireEvent.click(await screen.findByRole("button", { name: /^国内增加值出口占比：/ }));
       const alert = await screen.findByRole("alert");
       expect(alert.closest(".reg-family-bars")).not.toBeNull();
-      expect(alert.textContent).toContain("保存“国内增加值出口占比”没有成功：网络连接中断，请检查连接后重试。");
-      expect(alert.textContent).toContain("图和下面仍是上次保存的结果（外国增加值项占比）。");
+      expect(alert.textContent).toContain("预览“国内增加值出口占比”没有成功：网络连接中断，请检查连接后重试。");
+      expect(alert.textContent).toContain("图和结论仍是上次查看的结果（外国增加值项占比），已记录材料未改变。");
       expect(alert.textContent).not.toContain("计算");
       // One retry, next to the error; the run button above recalculates the saved Y as usual.
-      expect(alert.querySelector("button")?.textContent).toBe("重试：保存“国内增加值出口占比”");
+      expect(alert.querySelector("button")?.textContent).toBe("重试：预览“国内增加值出口占比”");
       expect(screen.getByRole("button", { name: "重新计算贸易流回归" }).className).toBe("run-btn secondary");
       expect(screen.getAllByRole("alert")).toHaveLength(1);
       expect(document.querySelector(".reg-stale-note")).toBeNull();
@@ -339,12 +394,14 @@ describe("simple regression workbench", () => {
       const bar = await screen.findByRole("button", { name: DVA_BAR });
       bar.focus();
       fireEvent.click(bar);
+      await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高"));
+      expect(document.querySelector(".reg-replaced-notice")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "用此结果替换本步报告材料" }));
       // The notice sits under the bars, in the chart card, where the click happened (not up in the run card).
       await waitFor(() => expect(document.querySelector(".diverging-bars .reg-replaced-notice")?.textContent)
-        .toBe("已改为保存这个 Y 的结果；报告已提交，请到步骤 15 更新报告并重新提交给老师。"));
+        .toBe("已改为保存这次算出的结果；报告已提交，请到步骤 15 更新报告并重新提交给老师。"));
       expect(document.querySelectorAll(".reg-rerun-warning")).toHaveLength(1);
       expect(document.querySelector(".reg-run-card .reg-rerun-warning")).toBeNull();
-      expect(document.body.textContent).not.toContain("这次算出的");
       expect(document.querySelector(".reg-replaced-notice")?.getAttribute("role")).toBe("status");
       // Brought into view without taking keyboard focus from the bars.
       await waitFor(() => expect(scrolled).toEqual([{ block: "nearest", behavior: "smooth" }]));
@@ -357,12 +414,16 @@ describe("simple regression workbench", () => {
     const run = spyOn(api, "runRegression").mockResolvedValue({ ...DVA(), benchmark } as never);
     render(<LockedLab initial={FVA()} />);
     fireEvent.click(await screen.findByRole("button", { name: DVA_BAR }));
+    await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高"));
+    fireEvent.click(screen.getByRole("button", { name: "用此结果替换本步报告材料" }));
     await waitFor(() => expect(document.querySelector(".reg-replaced-notice")).not.toBeNull());
     // Clicking the bar of the Y the report was built from (here FVA) restores that material: no update is needed.
     run.mockResolvedValue({ ...FVA(), benchmark } as never);
     fireEvent.click(await screen.findByRole("button", { name: /^外国增加值项占比：/ }));
+    await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("外国增加值项占比平均低"));
+    fireEvent.click(screen.getByRole("button", { name: "用此结果替换本步报告材料" }));
     await waitFor(() => expect(document.querySelector(".reg-replaced-notice")).toBeNull(), { timeout: 4000 });
-    expect(document.querySelector(".reg-rerun-warning")?.textContent).toContain("重新计算或点击另一条，会替换报告材料里保存的结果");
+    expect(document.querySelector(".reg-rerun-warning")?.textContent).toContain("点击另一条或重新计算仅预览");
   }, 15000);
 
   test("after a reload the notice follows the report: a stale step says so, the submitted Y does not", async () => {
@@ -374,6 +435,8 @@ describe("simple regression workbench", () => {
       .toBe("本步保存的结果与已提交报告里的不同；请到步骤 15 更新报告并重新提交给老师。"));
     // (b) Back to the Y the report used: withdrawn, although it is not the Y the page opened on.
     fireEvent.click(await screen.findByRole("button", { name: /^外国增加值项占比：/ }));
+    await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("外国增加值项占比平均低"));
+    fireEvent.click(screen.getByRole("button", { name: "用此结果替换本步报告材料" }));
     await waitFor(() => expect(document.querySelector(".reg-replaced-notice")).toBeNull(), { timeout: 4000 });
     expect(run).toHaveBeenCalledTimes(1);
     cleanup();
@@ -427,13 +490,13 @@ describe("simple regression workbench", () => {
   test("the saved bar's tooltip says it is saved; the others say what a click does", async () => {
     mockApis();
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
-    const saved = await screen.findByRole("button", { name: `${FVA_BAR}，已保存` });
+    const saved = await screen.findByRole("button", { name: `${FVA_BAR}，正在查看` });
     const tip = () => document.querySelector(".diverging-bars > div[style*='pointer-events']")?.textContent ?? "";
     fireEvent.mouseEnter(saved, { clientX: 10, clientY: 10 });
-    expect(tip()).toContain("状态 · 已保存（报告用这个 Y）");
+    expect(tip()).toContain("状态 · 正在查看（不替换报告材料）");
     expect(tip()).not.toContain("点击");
     fireEvent.mouseEnter(screen.getByRole("button", { name: DVA_BAR }), { clientX: 10, clientY: 10 });
-    expect(tip()).toContain("操作 · 点击即改为保存此 Y");
+    expect(tip()).toContain("操作 · 点击预览此 Y，不替换报告材料");
   });
 
   test("step 12's identity line sits inside the chart card, under the drawing", async () => {
@@ -653,15 +716,17 @@ describe("saving another Y from the bars", () => {
     const run = spyOn(api, "runRegression").mockResolvedValue({ ...FVA(), benchmark } as never);
     const saves: Record<string, unknown>[] = [];
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, save: (patch) => { saves.push(patch); }, data: { run: DVA() } as never }} />);
-    await screen.findByRole("button", { name: `${DVA_BAR}，已保存` });
+    await screen.findByRole("button", { name: `${DVA_BAR}，正在查看` });
     const chip = document.querySelector(".diverging-bars .reg-saved-chip");
-    expect(chip?.textContent).toBe("当前保存：国内增加值出口占比（不是本步默认） · 恢复默认（外国增加值项占比）");
+    expect(chip?.textContent).toBe("正在查看：国内增加值出口占比（不是本步默认） · 恢复默认（外国增加值项占比）");
     const reset = screen.getByRole("button", { name: "恢复默认（外国增加值项占比）" });
     reset.focus();
     await act(async () => { fireEvent.click(reset); });
     expect(document.querySelector(".reg-saved-chip")).toBeNull();
     // Through the run flow: the default Y is run and saved.
     expect(run.mock.calls[0][2]).toBeNull();
+    expect(saves).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "用此结果替换本步报告材料" }));
     expect((saves[0].run as { design: { baseline: string } }).design.baseline).toBe("FVA_share");
     // The chip's button is gone: keyboard focus lands on the bar that is saved now.
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
@@ -671,7 +736,7 @@ describe("saving another Y from the bars", () => {
   test("the default saved Y shows no chip", async () => {
     mockApis();
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
-    await screen.findByRole("button", { name: `${FVA_BAR}，已保存` });
+    await screen.findByRole("button", { name: `${FVA_BAR}，正在查看` });
     expect(document.querySelector(".reg-saved-chip")).toBeNull();
   });
 
@@ -679,8 +744,8 @@ describe("saving another Y from the bars", () => {
     mockApis();
     spyOn(api, "runRegression").mockResolvedValue({ ...DVA(), benchmark } as never);
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
-    const group = await screen.findByRole("group", { name: /（键盘：方向键切换，Enter 保存）/ });
-    expect(group.getAttribute("aria-label")).toContain("本类 2 个 Y · 点击任一条即改为保存该 Y（键盘：方向键切换，Enter 保存）");
+    const group = await screen.findByRole("group", { name: /（键盘：方向键切换，Enter 预览）/ });
+    expect(group.getAttribute("aria-label")).toContain("点击预览，不替换报告材料");
     const tip = () => document.querySelector<HTMLElement>(".diverging-bars > div[style*='pointer-events']");
     const other = screen.getByRole("button", { name: DVA_BAR });
     fireEvent.focus(other);
@@ -692,7 +757,7 @@ describe("saving another Y from the bars", () => {
     other.focus();
     fireEvent.keyDown(other, { key: "Enter" });
     await waitFor(() => expect([...document.querySelectorAll("[role='status'][aria-live='polite']")].map((node) => node.textContent))
-      .toContain("已保存：国内增加值出口占比"));
+      .toContain("正在查看：国内增加值出口占比；报告材料未替换"));
   });
 
   test("a run cut off by leaving the step says so once when the step is shown again", async () => {
