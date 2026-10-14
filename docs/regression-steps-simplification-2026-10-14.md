@@ -185,3 +185,9 @@ student02 的步骤 11 记录约 20 KB，四步约 80 KB，占 300 KB 保存预�
 - 文档：README、DEPLOY.md、技术手册 2.2／3.1／3.3／7.2／7.3／8.1／8.2／10.3、实验手册步骤 11–15 相关段落、`docs/student-manual/README.md`（截图未重拍，已注明）。
 - 验证：`uv run ruff check .`、`ruff format --check .`、`mypy` 通过；`pytest` 1,228 通过（专用测试库）；`bunx tsc`、`bun test` 940 通过（删除了约 3,000 行绑定旧语义的测试，新增预设、放入／替换／移出、旧契约拒绝等用例）；demo（新建 v15 库、`seed_full_journey.py` 为 student02 走完 15 步）上核对：步骤 11 点另一条只出预览，预设“去掉汇率变动”一键计算并放入报告，步骤 15 面板与草稿报告“附录：模型实验”均按保存设定重算。
 - 未做：实验手册 PDF 与图 10、14–16、18 未重拍；`scripts/accept_workbench_reports.py` 已改为每步一个实验但未在隔离库上重跑；阶段 3（`regression.tsx` 拆分）未开始。
+
+### 7.3 阶段 3（2026-10-14，同一分支）
+
+- `frontend/src/regression.tsx` 拆为页面（315 行，4 个 state、2 个 ref、3 个 effect）和 `frontend/src/regression-step/` 下的五个模块：方程说明、结论卡、保存的运行、本类条形图与趋势图辅助、运行 hook（请求、中断、429 倒计时）。页面继续再导出课程其他文件用到的名字，行为不变。
+- `scripts/agent_browser_course_journey.py` 的默认模型项集合改为从 `DEFAULT_SPEC` 取 X 滞后与全部控制变量（原先只含汇率变动，与 v12 默认模型不符，使浏览器验收在步骤 11 误报）。
+- 验证：`scripts/local_ci.sh` 全部通过（Gephi 基准、`ruff`／`mypy`、后端 1,228 个测试、覆盖率 92%、前端 940 个测试、学生 15 步与教师浏览器验收）；证据目录 `dogfood-output/local-ci/20261014T025947Z-1280154`。

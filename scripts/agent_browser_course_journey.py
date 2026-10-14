@@ -14,7 +14,7 @@ import psycopg
 
 from dogfood_sync import Browser
 from gvcsim import quizzes
-from gvcsim.regression.spec import DEFAULT_SPEC, EXCHANGE_RATE_COLUMN, X_LAG_COLUMNS
+from gvcsim.regression.spec import DEFAULT_SPEC, X_LAG_COLUMNS
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 from gvcsim.regression.teaching import X_COLUMN
 
@@ -24,7 +24,8 @@ QUIZ_ANSWERS = {
     step: {question["id"]: question["correct"] for question in quizzes.STEP_QUIZZES[step]} for step in range(1, 15)
 }
 # The default model's terms: X, L1.X and the exchange-rate control.
-DEFAULT_TERMS = {X_LAG_COLUMNS[lag] for lag in DEFAULT_SPEC.x_lags} | {EXCHANGE_RATE_COLUMN}
+# The course default model's terms as the run reports them: its X lags and its controls (v12: three of them).
+DEFAULT_TERMS = {X_LAG_COLUMNS[lag] for lag in DEFAULT_SPEC.x_lags} | set(DEFAULT_SPEC.control_columns)
 
 
 def choose(browser, name, value):
