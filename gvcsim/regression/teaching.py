@@ -89,6 +89,12 @@ GDP_COLUMN = "teaching_log_gdp"
 POPULATION_COLUMN = "teaching_population_growth"
 OPENNESS_COLUMN = "teaching_trade_openness"
 FDI_COLUMN = "teaching_fdi_gdp"
+# Simulated GDP: every country's log GDP grows by COMMON_GDP_GROWTH a year; first-wave economies grow by
+# WAVE1_EXTRA_GDP_GROWTH a year more from the first year on (a pre-existing path correlated with the tariff: a confounder).
+COMMON_GDP_GROWTH = 0.025
+WAVE1_EXTRA_GDP_GROWTH = 0.012
+# Simulated trade openness (percent of GDP): a country level plus this rise a year for first-wave economies.
+WAVE1_OPENNESS_RISE = 2.0
 MACRO_CONTROLS = {
     GDP_COLUMN: {"unit": "ln(USD)", "gamma_factor": 0.08},
     POPULATION_COLUMN: {"unit": "percent per year", "gamma_factor": 0.0},
@@ -591,13 +597,19 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
     def draw(keys: pd.Series, salt: str) -> pd.Series:
         return keys.map(lambda value: 2 * _unit_number(value, salt, seed) - 1)
 
-    growth = 0.025 * t + 0.012 * t * out[WAVE_COLUMN].eq(1) + 0.025 * draw(cluster, "macro-growth")
+    growth = (
+        COMMON_GDP_GROWTH * t
+        + WAVE1_EXTRA_GDP_GROWTH * t * out[WAVE_COLUMN].eq(1)
+        + 0.025 * draw(cluster, "macro-growth")
+    )
     openness_base = 80 + 45 * draw(out.country, "openness-level")
     out[GDP_COLUMN] = gdp_base + growth
     out[POPULATION_COLUMN] = (
         0.8 + 1.2 * draw(out.country, "population-level") + 0.5 * draw(cluster, "population-growth")
     )
-    out[OPENNESS_COLUMN] = openness_base + 2 * t * out[WAVE_COLUMN].eq(1) + 4 * draw(cluster, "openness")
+    out[OPENNESS_COLUMN] = (
+        openness_base + WAVE1_OPENNESS_RISE * t * out[WAVE_COLUMN].eq(1) + 4 * draw(cluster, "openness")
+    )
     out[FDI_COLUMN] = 2 + 3 * draw(out.country, "fdi-level") + 4 * draw(cluster, "fdi-flow")
     macro_effect = MACRO_CONTROLS[GDP_COLUMN]["gamma_factor"] * (out[GDP_COLUMN] - gdp_base) + MACRO_CONTROLS[
         OPENNESS_COLUMN

@@ -20,11 +20,20 @@ Run from the repository root:
         --markdown docs/regression-model-space-check-2026-10-14.md --summary benchmarks/model_space_v12.json
 
 ``run`` writes one JSON line per fit (resumable); ``report`` evaluates them. Numbers are for the current release only.
+
+``--variant NAME`` (run and report) uses a candidate generator setting from scripts/teaching_variants.py instead of the
+published panel, and ``--ys default`` limits the sweep to the four default Ys and the zero-effect Y. ``distinct`` reads a
+sweep and reports how far each single change to the default model moves the two-year total (whether a student who
+changes one thing sees a different number):
+
+    PYTHONPATH=. uv run python scripts/check_model_space.py run --out dogfood-output/model-space-P17 --variant P17 --ys default
+    PYTHONPATH=. uv run python scripts/check_model_space.py distinct --out dogfood-output/model-space
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import itertools
 import json
 import math
@@ -34,9 +43,12 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import teaching_variants  # noqa: E402
+
 from gvcsim.regression.design import RegressionDesign
 from gvcsim.regression.panel import run_design_with_benchmark
-from gvcsim.regression.spec import CONTROLS, DEFAULT_SPEC, FIXED_EFFECTS, ModelSpec
+from gvcsim.regression.spec import CONTROLS, DEFAULT_SPEC, FIXED_EFFECT_LABELS, FIXED_EFFECTS, ModelSpec
 from gvcsim.regression.teaching import (
     EXCHANGE_RATE_COLUMN,
     EXCHANGE_RATE_GAMMA_FACTOR,
@@ -47,6 +59,7 @@ from gvcsim.regression.teaching import (
     OPENNESS_COLUMN,
     OUTCOMES,
     POPULATION_COLUMN,
+    WEAK_Y,
     X_LAG_COLUMNS,
     selectable_baselines,
 )
@@ -100,16 +113,36 @@ def spec_id(outcome: str, key: str, spec: ModelSpec) -> str:
     return json.dumps([outcome, key, spec.to_dict()], sort_keys=True, ensure_ascii=False)
 
 
-def ys() -> list[tuple[str, str, float | None, str]]:
-    return [(outcome, item.key, item.beta, item.kind) for outcome in OUTCOMES for item in selectable_baselines(outcome)]
+def ys(which: str = "all") -> list[tuple[str, str, float | None, str]]:
+    """Every Y a page may choose, or (``default``) each family's default Y plus the zero-effect Y."""
+    items = [(outcome, item) for outcome in OUTCOMES for item in selectable_baselines(outcome)]
+    if which == "default":
+        items = [
+            (outcome, item)
+            for outcome, item in items
+            if item is selectable_baselines(outcome)[0] or (outcome, item.key) == WEAK_Y
+        ]
+    return [(outcome, item.key, item.beta, item.kind) for outcome, item in items]
+
+
+def _variant(args: argparse.Namespace) -> teaching_variants.Variant | None:
+    key = getattr(args, "variant", None)
+    return teaching_variants.VARIANTS[key] if key else None
+
+
+def _load_panel(args: argparse.Namespace) -> tuple[str, Any]:
+    variant = _variant(args)
+    if variant is None:
+        from gvcsim.regression_routes import read_teaching_panel
+
+        return read_teaching_panel()
+    return f"variant:{variant.key}", teaching_variants.build_panel(variant)
 
 
 def run(args: argparse.Namespace) -> None:
-    from gvcsim.regression_routes import read_teaching_panel
-
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    release, panel = read_teaching_panel()
+    release, panel = _load_panel(args)
     lines = out / "runs.jsonl"
     done: set[str] = set()
     if lines.exists():
@@ -117,7 +150,7 @@ def run(args: argparse.Namespace) -> None:
             for raw in handle:
                 done.add(json.loads(raw)["id"])
     specs = grid()
-    targets = ys()
+    targets = [item for item in ys(args.ys) if not args.keys or item[1] in args.keys]
     total = len(specs) * len(targets)
     print(f"release {release}: {len(specs)} specs × {len(targets)} Y = {total} fits, {len(done)} done", flush=True)
     started = time.time()
@@ -131,6 +164,7 @@ def run(args: argparse.Namespace) -> None:
                 design = RegressionDesign(outcome, teaching=True, baseline=key, spec=spec)
                 record: dict[str, Any] = {
                     "id": identity,
+                    "release": release,
                     "outcome": outcome,
                     "key": key,
                     "beta": beta,
@@ -281,8 +315,12 @@ def evaluate(records: list[dict[str, Any]]) -> tuple[list[Check], dict[str, Any]
         "recover_split": Check("正确设定恢复 60/40 拆分", "同上：当年项区间包含 0.6β、上年项区间包含 0.4β"),
         "lag2_null": Check("L2.X 为零", "正确设定加入 L2.X：其区间包含 0（数据没有两年后关联）"),
         "fx_slope": Check("汇率斜率", "正确设定：汇率变动系数区间包含 −0.0095β"),
-        "gdp_slope": Check("GDP 斜率", "正确设定且 GDP 在内：GDP 对数系数区间包含 0.08β"),
-        "openness_slope": Check("开放度斜率", "正确设定且开放度在内：开放度系数区间包含 0.0015β"),
+        "gdp_slope": Check(
+            "GDP 斜率", f"正确设定且 GDP 在内：GDP 对数系数区间包含 {MACRO_CONTROLS[GDP_COLUMN]['gamma_factor']}β"
+        ),
+        "openness_slope": Check(
+            "开放度斜率", f"正确设定且开放度在内：开放度系数区间包含 {MACRO_CONTROLS[OPENNESS_COLUMN]['gamma_factor']}β"
+        ),
         "null_controls": Check("无关控制为零", "正确设定加入人口增长率／FDI：其系数区间包含 0"),
         "null_controls_keep_beta": Check("无关控制不改变 β", "正确设定加入人口增长率／FDI：累计区间仍包含 β"),
         "icio_keep_beta": Check("ICIO 控制不改变 β", "正确设定加入 3 个 ICIO 派生控制：累计区间仍包含 β"),
@@ -539,18 +577,29 @@ def fmt(value: float | None, kind: str) -> str:
 
 
 def report(args: argparse.Namespace) -> None:
+    variant = _variant(args)
+    with teaching_variants.applied(variant) if variant else contextlib.nullcontext():
+        _report(args, variant)
+
+
+def _report(args: argparse.Namespace, variant: teaching_variants.Variant | None) -> None:
     out = Path(args.out)
     records = [json.loads(line) for line in (out / "runs.jsonl").open(encoding="utf-8")]
     checks, extras = evaluate(records)
     by_id = {record["id"]: record for record in records}
+    present = {(record["outcome"], record["key"]) for record in records}
+    targets = [item for item in ys() if (item[0], item[1]) in present]
+    gamma = MACRO_CONTROLS[GDP_COLUMN]["gamma_factor"]
+    openness_gamma = MACRO_CONTROLS[OPENNESS_COLUMN]["gamma_factor"]
+    where = f"候选生成规则 {variant.key}（{variant.title}）" if variant else "当前 release"
     lines = [
-        "# 步骤 11–14 模型空间核查",
+        "# 步骤 11–14 模型空间核查" + (f"（{variant.key}）" if variant else ""),
         "",
-        "> 当前 release 上，学生可构造的模型（7 种 X 滞后组合 × 13 种固定效应组合 × 13 种控制变量设置）对 17 个 Y 的估计，"
+        f"> {where}上，学生可构造的模型（7 种 X 滞后组合 × 13 种固定效应组合 × 13 种控制变量设置）对 {len(targets)} 个 Y 的估计，"
         "逐项与教学数据的生成规则对照。生成规则见 `gvcsim/regression/teaching.py`，核查脚本见 `scripts/check_model_space.py`。",
         "",
-        f"- 估计次数：{len(records)}；设定数：{len(grid())}；Y：{len(ys())}。",
-        "- 生成规则：Y = 单位水平 + β·(0.6·X + 0.4·L1.X) + (−0.0095·β)·汇率变动 + β·(0.08·ΔGDP对数 + 0.0015·Δ开放度) + 噪声与共同年份趋势；"
+        f"- 估计次数：{len(records)}；设定数：{len(grid())}；Y：{len(targets)}。",
+        f"- 生成规则：Y = 单位水平 + β·(0.6·X + 0.4·L1.X) + (−0.0095·β)·汇率变动 + β·({gamma}·ΔGDP对数 + {openness_gamma}·Δ开放度) + 噪声与共同年份趋势；"
         "人口增长率、FDI 与 Y 无关；没有两年后关联；汇率、GDP 增长、开放度上升与第一批加税相关（混杂）。",
         "",
         "## 1. 逐项核查",
@@ -603,7 +652,7 @@ def report(args: argparse.Namespace) -> None:
     named = key_specs(records)
     header = "| Y（β） | " + " | ".join(label for label, _, _ in named) + " |"
     lines += [header, "|" + " --- |" * (len(named) + 1)]
-    for outcome, key, beta, kind in ys():
+    for outcome, key, beta, kind in targets:
         cells = []
         for _label, _, spec in named:
             record = by_id.get(spec_id(outcome, key, spec))
@@ -661,21 +710,149 @@ def report(args: argparse.Namespace) -> None:
     print(text)
 
 
+def _moves() -> list[tuple[str, str, ModelSpec]]:
+    """Every single change a student can make to the default model on the page, as (group, label, spec)."""
+    default = DEFAULT_SPEC.canonical()
+    moves: list[tuple[str, str, ModelSpec]] = []
+    for lags in x_sets():
+        if lags != default.x_lags:
+            moves.append(
+                (
+                    "X 项",
+                    " + ".join("X" if lag == 0 else f"L{lag}.X" for lag in lags),
+                    ModelSpec(lags, default.controls, default.fixed_effects).canonical(),
+                )
+            )
+    labels = {key: info.label for key, info in CONTROLS.items()}
+    for key, lag in default.controls:
+        moves.append(
+            (
+                "去掉控制",
+                f"去掉{labels[key]}",
+                ModelSpec(
+                    default.x_lags, tuple(item for item in default.controls if item[0] != key), default.fixed_effects
+                ).canonical(),
+            )
+        )
+        moves.append(
+            (
+                "控制改滞后",
+                f"{labels[key]}改滞后 1 期",
+                ModelSpec(
+                    default.x_lags,
+                    tuple((name, 1 if name == key else lag) for name, lag in default.controls),
+                    default.fixed_effects,
+                ).canonical(),
+            )
+        )
+    for key in CONTROLS:
+        if key not in dict(default.controls):
+            moves.append(
+                (
+                    "加控制",
+                    f"加{labels[key]}",
+                    ModelSpec(default.x_lags, (*default.controls, (key, 0)), default.fixed_effects).canonical(),
+                )
+            )
+    for effects in fixed_effect_sets():
+        if effects != default.fixed_effects:
+            label = " + ".join(FIXED_EFFECT_LABELS[key] for key in effects) if effects else "无固定效应"
+            moves.append(("固定效应", label, ModelSpec(default.x_lags, default.controls, effects).canonical()))
+    return moves
+
+
+def distinct(args: argparse.Namespace) -> None:
+    """How far each single change to the default model moves the two-year total, per Y, plus the whole grid's spread."""
+    out = Path(args.out)
+    records = [json.loads(line) for line in (out / "runs.jsonl").open(encoding="utf-8")]
+    by_id = {record["id"]: record for record in records}
+    present = {(record["outcome"], record["key"]) for record in records}
+    targets = [item for item in ys() if (item[0], item[1]) in present and item[2]]
+    moves = [move for move in _moves() if by_id.get(spec_id(targets[0][0], targets[0][1], move[2]))]
+    thresholds = (0.05, 0.10)
+    lines = [
+        f"## 改一处设定，两年累计变多少（{records[0].get('release', '')}）",
+        "",
+        "相对默认模型两年累计的变化（+ 为幅度变大）。“全空间”列：全部设定里与默认模型相差至少 5% / 10% 的比例。",
+        "",
+        "| Y | " + " | ".join(label for _, label, _ in moves) + " | 全空间 ≥5% / ≥10% |",
+        "|" + " --- |" * (len(moves) + 2),
+    ]
+    summary: dict[str, Any] = {}
+    for outcome, key, beta, kind in targets:
+        base = by_id.get(spec_id(outcome, key, DEFAULT_SPEC.canonical()))
+        total = _x_sum(base) if base else None
+        if not total:
+            continue
+        reference = total["coef"]
+        cells = []
+        per_move: dict[str, float | None] = {}
+        for _group, label, spec in moves:
+            record = by_id.get(spec_id(outcome, key, spec))
+            value = _x_sum(record) if record and record.get("status") != "error" else None
+            if not value:
+                cells.append("—")
+                per_move[label] = None
+                continue
+            change = (
+                (abs(value["coef"]) - abs(reference)) / abs(reference)
+                if math.copysign(1, value["coef"]) == math.copysign(1, reference)
+                else -(abs(value["coef"]) + abs(reference)) / abs(reference)
+            )
+            per_move[label] = change
+            cells.append(f"{change:+.0%}")
+        spread = []
+        for record in records:
+            if (record["outcome"], record["key"]) != (outcome, key) or record.get("status") == "error":
+                continue
+            value = _x_sum(record)
+            if value:
+                spread.append(abs(value["coef"] - reference) / abs(reference))
+        shares = (
+            [sum(1 for item in spread if item >= threshold) / len(spread) for threshold in thresholds]
+            if spread
+            else [0.0, 0.0]
+        )
+        cells.append(" / ".join(f"{share:.0%}" for share in shares))
+        lines.append(f"| {key} | " + " | ".join(cells) + " |")
+        summary[key] = {
+            "moves": per_move,
+            "grid_share_at_least": dict(zip([str(t) for t in thresholds], shares, strict=True)),
+            "grid_size": len(spread),
+        }
+    text = "\n".join(lines) + "\n"
+    print(text)
+    if args.markdown:
+        Path(args.markdown).write_text(text, encoding="utf-8")
+    if args.summary:
+        Path(args.summary).write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
     runner = sub.add_parser("run")
     runner.add_argument("--out", required=True)
+    runner.add_argument("--variant", choices=list(teaching_variants.VARIANTS))
+    runner.add_argument("--ys", choices=("all", "default"), default="all")
+    runner.add_argument("--keys", nargs="*", help="only these baseline keys (to split a sweep over processes)")
     reporter = sub.add_parser("report")
     reporter.add_argument("--out", required=True)
     reporter.add_argument("--markdown", required=True)
     reporter.add_argument("--summary", required=True)
     reporter.add_argument("--max-failures", type=int, default=30)
+    reporter.add_argument("--variant", choices=list(teaching_variants.VARIANTS))
+    distincter = sub.add_parser("distinct")
+    distincter.add_argument("--out", required=True)
+    distincter.add_argument("--markdown")
+    distincter.add_argument("--summary")
     args = parser.parse_args()
     if args.command == "run":
         run(args)
-    else:
+    elif args.command == "report":
         report(args)
+    else:
+        distinct(args)
 
 
 if __name__ == "__main__":

@@ -3,9 +3,14 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 import check_model_space as cms  # noqa: E402
+import teaching_variants  # noqa: E402
+
+from gvcsim.regression import teaching  # noqa: E402
 from gvcsim.regression.spec import DEFAULT_SPEC, ModelSpec  # noqa: E402
 from gvcsim.regression.teaching import EXCHANGE_RATE_COLUMN, GDP_COLUMN, OPENNESS_COLUMN  # noqa: E402
 
@@ -52,3 +57,63 @@ def test_interval_checks_read_the_estimate_and_its_bounds():
     assert cms._x_sum(single) == {"name": "teaching_tariff_exposure", "coef": -0.4}
     two = {"spec": DEFAULT_SPEC.to_dict(), "coefs": [], "cumulative": {"coef": -0.55}}
     assert cms._x_sum(two) == {"coef": -0.55}
+
+
+def test_default_ys_are_the_four_defaults_and_the_zero_effect_y():
+    assert [key for _, key, _, _ in cms.ys("default")] == [
+        "FVA_share",
+        "3b_VA_GVC_C_share",
+        "3b_FGY_GVC_C_share",
+        "PLv_GVC",
+        "weighted_degree",
+    ]
+
+
+def test_single_changes_cover_x_terms_controls_and_every_other_effect_set():
+    moves = cms._moves()
+    groups = {group for group, _, _ in moves}
+    assert groups == {"X 项", "去掉控制", "控制改滞后", "加控制", "固定效应"}
+    labels = [label for _, label, _ in moves]
+    assert "去掉汇率变动" in labels and "汇率变动改滞后 1 期" in labels and "无固定效应" in labels
+    assert sum(1 for group, _, _ in moves if group == "固定效应") == len(cms.fixed_effect_sets()) - 1
+    assert sum(1 for group, _, _ in moves if group == "X 项") == len(cms.x_sets()) - 1
+    assert all(spec != DEFAULT_SPEC.canonical() for _, _, spec in moves)
+
+
+def test_variant_v12_is_the_published_generator_and_applied_restores_every_constant():
+    v12 = teaching_variants.VARIANTS["v12"]
+    assert v12.gdp_gamma == teaching.MACRO_CONTROLS[GDP_COLUMN]["gamma_factor"]
+    assert v12.wave1_extra_growth == teaching.WAVE1_EXTRA_GDP_GROWTH and v12.lows == ()
+    before = (
+        teaching.MACRO_CONTROLS[GDP_COLUMN]["gamma_factor"],
+        teaching.MACRO_CONTROLS[OPENNESS_COLUMN]["gamma_factor"],
+        teaching.WAVE1_EXTRA_GDP_GROWTH,
+        teaching.COMMON_GDP_GROWTH,
+        teaching.EXCHANGE_RATE_DEPRECIATION,
+        teaching.WAVE1_OPENNESS_RISE,
+        teaching.COMMON_YEAR_TREND,
+        teaching.default_baseline("trade").calibration,
+    )
+    p17 = teaching_variants.VARIANTS["P17"]
+    with teaching_variants.applied(p17):
+        assert teaching.MACRO_CONTROLS[GDP_COLUMN]["gamma_factor"] == 0.5
+        assert teaching.MACRO_CONTROLS[OPENNESS_COLUMN]["gamma_factor"] == -0.006
+        assert teaching.COMMON_YEAR_TREND == (0.0, 0.0, -4.0, 2.0, -4.0)
+        assert teaching.default_baseline("trade").calibration[0] == 0.27
+        # Identity Ys are not recalibrated: only the drawn parts have floors.
+        assert teaching.baseline("production", "1_VA_D_share").calibration == (0.0, 0.0, 0.0)
+    after = (
+        teaching.MACRO_CONTROLS[GDP_COLUMN]["gamma_factor"],
+        teaching.MACRO_CONTROLS[OPENNESS_COLUMN]["gamma_factor"],
+        teaching.WAVE1_EXTRA_GDP_GROWTH,
+        teaching.COMMON_GDP_GROWTH,
+        teaching.EXCHANGE_RATE_DEPRECIATION,
+        teaching.WAVE1_OPENNESS_RISE,
+        teaching.COMMON_YEAR_TREND,
+        teaching.default_baseline("trade").calibration,
+    )
+    assert after == before
+    # Relative size: + overstated, − understated, a sign flip beyond −100%.
+    assert teaching_variants._rel(-0.66, -0.55) == pytest.approx(0.2)
+    assert teaching_variants._rel(-0.44, -0.55) == pytest.approx(-0.2)
+    assert teaching_variants._rel(0.11, -0.55) == pytest.approx(-1.2)
