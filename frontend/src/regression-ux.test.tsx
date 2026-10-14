@@ -167,12 +167,16 @@ describe("simple regression workbench", () => {
     expect(card.firstElementChild?.textContent).toBe(GENERATED_Y_DISCLOSURE);
     expect(card.textContent?.split(GENERATED_DATA_NOTE)).toHaveLength(1);
     expect(screen.getByRole("group", { name: /X 每高 1 个百分点，Y 两年累计平均相差（个百分点）/ })).toBeTruthy();
-    // Three sections: the data, the default model (said above its run button), then the open change-the-model one.
+    // Two sections: the data, then the default model (said above its run button); the change-the-model card is a
+    // folded details after them.
     expect([...document.querySelectorAll(".reg-workbench > section > .reg-section-step")].map((node) => node.textContent))
-      .toEqual(["先看数据", "默认模型", "改模型、对比（选做）"]);
-    // Folded: the chart's per-year table, the model's data facts, and one column's full numbers.
+      .toEqual(["先看数据", "默认模型"]);
+    expect(document.querySelector("details.reg-custom-section")!.hasAttribute("open")).toBe(false);
+    // Folded: the chart's per-year table and how to read it, the model's terms (open on step 11) and data facts,
+    // then the whole change-the-model card.
     await waitFor(() => expect([...document.querySelectorAll("details > summary")].map((node) => node.textContent))
-      .toEqual(["各组逐年读数", "数据、样本和区间的算法", "查看单模型详细数字（系数、t 值与区间）"]));
+      .toEqual(["各组逐年读数", "这张图怎么读", "公式里各项的意思", "数据、样本和区间的算法", "改模型、对比（选做）换一种模型试试：每次改一处，和默认模型比较"]));
+    expect(document.querySelector(".reg-model-terms")!.hasAttribute("open")).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: DVA_BAR }));
     await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高 0.56 个百分点"));
     expect(run.mock.calls[1][2]).toBe("DVAex_share");
@@ -260,10 +264,16 @@ describe("simple regression workbench", () => {
     cleanup();
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
     await screen.findByText("换一种模型试试：每次改一处，和默认模型比较");
-    expect(screen.getByRole("group", { name: "单模型详细数字" }).hasAttribute("open")).toBe(false);
+    // Folded until opened: nothing of the workbench (its options are not even requested) shows before that.
+    const workbench = document.querySelector<HTMLDetailsElement>("details.reg-custom-section")!;
+    expect(workbench.hasAttribute("open")).toBe(false);
+    expect(screen.queryByRole("button", { name: "计算这个模型" })).toBeNull();
     expect(screen.getByRole("link", { name: "查看已保存结果" }).getAttribute("href")).toBe("#regression-results");
     expect(screen.getByRole("link", { name: "修改模型（选做）" }).getAttribute("href")).toBe("#regression-model");
+    workbench.open = true;
+    fireEvent(workbench, new Event("toggle"));
     expect(await screen.findByRole("button", { name: "计算这个模型" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "单模型详细数字" }).hasAttribute("open")).toBe(false);
     expect([...document.querySelectorAll(".reg-custom-compare-table thead th")].map((cell) => cell.textContent)).toEqual(["变量", "默认模型"]);
   });
 

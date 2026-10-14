@@ -416,6 +416,14 @@ export function ShockLab({ meta, step: _step, state }: {
       <p className="teaching-example-lead">
         先在逐年表里认识 X、L1.X 和汇率变动；默认回归还控制 GDP 对数与贸易开放度。选一个国家和一个行业，可再选一个对照国家；默认是被加税的加拿大和未被加税的哥斯达黎加（两国汽车业都主要出口到美国），行业为 C29 汽车及零部件。步骤 11–14 会把回归结果换算到这个例子上。所选例子只用于展示与换算，不是回归样本筛选；回归仍使用课程规定的样本。
       </p>
+      {/* One strip says what the model's variables are; the four cards with sources are folded under it. */}
+      <p className="teaching-definitions">
+        <span><b>X = w × τ</b>：首年对美出口份额 w（ICIO）× 美国加征税率 τ（课程设定）；未被加税的国家{goodsOnly ? "和所有服务业" : ""} τ = 0，X = 0</span>
+        <span><b>L1.X</b>：上一年的 X，加税次年才上升</span>
+        <span><b>汇率变动、GDP 对数、贸易开放度</b>：默认控制变量（课程生成）</span>
+      </p>
+      <details className="teaching-variable-details">
+        <summary>各变量的定义与来源</summary>
       <dl className="teaching-variables" aria-label="步骤 11–14 的模型用到的变量">
         <div>
           <dt>关税暴露 X = 首年对美出口份额 w × 加征税率 τ</dt>
@@ -434,6 +442,7 @@ export function ShockLab({ meta, step: _step, state }: {
           <dd>GDP 对数为 ln（模拟 GDP，美元），开放度为模拟进出口总额 / GDP（%）。它们也是默认控制变量；步骤 11–14 可增减控制，另可选人口增长率、FDI 净流入占比<span className="source-tag">课程生成</span>，以及制造业增加值占比等<span className="source-tag">ICIO 派生</span>。变量多不一定更好。</dd>
         </div>
       </dl>
+      </details>
       <div className="controls" role="group" aria-label="例子的国家与行业">
         <label className="model-control"><span className="model-control-label">例子国家</span>
           <select value={first} onChange={(event) => {
@@ -551,7 +560,8 @@ export function ShockLab({ meta, step: _step, state }: {
             />
           )}
         </div>
-        <h4 className="teaching-subhead">逐年表</h4>
+        <details className="teaching-year-details">
+        <summary>逐年表：w、τ、X、L1.X{hasRateChange ? "、汇率变动" : ""}</summary>
         <ScrollableRegion className="table-wrap bounded-data-table" label="所选例子的逐年变量表">
           <table className="data-table teaching-year-table"><thead><tr><th>国家</th><th>年份</th><th>首年对美出口份额 w</th><th>加征税率 τ</th><th>关税暴露 X = w × τ</th><th>上一年的 X（L1.X）</th>{hasRateChange && <th>汇率变动</th>}</tr></thead>
             {/* Country A first, then B (the rows arrive in alphabetical order). */}
@@ -571,6 +581,7 @@ export function ShockLab({ meta, step: _step, state }: {
           </table>
         </ScrollableRegion>
         <p className="muted teaching-table-note">行业：{sectorLabel(shownIndustry)}。2016 年没有上一年的 τ，按加税前处理，L1.X 为 0。</p>
+        </details>
       </div>}
     </section>
     {overview && <section className="reg-run-card">
@@ -579,7 +590,7 @@ export function ShockLab({ meta, step: _step, state }: {
       <p className="teaching-one-line">
         每条是一个国家 {overview.year} 年各{goodsOnly ? "货物" : ""}行业的平均 X{goodsOnly ? "（服务业不加税，X = 0，不计入）" : ""}。回归样本{goodsOnly ? "（货物和服务业都在内）" : ""}：{overview.countries.length} 国的 {overview.entities.toLocaleString("zh-CN")} 个国家×行业{sampleRows ? ` × ${years.length} 年 = ${sampleRows.toLocaleString("zh-CN")} 条记录` : ""}{overview.entities < overview.countries.length * meta.sectors.length ? `（${overview.countries.length} 国 × ${meta.sectors.length} 个行业中，首年指标无法计算的组合不进入样本，多为当年没有出口或没有增加值的行业，所以${overview.countries.every((row) => row.industries < meta.sectors.length) ? "每个国家进入样本的行业都少于" : "一国的行业数可能少于"} ${meta.sectors.length} 个）` : ""}。
       </p>
-      <CountryExposureChart data={overview} />
+      <CountryExposureChart data={overview} limit={15} />
       <p className="teaching-one-line">步骤 11–14 用每个国家×行业的 X、上一年的 X，控制汇率变动、GDP 对数和贸易开放度，分别对照四类指标 Y，读“X 每高 1 个百分点，Y 两年累计平均相差多少”。</p>
     </section>}
   </div>;

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { scrollIntoCourseContent } from "./content-scroll";
 import { api, ApiError } from "./api";
 import { groupedFixed, percentagePoints } from "./format";
@@ -130,7 +130,7 @@ function withSubscripts(text: string) {
 const FALLBACK_EQUATION = ["Y_ijt", " = ", "β·X_ijt", " + ", "α_ij", " + ", "λ_t", " + ", "ε_ijt"];
 
 /** The step's model before and after the run: its equation and what each part does, the data facts folded. */
-function DesignEquation({ design }: { design: RegressionDesignInfo }) {
+function DesignEquation({ design, expanded = true }: { design: RegressionDesignInfo; expanded?: boolean }) {
   const parts = design.equation_parts?.length ? design.equation_parts.map(equationSymbol) : FALLBACK_EQUATION;
   const yLabel = displayBaselineLabel(design.depvar_label) || "本步的结果指标";
   const lagged = (design.spec?.x_lags ?? [0]).includes(1);
@@ -140,7 +140,9 @@ function DesignEquation({ design }: { design: RegressionDesignInfo }) {
       <div className="model-eq" role="group" aria-label="本步计算的公式">
         {parts.map((text, index) => <span key={`${text}-${index}`}>{withSubscripts(text)}</span>)}
       </div>
-      {/* Three points, always visible (a hover-only gloss went unnoticed). */}
+      {/* Three points: open on step 11, where the model is first met; folded on steps 12–14, which reuse it. */}
+      <details className="reg-model-terms" open={expanded}>
+        <summary>公式里各项的意思</summary>
       <ul className="model-eq-terms" aria-label="公式里各项的意思">
         {lagged
           ? <li><b>β₁·X + β₂·L1.X</b>：当年和上一年的关税暴露。关税的影响可能分两年显现，β₁ 是当年的关联，β₂ 是次年再出现的关联，<b>两者之和是两年累计关联</b>，即本步的主结果。累计的是系数，不是把图上两个年份的 Y 变化相加。</li>
@@ -150,6 +152,7 @@ function DesignEquation({ design }: { design: RegressionDesignInfo }) {
         )}
         <li><b>α + λ</b>：先扣掉每个国家×行业自己的平均水平（α）和每年所有国家×行业共同的变化（λ），即“双向固定效应”；ε 是剩下的随机波动。Y 是{yLabel}，i = 国家，j = 行业，t = 年份。</li>
       </ul>
+      </details>
       <details className="reg-model-facts">
         <summary>数据、样本和区间的算法</summary>
         <DesignMeta design={design} />
@@ -560,8 +563,10 @@ export function familyBarsTitle(count: number): string {
  * step's default Y and draws a bar for every Y of the family; clicking a bar runs that Y, which becomes the
  * headline and the saved report material.
  */
-export function RegressionRunLab({ step, meta, state, getStep, reportRuns, reportCustomResults, reportOutdated = false }: {
+export function RegressionRunLab({ step, meta, state, getStep, reportRuns, reportCustomResults, reportOutdated = false, quiz }: {
   step: Step;
+  /** The step's quiz panel: placed after the result, before the optional workbench. */
+  quiz?: ReactNode;
   meta: Pick<Meta, "countries" | "sectors">;
   state: StepStateApi<RegressionStepState>;
   /** Read-only: the example the student chose in step 10. */
@@ -609,6 +614,8 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
     return () => window.clearInterval(timer);
   }, [retryAt]);
   const retryWait = retryAt == null ? 0 : Math.max(0, Math.ceil((retryAt - now) / 1000));
+  // The optional workbench is folded until opened; its options and tables load only then.
+  const [workbenchOpen, setWorkbenchOpen] = useState(false);
   const mountedRef = useRef(true);
   const runningRef = useRef(false);
   const runController = useRef<AbortController | null>(null);
@@ -846,8 +853,11 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
                 unit={display.unit ?? lesson.unit}
                 title={`加税前后：各组${latinGap}${lesson.shortMetric}的平均变化`}
               />
-              {/* One note: what the chart mixes in, and the premise it can only partly show. */}
-              <p className="muted reg-gap-caption">{lines.length > 2 ? GROUP_CHART_CAPTION : ""}{parallelTrendsNote(groups.years, groups.policy_year, lines.length)}</p>
+              {/* One note, folded: what the chart mixes in, and the premise it can only partly show. */}
+              <details className="reg-gap-details">
+                <summary>这张图怎么读</summary>
+                <p className="muted reg-gap-caption">{lines.length > 2 ? GROUP_CHART_CAPTION : ""}{parallelTrendsNote(groups.years, groups.policy_year, lines.length)}</p>
+              </details>
             </div>
           );
         })()}
@@ -860,7 +870,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
       <section className="reg-run-card">
         <span className="reg-section-step">默认模型</span>
         {modelDesign
-          ? <DesignEquation design={modelDesign} />
+          ? <DesignEquation design={modelDesign} expanded={step.n === 11} />
           : designQuery.status === "error" && designQuery.error
             ? <RegressionRequestError label="模型说明" error={designQuery.error} onRetry={designQuery.retry} />
             : <div className="reg-request-state muted" role="status" aria-busy="true">正在读取模型…</div>}
@@ -967,20 +977,28 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
         </div>
       )}
 
-      {/* 3 · Change one setting at a time and read it next to the default model (open; optional for completion). */}
+      {/* 3 · The quiz: the step is complete once it is answered, before anything optional. */}
+      {quiz}
+
+      {/* 4 · Change one setting at a time and read it next to the default model (folded; optional for completion). */}
       {result && (
-        <section className="reg-run-card reg-custom-section" id="regression-model" tabIndex={-1}>
-          <span className="reg-section-step">改模型、对比（选做）</span>
-          <h3>换一种模型试试：每次改一处，和默认模型比较</h3>
-          <RegressionModelWorkbench
-            stepNumber={step.n}
-            outcome={outcome}
-            defaultResponse={result}
-            state={state as unknown as StepStateApi<WorkbenchStepState>}
-            reportCustomResults={reportCustomResults}
-            reportOutdated={reportOutdated}
-          />
-        </section>
+        <details className="reg-run-card reg-custom-section" id="regression-model" open={workbenchOpen}
+          onToggle={(event) => setWorkbenchOpen(event.currentTarget.open)}>
+          <summary>
+            <span className="reg-section-step">改模型、对比（选做）</span>
+            <span className="reg-custom-title">换一种模型试试：每次改一处，和默认模型比较</span>
+          </summary>
+          {workbenchOpen && (
+            <RegressionModelWorkbench
+              stepNumber={step.n}
+              outcome={outcome}
+              defaultResponse={result}
+              state={state as unknown as StepStateApi<WorkbenchStepState>}
+              reportCustomResults={reportCustomResults}
+              reportOutdated={reportOutdated}
+            />
+          )}
+        </details>
       )}
     </div>
   );
