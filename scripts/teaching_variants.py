@@ -9,8 +9,8 @@ the reproduction path for docs/regression-steps-11-14-optimization-final-2026-10
 Run from the repository root:
 
     PYTHONPATH=. uv run python scripts/teaching_variants.py list
-    PYTHONPATH=. uv run python scripts/teaching_variants.py table --variant v12 --variant P17
-    PYTHONPATH=. uv run python scripts/teaching_variants.py seeds --variant P17 --seeds 1 2 3
+    PYTHONPATH=. uv run python scripts/teaching_variants.py table --variant v12 --variant v13
+    PYTHONPATH=. uv run python scripts/teaching_variants.py seeds --variant v13 --seeds 1 2 3
 
 ``table`` prints, per variant and per Y, the two-year total of the named model settings (偏差 = estimate size relative to
 β, + overstated), the three-group trend in the last year, the generation-rule decomposition of the first wave's change,
@@ -40,66 +40,86 @@ from gvcsim.regression.spec import DEFAULT_SPEC, ModelSpec
 
 @dataclasses.dataclass(frozen=True)
 class Variant:
+    """One generator setting. The defaults are the published generator (v13 = the document's P17)."""
+
     key: str
     title: str
-    gdp_gamma: float = teaching.MACRO_CONTROLS[teaching.GDP_COLUMN]["gamma_factor"]
-    wave1_extra_growth: float = teaching.WAVE1_EXTRA_GDP_GROWTH
-    common_growth: float = teaching.COMMON_GDP_GROWTH
-    fx_depreciation: float = teaching.EXCHANGE_RATE_DEPRECIATION
-    openness_gamma: float = teaching.MACRO_CONTROLS[teaching.OPENNESS_COLUMN]["gamma_factor"]
-    wave1_openness_rise: float = teaching.WAVE1_OPENNESS_RISE
-    year_trend: tuple[float, ...] = teaching.COMMON_YEAR_TREND
+    gdp_gamma: float = 0.5
+    wave1_extra_growth: float = 0.04
+    common_growth: float = 0.015
+    fx_depreciation: float = -8.0
+    openness_gamma: float = -0.006
+    wave1_openness_rise: float = 4.0
+    year_trend: tuple[float, ...] = (0.0, 0.0, -4.0, 2.0, -4.0)
     # Calibration floors (``low``) by baseline key; span and noise scale stay.
     lows: tuple[tuple[str, float], ...] = ()
 
 
-# Floors that keep every Y inside its domain once the three same-direction terms (tariff, depreciation, GDP) add up
-# on the lowest-ranked units (P9/P11 in the document).
-RAISED_LOWS = (
-    ("FVA_share", 0.27),
-    ("3b_VA_GVC_C_share", 0.19),
-    ("3a_VA_GVC_S_share", 0.14),
-    ("2_VA_RT_share", 0.14),
-    ("weighted_indegree", 1000.0),
-    ("weighted_outdegree", 1000.0),
-    ("betweenesscentrality", 3000.0),
+# v12's floors; v13 raised seven of them so the lowest-ranked units stay in their domains once the three
+# same-direction terms (tariff, depreciation, GDP) add up (P9/P11 in the document).
+V12_LOWS = (
+    ("FVA_share", 0.25),
+    ("3b_VA_GVC_C_share", 0.14),
+    ("3a_VA_GVC_S_share", 0.12),
+    ("2_VA_RT_share", 0.10),
+    ("weighted_indegree", 650.0),
+    ("weighted_outdegree", 650.0),
+    ("betweenesscentrality", 2000.0),
 )
-
+V12_TREND = (-0.4, -0.2, 0.0, 0.2, 0.4)
+# The v12 generator, and the candidates the document explored on the way from it to v13 (P17), each spelled out in
+# full so the table stays reproducible whatever the published defaults become.
+V12 = dict(
+    gdp_gamma=0.08,
+    wave1_extra_growth=0.012,
+    common_growth=0.025,
+    fx_depreciation=-6.0,
+    openness_gamma=0.0015,
+    wave1_openness_rise=2.0,
+    year_trend=V12_TREND,
+    lows=V12_LOWS,
+)
 VARIANTS: dict[str, Variant] = {
     item.key: item
     for item in (
-        Variant("v12", "现状 v12"),
-        Variant("P1", "GDP 反向 γ=−0.5，第一批增长差 3%/年", gdp_gamma=-0.5, wave1_extra_growth=0.03),
-        Variant("P4", "GDP 同向 γ=+0.5，第一批增长差 3%/年", gdp_gamma=0.5, wave1_extra_growth=0.03),
-        Variant("P9", "P4 + 校准下限上调", gdp_gamma=0.5, wave1_extra_growth=0.03, lows=RAISED_LOWS),
+        Variant("v12", "v12（2026-10-14 之前的发布）", **V12),
         Variant(
-            "P11",
-            "P9 + 共同 GDP 增长 1.5%/年（推荐）",
-            gdp_gamma=0.5,
-            wave1_extra_growth=0.03,
-            common_growth=0.015,
-            lows=RAISED_LOWS,
+            "P1", "v12 + GDP 反向 γ=−0.5，第一批增长差 3%/年", **{**V12, "gdp_gamma": -0.5, "wave1_extra_growth": 0.03}
         ),
         Variant(
-            "P12", "γ=+0.4，第一批增长差 3%/年，校准下限上调", gdp_gamma=0.4, wave1_extra_growth=0.03, lows=RAISED_LOWS
+            "P4", "v12 + GDP 同向 γ=+0.5，第一批增长差 3%/年", **{**V12, "gdp_gamma": 0.5, "wave1_extra_growth": 0.03}
+        ),
+        Variant(
+            "P9",
+            "P4 + 校准下限上调",
+            **{**V12, "gdp_gamma": 0.5, "wave1_extra_growth": 0.03, "lows": ()},
+        ),
+        Variant(
+            "P11",
+            "P9 + 共同 GDP 增长 1.5%/年",
+            **{**V12, "gdp_gamma": 0.5, "wave1_extra_growth": 0.03, "common_growth": 0.015, "lows": ()},
+        ),
+        Variant(
+            "P12",
+            "γ=+0.4，第一批增长差 3%/年，校准下限上调",
+            **{**V12, "gdp_gamma": 0.4, "wave1_extra_growth": 0.03, "lows": ()},
         ),
         Variant(
             "P13",
             "P11 + 开放度反向混杂（γ=−0.006，第一批每年 +4）",
             gdp_gamma=0.5,
             wave1_extra_growth=0.03,
-            common_growth=0.015,
-            lows=RAISED_LOWS,
-            openness_gamma=-0.006,
-            wave1_openness_rise=4.0,
+            fx_depreciation=-6.0,
+            year_trend=V12_TREND,
         ),
         Variant(
             "P14",
             "P11 + 共同年份台阶（2018 起 −4 噪声单位）",
             gdp_gamma=0.5,
             wave1_extra_growth=0.03,
-            common_growth=0.015,
-            lows=RAISED_LOWS,
+            fx_depreciation=-6.0,
+            openness_gamma=0.0015,
+            wave1_openness_rise=2.0,
             year_trend=(0.0, 0.0, -4.0, -4.0, -4.0),
         ),
         Variant(
@@ -107,35 +127,16 @@ VARIANTS: dict[str, Variant] = {
             "P11 + 共同年份锯齿（0, 0, −4, +2, −4）",
             gdp_gamma=0.5,
             wave1_extra_growth=0.03,
-            common_growth=0.015,
-            lows=RAISED_LOWS,
-            year_trend=(0.0, 0.0, -4.0, 2.0, -4.0),
+            fx_depreciation=-6.0,
+            openness_gamma=0.0015,
+            wave1_openness_rise=2.0,
         ),
-        Variant(
-            "P16",
-            "P13 + 共同年份锯齿（候选终稿）",
-            gdp_gamma=0.5,
-            wave1_extra_growth=0.03,
-            common_growth=0.015,
-            lows=RAISED_LOWS,
-            openness_gamma=-0.006,
-            wave1_openness_rise=4.0,
-            year_trend=(0.0, 0.0, -4.0, 2.0, -4.0),
-        ),
-        Variant(
-            "P17",
-            "P16 + 汇率贬值 8、第一批增长差 4%/年",
-            gdp_gamma=0.5,
-            wave1_extra_growth=0.04,
-            common_growth=0.015,
-            fx_depreciation=-8.0,
-            lows=RAISED_LOWS,
-            openness_gamma=-0.006,
-            wave1_openness_rise=4.0,
-            year_trend=(0.0, 0.0, -4.0, 2.0, -4.0),
-        ),
+        Variant("P16", "P13 + 共同年份锯齿", gdp_gamma=0.5, wave1_extra_growth=0.03, fx_depreciation=-6.0),
+        Variant("v13", "v13 = P17：P16 + 汇率贬值 8、第一批增长差 4%/年（当前发布）"),
     )
 }
+VARIANTS["P17"] = VARIANTS["v13"]
+
 
 # The model settings a page names (presets) and the two the document discusses besides them.
 SETTINGS: dict[str, ModelSpec] = {}

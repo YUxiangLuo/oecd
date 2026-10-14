@@ -39,6 +39,7 @@ from gvcsim.regression.teaching import (
     Y_COLUMNS,
     available_baselines,
     country_exposure_overview,
+    first_wave_decomposition,
     group_trends,
     model_snapshot,
     variable_catalog,
@@ -373,6 +374,16 @@ def _run_payload(design: RegressionDesign, result: Any, benchmark: dict[str, Any
     }
 
 
+def _with_decomposition(payload: dict[str, Any], design: RegressionDesign, panel: Any) -> dict[str, Any]:
+    """The payload plus the first wave's change in Y as the fitted model splits it (the sentence under the
+    three-group chart); None when the panel has no waves."""
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        return payload
+    coefs = {item["name"]: item["coef"] for item in result.get("coefs", [])}
+    return {**payload, "decomposition": first_wave_decomposition(panel, design.depvar, coefs)}
+
+
 # Completed runs of the current teaching panel, shared by the run endpoint and the report (whose recalculation of
 # the workbench models is synchronous). Keyed on the release the panel was read under, not on the DataFrame: a
 # release's files never change, but the shared CSV cache (32 entries) may hand out a new DataFrame for the same
@@ -508,7 +519,7 @@ def cached_run(panel: Any, design: RegressionDesign, release: str | None = None)
     else:
         return anyio.from_thread.run(shared_run, panel, design, release, None)
     _require_y(panel, design)
-    payload = _run_payload(design, *run_design_with_benchmark(panel, design))
+    payload = _with_decomposition(_run_payload(design, *run_design_with_benchmark(panel, design)), design, panel)
     _store_payload(key, payload, release, pinned=design.spec == DEFAULT_SPEC)
     return payload
 
@@ -544,7 +555,7 @@ async def shared_run(panel: Any, design: RegressionDesign, release: str | None, 
         try:
             _require_y(panel, design)
             result, benchmark = await concurrency.run_cpu_bound(run_design_with_benchmark, panel, design)
-            payload = _run_payload(design, result, benchmark)
+            payload = _with_decomposition(_run_payload(design, result, benchmark), design, panel)
             _store_payload(run_key, payload, release, pinned=design.spec == DEFAULT_SPEC)
             if billing is not None and run_key in billing.eligible:
                 billing.computed.add(run_key)

@@ -134,8 +134,8 @@ def test_v2_preserves_randomization_and_halves_noise_without_changing_effects():
 
     # Independent fixed acceptance values, not expectations read from CALIBRATION.
     for outcome, low, span, beta, scale in (
-        ("trade", 0.25, 0.30, -0.55, 0.006),
-        ("production", 0.14, 0.16, -0.40, 0.005),
+        ("trade", 0.27, 0.30, -0.55, 0.006),
+        ("production", 0.19, 0.16, -0.40, 0.005),
         ("length", 3.0, 2.0, -1.8, 0.030),
     ):
         baseline = panel.loc[panel.year.eq(2016)].set_index("entity_id")[OUTCOME_DEPVARS[outcome][0]].rank(pct=True)
@@ -145,8 +145,11 @@ def test_v2_preserves_randomization_and_halves_noise_without_changing_effects():
                 f"{row.country}|{row.year}", f"cluster-{outcome}"
             )
             # v10: 60% of the relation in the tariff's year, 40% the next; the exchange rate moves Y by
-            # −0.0095 × β per point (the tariff's direction).
+            # −0.0095 × β per point (the tariff's direction). v13: GDP by 0.5 × β per log point (first-wave economies
+            # grow 4% a year faster, all 1.5%), openness by −0.006 × β per point (first-wave openness +4 a year), and a
+            # common zigzag of 0, 0, −4, +2, −4 noise units.
             effect = 0.6 * getattr(row, X_LAG_COLUMNS[0]) + 0.4 * getattr(row, X_LAG_COLUMNS[1])
+            zigzag = {2016: 0.0, 2017: 0.0, 2018: -4.0, 2019: 2.0, 2020: -4.0}[row.year]
             expected.append(
                 low
                 + span * baseline[row.entity_id]
@@ -154,25 +157,25 @@ def test_v2_preserves_randomization_and_halves_noise_without_changing_effects():
                 - 0.0095 * beta * getattr(row, EXCHANGE_RATE_COLUMN)
                 + beta
                 * (
-                    0.08
+                    0.5
                     * (
-                        0.025 * (row.year - 2016)
-                        + 0.012 * (row.year - 2016) * (getattr(row, WAVE_COLUMN) == 1)
+                        0.015 * (row.year - 2016)
+                        + 0.04 * (row.year - 2016) * (getattr(row, WAVE_COLUMN) == 1)
                         + 0.025 * draw(f"{row.country}|{row.year}", "macro-growth")
                     )
-                    + 0.0015
+                    - 0.006
                     * (
-                        2 * (row.year - 2016) * (getattr(row, WAVE_COLUMN) == 1)
+                        4 * (row.year - 2016) * (getattr(row, WAVE_COLUMN) == 1)
                         + 4 * draw(f"{row.country}|{row.year}", "openness")
                     )
                 )
-                + scale * (noise + (row.year - 2018) * 0.2)
+                + scale * (noise + zigzag)
             )
         np.testing.assert_allclose(panel[Y_COLUMNS[outcome]], expected, rtol=1e-12, atol=1e-12)
-    # The exchange-rate change: uniform country × year noise with SD 1 point, minus 6 points for the first wave
+    # The exchange-rate change: uniform country × year noise with SD 1 point, minus 8 points for the first wave
     # from 2018.
     for row in panel.drop_duplicates(["country", "year"]).itertuples():
-        shift = -6.0 if getattr(row, WAVE_COLUMN) == 1 and row.year >= 2018 else 0.0
+        shift = -8.0 if getattr(row, WAVE_COLUMN) == 1 and row.year >= 2018 else 0.0
         expected_rate = draw(f"{row.country}|{row.year}", "exchange-rate") * 3**0.5 + shift
         assert getattr(row, EXCHANGE_RATE_COLUMN) == pytest.approx(expected_rate, abs=1e-12)
     # v6: the network family's fixed Y is weighted in-degree + out-degree, row by row.
@@ -184,11 +187,11 @@ def test_v2_preserves_randomization_and_halves_noise_without_changing_effects():
         atol=1e-9,
     )
     snapshot = model_snapshot("trade")
-    assert snapshot["version"] == "step10-tariff-teaching-v12"
+    assert snapshot["version"] == "step10-tariff-teaching-v13"
     assert snapshot["randomization_version"] == "step10-tariff-teaching-v1"
     assert snapshot["tariff_rate"] == 0.25 and snapshot["lag_shares"] == [0.6, 0.4]
     assert [wave["start_year_offset"] for wave in snapshot["taxed_rule"]["waves"]] == [2, 3]
-    assert snapshot["exchange_rate"]["first_wave_depreciation"] == -6.0
+    assert snapshot["exchange_rate"]["first_wave_depreciation"] == -8.0
     assert teaching.SEED == 20260913
 
 
@@ -254,8 +257,8 @@ def test_benchmark_binds_exposure_bytes_and_generator_parameters(tmp_path):
     snapshot = first["generator_snapshots"]["trade"]
     assert snapshot["randomization_version"] == "step10-tariff-teaching-v1"
     assert snapshot["beta"] == -0.55
-    assert snapshot["calibration"] == (0.25, 0.30, 0.006)
-    assert snapshot["common_year_trend"] == [-0.4, -0.2, 0.0, 0.2, 0.4]
+    assert snapshot["calibration"] == (0.27, 0.30, 0.006)
+    assert snapshot["common_year_trend"] == [0.0, 0.0, -4.0, 2.0, -4.0]
     from gvcsim.regression.teaching import simulation_parameters
 
     assert simulation_parameters()["common_year_trend"]["values"] == snapshot["common_year_trend"]
@@ -774,3 +777,36 @@ def test_a_signed_other_parts_share_is_ranked_not_dropped():
     assert rows[["teaching_y_trade_DVAex_share", "teaching_y_trade_trade_rest_share"]].notna().all().all()
     # The generated part keeps its share domain (it is a rank, not the signed source value).
     assert panel["teaching_y_trade_trade_rest_share"].between(0, 1).all()
+
+
+def test_first_wave_decomposition_splits_the_chart_change_by_the_fitted_coefficients():
+    from gvcsim.regression.design import RegressionDesign
+    from gvcsim.regression.panel import run_design_with_benchmark
+    from gvcsim.regression.teaching import first_wave_decomposition
+
+    source = _source(tuple(f"C{i:02}" for i in range(30)))
+    panel = build_teaching_panel(source, _exposure(source))
+    result, _ = run_design_with_benchmark(panel, RegressionDesign("trade", method="twfe_intensity", teaching=True))
+    coefs = {item.name: item.coef for item in result.coefs}
+    split = first_wave_decomposition(panel, Y_COLUMNS["trade"], coefs)
+    assert split is not None and split["group"] == "first" and split["wave_start"] == 2018 and split["year"] == 2020
+    assert split["pre_years"] == [2016, 2017]
+    first = panel[panel[WAVE_COLUMN].eq(1)]
+    observed = (
+        first[first.year.eq(2020)][Y_COLUMNS["trade"]].mean() - first[first.year.lt(2018)][Y_COLUMNS["trade"]].mean()
+    )
+    assert split["observed"] == pytest.approx(observed)
+    names = [item["name"] for item in split["terms"]]
+    assert names[0] == "x_terms" and set(names[1:]) == set(coefs) - set(X_LAG_COLUMNS.values())
+    assert split["terms"][1]["label"] == "汇率变动"
+    # The X part is each X coefficient times the first wave's change in that regressor, summed.
+    x_part = sum(
+        coefs[column] * (first[first.year.eq(2020)][column].mean() - first[first.year.lt(2018)][column].mean())
+        for column in (X_LAG_COLUMNS[0], X_LAG_COLUMNS[1])
+    )
+    assert split["terms"][0]["change"] == pytest.approx(x_part)
+    assert split["observed"] == pytest.approx(sum(item["change"] for item in split["terms"]) + split["remainder"])
+    # A panel without the wave column (another course's fixture) has no decomposition, and no error.
+    assert first_wave_decomposition(panel.drop(columns=[WAVE_COLUMN]), Y_COLUMNS["trade"], coefs) is None
+    # Root MSE: the residual standard error over the residual degrees of freedom.
+    assert result.root_mse is not None and 0 < result.root_mse < result.depvar_within_std

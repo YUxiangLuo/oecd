@@ -3,11 +3,13 @@
 
 The teaching panel (gvcsim/regression/teaching.py) generates each Y as
 
-    Y = unit level + β·(0.6·X_t + 0.4·X_{t−1}) + (−0.0095·β)·汇率变动 + β·(0.08·ΔGDP对数 + 0.0015·Δ开放度)
-        + noise_scale·(unit×year noise + country×year noise + common year trend)
+    Y = unit level + β·(0.6·X_t + 0.4·X_{t−1}) + (−0.0095·β)·汇率变动 + β·(0.5·ΔGDP对数 − 0.006·Δ开放度)
+        + noise_scale·(unit×year noise + country×year noise + common year zigzag)
 
-with 人口增长率 and FDI generated but unrelated to Y, no lag-2 relation, the exchange rate and the two macro paths
-correlated with the first tariff wave (confounders), and three ICIO-derived controls that are real data. This script
+(v13 values; the report reads the published gammas) with 人口增长率 and FDI generated but unrelated to Y, no lag-2
+relation, the exchange rate and the two macro paths correlated with the first tariff wave (confounders: GDP in the
+tariff's direction, openness against it), a common year zigzag only the year effects remove, and three ICIO-derived
+controls that are real data. This script
 fits the workbench's whole model space on the published panel — every X-lag set, every distinct fixed-effect set and a
 structured set of control settings, for every Y a page may choose — with the production estimator, then checks each
 result against what that construction implies (recovery of β where the model is right, the designed biases where it
@@ -262,6 +264,25 @@ def _well_specified(record: dict[str, Any]) -> bool:
     return _unit_fe(record) and _year_fe(record) and _confounders_handled(record)
 
 
+def _one_confounder_omitted(record: dict[str, Any], key: str) -> bool:
+    """Unit + year effects (no country × year), the other two confounders in at lag 0, ``key`` not in at all."""
+    others = {EXCHANGE_RATE_COLUMN, GDP_COLUMN, OPENNESS_COLUMN} - {key}
+    return (
+        _unit_fe(record)
+        and _year_fe(record)
+        and not _country_year(record)
+        and all(_has_control(record, other, 0) for other in others)
+        and not any(item["name"] == key for item in record["spec"]["controls"])
+    )
+
+
+def _year_fe_omitted_only(record: dict[str, Any]) -> bool:
+    """The default model without its year effects: unit effects only, the three confounders in at lag 0."""
+    return _effects(record) == {"country_industry"} and all(
+        _has_control(record, key, 0) for key in (EXCHANGE_RATE_COLUMN, GDP_COLUMN, OPENNESS_COLUMN)
+    )
+
+
 def _fx_omitted_only(record: dict[str, Any]) -> bool:
     """Unit and year effects, GDP and openness in, the exchange rate out (and not absorbed)."""
     return (
@@ -272,6 +293,11 @@ def _fx_omitted_only(record: dict[str, Any]) -> bool:
         and _has_control(record, GDP_COLUMN, 0)
         and _has_control(record, OPENNESS_COLUMN, 0)
     )
+
+
+# A well-specified estimate within this relative distance of β counts as recovering it even when its (very narrow)
+# interval misses β; a designed omission counts as showing when it moves the estimate at least this far the designed way.
+RECOVERY_TOLERANCE = 0.025
 
 
 def _rel(value: float, beta: float) -> float:
@@ -326,6 +352,20 @@ def evaluate(records: list[dict[str, Any]]) -> tuple[list[Check], dict[str, Any]
         "icio_keep_beta": Check("ICIO 控制不改变 β", "正确设定加入 3 个 ICIO 派生控制：累计区间仍包含 β"),
         "omit_fx_overstates": Check(
             "漏汇率高估", "单位 + 年份固定效应、GDP 与开放度在内、汇率不在：累计关联的幅度大于 |β|，且区间不含 β"
+        ),
+        "omit_gdp_overstates": Check(
+            "漏 GDP 高估",
+            "单位 + 年份固定效应、汇率与开放度在内、GDP 对数不在：累计关联的幅度比 |β| 大至少 2.5%（恢复判定的门槛；"
+            "v13 的设计偏差约 +9%）。去掉一个混杂后区间变宽，单次抽样下区间是否含 β 只在明细中给出",
+        ),
+        "omit_openness_understates": Check(
+            "漏开放度低估",
+            "单位 + 年份固定效应、汇率与 GDP 在内、贸易开放度不在：累计关联的幅度比 |β| 小至少 2.5%（v13 的设计偏差约 −6%）；"
+            "区间是否含 β 只在明细中给出",
+        ),
+        "omit_year_fe_understates": Check(
+            "去掉年份固定效应低估",
+            "只留国家×行业固定效应、三项混杂控制在内：累计关联的幅度小于 |β|，且区间不含 β（v13 起的共同年份锯齿）",
         ),
         "lagged_fx_does_not_fix": Check(
             "滞后汇率不能替代当期汇率",
@@ -442,7 +482,7 @@ def evaluate(records: list[dict[str, Any]]) -> tuple[list[Check], dict[str, Any]
             rel = _rel(cumulative["coef"], beta)
             contained = _contains(cumulative, beta)
             detail = f"cum={cumulative['coef']:.4g} rel={rel:+.1%} ci=[{cumulative['ci_low']:.4g}, {cumulative['ci_high']:.4g}]"
-            checks["recover_cumulative"].add(bool(contained) or abs(rel) <= 0.025, record, detail)
+            checks["recover_cumulative"].add(bool(contained) or abs(rel) <= RECOVERY_TOLERANCE, record, detail)
             checks["recover_cumulative_ci"].add(contained, record, detail)
             x0, x1 = _coef(record, X_LAG_COLUMNS[0]), _coef(record, X_LAG_COLUMNS[1])
             split = _contains(x0, LAG_SHARES[0] * beta) and _contains(x1, LAG_SHARES[1] * beta)
@@ -500,6 +540,29 @@ def evaluate(records: list[dict[str, Any]]) -> tuple[list[Check], dict[str, Any]
             checks["omit_fx_overstates"].add(
                 overstated, record, f"cum={cumulative['coef']:.4g} rel={_rel(cumulative['coef'], beta):+.1%}"
             )
+        if _one_confounder_omitted(record, GDP_COLUMN) and lags == (0, 1) and record.get("cumulative"):
+            cumulative = record["cumulative"]
+            checks["omit_gdp_overstates"].add(
+                _rel(cumulative["coef"], beta) >= RECOVERY_TOLERANCE,
+                record,
+                f"cum={cumulative['coef']:.4g} rel={_rel(cumulative['coef'], beta):+.1%}"
+                f" ci含β={'是' if _contains(cumulative, beta) else '否'}",
+            )
+        if _one_confounder_omitted(record, OPENNESS_COLUMN) and lags == (0, 1) and record.get("cumulative"):
+            cumulative = record["cumulative"]
+            checks["omit_openness_understates"].add(
+                _rel(cumulative["coef"], beta) <= -RECOVERY_TOLERANCE,
+                record,
+                f"cum={cumulative['coef']:.4g} rel={_rel(cumulative['coef'], beta):+.1%}"
+                f" ci含β={'是' if _contains(cumulative, beta) else '否'}",
+            )
+        if _year_fe_omitted_only(record) and lags == (0, 1) and record.get("cumulative"):
+            cumulative = record["cumulative"]
+            checks["omit_year_fe_understates"].add(
+                abs(cumulative["coef"]) < abs(beta) and not _contains(cumulative, beta),
+                record,
+                f"cum={cumulative['coef']:.4g} rel={_rel(cumulative['coef'], beta):+.1%}",
+            )
         if (
             record["setting"] == "fx_lag1+gdp+openness"
             and _unit_fe(record)
@@ -549,7 +612,7 @@ def key_specs(records: list[dict[str, Any]]) -> list[tuple[str, str, ModelSpec]]
     from gvcsim.regression.workbench import PRESETS
 
     named = [("默认模型", DEFAULT_SPEC)]
-    named += [(label, spec.canonical()) for _key, label, _question, spec in PRESETS]
+    named += [(label, spec.canonical()) for _key, _tier, label, _question, spec in PRESETS]
     named += [
         (
             "去掉汇率变动 + 国家×年份 FE",
