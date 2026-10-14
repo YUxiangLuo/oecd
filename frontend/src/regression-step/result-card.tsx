@@ -1,6 +1,7 @@
 /** The step's result card: the headline sentence, its interval in words, the step 10 example's conversion and the limits. */
 import { groupedFixed, percentagePoints } from "../format";
 import { GENERATED_Y_DISCLOSURE, lessonFor } from "../regression-lessons";
+import { designDeviation, perPointDigits, perPointReading } from "../regression-workbench-table";
 import {
   buildRegressionVerdict,
   differenceWords,
@@ -11,7 +12,7 @@ import {
   shownPerPoint,
 } from "../regression-verdict";
 import { workedNumbers } from "../labs/steps/shock-lab";
-import type { RegressionOutcome, RegressionResponse } from "../types";
+import type { CoefStat, RegressionOutcome, RegressionResponse } from "../types";
 import { NEGATIVE, POSITIVE, UNCERTAIN } from "../viz/regression/palette";
 
 /** An example followed from step 10: its X in the last year and whether it was taxed at all (τ > 0). */
@@ -125,6 +126,9 @@ export function RegressionResultCard({ outcome, response, examples = [], example
         </p>
       )}
       {verdict.coefficient && split && <p className="reg-lag-split">{split}</p>}
+      {verdict.coefficient && !suppressed && response.model_snapshot && "beta" in response.model_snapshot && (
+        <p className="reg-design-value" role="note">{designValueSentence(outcome, response, verdict.coefficient)}</p>
+      )}
       <ul className="reg-result-points">
         {!suppressed && verdict.coefficient && examples.length > 0 && (() => {
           // Only an example with X > 0 has a conversion, and only that conversion carries the interval's open
@@ -173,6 +177,28 @@ export function RegressionResultCard({ outcome, response, examples = [], example
       )}
     </section>
   );
+}
+
+/**
+ * "课程数据设定的两年累计为 -0.55 个百分点，你算出 -0.55，区间包含设定值": the course's design value next to the
+ * estimate, so a student can see whether the model recovered the number the data were built around. The
+ * zero-effect Y and the position ratio (no single design value) say so instead.
+ */
+export function designValueSentence(outcome: RegressionOutcome, response: Pick<RegressionResponse, "design" | "result" | "model_snapshot">, coefficient: CoefStat): string {
+  const beta = response.model_snapshot?.beta;
+  if (beta === undefined) return "";
+  if (beta === null) return "课程设定：这个 Y 是两项模拟长度之比，没有单一的设定值，估计不与某个数对照。";
+  const includesZero = coefficient.ci_low != null && coefficient.ci_high != null && coefficient.ci_low <= 0 && 0 <= coefficient.ci_high;
+  if (beta === 0) return includesZero ? "课程设定：这个 Y 与 X 无关（设定值为 0），区间包含 0，与设定一致。" : "课程设定：这个 Y 与 X 无关（设定值为 0）；这次区间不含 0，是抽样波动，不是关联。";
+  const source = { depvar_kind: response.design.depvar_kind ?? "", result: { suppressed: true } };
+  const digits = perPointDigits(outcome, coefficient, { depvar_kind: source.depvar_kind, result: { suppressed: false } });
+  const target = perPointReading(outcome, { coef: beta, ci_low: null, ci_high: null }, source, digits);
+  const estimate = perPointReading(outcome, coefficient, source, digits);
+  const covered = coefficient.ci_low != null && coefficient.ci_high != null && coefficient.ci_low <= beta && beta <= coefficient.ci_high;
+  const deviation = designDeviation(coefficient.coef, beta);
+  const lags = response.design.spec?.x_lags;
+  const span = lags == null || (lags.length === 2 && lags.includes(0) && lags.includes(1)) ? "两年累计" : "X 各项合计";
+  return `课程数据设定的${span}为 ${target}，你算出 ${estimate}，区间${covered ? "包含" : "不包含"}设定值（估计偏差 ${deviation > 0 ? "+" : ""}${Math.round(deviation * 100)}%）。`;
 }
 
 /**

@@ -806,7 +806,11 @@ export interface RegressionResponse {
     f_stat?: number | null;
     f_df?: number[] | null;
     f_p?: number | null;
+    /** Root mean squared error of the residuals (Stata's Root MSE); absent on older saved runs. */
+    root_mse?: number | null;
   };
+  /** The first wave's change in Y since before its tariff, as the fitted model splits it (teaching runs). */
+  decomposition?: FirstWaveDecomposition | null;
   benchmark: {
     backend: string;
     policy_coefs: {
@@ -851,6 +855,19 @@ export interface RegressionResponse {
   /** Missing only on a restored legacy session snapshot; every current API response includes it. */
   preflight?: RegressionPreflight;
   disclaimer: string;
+}
+
+export interface FirstWaveDecomposition {
+  group: string;
+  wave_start: number;
+  year: number;
+  pre_years: number[];
+  /** Mean Y of the first-wave rows in `year` minus their mean over `pre_years`, in the Y's raw unit. */
+  observed: number;
+  /** Each regressor's part: coefficient × the same change in that regressor (the X terms summed as "x_terms"). */
+  terms: { name: string; label: string; change: number }[];
+  /** What the fixed effects and residual carry: the year changes common to every group, and noise. */
+  remainder: number;
 }
 
 export interface CurrentRegressionDesignInfo extends RegressionDesignInfo {
@@ -945,10 +962,14 @@ export interface WorkbenchOptions {
   control_lag_note: string;
   fixed_effects: { key: string; label: string; description: string; includes: string[] }[];
   no_fixed_effects_note: string;
-  /** The preset experiments, in page order: each changes one thing of the default model and asks a question. */
-  presets: { key: string; label: string; question: string; spec: ModelSpec }[];
+  /** The preset experiments, in page order: each changes one thing of the default model and asks a question;
+   *  the "core" tier (必看) comes first, then "advanced" (进阶). */
+  presets: { key: string; tier: "core" | "advanced"; tier_label: string; label: string; question: string; spec: ModelSpec }[];
   /** How a model that matches no preset is named ("自定义设定"), on the page and in the report. */
   custom_label: string;
+  /** The course's design value of each Y's two-year total, by outcome and baseline key (null: no single value). */
+  design_values: Record<string, Record<string, number | null>>;
+  design_value_note: string;
   limits: { runs_per_minute: number };
   hints: string[];
   footnote: string;
@@ -962,7 +983,7 @@ export interface CustomResultSnapshot {
   depvar_kind: string;
   result: Pick<RegressionResponse["result"],
     "coefs" | "cumulative" | "constant" | "omitted" | "r2" | "r2_adj" | "r2_within" | "f_stat" | "f_df" | "f_p"
-    | "n_obs" | "n_entities" | "n_times" | "n_clusters" | "status"> & {
+    | "root_mse" | "n_obs" | "n_entities" | "n_times" | "n_clusters" | "status"> & {
     years: [number, number] | null;
     suppressed: boolean;
   };

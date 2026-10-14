@@ -26,7 +26,7 @@ from gvcsim.regression.spec import (
     control_term_label,
     x_term_label,
 )
-from gvcsim.regression.teaching import default_baseline
+from gvcsim.regression.teaching import baseline, default_baseline
 from gvcsim.report_common import (
     UNIT_NAMES,
     _depvar_kind,
@@ -220,6 +220,7 @@ def _coefficient_rows(columns: list[dict[str, Any]]) -> list[str]:
         total_cells = cells(lambda result: (result.get("cumulative") if _x_terms(result) > 1 else None, False))
         rows.append(f"| X 各项合计（累计效应） | {total_cells} |")
     rows += _per_point_rows(columns)
+    rows += _design_value_rows(columns)
     if any(isinstance(column["run"], dict) and column["run"]["result"].get("constant") for column in columns):
         rows.append(f"| 常数项 | {cells(lambda result: (result.get('constant'), False))} |")
     return rows
@@ -273,6 +274,45 @@ def _per_point_rows(columns: list[dict[str, Any]]) -> list[str]:
         span = _x_span(column["spec"])
         cells.append(f"{with_count_unit(_signed(value, digits), kind)}（{span}）")
     return [f"| 合计：X 每高 1 个百分点 | {' | '.join(cells)} |"]
+
+
+def _design_value_rows(columns: list[dict[str, Any]]) -> list[str]:
+    """The row "课程设定值": the two-year total the course data were built around, in the step's unit, and how far
+    each column's X-terms sum is from it (+ larger in size, − smaller; a sign flip reads as more than −100%)."""
+
+    def x_sum(column: dict[str, Any]) -> dict[str, Any] | None:
+        run = column["run"]
+        total = _x_sum(run["result"], column["spec"]) if isinstance(run, dict) else None
+        return total if total is not None and isinstance(total.get("coef"), (int, float)) else None
+
+    first = next((column for column in columns if x_sum(column)), None)
+    if first is None:
+        return []
+    design = first["run"]["design"]
+    outcome = str(design.get("outcome", ""))
+    beta = baseline(outcome, design.get("baseline")).beta
+    if beta is None:
+        return ["| 课程设定值 | " + " | ".join("无单一设定值（比值 Y）" for _ in columns) + " |"]
+    kind = _depvar_kind(outcome, design)
+    if beta == 0:
+        return ["| 课程设定值 | " + " | ".join("设定为 0（与 X 无关）" for _ in columns) + " |"]
+    scale = 1.0 if kind == "share" else 0.01
+    digits = estimate_digits(kind, *_per_point(kind, first["run"]["result"], cast(dict[str, Any], x_sum(first))))
+    target = with_count_unit(_signed(beta * scale, digits), kind)
+    cells = []
+    for column in columns:
+        total = x_sum(column)
+        if total is None:
+            cells.append("")
+            continue
+        value = float(total["coef"])
+        deviation = (
+            (abs(value) - abs(beta)) / abs(beta)
+            if math.copysign(1, value) == math.copysign(1, beta)
+            else -(abs(value) + abs(beta)) / abs(beta)
+        )
+        cells.append(f"{target}；估计偏差 {deviation:+.0%}")
+    return [f"| 课程设定值（X 每高 1 个百分点） | {' | '.join(cells)} |"]
 
 
 def _included(spec: ModelSpec, key: str) -> bool:

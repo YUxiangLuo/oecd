@@ -4,7 +4,7 @@ import { useState } from "react";
 import { api, ApiError } from "./api";
 import { ColumnDetails, experimentReportChanged, ModelComparisonChart, RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
 import {
-  canonicalSpec, coefficientRows, comparisonCsv, effectiveEffects, equationPreview, experimentLabel, includedBy, omittedSummary, perPointReading,
+  canonicalSpec, coefficientRows, comparisonCsv, designDeviation, designValueRow, effectiveEffects, equationPreview, experimentLabel, includedBy, omittedSummary, perPointReading,
   perPointRow, samplesDiffer, significanceStars, snapshotOf, specSummary, summaryRows, termLabel,
   type TableColumn,
 } from "./regression-workbench-table";
@@ -106,6 +106,29 @@ describe("tables", () => {
     { name: "默认模型", spec: DEFAULT, snapshot: snapshotOf(DEFAULT_RUN) },
     { name: "去掉汇率", spec: NO_RATE, snapshot: snapshotOf(NO_RATE_RUN) },
   ];
+
+  test("the design-value row says the course's number per point and each column's deviation from it (v13)", () => {
+    const row = designValueRow(columns, "trade", "FVA_share", options)!;
+    expect(row.label).toBe("课程设定值（X 每高 1 个百分点）");
+    expect(row.cells.every((cell) => cell.startsWith("-0.55 个百分点；估计偏差 "))).toBe(true);
+    expect(designValueRow(columns, "production", "3b_FGY_GVC_C_share", options)!.cells[0]).toBe("设定为 0（与 X 无关）");
+    expect(designValueRow(columns, "length", "GVCPs", options)!.cells[0]).toBe("无单一设定值（比值 Y）");
+    expect(designValueRow(columns, "trade", "unknown", options)).toBeNull();
+    expect(designDeviation(-0.66, -0.55)).toBeCloseTo(0.2);
+    expect(designDeviation(-0.44, -0.55)).toBeCloseTo(-0.2);
+    expect(designDeviation(0.11, -0.55)).toBeCloseTo(-1.2);
+    const summary = summaryRows(columns, options);
+    expect(summary.map((item) => item.key)).toEqual(expect.arrayContaining(["f_p", "root_mse"]));
+  });
+
+  test("the presets are offered in two tiers, 必看 before 进阶, with the design-value note (v13)", () => {
+    expect(options.presets.map((item) => item.tier)).toEqual(["core", "core", "core", "advanced", "advanced", "advanced", "advanced"]);
+    expect(options.presets.map((item) => item.label)).toEqual([
+      "去掉汇率变动", "去掉 GDP 对数", "去掉贸易开放度", "只放当期 X（去掉 L1.X）", "去掉年份固定效应", "固定效应改为国家 + 行业 + 年份", "加上人口增长率和 FDI 净流入占比",
+    ]);
+    expect(options.x_lags[2].description).toContain("没有两年后的关联");
+    expect(options.fixed_effects.find((item) => item.key === "country_year")?.description).toContain("吸收不等于没有控制");
+  });
 
   test("rows are the union of the columns' terms, then each fixed effect and the statistics", () => {
     const rows = coefficientRows(columns, options);
@@ -447,8 +470,7 @@ describe("the open workbench", () => {
     // The preset no longer reads pressed: the form holds another model.
     expect(screen.getByRole("button", { name: /^去掉汇率变动/ }).getAttribute("aria-pressed")).toBe("false");
     const details = screen.getByRole("group", { name: "单模型详细数字" });
-    expect(details.hasAttribute("open")).toBe(false);
-    fireEvent.click(details.querySelector("summary")!);
+    expect(details.hasAttribute("open")).toBe(true);
     expect(details.textContent).toContain("GDP 对数、贸易开放度");
     expect(details.textContent).toContain("上次计算（设定已更改）");
     expect(details.textContent).toContain("当前设定待重算");
@@ -492,8 +514,9 @@ describe("one column's full numbers", () => {
     run.result.cumulative = { ...coef("cumulative", -1.8414), ci_low: -1.92, ci_high: -1.76 };
     const sum = cells(run, "length").at(-1)!;
     expect(sum[0]).toBe("X 各项合计（累计效应）");
-    expect(sum[1]).toBe("-1.8414***");
-    expect(sum[6]).toBe("-0.0184 个长度单位");
+    expect(sum[1]).toBe("-1.8414");
+    expect(sum[5]).toBe("***");
+    expect(sum[7]).toBe("-0.0184 个长度单位");
   });
 
   test("network coefficients group thousands; nothing reads as a negative zero", () => {
@@ -502,9 +525,9 @@ describe("one column's full numbers", () => {
     run.result.coefs[0] = { ...run.result.coefs[0], ci_low: -2558.542, ci_high: -2402.2026, se: 39.88, t: -62.2 };
     run.result.coefs[2] = { ...run.result.coefs[2], coef: -0.00001, se: 0.00001, t: -0.001, ci_low: -0.00004, ci_high: 0.00002 };
     const rows = cells(run, "network");
-    expect(rows[0].slice(1, 6)).toEqual(["-2,480.3723***", "(39.8800)", "-62.20", "0.0010", "[-2,558.5420, -2,402.2026]"]);
+    expect(rows[0].slice(1, 7)).toEqual(["-2,480.3723", "(39.8800)", "-62.20", "0.0010", "***", "[-2,558.5420, -2,402.2026]"]);
     expect(rows[2][1].startsWith("0.0000")).toBe(true);
-    expect(rows[2][5]).toBe("[0.0000, 0.0000]");
+    expect(rows[2][6]).toBe("[0.0000, 0.0000]");
   });
 
   test.each([

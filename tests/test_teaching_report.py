@@ -2970,6 +2970,8 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     assert "每步最多一个" in appendix
     # One table a step; a preset's model is named after the preset, any other as a custom setting (escaped).
     assert "### 步骤 11 · 贸易流回归（Y：外国增加值项占比）" in appendix
+    # The course's design value sits under the per-point row with each column's deviation from it.
+    assert "| 课程设定值（X 每高 1 个百分点） | -0.55 个百分点；估计偏差 " in appendix
     assert f"| 变量 | 默认模型 | {escaped_name} |" in appendix
     assert "### 步骤 13 · 长度回归（Y：" in appendix
     assert "| 变量 | 默认模型 | 去掉汇率变动 |" in appendix

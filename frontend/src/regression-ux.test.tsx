@@ -247,7 +247,8 @@ describe("simple regression workbench", () => {
     workbench.open = true;
     fireEvent(workbench, new Event("toggle"));
     expect(await screen.findByRole("button", { name: "计算这个模型" })).toBeTruthy();
-    expect(screen.getByRole("group", { name: "单模型详细数字" }).hasAttribute("open")).toBe(false);
+    // The single-model table (the Stata/Excel-like one the course asked for) is open from the start.
+    expect(screen.getByRole("group", { name: "单模型详细数字" }).hasAttribute("open")).toBe(true);
     expect([...document.querySelectorAll(".reg-custom-compare-table thead th")].map((cell) => cell.textContent)).toEqual(["变量", "默认模型"]);
   });
 

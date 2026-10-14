@@ -6,6 +6,7 @@ import {
   RegressionEvidenceMatrix,
   RegressionSummaryBars,
   ReportedExperiments,
+  decompositionSentence,
   familyVerdict,
   regressionSummaryRows,
 } from "./regression-teach";
@@ -251,4 +252,25 @@ test("the step-15 summary table gives each of its seven columns a share of the w
   expect(widths.map(([column]) => column)).toEqual([1, 2, 3, 4, 5, 6, 7]);
   expect(widths.reduce((total, [, width]) => total + width, 0)).toBe(100);
   expect(widths.every(([, width]) => width > 0)).toBe(true);
+});
+
+
+describe("the sentence under the three-group chart (v13)", () => {
+  test("it reads the first wave's change and the fitted split in the chart's unit, X first, the remainder last", () => {
+    const text = decompositionSentence({
+      group: "first", wave_start: 2018, year: 2020, pre_years: [2016, 2017], observed: -0.084,
+      terms: [
+        { name: "x_terms", label: "关税 X", change: -0.016 },
+        { name: "teaching_exchange_rate_change", label: "汇率变动", change: -0.041 },
+        { name: "teaching_log_gdp", label: "GDP 对数", change: -0.05 },
+        { name: "teaching_trade_openness", label: "贸易开放度", change: 0.049 },
+      ],
+      remainder: -0.026,
+    }, "外国增加值项占比", 100, "个百分点", 1);
+    expect(text).toContain("第一批被加税国家 2020 年的外国增加值项占比比加税前（2016、2017 年）平均低 8.4 个百分点");
+    expect(text).toContain("与关税 X 相关 −1.6，与汇率变动同步 −4.1，与 GDP 对数同步 −5.0，与贸易开放度同步 +4.9，其余（各年共同的变化与噪声）−2.6");
+    expect(decompositionSentence({ group: "first", wave_start: 2018, year: 2020, pre_years: [2016, 2017], observed: -0.32, terms: [], remainder: -0.32 }, "前向 GVC 段长度", 1, "长度单位", 3))
+      .toContain("平均低 0.320 个长度单位");
+    expect(text).toContain("第二批税率相同");
+  });
 });

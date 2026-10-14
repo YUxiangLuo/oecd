@@ -63,15 +63,24 @@ def test_options_list_every_choice_in_page_order_with_the_default_and_the_limits
     assert len(options["hints"]) == 2 and options["footnote"].startswith("注：括号内为按国家聚类的标准误。")
     # The preset experiments: each changes one thing of the default model, none is the default, no two alike.
     presets = options["presets"]
-    assert [item["label"] for item in presets] == [
-        "去掉汇率变动",
-        "只放当期 X（去掉 L1.X）",
-        "固定效应改为国家 + 行业 + 年份",
-        "改用国家×年份固定效应",
-        "去掉 GDP 对数",
-        "加上人口增长率和 FDI 净流入占比",
-        "加上两年前的 X（L2.X）",
+    assert [(item["tier"], item["label"]) for item in presets] == [
+        ("core", "去掉汇率变动"),
+        ("core", "去掉 GDP 对数"),
+        ("core", "去掉贸易开放度"),
+        ("advanced", "只放当期 X（去掉 L1.X）"),
+        ("advanced", "去掉年份固定效应"),
+        ("advanced", "固定效应改为国家 + 行业 + 年份"),
+        ("advanced", "加上人口增长率和 FDI 净流入占比"),
     ]
+    assert {item["tier_label"] for item in presets} == {"必看", "进阶"}
+    # The two choices that leave the estimate unchanged by design are explained where they are offered.
+    assert "没有两年后的关联" in options["x_lags"][2]["description"]
+    assert "吸收不等于没有控制" in effects["country_year"]["description"]
+    # The course's design value of each Y, for the page to say how far an estimate is from it.
+    assert options["design_values"]["trade"]["FVA_share"] == -0.55
+    assert options["design_values"]["production"]["3b_FGY_GVC_C_share"] == 0.0
+    assert options["design_values"]["length"]["GVCPs"] is None
+    assert options["design_value_note"].startswith("课程数据按设定生成")
     specs = [json.dumps(item["spec"], sort_keys=True) for item in presets]
     assert len(set(specs)) == len(specs) and json.dumps(DEFAULT_SPEC.to_dict(), sort_keys=True) not in specs
     assert all(item["question"].endswith("？") and ModelSpec.from_dict(item["spec"]) for item in presets)

@@ -1,7 +1,7 @@
 /** What a step keeps of its one run (the course default model on the step's default Y) and how it is restored. */
 import type { QuizCompletionState, RegressionResponse } from "../types";
 
-export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v12";
+export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v13";
 
 /** 自动保存最近一次真实运行，供刷新恢复与报告复估。 */
 export interface SavedRegressionRun {

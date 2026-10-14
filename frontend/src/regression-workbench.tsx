@@ -22,6 +22,7 @@ import {
   sameSpec,
   samplesDiffer,
   significanceStars,
+  designValueRow,
   snapshotOf,
   specSummary,
   specKey,
@@ -168,15 +169,16 @@ export function ColumnDetails({ column, options, perPoint }: {
   return (
     <ScrollableRegion className="table-wrap" label={`${column.name}的完整数字，可横向滚动`}>
       <table className="data-table reg-custom-table">
-        <thead><tr><th>变量</th><th>系数</th><th>标准误</th><th>t 值</th><th>p 值</th><th>95% 区间</th><th>X 每高 1 个百分点</th></tr></thead>
+        <thead><tr><th>变量</th><th>系数</th><th>标准误</th><th>t 值</th><th>p 值</th><th>显著性</th><th>95% 区间</th><th>X 每高 1 个百分点</th></tr></thead>
         <tbody>
           {rows.map((coef) => (
             <tr key={coef.name}>
               <td>{termLabel(coef.name, options)}</td>
-              <td>{fixed4(coef.coef)}{result.suppressed ? "" : significanceStars(coef.p)}</td>
+              <td>{fixed4(coef.coef)}</td>
               <td>{result.suppressed ? "—" : `(${fixed4(coef.se)})`}</td>
               <td>{result.suppressed || coef.t == null ? "—" : groupedFixed(coef.t, 2)}</td>
               <td>{result.suppressed ? "—" : formatPValue(coef.p)}</td>
+              <td>{result.suppressed ? "—" : significanceStars(coef.p) || "—"}</td>
               <td>{result.suppressed || coef.ci_low == null || coef.ci_high == null ? "—" : `[${fixed4(coef.ci_low)}, ${fixed4(coef.ci_high)}]`}</td>
               {/* The page's reading, for the X terms' sum (or the single X term) only. */}
               <td>{coef.name === "cumulative" || (xTerms === 1 && Object.values(X_COLUMNS).includes(coef.name)) ? perPoint(coef, column.snapshot) : "—"}</td>
@@ -248,6 +250,8 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const [detailColumn, setDetailColumn] = useState(0);
   // The custom form is folded: the presets are the first thing offered.
   const [customOpen, setCustomOpen] = useState(false);
+  // The single-model table (coefficient, SE, t, p, significance, interval) is open: the course asked for it first.
+  const [detailsOpen, setDetailsOpen] = useState(true);
   // A refused calculation (429) shows how long new models must wait. The button stays usable: a model computed before
   // (by anyone) is answered from the server's cache and not counted, and a new one is simply refused again.
   const [retryAt, setRetryAt] = useState<number | null>(null);
@@ -340,6 +344,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const highlighted = latest ? 1 : isDefault ? 0 : -1;
   const coefficients = coefficientRows(columns, options);
   const pointRow = perPointRow(columns, outcome);
+  const designRow = designValueRow(columns, outcome, baseline, options);
   const summary = summaryRows(columns, options);
   const latestColumn: TableColumn | null = computed && computed.design.spec
     ? { name: !current ? "上次计算（设定已更改）" : columns[highlighted]?.name ?? DEFAULT_COLUMN, spec: computed.design.spec, snapshot: snapshotOf(computed) }
@@ -365,16 +370,26 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
     <div className="reg-custom">
       <p className="reg-custom-y">因变量：<b>{depvarLabel}</b>（本步的 Y）。每次只改一处设定，算出后和表中第一列的默认模型比较；只改一项也可能改变样本。</p>
       <div className="reg-custom-presets" role="group" aria-label="预设实验">
-        <ul>
-          {options.presets.map((item) => (
-            <li key={item.key}>
-              <button type="button" className="reg-preset" aria-pressed={activePreset === item.key} aria-disabled={running || undefined}
-                onClick={() => { if (!running) runPreset(item.spec); }}>
-                <b>{item.label}</b><small>{item.question}</small>
-              </button>
-            </li>
-          ))}
-        </ul>
+        {(["core", "advanced"] as const).map((tier) => {
+          const items = options.presets.filter((item) => (item.tier ?? "core") === tier);
+          if (!items.length) return null;
+          return (
+            <div key={tier} className={`reg-preset-tier reg-preset-tier-${tier}`}>
+              <h5 className="reg-preset-tier-title">{items[0].tier_label ?? (tier === "core" ? "必看" : "进阶")}</h5>
+              <ul>
+                {items.map((item) => (
+                  <li key={item.key}>
+                    <button type="button" className="reg-preset" aria-pressed={activePreset === item.key} aria-disabled={running || undefined}
+                      onClick={() => { if (!running) runPreset(item.spec); }}>
+                      <b>{item.label}</b><small>{item.question}</small>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+        {options.design_value_note && <p className="muted reg-design-note">{options.design_value_note}</p>}
       </div>
       <details className="reg-custom-details reg-custom-form-details" open={customOpen} onToggle={(event) => setCustomOpen(event.currentTarget.open)}>
         <summary>自定义设定（X 的滞后、8 个控制变量、固定效应）</summary>
@@ -419,6 +434,12 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
                 <tr className="reg-custom-point-row">
                   <th scope="row">{pointRow.label}</th>
                   {pointRow.cells.map((value, index) => <td key={index} className={cellClass(index)}>{value}</td>)}
+                </tr>
+              )}
+              {designRow && (
+                <tr className="reg-custom-design-row">
+                  <th scope="row">{designRow.label}</th>
+                  {designRow.cells.map((value, index) => <td key={index} className={cellClass(index)}>{value}</td>)}
                 </tr>
               )}
               {coefficients.filter((row) => row.key === "_constant").map((row) => (
@@ -471,8 +492,8 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         {reportChanged && <p className="reg-rerun-warning reg-replaced-notice" role="status">放入报告的模型与已提交报告里的不同；请到步骤 15 更新报告并重新提交给老师。</p>}
       </div>
 
-      <details className="reg-custom-details" aria-label="单模型详细数字">
-        <summary>查看单模型详细数字（系数、t 值与区间）与导出 CSV{staleMessage ? " · 当前设定待重算" : ""}</summary>
+      <details className="reg-custom-details" aria-label="单模型详细数字" open={detailsOpen} onToggle={(event) => setDetailsOpen(event.currentTarget.open)}>
+        <summary>单模型详细数字（系数、标准误、t 值、p 值、显著性、区间）与导出 CSV{staleMessage ? " · 当前设定待重算" : ""}</summary>
         <label className="reg-custom-detail-pick">查看
           <select value={shownDetail} onChange={(event) => setDetailColumn(Number(event.target.value))}>
             {detailColumns.map((column, index) => <option key={index} value={index}>{column.name}</option>)}
@@ -483,7 +504,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         <ColumnDetails column={detailColumns[shownDetail]} options={options} perPoint={perPoint} />
         {detailColumns[shownDetail].snapshot.result.suppressed && <p className="reg-stale-note">{options.suppressed_note}</p>}
         {omittedSummary(detailColumns[shownDetail].snapshot, options).map((note) => <p className="muted" key={note}>{note}</p>)}
-        <p className="muted">系数按 X 以份额计（1 = 100 个百分点）；最后一列换算为 X 每高 1 个百分点。{xSpanLabel(detailColumns[shownDetail].spec)}；括号内为标准误，星号含义见表下注释。</p>
+        <p className="muted">系数按 X 以份额计（1 = 100 个百分点）；最后一列换算为 X 每高 1 个百分点。{xSpanLabel(detailColumns[shownDetail].spec)}；括号内为标准误，星号含义见表下注释。{detailColumns[shownDetail].spec.fixed_effects.length ? "带固定效应的模型没有常数项：各单位和各年的截距已被固定效应吸收。" : ""}</p>
         <button type="button" className="secondary" onClick={() => download(comparisonCsv(columns, options, depvarLabel, pointRow), `步骤${stepNumber}-回归对比.csv`)}>
           导出 CSV（上面的回归结果表）
         </button>
