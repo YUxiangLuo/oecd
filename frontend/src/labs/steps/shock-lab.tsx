@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sameJsonValue } from "../../session-store";
-import { MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT } from "../../step-task-card";
+import { MaterialCard, AUTO_RECORD_HOW } from "../../material-card";
+import { shockMaterialLabel } from "../../material-label";
+
 import { api } from "../../api";
 import { ScrollableRegion } from "../../a11y";
 import { userFacingRequestError } from "../../user-facing-error";
@@ -221,6 +223,11 @@ export function ShockLab({ meta, step: _step, state }: {
       viewed_teaching_panel: true,
       teaching_panel_version: panel.version,
       teaching_example_chosen: chosen,
+      material_label: shockMaterialLabel({
+        first, second: second || undefined, industry,
+        firstTaxed: Boolean(panel.rows.some((row) => row.country === first && row.teaching_tariff_rate_tau > 0)),
+        secondTaxed: second ? Boolean(panel.rows.some((row) => row.country === second && row.teaching_tariff_rate_tau > 0)) : undefined,
+      }),
       teaching_observation: representative
         ? {
           country: representative.country,
@@ -240,7 +247,7 @@ export function ShockLab({ meta, step: _step, state }: {
     recordExample();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panel, complete, savedExample, savedFlagCurrent, first, second, industry]);
-  const recordStripRef = useRef<HTMLDivElement>(null);
+  const recordStripRef = useRef<HTMLElement | null>(null);
   // The recorded example as saved (not the current selects): "CAN 加拿大 · C29 汽车（对比 CRI 哥斯达黎加）".
   const savedCompared = state.data?.teaching_observation ? state.data.compared ?? [] : [];
   const recordedExample = savedCompared.length && state.data?.teaching_industry
@@ -249,11 +256,6 @@ export function ShockLab({ meta, step: _step, state }: {
   // Worded as steps 6–9 word their recorded chart.
   // Recorded on request after submission: the confirmation then says to update the report on step 15.
   const [rechosen, setRechosen] = useState(false);
-  const recordStatus = state.materialLocked
-    ? `${MATERIAL_LOCKED_NOTE}${panel && complete && savedExample ? `当前例子就是已记录的材料。${rechosen ? MATERIAL_RECHOSEN_NEXT : ""}` : ""}`
-    : panel && complete
-      ? savedExample ? "当前例子已自动记录；换国家或行业后会自动更新。" : "正在记录当前例子…"
-      : null;
 
   // While the current selection cannot be used (not in the sample), the recorded example stays on screen: its
   // worked X and trend, rather than the CAN all-industry average.
@@ -467,21 +469,21 @@ export function ShockLab({ meta, step: _step, state }: {
           </select>
         </label>
       </div>
-      {/* What the report material holds, as step 1 shows its recorded cell; it follows the selection until the
-          report is submitted, then changes only through the button. */}
-      <div className="observation-strip teaching-example-record" ref={recordStripRef} tabIndex={-1} aria-live="polite">
-        <b>已记录的例子</b>
-        {recordedExample ? <span>{recordedExample}</span> : <span className="empty">尚未记录</span>}
-        {recordStatus && <span className="muted">{recordStatus}</span>}
-        {state.materialLocked && panel && complete && !savedExample && (
-          <button type="button" className="secondary" onClick={() => {
-            // The button removes itself: focus the strip (it stays mounted), which then confirms the switch.
-            recordStripRef.current?.focus({ preventScroll: true });
-            setRechosen(true);
-            recordExample();
-          }}>改用当前例子作为报告材料（之后需在步骤 15 更新报告）</button>
-        )}
-      </div>
+      {/* 本步报告材料: the recorded example, as on every step. */}
+      <MaterialCard
+        cardRef={(node) => { recordStripRef.current = node; }}
+        state={recordedExample ? "recorded" : "missing"}
+        summary={recordedExample ? (state.data?.material_label as string | undefined) ?? recordedExample : "尚未记录：关税数据加载后自动记录当前例子。"}
+        how={recordedExample ? (savedExample ? "当前例子就是已记录的材料；换国家或行业后自动更新。" : "已记录的是另一个例子；换回或点下面的按钮即改为当前例子。") : AUTO_RECORD_HOW}
+        locked={state.materialLocked}
+        rechosen={rechosen}
+        action={state.materialLocked && panel && complete && !savedExample
+          ? { label: "改用当前例子作为报告材料（之后需在步骤 15 更新报告）", onClick: () => { recordStripRef.current?.focus({ preventScroll: true }); setRechosen(true); recordExample(); } }
+          : null}
+        syncing={state.syncing}
+        syncError={state.syncError}
+        onRetrySync={state.syncNow}
+      />
       {boundaryNote && <p className="reg-boundary" role="status">{boundaryNote}</p>}
       {query.status === "loading" && <div className="shock-panel-state shock-workbench-loading" role="status">正在读取关税数据…</div>}
       {query.status === "error" && <div className="error-box" role="alert">{userFacingRequestError(query.error, "关税数据读取失败")} <button className="secondary" onClick={query.retry}>重试</button></div>}

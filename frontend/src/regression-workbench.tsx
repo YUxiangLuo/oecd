@@ -382,8 +382,8 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   // another model on this Y (on another Y it is only named below: two Ys cannot share a table).
   const columns: TableColumn[] = [
     { name: DEFAULT_COLUMN, spec: options.default_spec, snapshot: snapshotOf(defaultForY ?? defaultResponse) },
-    ...(latest ? [{ name: `${latestIsReported ? "已放入报告" : "本次"}：${label(latest.design.spec!)}`, spec: latest.design.spec!, snapshot: snapshotOf(latest) }] : []),
-    ...(experiment && experimentY === yKey && !latestIsReported ? [{ name: `已放入报告：${label(experiment.spec)}`, spec: experiment.spec, snapshot: experiment.snapshot }] : []),
+    ...(latest ? [{ name: `${latestIsReported ? "已记入报告" : "本次"}：${label(latest.design.spec!)}`, spec: latest.design.spec!, snapshot: snapshotOf(latest) }] : []),
+    ...(experiment && experimentY === yKey && !latestIsReported ? [{ name: `已记入报告：${label(experiment.spec)}`, spec: experiment.spec, snapshot: experiment.snapshot }] : []),
   ];
   const highlighted = latest ? 1 : isDefault ? 0 : -1;
   const coefficients = coefficientRows(columns, options);
@@ -403,13 +403,13 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       spec: latest.design.spec!, ...(yKey !== stepBaseline ? { baseline: yKey } : {}),
       saved_at: new Date().toISOString(), snapshot: snapshotOf(latest),
     } });
-    setAnnouncement(`已把“${label(latest.design.spec!)}”放入报告${yKey !== stepBaseline ? `（Y：${depvarLabel}）` : ""}。`);
+    setAnnouncement(`已把“${label(latest.design.spec!)}”记入报告${yKey !== stepBaseline ? `（Y：${depvarLabel}）` : ""}。`);
   };
   const removeFromReport = () => {
     if (!experiment) return;
     const name = label(experiment.spec);
     state.save({ experiment: null });
-    setAnnouncement(`已把“${name}”移出报告。`);
+    setAnnouncement(`已把“${name}”从报告移除。`);
   };
   const activePreset = options.presets.find((item) => sameSpec(item.spec, spec, options))?.key ?? null;
 
@@ -535,22 +535,22 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       <div className="reg-custom-report">
         {latest && !latestIsReported && (
           <button type="button" className="secondary" onClick={putInReport}>
-            {experiment ? `用“${label(latest.design.spec!)}”替换报告里的模型` : `把“${label(latest.design.spec!)}”放入报告`}
+            {experiment ? `用“${label(latest.design.spec!)}”替换记入报告的模型` : `把“${label(latest.design.spec!)}”也记入报告（选做）`}
           </button>
         )}
         {experiment
           ? (
             <p className="reg-custom-report-chip" role="note">
-              <span>已放入报告：<b>{label(experiment.spec)}</b>（{specSummary(experiment.spec, options)}{experimentY !== stepBaseline ? `；Y：${yLabel(experimentY)}` : ""}）</span>
+              <span>已记入报告：<b>{label(experiment.spec)}</b>（{specSummary(experiment.spec, options)}{experimentY !== stepBaseline ? `；Y：${yLabel(experimentY)}` : ""}）</span>
               <span aria-hidden="true"> · </span>
-              <button type="button" className="link-button danger" onClick={removeFromReport}>移出报告</button>
+              <button type="button" className="link-button danger" onClick={removeFromReport}>从报告移除</button>
             </p>
           )
-          : <p className="muted reg-custom-report-none">还没有模型放入报告（选做）：算出一个模型后点“放入报告”，报告附录“模型实验”会把它和默认模型并列。</p>}
+          : <p className="muted reg-custom-report-none">还没有记入报告的模型实验（选做）：算出一个模型后点“也记入报告”，报告附录“模型实验”会把它和默认模型并列。</p>}
         {state.materialLocked && (
-          <p className="reg-rerun-warning" role="note"><b>报告已提交</b>放入、替换或移出报告里的模型都会改变报告；之后要到步骤 15 更新报告，并重新提交给老师。</p>
+          <p className="reg-rerun-warning" role="note"><b>报告已提交</b>记入、替换或移除报告里的模型都会改变报告；之后要到步骤 15 更新报告，并重新提交给老师。</p>
         )}
-        {reportChanged && <p className="reg-rerun-warning reg-replaced-notice" role="status">放入报告的模型与已提交报告里的不同；请到步骤 15 更新报告并重新提交给老师。</p>}
+        {reportChanged && <p className="reg-rerun-warning reg-replaced-notice" role="status">记入报告的模型与已提交报告里的不同；请到步骤 15 更新报告并重新提交给老师。</p>}
       </div>
 
       <details className="reg-custom-details" aria-label="单模型详细数字" open={detailsOpen} onToggle={(event) => setDetailsOpen(event.currentTarget.open)}>

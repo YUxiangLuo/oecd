@@ -71,6 +71,8 @@ _VIEW_ONLY_KEYS = frozenset(
         "browse_selection",
         "network_browse",
         "custom_draft",
+        # The sentence a step records its material as (shown again on step 15): wording, not evidence.
+        "material_label",
     }
 )
 

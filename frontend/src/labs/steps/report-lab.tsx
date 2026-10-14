@@ -7,7 +7,7 @@ import { ReportOutro } from "../../report-outro";
 import { clearToasts, showToast } from "../../toast";
 import { stepTaskTitleId } from "../../step-task-card";
 import { ConfirmModal } from "../../teacher/ui";
-import type { ClassroomReport, ReportGateItem, ReportMutationResponse, StepStateApi } from "../../types";
+import type { ClassroomReport, ReportGateItem, ReportMutationResponse, Step, StepStateApi } from "../../types";
 import type { SessionStatus } from "../../use-session";
 import { userFacingRequestError } from "../../user-facing-error";
 
@@ -221,6 +221,41 @@ export function GateCard({ blocked, onNavigateStep, flash = 0, verb = "生成" }
           ))}
         </div>
       </details>
+    </section>
+  );
+}
+
+/** 你记录的材料: one line per step 1–14, in the same words each step's material card used, with a link back. */
+export function RecordedMaterials({ steps, getStep, blocked, onNavigateStep }: {
+  steps?: Pick<Step, "n" | "title" | "lab">[];
+  getStep?: (step: number) => SiblingStepData | undefined;
+  blocked: ReportGateItem[];
+  onNavigateStep: (step: number) => void;
+}) {
+  const rows = (steps ?? []).filter((step) => step.n >= 1 && step.n <= 14).map((step) => {
+    const data = getStep?.(step.n) as (Record<string, unknown> | undefined);
+    // The material reasons only: the quiz is the step's other condition and has its own place in the gate card.
+    const missing = blocked.filter((item) => item.step === step.n && !item.quiz_only).flatMap((item) => item.missing).filter((text) => !text.includes("理解题"));
+    const label = typeof data?.material_label === "string" ? data.material_label : null;
+    const recorded = missing.length === 0 && Boolean(data && Object.keys(data).some((key) => ["observation", "observations", "teaching_observation", "run"].includes(key)));
+    return { step, label, missing, recorded };
+  });
+  if (!rows.length) return null;
+  return (
+    <section className="report-materials" aria-labelledby="report-materials-title">
+      <h3 id="report-materials-title">你记录的材料</h3>
+      <p className="muted">每步一条，和各步“本步报告材料”卡上写的一样；缺的点步骤名回去补。</p>
+      <table>
+        <tbody>
+          {rows.map(({ step, label, missing, recorded }) => (
+            <tr key={step.n}>
+              <td><button type="button" className="gate-link" onClick={() => onNavigateStep(step.n)}>步骤 {step.n} · {step.title}</button></td>
+              <td><span className={`material-chip material-chip--${recorded ? "recorded" : "missing"}`}>{recorded ? "已记录" : "未记录"}</span></td>
+              <td>{recorded ? (label ?? "已记录（旧记录，到本步查看）") : missing.length ? missing.join("；") : "尚未记录"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </section>
   );
 }
@@ -481,6 +516,7 @@ export function ReportLab({
   onNavigateStep,
   onReportChanged,
   getStep,
+  steps,
 }: {
   state: StepStateApi;
   report: ClassroomReport | null;
@@ -495,6 +531,8 @@ export function ReportLab({
   onNavigateStep: (step: number) => void;
   onReportChanged: (response: ReportMutationResponse) => void;
   getStep?: (step: number) => SiblingStepData | undefined;
+  /** The course's steps (titles for 你记录的材料). */
+  steps?: Pick<Step, "n" | "title" | "lab">[];
 }) {
   const [blocked, setBlocked] = useState<ReportGateItem[]>([]);
   const [generating, setGenerating] = useState(false);
@@ -835,6 +873,7 @@ export function ReportLab({
         </nav>
       </section>
       {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} flash={gateFlash} verb={reportGateVerb(report)} />}
+      <RecordedMaterials steps={steps} getStep={getStep} blocked={reportGate ?? []} onNavigateStep={onNavigateStep} />
       {/* Open while the analysis is written (it cites these); folded once the report is handed in. */}
       <details className="report-reference" aria-labelledby="report-regression-results-title" open={!(report?.state === "pending" || report?.state === "graded")}>
         <summary><h3 id="report-regression-results-title" className="report-reference-title">四步回归结果</h3></summary>

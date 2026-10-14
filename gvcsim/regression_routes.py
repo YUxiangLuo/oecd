@@ -491,7 +491,7 @@ def charge_report_runs(account_id: Any, designs: list[RegressionDesign]) -> Repo
         raise HTTPException(
             status_code=429,
             detail=(
-                f"生成报告要重新计算你放入报告的 {missing} 个模型，本分钟的计算次数已用完；"
+                f"生成报告要重新计算你记入报告的 {missing} 个模型，本分钟的计算次数已用完；"
                 f"请约 {error.retry_after_header} 秒后再生成。"
             ),
             headers={"Retry-After": error.retry_after_header},

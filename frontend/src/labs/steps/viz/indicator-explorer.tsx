@@ -1,5 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT, NO_READINGS_NOTE, NOT_RECORDED_HINT, RECORD_CHART_ACTION, RECORDED_CHART_LABEL, REPLACE_MATERIAL_ACTION } from "../../../step-task-card";
+import { NO_READINGS_NOTE, NOT_RECORDED_HINT, RECORD_CHART_ACTION, RECORDED_CHART_LABEL, REPLACE_MATERIAL_ACTION } from "../../../step-task-card";
+import { MaterialCard } from "../../../material-card";
+import { vizMaterialLabel } from "../../../material-label";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { Meta, Step, StepStateApi } from "../../../types";
@@ -489,11 +491,21 @@ export function IndicatorExplorer({
   // Recorded on request after submission: the confirmation then says to update the report on step 15.
   const [rechosen, setRechosen] = useState(false);
   // Recorded on the student's request only (the button under the chart): the report calls it 学生选定.
+  const materialLabel = () => vizMaterialLabel({
+    view: `${lenses.find((lens) => lens.key === (composition ? "composition" : view))?.label ?? ""}${composition && side === "alternate" ? " · 后向" : ""}`,
+    // A composition chart is named by its lens already; its readings are the parts and the total.
+    metric: composition ? "各分项与总量" : indicatorName,
+    countries: selected,
+    industry: industry || undefined,
+    years: timeView ? chartYears : [year],
+    readings: pending.length,
+  });
   const recordCurrent = () => state.save({
     compared: selected,
     observations: pending,
     indicator_selection: { ...selection, view },
     material_chosen: true,
+    material_label: materialLabel(),
   });
   // View bar: the step's theme first (default entry), then the two views every step must offer.
   const themeLens = topic.composition
@@ -1284,39 +1296,29 @@ export function IndicatorExplorer({
             {field(key)?.denominator && `分母：${label(field(key)!.denominator!)}（分母为 0 或负数时不显示份额）。`}
           </p>
         ))}
-      {/* The one way a chart becomes report material: this button, under every chart, in the same place. */}
-      <div className="material-record" role="group" aria-label="记录报告材料">
-        {!validYears ? <p className="muted" role="status">请先修正年份范围，当前图表才能被记录。</p>
-          : !canSave
-            // 定位图 and 行业结构 have no readings to record: the sentence says so, without "暂不能记录".
-            ? <p className="muted" role="status">{view === "positioning" || view === "structure" ? "" : "当前图表暂不能记录："}{blockedReason}</p>
-          : matches
-            ? <button type="button" className="secondary" disabled aria-disabled="true">{RECORDED_CHART_LABEL}</button>
-            : <button type="button" className="secondary" onClick={() => { setRechosen(Boolean(state.materialLocked)); recordCurrent(); }}>{state.materialLocked && saved.length ? REPLACE_MATERIAL_ACTION : RECORD_CHART_ACTION}</button>}
-        {validYears && !canSave && view === "industry" && !rankComplete.length && rankGapList}
-      </div>
-      <section className="qualified-run-card" aria-label="报告材料">
-        <h3>报告材料 · {saved.length ? `已记录（${saved.length} 条读数）` : "尚未记录"}</h3>
-        <p role="status">
-          {!saved.length ? NOT_RECORDED_HINT
-            : state.materialLocked
-              ? `${MATERIAL_LOCKED_NOTE}${matches ? "当前图表就是已记录的材料。" : "要换成当前图表，点上面的“替换报告材料”。"}${rechosen ? MATERIAL_RECHOSEN_NEXT : ""}`
-              : matches ? "当前图表就是已记录的材料；换视角、国家或年份不会改动它。" : "已记录的是另一张图；要换成当前图表，点上面的“把这张图记为本步报告材料”。"}
-        </p>
-        {view === "composition" && canSave && matches && (
-          <p className="muted composition-material-scale">{COMPOSITION_MATERIAL_SCALE_NOTE}{amountMode ? "本页现在按金额显示。" : ""}</p>
-        )}
-        {saved.length > 0 && <details>
-          <summary>核对已记录的材料 · {saved.length} 条读数</summary>
-          <p>
-            {joinCountries([...new Set(saved.map((item) => item.country))])} · {savedYearSpan(saved.map((item) => item.year))}
-            {" "}· {[...new Set(saved.map((item) => item.industry ?? ""))].map((industry) => industry ? sectorLabel(industry) : "国家整体").join("、")}
-          </p>
-          {table(saved)}
-        </details>}
-        {state.syncError ? <p role="alert">材料还没保存成功，请重试。<button className="secondary" onClick={state.syncNow}>重试同步</button></p>
-          : state.syncing && <p className="muted">正在同步实验记录…</p>}
-      </section>
+      {/* 本步报告材料: the one card, with the one button, under the chart as on every step. */}
+      <MaterialCard
+        state={saved.length ? "recorded" : !validYears || !canSave ? "blocked" : "missing"}
+        summary={saved.length
+          ? (state.data?.material_label as string | undefined) ?? `${joinCountries([...new Set(saved.map((item) => item.country))])} · ${savedYearSpan(saved.map((item) => item.year))} · ${[...new Set(saved.map((item) => item.industry ?? ""))].map((industry) => industry ? sectorLabel(industry) : "国家整体").join("、")}（${saved.length} 条读数）`
+          : !validYears ? "请先修正年份范围，当前图表才能被记录。"
+          : !canSave ? `${view === "positioning" || view === "structure" ? "" : "当前图表暂不能记录："}${blockedReason}`
+          : NOT_RECORDED_HINT}
+        extra={validYears && !canSave && view === "industry" && !rankComplete.length ? rankGapList : view === "composition" && canSave && matches ? <span className="composition-material-scale">{COMPOSITION_MATERIAL_SCALE_NOTE}{amountMode ? "本页现在按金额显示。" : ""}</span> : null}
+        how={saved.length
+          // Restored years out of range: the saved material stays, and the years (not the chart) are what to fix.
+          ? (!validYears ? "请先修正年份范围，当前图表才能被记录。" : matches ? "当前图表就是已记录的材料；换视角、国家或年份不会改动它。" : canSave ? "已记录的是另一张图；要换成当前图表，点下面的按钮。" : view === "positioning" || view === "structure" ? "已记录的是另一张图；当前图表没有可记录的读数。" : `已记录的是另一张图；当前图表暂不能记录：${blockedReason}`)
+          : canSave ? "每步记一张图：看好了就点下面的按钮；再点另一张即替换。" : undefined}
+        locked={state.materialLocked}
+        rechosen={rechosen}
+        action={!validYears || !canSave ? null
+          : matches ? { label: RECORDED_CHART_LABEL, disabled: true }
+          : { label: state.materialLocked && saved.length ? REPLACE_MATERIAL_ACTION : RECORD_CHART_ACTION, onClick: () => { setRechosen(Boolean(state.materialLocked)); recordCurrent(); } }}
+        check={saved.length ? { label: `核对已记录的读数 · ${saved.length} 条`, content: table(saved) } : null}
+        syncing={state.syncing}
+        syncError={state.syncError}
+        onRetrySync={state.syncNow}
+      />
     </section>
   );
 }

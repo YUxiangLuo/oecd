@@ -122,7 +122,7 @@ def main():
                 student.run(
                     "wait",
                     "--fn",
-                    "Boolean(document.querySelector('[aria-label=\"记录报告材料\"] button:not([disabled])'))",
+                    "Boolean(document.querySelector('.material-card button.material-card-action:not([disabled])'))",
                 )
                 student.button("把这张图记为本步报告材料")
                 wait_saved(
@@ -159,7 +159,7 @@ def main():
                 student.run(
                     "wait",
                     "--fn",
-                    "Boolean(document.querySelector('[aria-label=\"记录报告材料\"] button:not([disabled])'))",
+                    "Boolean(document.querySelector('.material-card button.material-card-action:not([disabled])'))",
                 )
                 student.button("把这张图记为本步报告材料")
                 wait_saved(

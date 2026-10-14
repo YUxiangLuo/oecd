@@ -1,7 +1,7 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { api } from "../../../api";
-import { NO_READINGS_NOTE, NOT_RECORDED_HINT, RECORD_CHART_ACTION, RECORDED_CHART_LABEL } from "../../../step-task-card";
+import { NOT_RECORDED_HINT, RECORD_CHART_ACTION, RECORDED_CHART_LABEL } from "../../../step-task-card";
 import type { Meta, Step } from "../../../types";
 import { NetworkVizStep, STEP10_DEFAULT_LENS } from "./network";
 import type { VizStepState } from "./scaffold";
@@ -38,12 +38,13 @@ test("step 9 records the main comparison only when asked; the exploration views 
   expect(screen.getByLabelText("当前图表范围").textContent).toMatch(/CHN 中国 与 USA 美国.*C26/);
   // The legacy record is another chart: the complete main chart is offered, not recorded, until the student asks.
   const record = await screen.findByRole("button", { name: RECORD_CHART_ACTION });
-  expect(screen.getByRole("region", { name: "步骤9报告材料" }).textContent).toContain("已记录的是另一张图");
+  expect(screen.getByRole("region", { name: "本步报告材料" }).textContent).toContain("已记录的是另一张图；要换成当前图表，点下面的按钮。");
   expect(recordedPatches(save)).toHaveLength(0);
   fireEvent.click(record);
   expect(recordedPatches(save)).toHaveLength(1);
   const recorded = recordedPatches(save)[0];
-  expect(recorded).toEqual({ compared: ["CHN", "USA"], metric: "weighted degree", observations: expect.any(Array), material_chosen: true });
+  expect(recorded).toEqual({ compared: ["CHN", "USA"], metric: "weighted degree", observations: expect.any(Array), material_chosen: true, material_label: expect.any(String) });
+  expect(recorded.material_label).toMatch(/^历年变化 · .*CHN 中国 对 USA 美国.*（4 条读数）$/);
   expect(recorded.observations).toHaveLength(4);
   expect(recorded.observations!.every((item) => item.release === meta.dataset!.release_id && item.source === "explicit-network-trend")).toBe(true);
 
@@ -68,9 +69,12 @@ test("step 9 records the main comparison only when asked; the exploration views 
   expect(save.mock.calls.slice(callsBefore).every(([patch]) => !("observations" in patch))).toBe(true);
   fireEvent.click(within(bar).getByRole("button", { name: "买入与卖出" }));
   expect(screen.getByLabelText("当前图表范围").textContent).toContain("这张图没有可记录的读数条目");
-  expect(screen.getByRole("group", { name: "记录报告材料" }).textContent).toBe(NO_READINGS_NOTE);
+  const card = screen.getByRole("region", { name: "本步报告材料" });
+  expect(card.querySelector(".material-card-how")!.textContent).toBe("已记录的是另一张图；当前图表没有可记录的读数。");
+  expect(card.querySelector(".material-card-action")).toBeNull();
   expect(screen.queryByRole("button", { name: RECORD_CHART_ACTION })).toBeNull();
-  expect(screen.getByRole("region", { name: "步骤9报告材料" }).textContent).not.toContain("暂不能记录");
+  expect(card.textContent).not.toContain("暂不能记录");
+  expect(card.querySelector(".material-chip")!.textContent).toBe("已记录");
   expect(screen.getAllByRole("region", { name: /行业买入与卖出/ })).toHaveLength(2);
   fireEvent.click(within(bar).getByRole("button", { name: "流量与路径" }));
   expect(screen.getAllByText(/行业的流量与路径/)).toHaveLength(2);
@@ -117,11 +121,11 @@ test("browsing across all six views of step 9 records nothing: material is made 
   expect(saveView.mock.calls.some(([patch]) => "network_browse" in patch)).toBe(true);
   expect(saveView.mock.calls.every(([patch]) => !("observations" in patch) && !("material_chosen" in patch))).toBe(true);
   expect(save.mock.calls.every(([patch]) => !("observations" in patch) && !("material_chosen" in patch))).toBe(true);
-  expect(screen.getByRole("region", { name: "步骤9报告材料" }).textContent).toContain(`报告材料 · 尚未记录${NOT_RECORDED_HINT}`);
+  expect(screen.getByRole("region", { name: "本步报告材料" }).textContent).toContain(`尚未记录${NOT_RECORDED_HINT}`);
   // The complete chart is offered; recording it is the one thing that saves material.
   fireEvent.click(screen.getByRole("button", { name: RECORD_CHART_ACTION }));
   // A new pair first clears the material saved for the old one (useVizLab.pickCountries), then the record is saved.
-  expect(recordedPatches(save)).toEqual([{ observations: [] }, expect.objectContaining({ compared: ["USA", "CHN"], metric: "betweenesscentrality", material_chosen: true })]);
+  expect(recordedPatches(save)).toEqual([{ observations: [] }, expect.objectContaining({ compared: ["USA", "CHN"], metric: "betweenesscentrality", material_chosen: true, material_label: expect.stringMatching(/^行业排名 · .*2019 年 · USA 美国 对 CHN 中国/) })]);
   expect(recordedPatches(save).at(-1)!.observations!.every((item) => item.source === "explicit-network-ranking" && item.year === 2019)).toBe(true);
   expect(screen.queryByRole("button", { name: RECORDED_CHART_LABEL })).toBeNull();
 });

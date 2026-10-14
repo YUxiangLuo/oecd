@@ -183,13 +183,14 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
         onBrowse={(browse) => state.saveView?.({ network_browse: browse })}
         carriedNote={carriedNote}
         observations={observations}
+        savedLabel={state.data?.material_label as string | undefined}
         syncing={state.syncing}
         syncError={state.syncError}
         onRetrySync={state.syncNow}
         locked={state.materialLocked}
-        onRecord={(countries, records) => {
+        onRecord={(countries, records, label) => {
           pickCountries(countries);
-          state.save({ compared: countries, metric: records[0]?.metric, observations: records, material_chosen: true });
+          state.save({ compared: countries, metric: records[0]?.metric, observations: records, material_chosen: true, material_label: label });
         }}
         extraLenses={[{ key: "partners", label: "贸易伙伴" }, { key: "global-network", label: "全球贸易网络图" }]}
         renderExtra={(key, countries, trendYear, onTrendYear) => key === "global-network"

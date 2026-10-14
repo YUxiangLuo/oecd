@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { sameJsonValue } from "../../session-store";
-import { MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT } from "../../step-task-card";
+import { MaterialCard } from "../../material-card";
 import { LabeledControl, ScrollableRegion } from "../../a11y";
 import { api } from "../../api";
 import { icioDatasetName } from "../../dataset-label";
@@ -669,6 +669,14 @@ export function ReleaseIntegrityStatus({ meta }: { meta: Meta | null }) {
   );
 }
 
+/** The step's material sentence, saved with the cell so step 15 repeats the same words. */
+function withDbLabel<T extends { observation?: { table?: string; row: string; column: string; value: number } | null }>(patch: T, fallbackTable: DbTableKind): T & { material_label?: string } {
+  const observation = patch.observation;
+  if (!observation) return patch;
+  const kind = (observation.table as DbTableKind | undefined) ?? fallbackTable;
+  return { ...patch, material_label: `${dbObservationSentence(kind, observation.row, observation.column)} = ${fmtDb(observation.value)} 百万美元` };
+}
+
 export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>; releaseMeta: Meta | null }) {
   const lastPages = useRef(1);
   const {
@@ -783,7 +791,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
       { year: slice.year, table: slice.table, rowCountry, colCountry, rowSector, colSector },
       { row: cell.row, column: cell.column, value: cell.value },
     );
-    state.save({ observation: { ...patch.observation!, auto: true } });
+    state.save(withDbLabel({ observation: { ...patch.observation!, auto: true } }, slice.table));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slice, hasObservation]);
 
@@ -912,25 +920,6 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
           <button type="button" className="secondary" onClick={retrySlice}>重试</button>
         </div>
       )}
-      <div className="observation-strip db-observation" aria-live="polite">
-        <b>已记录的单元格</b>
-        {selectedObservation ? (
-          <span>
-            {/* 观察值跨表页签保留；读法必须用记录时的表类型,不能用当前页签的。 */}
-            {dbObservationSentence((selectedObservation.table as DbTableKind | undefined) ?? table, selectedObservation.row, selectedObservation.column)} = {fmtDb(selectedObservation.value)} 百万美元
-            {observationSource ? `（${observationSource}）` : ""}
-            {selectedObservation.value === 0 ? `。${zeroCellNote((selectedObservation.table as DbTableKind | undefined) ?? table)}` : ""}
-            {selectedObservation.auto && !state.materialLocked ? "（系统先记录的；点其他数值即替换）" : ""}
-          </span>
-        ) : <span className="empty">尚未记录</span>}
-        {state.materialLocked && <span className="muted">{MATERIAL_LOCKED_NOTE.replace("浏览", "点击单元格")}{rechosen && !pickedCell ? `已改为记录这个单元格。${MATERIAL_RECHOSEN_NEXT}` : ""}</span>}
-        {state.materialLocked && pickedCell?.observation && !sameJsonValue(pickedCell.observation, selectedObservation) && (
-          <span className="db-picked">
-            你选中的：{dbObservationSentence((pickedCell.observation.table as DbTableKind | undefined) ?? table, pickedCell.observation.row, pickedCell.observation.column)} = {fmtDb(pickedCell.observation.value)} 百万美元{observationSourceLabel(pickedCell.observation) ? `（${observationSourceLabel(pickedCell.observation)}）` : ""}
-            <button type="button" className="secondary" onClick={() => { state.save(pickedCell); setPickedCell(null); setRechosen(true); }}>改为记录这个单元格（之后需在步骤 15 更新报告）</button>
-          </span>
-        )}
-      </div>
       {/* One action line; the reading rules, legend and identities live in a single fold-out. */}
       <div className="db-reading db-fullscreen-note">
         <span>
@@ -968,13 +957,30 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
         locked={state.materialLocked}
         onCapture={(patch) => {
           if (state.materialLocked) setPickedCell(patch);
-          else state.save(patch);
+          else state.save(withDbLabel(patch, table));
           setCellExpandSignal((value) => value + 1);
         }}
       />
       <div style={{ marginTop: 12 }}>
         <Pager page={page} pages={pages} total={slice?.total} onChange={setPage} />
       </div>
+      {/* 本步报告材料: the recorded cell, under the table as on every step. */}
+      <MaterialCard
+        state={selectedObservation ? "recorded" : "missing"}
+        summary={selectedObservation
+          ? <>{dbObservationSentence((selectedObservation.table as DbTableKind | undefined) ?? table, selectedObservation.row, selectedObservation.column)} = {fmtDb(selectedObservation.value)} 百万美元{observationSource ? `（${observationSource}）` : ""}{selectedObservation.value === 0 ? `。${zeroCellNote((selectedObservation.table as DbTableKind | undefined) ?? table)}` : ""}</>
+          : "尚未记录：点表中任一数值即记录这个单元格。"}
+        how={state.materialLocked ? "点击单元格只会选中，要换成报告材料请点下面的按钮。" : selectedObservation?.auto ? "系统先记录了本页数值最大的一格；点表中其他数值即改为记录那一格。" : "点表中其他数值即改为记录那一格。"}
+        locked={state.materialLocked}
+        rechosen={rechosen && !pickedCell}
+        action={state.materialLocked && pickedCell?.observation && !sameJsonValue(pickedCell.observation, selectedObservation)
+          ? { label: `改为记录 ${dbObservationSentence((pickedCell.observation.table as DbTableKind | undefined) ?? table, pickedCell.observation.row, pickedCell.observation.column)} = ${fmtDb(pickedCell.observation.value)} 百万美元（之后需在步骤 15 更新报告）`,
+            onClick: () => { state.save(withDbLabel(pickedCell, table)); setPickedCell(null); setRechosen(true); } }
+          : null}
+        syncing={state.syncing}
+        syncError={state.syncError}
+        onRetrySync={state.syncNow}
+      />
       </FullscreenPanel>
 
       {/* 单层折叠：早前这里是“外层 details 套一个内层 details”，学生要点击两次才能看到正文。 */}

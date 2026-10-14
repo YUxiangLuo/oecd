@@ -370,6 +370,7 @@ export function StudentWorkspace({
                       <LabRouter
                         key={`lab:${step.n}`}
                         step={step}
+                        steps={steps}
                         quiz={step.lab === "reg" ? quiz : undefined}
                         meta={meta}
                         state={labState}

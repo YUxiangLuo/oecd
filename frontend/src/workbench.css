@@ -712,3 +712,29 @@ details.reg-custom-section > summary:focus-visible { outline: 2px solid #4b47e0;
 /* Steps 6–9: the record button under every chart, in one place, right above the material card. */
 .material-record { margin: 12px 0 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .material-record p { margin: 0; }
+
+/* 本步报告材料: the one card every step shows under its main chart or table (material-card.tsx). */
+.material-card { min-width: 0; margin: 14px 0; padding: 12px 14px; border: 1px solid #b9dacb; border-left: 4px solid #18745f; border-radius: 11px; background: #f4fbf7; }
+.material-card--missing { border-color: #e4cf8d; border-left-color: #8a6415; background: #fffaf0; }
+.material-card--blocked { border-color: #e0e3ed; border-left-color: #6b7280; background: #f8f9fb; }
+.material-card:focus-visible { box-shadow: 0 0 0 2px #9ec9b4; outline: none; }
+.material-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.material-card-head b { font-size: 14px; color: #1f2a3a; }
+.material-chip { border-radius: 999px; padding: 2px 10px; font-size: 11.5px; font-weight: 650; }
+.material-chip--recorded { background: #d9f0e4; color: #145c4a; }
+.material-chip--missing { background: #fbe9c3; color: #6d5118; }
+.material-chip--blocked { background: #e6e8ef; color: #4b5563; }
+.material-card-summary { margin: 8px 0 2px; font-size: 13.5px; line-height: 1.6; color: #1f2a3a; overflow-wrap: anywhere; }
+.material-card-extra { margin: 2px 0; font-size: 12.5px; line-height: 1.6; color: #3a4556; }
+.material-card-how { margin: 4px 0 0; font-size: 12px; line-height: 1.6; }
+.material-card-action { margin-top: 8px; }
+.material-card-check { margin-top: 8px; font-size: 12.5px; }
+.material-card-check > summary { cursor: pointer; color: #51458b; }
+.material-card-sync { margin: 8px 0 0; font-size: 12px; }
+.material-card-sync button { margin-left: 8px; }
+/* Step 15: every step's material in one table. */
+.report-materials { margin: 0 0 18px; }
+.report-materials table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.report-materials td, .report-materials th { padding: 6px 8px; border-bottom: 1px solid #e6e8f0; text-align: left; vertical-align: top; }
+.report-materials td:first-child { white-space: nowrap; color: #51586a; }
+.report-materials .material-chip { white-space: nowrap; }

@@ -56,6 +56,8 @@ def test_exploration_view_selections_do_not_outdate_a_report():
     browsed = copy.deepcopy(session)
     browsed["steps"]["9"]["data"]["network_browse"] = {"countries": ["BRN", "USA"], "view": "topology"}
     browsed["steps"]["2"]["data"]["browse_selection"] = {"first": "BRN", "others": ["USA"], "view": "structure"}
+    # The sentence a step records its material as is wording, not evidence: it never outdates a report.
+    browsed["steps"]["2"]["data"]["material_label"] = "2020 年 外国增加值项占比：CHN 中国 11.730%"
     assert records.report_matches_session(browsed, report)
 
 

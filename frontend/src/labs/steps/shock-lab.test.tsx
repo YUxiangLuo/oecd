@@ -227,6 +227,11 @@ const tenSeries = (rows: (countries: string[], industry: string) => ReturnType<t
   }) as never);
 const tenState = (data: Record<string, unknown> | undefined, save = mock(() => {}), materialLocked = false) =>
   ({ data, save, complete: false, syncing: false, syncError: null, syncNow: () => {}, materialLocked });
+/** The 本步报告材料 card and its three lines: the state chip, the one-sentence summary and how the record is made. */
+const materialCard = () => screen.getByRole("region", { name: "本步报告材料" });
+const materialChip = () => materialCard().querySelector(".material-chip")!.textContent;
+const materialSummary = () => materialCard().querySelector(".material-card-summary")!.textContent;
+const materialHow = () => materialCard().querySelector(".material-card-how")?.textContent ?? "";
 
 test("the worked example prefers the exposed row: taxed with X > 0 before a taxed w = 0 one", () => {
   const rows = [...tenRows("CHE", "B05_06", 0, true), ...tenRows("CAN", "B05_06", 0.93, true)];
@@ -341,12 +346,24 @@ test("the recorded example is named on the page and follows the selection before
     return <ShockLab meta={meta} step={step} state={tenState(data, mock((patch: Record<string, unknown>) => setData((value) => ({ ...value, ...patch }))) as never)} />;
   }
   render(<Harness />);
-  const strip = () => document.querySelector(".teaching-example-record")!.textContent;
-  expect(strip()).toContain("已记录的例子尚未记录");
-  await waitFor(() => expect(strip()).toContain("已记录的例子CAN 加拿大 · C29 汽车及零部件（对比 MEX 墨西哥）"));
-  expect(strip()).toContain("当前例子已自动记录");
+  // Nothing recorded yet: the card says so and that the record follows the choice by itself.
+  expect(materialCard().className).toContain("material-card--missing");
+  expect(materialChip()).toBe("尚未记录");
+  expect(materialSummary()).toBe("尚未记录：关税数据加载后自动记录当前例子。");
+  expect(materialHow()).toBe("随你的选择自动记录，无需另外保存。");
+  expect(materialCard().querySelector(".material-card-action")).toBeNull();
+  // The tariff data arrive: the example is recorded with the one-sentence label step 15 shows again.
+  await waitFor(() => expect(materialSummary()).toBe("例子：CAN 加拿大（被加税） 对 MEX 墨西哥（未被加税） · C29 汽车及零部件"));
+  expect(materialCard().className).toContain("material-card--recorded");
+  expect(materialChip()).toBe("已记录");
+  expect(materialHow()).toBe("当前例子就是已记录的材料；换国家或行业后自动更新。");
+  expect(materialCard().querySelector(".material-card-action")).toBeNull();
   fireEvent.change(screen.getByRole("combobox", { name: "行业" }), { target: { value: "C26" } });
-  await waitFor(() => expect(strip()).toContain("CAN 加拿大 · C26"));
+  await waitFor(() => expect(materialSummary()).toBe("例子：CAN 加拿大（被加税） 对 MEX 墨西哥（未被加税） · C26 计算机电子光学"));
+  expect(materialHow()).toBe("当前例子就是已记录的材料；换国家或行业后自动更新。");
+  // The card is the step's one material element; the old strip is gone.
+  expect(materialCard().id).toBe("step-material-action");
+  expect(document.querySelector(".teaching-example-record")).toBeNull();
   groups.mockRestore();
   series.mockRestore();
   cleanup();
@@ -367,19 +384,29 @@ test("after submission, switching the example asks first, then confirms and keep
     return <ShockLab meta={meta} step={step} state={tenState(data, mock(record) as never, true)} />;
   }
   render(<Harness />);
-  const strip = () => document.querySelector(".teaching-example-record")!.textContent;
-  await waitFor(() => expect(strip()).toContain("当前例子就是已记录的材料。"));
+  // An older save without material_label reads as the recorded example; the card says the report is handed in.
+  expect(materialChip()).toBe("已记录");
+  expect(materialSummary()).toBe("CAN 加拿大 · C29 汽车及零部件（对比 MEX 墨西哥）");
+  await waitFor(() => expect(materialHow()).toBe("当前例子就是已记录的材料；换国家或行业后自动更新。 报告已提交：浏览不再自动改动报告材料。"));
+  expect(materialCard().querySelector(".material-card-action")).toBeNull();
   fireEvent.change(screen.getByRole("combobox", { name: "行业" }), { target: { value: "C26" } });
   const button = await screen.findByRole("button", { name: "改用当前例子作为报告材料（之后需在步骤 15 更新报告）" });
-  // Browsing after submission does not record: the strip still names the submitted example.
-  expect(strip()).toContain("CAN 加拿大 · C29");
+  expect(button.closest(".material-card")).toBe(materialCard());
+  expect(materialCard().querySelectorAll("button.material-card-action")).toHaveLength(1);
+  // Browsing after submission does not record: the card still names the submitted example and asks first.
+  expect(materialSummary()).toBe("CAN 加拿大 · C29 汽车及零部件（对比 MEX 墨西哥）");
+  expect(materialHow()).toBe("已记录的是另一个例子；换回或点下面的按钮即改为当前例子。 报告已提交：浏览不再自动改动报告材料。");
   expect(save).not.toHaveBeenCalled();
   button.focus();
   act(() => { fireEvent.click(button); });
-  await waitFor(() => expect(strip()).toContain("CAN 加拿大 · C26"));
-  expect(strip()).toContain("报告已提交：浏览不再自动改动报告材料。当前例子就是已记录的材料。请到步骤 15 更新报告并重新提交给老师。");
+  await waitFor(() => expect(materialSummary()).toBe("例子：CAN 加拿大（被加税） 对 MEX 墨西哥（未被加税） · C26 计算机电子光学"));
+  expect(save).toHaveBeenCalledTimes(1);
+  expect(materialHow()).toBe("当前例子就是已记录的材料；换国家或行业后自动更新。 报告已提交：浏览不再自动改动报告材料。请到步骤 15 更新报告并重新提交给老师。");
   expect(screen.queryByRole("button", { name: /改用当前例子/ })).toBeNull();
-  await waitFor(() => expect(document.activeElement).toBe(document.querySelector(".teaching-example-record")));
+  // Focus moves to the card itself (the step's material element) when the button it was on disappears.
+  expect(materialCard().id).toBe("step-material-action");
+  expect(materialCard().tabIndex).toBe(-1);
+  await waitFor(() => expect(document.activeElement).toBe(materialCard()));
   groups.mockRestore();
   series.mockRestore();
   cleanup();
@@ -782,7 +809,9 @@ test("after the report is submitted, an unconfirmed step 10 selection is kept as
   const save = mock(() => {});
   render(<ShockLab meta={meta} step={step} state={tenState({ ...RECORDED_CAN, browse_selection: { first: "CAN", second: "CRI", industry: "C29" } }, save, true)} />);
   expect((screen.getByRole("combobox", { name: "对照国家（可选）" }) as HTMLSelectElement).value).toBe("CRI");
-  await waitFor(() => expect(document.querySelector(".teaching-example-record")!.textContent).toContain("对比 MEX 墨西哥"));
+  await waitFor(() => expect(materialSummary()).toBe("CAN 加拿大 · C29 汽车及零部件（对比 MEX 墨西哥）"));
+  expect(materialHow()).toContain("已记录的是另一个例子");
+  expect(materialHow()).toContain("报告已提交：浏览不再自动改动报告材料。");
   expect(save).not.toHaveBeenCalled();
   groups.mockRestore();
   series.mockRestore();
