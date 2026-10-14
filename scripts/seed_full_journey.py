@@ -22,7 +22,7 @@ from urllib.request import Request, urlopen
 
 from gvcsim import quizzes
 from gvcsim.report_gate import AUTO_COMPARISON_SOURCE
-from gvcsim.report_saved_run import _result_is_qualified, _result_is_reportable
+from gvcsim.report_saved_run import _result_is_reportable
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 from gvcsim.session import empty_session, make_record
 
@@ -384,11 +384,8 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
             "variable_catalog": catalog,
         }
         data = session["steps"][str(step)]["data"]
+        # One saved run a step, on the step's default Y (a complete stopped-inference diagnosis satisfies the gate).
         data["run"] = saved
-        # A complete stopped-inference diagnosis satisfies the course gate but
-        # must never be stored as the optional inferential reference snapshot.
-        if _result_is_qualified(result, design):
-            data["qualified_run"] = saved
         regression_statuses[outcome] = str(result.get("status"))
 
     session["steps"]["15"] = make_record(

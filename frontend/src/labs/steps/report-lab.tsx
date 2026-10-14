@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, isApiErrorStatus } from "../../api";
-import { RegressionEvidenceMatrix, RegressionSummaryBars, ReportedCustomModels, type SiblingStepData } from "../../regression-teach";
+import { RegressionEvidenceMatrix, RegressionSummaryBars, ReportedExperiments, type SiblingStepData } from "../../regression-teach";
 import { revealFocusedWhileSettling, scrollIntoCourseContent } from "../../content-scroll";
 import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-lazy";
 import { ReportOutro } from "../../report-outro";
@@ -823,7 +823,7 @@ export function ReportLab({
         <p className="muted">四个 Y 的单位不同，条长都换算成标准差；条末先写各自单位的值。</p>
         <RegressionSummaryBars getStep={getStep} />
         <RegressionEvidenceMatrix getStep={getStep} />
-        <ReportedCustomModels getStep={getStep} onNavigateStep={onNavigateStep} />
+        <ReportedExperiments getStep={getStep} onNavigateStep={onNavigateStep} />
         <p className="muted">课程模拟回归按你的例子换算的结果在步骤 11–14，不是该例子的单独估计；步骤 6–9 的真实 ICIO 图表读数会自动写进报告。这里只列出已保存的结果，结论要你自己写；自定义模型的解释跨度以所选 X 滞后为准。</p>
       </section>
       <section className="report-reflection" aria-labelledby={REPORT_REFLECTION_TITLE_ID}>

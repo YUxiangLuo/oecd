@@ -436,6 +436,23 @@ describe("semantic decomposition and path tables", () => {
 });
 
 describe("Step 5 teaching network accessibility", () => {
+  test("distinguishes unreachable closeness from genuine zero betweenness", () => {
+    const view = render(<NetworkCentralityDemo />);
+    try {
+      fireEvent.click(view.getByRole("button", { name: "查看接近中心性的算法" }));
+      expect(view.getByRole("status").textContent).toContain("0.667");
+      fireEvent.click(view.getByRole("button", { name: /越（VNM）/ }));
+      expect(view.getByRole("status").textContent).toContain("无连接，无法定义");
+      expect(view.getByRole("button", { name: /越（VNM），接近中心性 无连接，无法定义，已选择/ })).toBeTruthy();
+      expect(view.container.textContent).toContain("沿出边无法到达其他节点，接近中心性无法定义");
+      fireEvent.click(view.getByRole("button", { name: "查看介数的算法" }));
+      expect(view.getByRole("status").textContent).toContain("介数 = 0");
+      expect(view.getByRole("status").textContent).not.toContain("无法定义");
+    } finally {
+      cleanup();
+    }
+  });
+
   test("keeps one roving node stop and exposes mode and selected-node semantics", () => {
     const html = renderToStaticMarkup(<NetworkCentralityDemo />);
     expect(html.match(/class="net-demo-node"/g)).toHaveLength(7);

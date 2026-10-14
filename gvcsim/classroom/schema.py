@@ -5,7 +5,7 @@ from typing import Any
 import psycopg
 
 _SCHEMA_LOCK_ID = 736_861_016
-TEACHING_DB_VERSION = "gvcsim-teaching-db-v14"
+TEACHING_DB_VERSION = "gvcsim-teaching-db-v15"
 
 
 SCHEMA_SQL = """

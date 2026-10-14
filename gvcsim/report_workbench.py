@@ -1,7 +1,7 @@
-"""Report appendix "学生设计的模型": the workbench models a student marked 放入报告 in steps 11–14.
+"""Report appendix "模型实验": the one workbench model a student put into the report in each of steps 11–14.
 
-Every number is recomputed here from the saved ``(outcome, baseline, spec)``; the page's snapshot is never read,
-so editing it in the browser changes nothing in the report. Each Y gets one table, the course default model first.
+Every number is recomputed here from the saved ``spec`` on the step's default Y; the page's snapshot is never read,
+so editing it in the browser changes nothing in the report. Each step gets one table, the course default model first.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from gvcsim.regression.spec import (
     control_term_label,
     x_term_label,
 )
-from gvcsim.regression.teaching import selectable_baselines
+from gvcsim.regression.teaching import default_baseline
 from gvcsim.report_common import (
     UNIT_NAMES,
     _depvar_kind,
@@ -63,18 +63,24 @@ def _x_span(spec: ModelSpec) -> str:
 
 
 def reported_models(session: dict[str, Any]) -> list[dict[str, Any]]:
-    """The saved models marked 放入报告, step by step, in saved order: ``{step, name, outcome, baseline, spec}``.
-    The session route checks them on save; an entry that no longer passes (an older release) is left out."""
+    """The model experiment each step put into the report, step by step (at most one a step):
+    ``{step, name, outcome, baseline, spec}``, on the step's default Y. The session route checks it on save; an entry
+    that no longer passes is left out."""
     models: list[dict[str, Any]] = []
     for step, outcome in sorted(_STEP_OUTCOMES.items()):
         data = session.get("steps", {}).get(str(step), {}).get("data", {})
-        saved = data.get("custom_results") if isinstance(data, dict) else None
-        if not isinstance(saved, list) or workbench.custom_results_problem(saved, outcome):
+        reported = workbench.reported_experiment(data.get("experiment")) if isinstance(data, dict) else None
+        if reported is None:
             continue
-        baselines = {item.key for item in selectable_baselines(outcome)}
-        for item in workbench.reported_custom_results(saved):
-            if item["baseline"] in baselines:
-                models.append({"step": step, **item})
+        models.append(
+            {
+                "step": step,
+                "name": workbench.experiment_label(ModelSpec.from_dict(reported["spec"])),
+                "outcome": outcome,
+                "baseline": default_baseline(outcome).key,
+                "spec": reported["spec"],
+            }
+        )
     return models
 
 
@@ -394,9 +400,9 @@ def custom_model_sections(tables: list[dict[str, Any]]) -> list[str]:
     if not tables:
         return []
     lines = [
-        "## 附录：学生设计的模型",
+        "## 附录：模型实验",
         "",
-        "以下是你在步骤 11–14 的“自己设计模型（选做）”中保存、并勾选了“放入报告”的模型。"
+        "以下是你在步骤 11–14 的“改模型、对比（选做）”中放入报告的模型实验，每步最多一个，都在本步默认的 Y 上。"
         "数字由服务器在生成报告时按保存的设定重新计算；每张表的第一列是本步的默认模型，便于对照。",
         "",
     ]

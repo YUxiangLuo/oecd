@@ -92,7 +92,7 @@ def main():
         check("unknown-year", {404}, "GET", "/api/db/slice?year=1900", token=student)
         check("unknown-table", {400}, "GET", "/api/db/slice?year=2020&table=unknown", token=student)
         check("unknown-sort", {422}, "GET", "/api/shocks/panel?year=2020&sort=unknown", token=student)
-        session = {"version": "experiment-session-simple-v3", "steps": {}, "shared": {}}
+        session = {"version": "experiment-session-simple-v4", "steps": {}, "shared": {}}
         for value in (float("nan"), float("inf"), "\ud800", "\x00"):
             invalid = {**session, "steps": {"15": {"data": {"research_question": value}}}}
             check(

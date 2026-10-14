@@ -36,7 +36,7 @@ function report(state: ClassroomReport["state"]): ClassroomReport {
     markdown: "# report",
     provenance: {
       release_id: "a".repeat(32),
-      session_version: "experiment-session-simple-v3",
+      session_version: "experiment-session-simple-v4",
       generated_at: "2026-08-13T00:00:00Z",
       years: [2020],
       session_fingerprint: "fingerprint",
@@ -445,7 +445,7 @@ test("one-click finish flushes then generates then submits; outro appears only a
 test("a 409 because the teacher just graded shows the current report, not a phantom draft", async () => {
   const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new ApiError(409, "报告或评分已更新，请刷新页面核对后再确认重新生成", "Conflict"));
   const latest = mutation("graded");
-  const session = spyOn(api.classroom, "session").mockResolvedValue({ release_id: "a".repeat(32), session: { version: "experiment-session-simple-v3", steps: {}, shared: {} }, updated_at: null, ...latest });
+  const session = spyOn(api.classroom, "session").mockResolvedValue({ release_id: "a".repeat(32), session: { version: "experiment-session-simple-v4", steps: {}, shared: {} }, updated_at: null, ...latest });
   const changed: string[] = [];
   try {
     render(<ReportLab {...finishProps} report={report("pending")} onReportChanged={(r) => changed.push(r.report.state)} />);
@@ -460,7 +460,7 @@ test("a 409 because the teacher just graded shows the current report, not a phan
 test("a 409 because the report was submitted in another tab says so, not that it was graded", async () => {
   const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new ApiError(409, "报告或评分已更新，请刷新页面核对后再确认重新生成", "Conflict"));
   const latest = mutation("pending");
-  const session = spyOn(api.classroom, "session").mockResolvedValue({ release_id: "a".repeat(32), session: { version: "experiment-session-simple-v3", steps: {}, shared: {} }, updated_at: null, ...latest });
+  const session = spyOn(api.classroom, "session").mockResolvedValue({ release_id: "a".repeat(32), session: { version: "experiment-session-simple-v4", steps: {}, shared: {} }, updated_at: null, ...latest });
   const changed: string[] = [];
   try {
     render(<ReportLab {...finishProps} report={report("draft")} onReportChanged={(r) => changed.push(r.report.state)} />);
@@ -721,7 +721,7 @@ test("an exported graded report carries the score and feedback, and the PDF is n
   const print = spyOn(globalThis, "print").mockImplementation(() => { titles.push(document.title); });
   // A graded export first checks the server still has this graded version (it does here).
   const session = spyOn(api.classroom, "session").mockResolvedValue({
-    release_id: "a".repeat(32), session: { version: "experiment-session-simple-v3", steps: {}, shared: {} }, updated_at: null,
+    release_id: "a".repeat(32), session: { version: "experiment-session-simple-v4", steps: {}, shared: {} }, updated_at: null,
     ...mutation("graded"), report: graded,
   });
   document.title = "步骤 15 · 生成实验报告";
@@ -880,7 +880,7 @@ test("in a save conflict the report actions ask for the server version, not a re
 
 const sessionWith = (latest: ReportMutationResponse, steps: Record<string, unknown> = {}) => ({
   release_id: "a".repeat(32), updated_at: null, ...latest,
-  session: { version: "experiment-session-simple-v3", steps, shared: {} } as never,
+  session: { version: "experiment-session-simple-v4", steps, shared: {} } as never,
 });
 const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
 

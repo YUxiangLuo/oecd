@@ -649,3 +649,49 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 .reg-custom-compare-table th.reg-custom-current, .reg-custom-compare-table td.reg-custom-current { background: #fff8e1; }
 .reg-custom-point-row > * { border-top: 1px dashed #c9cde0; font-weight: 650; }
 .reg-custom-detail-pick { display: inline-flex; gap: 6px; align-items: center; margin: 8px 0; font-size: 12.5px; }
+
+/* Steps 10–14 simplification (phase 1): folded secondary content, the workbench as a closed card after the quiz. */
+.reg-model-terms { margin: 8px 0 4px; font-size: 12px; }
+.reg-model-terms > summary { cursor: pointer; color: #4b47e0; font-weight: 650; }
+.reg-model-terms[open] > summary { margin-bottom: 4px; }
+.reg-gap-details { margin: 6px 0 0; font-size: 12px; }
+.reg-gap-details > summary { cursor: pointer; color: #4b47e0; font-weight: 650; }
+details.reg-custom-section > summary { display: grid; gap: 4px; cursor: pointer; list-style: none; }
+details.reg-custom-section > summary::-webkit-details-marker { display: none; }
+details.reg-custom-section > summary .reg-custom-title { color: #1b1f2b; font-size: 17px; font-weight: 700; line-height: 1.45; }
+details.reg-custom-section > summary .reg-custom-title::before { content: "▸ "; color: #4b47e0; }
+details.reg-custom-section[open] > summary .reg-custom-title::before { content: "▾ "; }
+details.reg-custom-section[open] > summary { margin-bottom: 12px; }
+details.reg-custom-section > summary:focus-visible { outline: 2px solid #4b47e0; outline-offset: 4px; border-radius: 6px; }
+.teaching-definitions { display: grid; gap: 4px; margin: 10px 0 6px; padding: 10px 12px; border: 1px solid #dcdff0; border-radius: 9px; background: #f8f8ff; color: #3f4759; font-size: 12.5px; line-height: 1.6; }
+.teaching-definitions b { color: #35328d; }
+.teaching-variable-details { margin: 0 0 12px; font-size: 12px; }
+.teaching-variable-details > summary { cursor: pointer; color: #4b47e0; font-weight: 650; }
+.teaching-variable-details[open] > summary { margin-bottom: 4px; }
+.teaching-year-details { margin-top: 16px; padding-top: 12px; border-top: 1px solid #eceef3; }
+.teaching-year-details > summary { cursor: pointer; color: #1b1f2b; font-size: 14.5px; font-weight: 700; }
+.teaching-year-details[open] > summary { margin-bottom: 6px; }
+.country-exposure-expand { margin: 6px 0 2px; font-size: 12.5px; }
+
+/* Steps 11–14 simplification (phase 2): read-only bars with a preview line; preset experiments; one model a step
+   in the report. */
+.diverging-bars .reg-bar-preview { margin: 8px 0 0; padding: 7px 10px; border-radius: 7px; background: #f3f4fa; color: #2a2f3a; font-size: 12.5px; line-height: 1.6; }
+.reg-custom-presets ul { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.reg-preset { display: grid; gap: 2px; width: 100%; min-height: 56px; padding: 8px 11px; border: 1px solid #c9cde0; border-radius: 9px; background: #fff; text-align: left; font: inherit; cursor: pointer; }
+.reg-preset b { color: #1b1f2b; font-size: 13px; }
+.reg-preset small { color: #5f6677; font-size: 11.5px; line-height: 1.45; }
+.reg-preset:hover { border-color: #4b47e0; background: #f8f8ff; }
+.reg-preset[aria-pressed="true"] { border-color: #4b47e0; box-shadow: inset 0 0 0 1px #4b47e0; background: #f3f4fa; }
+.reg-preset[aria-disabled="true"] { cursor: progress; opacity: .7; }
+.reg-preset:focus-visible { outline: 2px solid #4b47e0; outline-offset: 2px; }
+.reg-custom-form-details > summary { color: #4b47e0; }
+.reg-custom-form-details[open] .reg-custom-form { margin-top: 8px; }
+.reg-custom-form-details .reg-custom-equation { margin-top: 8px; }
+.reg-custom-form-details .reg-custom-actions { margin-top: 8px; }
+.reg-custom-status { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; min-height: 0; font-size: 12.5px; }
+.reg-custom-status:empty { display: none; }
+.reg-custom-default-note { margin: 0; }
+.reg-custom-report { display: grid; gap: 8px; justify-items: start; }
+.reg-custom-report > p { justify-self: stretch; }
+.reg-custom-report-chip { margin: 0; padding: 7px 10px; border-radius: 7px; background: #eef8f1; color: #1c4d2f; font-size: 12.5px; line-height: 1.6; }
+.reg-custom-report-none { margin: 0; font-size: 12.5px; }

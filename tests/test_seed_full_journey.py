@@ -256,14 +256,9 @@ def test_seed_preserves_diagnoses_without_inferential_snapshots(api, status):
     assert summary["completed_steps"] == 14 and summary["report_gate"] == []
     data = api["saved"]["steps"]["11"]["data"]
     assert data["run"]["result"] == result
-    if status in {"ok", "warning"}:
-        assert data["qualified_run"] == data["run"]
-    else:
-        assert "qualified_run" not in data
-    # Other, inferential families keep their real reference snapshots.
-    for step in (12, 13, 14):
-        data = api["saved"]["steps"][str(step)]["data"]
-        assert data["qualified_run"] == data["run"]
+    # One saved run a step, whatever its status; no second reference snapshot.
+    for step in (11, 12, 13, 14):
+        assert "qualified_run" not in api["saved"]["steps"][str(step)]["data"]
 
 
 @pytest.mark.parametrize("invalid", ["missing_contract", "missing_reason", "unsuppressed", "forbidden_p", "bad_result"])

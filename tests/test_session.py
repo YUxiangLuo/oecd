@@ -63,7 +63,7 @@ def test_put_session_acknowledges_without_echoing_the_saved_snapshot(monkeypatch
         "variable_catalog": variable_catalog(outcome),
     }
     requested = empty_session()
-    requested["steps"]["12"] = make_record({"run": run, "qualified_run": run})
+    requested["steps"]["12"] = make_record({"run": run})
     persisted = []
     monkeypatch.setattr(
         classroom_routes.db,
@@ -83,7 +83,7 @@ def test_put_session_acknowledges_without_echoing_the_saved_snapshot(monkeypatch
     assert requested == persisted[0][1]
     assert persisted[0][0] == "student"
     assert persisted[0][2] is None
-    assert persisted[0][1]["steps"]["12"]["data"]["qualified_run"] == run
+    assert persisted[0][1]["steps"]["12"]["data"]["run"] == run
     assert response["updated_at"] == "saved-at"
 
 

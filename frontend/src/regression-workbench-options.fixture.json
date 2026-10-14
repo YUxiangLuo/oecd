@@ -24,6 +24,213 @@
       "year"
     ]
   },
+  "presets": [
+    {
+      "key": "no_exchange_rate",
+      "label": "去掉汇率变动",
+      "question": "X 各项合计变大还是变小？",
+      "spec": {
+        "x_lags": [
+          0,
+          1
+        ],
+        "controls": [
+          {
+            "name": "teaching_log_gdp",
+            "lag": 0
+          },
+          {
+            "name": "teaching_trade_openness",
+            "lag": 0
+          }
+        ],
+        "fixed_effects": [
+          "country_industry",
+          "year"
+        ]
+      }
+    },
+    {
+      "key": "current_x_only",
+      "label": "只放当期 X（去掉 L1.X）",
+      "question": "合计和默认模型相差多少？",
+      "spec": {
+        "x_lags": [
+          0
+        ],
+        "controls": [
+          {
+            "name": "teaching_exchange_rate_change",
+            "lag": 0
+          },
+          {
+            "name": "teaching_log_gdp",
+            "lag": 0
+          },
+          {
+            "name": "teaching_trade_openness",
+            "lag": 0
+          }
+        ],
+        "fixed_effects": [
+          "country_industry",
+          "year"
+        ]
+      }
+    },
+    {
+      "key": "separate_effects",
+      "label": "固定效应改为国家 + 行业 + 年份",
+      "question": "不勾“国家×行业”，结果怎样变？",
+      "spec": {
+        "x_lags": [
+          0,
+          1
+        ],
+        "controls": [
+          {
+            "name": "teaching_exchange_rate_change",
+            "lag": 0
+          },
+          {
+            "name": "teaching_log_gdp",
+            "lag": 0
+          },
+          {
+            "name": "teaching_trade_openness",
+            "lag": 0
+          }
+        ],
+        "fixed_effects": [
+          "country",
+          "industry",
+          "year"
+        ]
+      }
+    },
+    {
+      "key": "country_year_effects",
+      "label": "改用国家×年份固定效应",
+      "question": "宏观控制被吸收后，X 各项合计怎样变？",
+      "spec": {
+        "x_lags": [
+          0,
+          1
+        ],
+        "controls": [
+          {
+            "name": "teaching_exchange_rate_change",
+            "lag": 0
+          },
+          {
+            "name": "teaching_log_gdp",
+            "lag": 0
+          },
+          {
+            "name": "teaching_trade_openness",
+            "lag": 0
+          }
+        ],
+        "fixed_effects": [
+          "country_industry",
+          "country_year"
+        ]
+      }
+    },
+    {
+      "key": "no_gdp",
+      "label": "去掉 GDP 对数",
+      "question": "X 各项合计怎样变化？",
+      "spec": {
+        "x_lags": [
+          0,
+          1
+        ],
+        "controls": [
+          {
+            "name": "teaching_exchange_rate_change",
+            "lag": 0
+          },
+          {
+            "name": "teaching_trade_openness",
+            "lag": 0
+          }
+        ],
+        "fixed_effects": [
+          "country_industry",
+          "year"
+        ]
+      }
+    },
+    {
+      "key": "extra_controls",
+      "label": "加上人口增长率和 FDI 净流入占比",
+      "question": "多放变量是否一定更好？",
+      "spec": {
+        "x_lags": [
+          0,
+          1
+        ],
+        "controls": [
+          {
+            "name": "teaching_exchange_rate_change",
+            "lag": 0
+          },
+          {
+            "name": "teaching_log_gdp",
+            "lag": 0
+          },
+          {
+            "name": "teaching_population_growth",
+            "lag": 0
+          },
+          {
+            "name": "teaching_trade_openness",
+            "lag": 0
+          },
+          {
+            "name": "teaching_fdi_gdp",
+            "lag": 0
+          }
+        ],
+        "fixed_effects": [
+          "country_industry",
+          "year"
+        ]
+      }
+    },
+    {
+      "key": "lag2",
+      "label": "加上两年前的 X（L2.X）",
+      "question": "L2.X 的区间是否包含 0？",
+      "spec": {
+        "x_lags": [
+          0,
+          1,
+          2
+        ],
+        "controls": [
+          {
+            "name": "teaching_exchange_rate_change",
+            "lag": 0
+          },
+          {
+            "name": "teaching_log_gdp",
+            "lag": 0
+          },
+          {
+            "name": "teaching_trade_openness",
+            "lag": 0
+          }
+        ],
+        "fixed_effects": [
+          "country_industry",
+          "year"
+        ]
+      }
+    }
+  ],
+  "custom_label": "自定义设定",
   "x_lags": [
     {
       "lag": 0,
@@ -143,19 +350,8 @@
   ],
   "no_fixed_effects_note": "都不勾时模型加常数项，表下的设定写作“无固定效应”。",
   "limits": {
-    "saved": 6,
-    "in_report": 3,
-    "compared": 4,
-    "name_length": 20,
     "runs_per_minute": 20
   },
-  "tries": [
-    "去掉“汇率变动”：X 各项合计变大还是变小？再改用“国家×年份”固定效应呢？",
-    "只放当期 X（去掉 L1.X）：合计和默认模型相差多少？",
-    "固定效应改成“国家 + 行业 + 年份”（不勾“国家×行业”）：结果怎样变？",
-    "去掉 GDP 对数或贸易开放度：X 各项合计怎样变化？",
-    "加上人口增长率、FDI 净流入占比，或 L2.X：多放变量是否一定更好？"
-  ],
   "hints": [
     "在课程模拟数据中，每次只改一处设定，与第一列的默认模型比较：X 各项的系数和合计变了多少？观测值和年份是否相同？",
     "与 Y 无关的变量在 10% 水平上大约每 10 次也会出现一次 *，不要只凭一颗星下结论。"

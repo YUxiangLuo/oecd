@@ -116,18 +116,25 @@ export function focusTipHeight(lines: readonly TipLine[]): number {
  * student's example has its own section and trend below. Every bar and code is a keyboard stop (one tab stop,
  * arrows move) with the same readout as hover; a collapsed table lists all countries.
  */
-export function CountryExposureChart({ data }: { data: TeachingCountriesResponse }) {
+export function CountryExposureChart({ data, limit }: {
+  data: TeachingCountriesResponse;
+  /** Show only the highest `limit` taxed countries until expanded (the full list is one click away). */
+  limit?: number;
+}) {
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
   const [activeIndex, setActiveIndex] = useState(0);
   // The focused item draws its own ring (an SVG group shows no outline in every browser).
   const [focused, setFocused] = useState<number | null>(null);
   const nodeRefs = useRef<(Element & { focus: () => void } | null)[]>([]);
-  const taxed = data.countries.filter((row) => row.taxed);
+  const [expanded, setExpanded] = useState(false);
+  const allTaxed = data.countries.filter((row) => row.taxed);
+  const limited = limit != null && limit > 0 && allTaxed.length > limit && !expanded;
+  const taxed = limited ? allTaxed.slice(0, limit) : allTaxed;
   // The waves present in the ranking, in order, with their size and start year (one entry before v10).
-  const waves = [...new Set(taxed.map((row) => row.wave).filter((wave): wave is number => Boolean(wave)))].sort().map((wave) => ({
+  const waves = [...new Set(allTaxed.map((row) => row.wave).filter((wave): wave is number => Boolean(wave)))].sort().map((wave) => ({
     wave,
-    count: taxed.filter((row) => row.wave === wave).length,
-    start: taxed.find((row) => row.wave === wave)?.start_year,
+    count: allTaxed.filter((row) => row.wave === wave).length,
+    start: allTaxed.find((row) => row.wave === wave)?.start_year,
   }));
   const untaxed = data.countries.filter((row) => !row.taxed);
   // Keyboard order: the taxed bars from the top, then the untaxed codes.
@@ -220,7 +227,7 @@ export function CountryExposureChart({ data }: { data: TeachingCountriesResponse
   );
   const top = taxed[0], bottom = taxed.at(-1);
   const summary = top && bottom
-    ? `${taxed.length} 个被加税国家的关税暴露 X（${data.year} 年各货物行业平均，个百分点），从高到低：最高 ${countryLabel(top.country)} ${points(top.mean_exposure)}，最低 ${countryLabel(bottom.country)} ${points(bottom.mean_exposure)}；另有 ${untaxed.length} 国未被加税，X = 0`
+    ? `${limited ? `X 最高的 ${taxed.length} 个被加税国家（共 ${allTaxed.length} 个）` : `${taxed.length} 个被加税国家`}的关税暴露 X（${data.year} 年各货物行业平均，个百分点），从高到低：最高 ${countryLabel(top.country)} ${points(top.mean_exposure)}，最低 ${countryLabel(bottom.country)} ${points(bottom.mean_exposure)}；另有 ${untaxed.length} 国未被加税，X = 0`
     : `${untaxed.length} 国未被加税，X = 0`;
   const axisTitle = `${data.year} 年各货物行业平均 X（个百分点）`;
   const showBalance = data.countries.some((row) => goodsBalance(row, rule) !== undefined);
@@ -233,7 +240,7 @@ export function CountryExposureChart({ data }: { data: TeachingCountriesResponse
           ? waves.map((wave) => (
             <span key={wave.wave}><i style={{ background: wave.wave === 2 ? TAXED_LATER : TAXED }} />{WAVE_NAMES[wave.wave] ?? `第 ${wave.wave} 批`}被加税（{wave.count} 国，{wave.start} 年起）</span>
           ))
-          : <span><i style={{ background: TAXED }} />被加税（{taxed.length} 国，按 X 从高到低）</span>}
+          : <span><i style={{ background: TAXED }} />被加税（{allTaxed.length} 国，按 X 从高到低）</span>}
         <span><i className="line" style={{ background: UNTAXED }} />未被加税（{untaxed.length} 国，X = 0，列在图下）</span>
       </div>
       {taxed.length > 0 && (
@@ -244,6 +251,12 @@ export function CountryExposureChart({ data }: { data: TeachingCountriesResponse
           <text x={labelW + barW / 2} y={height - 4} textAnchor="middle" fontSize={10.5} fill="#5f6677">{axisTitle}</text>
         </svg>
         </div>
+      )}
+      {limit != null && limit > 0 && allTaxed.length > limit && (
+        <button type="button" className="link-button country-exposure-expand" aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}>
+          {expanded ? `只看 X 最高的 ${limit} 国` : `展开全部 ${allTaxed.length} 个被加税国家`}
+        </button>
       )}
       {untaxed.length > 0 && (
         <div className="country-exposure-untaxed" role="group" aria-label={`${untaxed.length} 国未被加税，X = 0`}>

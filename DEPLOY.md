@@ -245,7 +245,7 @@ systemctl start gvcsim-api
 
 ## 教学数据库 schema 演进门槛
 
-当前初始化版本为 `gvcsim-teaching-db-v14`，保留学期/班级名称比较键及账号大小写一致的唯一约束，新增独立于 release 的系统统一 `quiz_config` 默认题库快照。
+当前初始化版本为 `gvcsim-teaching-db-v15`（表结构同 v14；会话契约升为 `experiment-session-simple-v4`，步骤 11–14 只保存 `run` 和一个 `experiment`，旧记录在保存时被拒绝，因此要新建空库），保留学期/班级名称比较键及账号大小写一致的唯一约束，新增独立于 release 的系统统一 `quiz_config` 默认题库快照。
 本轮按要求仅提供新库初始化，没有要求或实现历史兼容迁移；不要把不带 `--reset` 的
 `classroom-init` 当作旧库升级器。既有数据库必须保留，schema 不匹配应预检失败，停止放行；
 若要部署到旧库，需另行批准保留记录的迁移方案，不能用重置代替。隔离验收使用新建空库初始化 v14。教师改题无需重新发布数据；仅变更本步答案版本，不删除材料或已提交报告，未提交草稿需重新生成。
@@ -296,6 +296,6 @@ psql --dbname=gvcsim_restore_drill -Atc "select version from schema_meta where s
 unset PGPASSWORD
 ```
 
-当前版本的恢复结果必须为 `gvcsim-teaching-db-v14`（历史备份须配套历史代码验证，不会自动迁移）。恢复生产库前应停止 API、保留故障库，并先在隔离空库完成摘要、目录和 schema 验证。
+当前版本的恢复结果必须为 `gvcsim-teaching-db-v15`（历史备份须配套历史代码验证，不会自动迁移）。恢复生产库前应停止 API、保留故障库，并先在隔离空库完成摘要、目录和 schema 验证。
 
 本机保留不等于灾难备份。应只同步已同时存在 `.dump` 与 `.dump.sha256` 的完成文件对到异机或对象存储，并对异机副本定期执行同样的摘要与隔离恢复演练。

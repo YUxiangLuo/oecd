@@ -17,10 +17,8 @@ import {
 } from "./regression-verdict";
 import { api } from "./api";
 import { useAsync } from "./labs";
-import { omittedSummary, perPointDigits, perPointReading, snapshotOf, specSummary, xSpanLabel, xSum, type PerPointSource } from "./regression-workbench-table";
-import type {
-  CoefStat, CustomResult, RegressionOutcome, RegressionResponse, TeachingEstimate, TeachingOverviewResponse, WorkbenchOptions,
-} from "./types";
+import { experimentLabel, omittedSummary, perPointDigits, perPointReading, snapshotOf, specSummary, xSpanLabel, xSum } from "./regression-workbench-table";
+import type { Experiment, RegressionOutcome, RegressionResponse, WorkbenchOptions } from "./types";
 import { DivergingBarChart, type DivergingBarRow } from "./viz/regression/diverging-bars";
 
 interface SavedRegression {
@@ -29,10 +27,10 @@ interface SavedRegression {
 }
 
 export interface SiblingStepData {
+  /** The step's one saved run: the course default model on the step's default Y. */
   run?: SavedRegression;
-  qualified_run?: SavedRegression;
-  /** The workbench models saved in the step (改模型、对比); those marked 放入报告 go into the report's appendix. */
-  custom_results?: CustomResult[];
+  /** The one model experiment the step put into the report (改模型、对比), printed in the report's appendix. */
+  experiment?: Experiment | null;
 }
 
 const SAVED_BENCHMARK: RegressionResponse["benchmark"] = {
@@ -57,9 +55,7 @@ function verdictFromSaved(outcome: RegressionOutcome, saved: SavedRegression | u
 
 /** Each step's own saved run is the only source; steps 11–14 never read each other. */
 function familyRun(outcome: RegressionOutcome, getStep?: (step: number) => SiblingStepData | undefined): SavedRegression | undefined {
-  const data = getStep?.(FAMILY_STEPS[outcome]);
-  if (data?.run?.result?.diagnostics?.study_contract === "economics-v2") return data.run;
-  return data?.qualified_run ?? data?.run;
+  return getStep?.(FAMILY_STEPS[outcome])?.run;
 }
 
 /** "-0.33 个百分点 / -0.22 个百分点": the saved run's X and L1.X, in the headline's units ("—" without L1.X). */
@@ -163,69 +159,51 @@ export function RegressionEvidenceMatrix({
 }
 
 /**
- * Step 15: the workbench models marked 放入报告 in steps 11–14, each with its X-terms sum next to the step's default
- * model (the report's appendix recomputes both). Each links back to its step.
+ * Step 15: the model experiment each of steps 11–14 put into the report, with its X-terms sum next to the step's
+ * default model (the report's appendix recomputes both). Each links back to its step.
  */
-/** A course-overview row (a Y's default model) as a per-point reading's input; null when it has no estimate. */
-function overviewEstimate(item: TeachingEstimate | undefined): { stat: Pick<CoefStat, "coef" | "ci_low" | "ci_high">; source: PerPointSource } | null {
-  if (!item || item.coef == null) return null;
-  const suppressed = item.suppress_inference || !(item.status === "ok" || item.status === "warning");
-  return {
-    stat: { coef: item.coef, ci_low: item.ci_low, ci_high: item.ci_high },
-    source: { depvar_kind: item.kind, result: { suppressed } },
-  };
-}
-
-export function ReportedCustomModels({ getStep, onNavigateStep }: {
+export function ReportedExperiments({ getStep, onNavigateStep }: {
   getStep?: (step: number) => SiblingStepData | undefined;
   onNavigateStep?: (step: number) => void;
 }) {
   const rows = REGRESSION_FAMILIES.flatMap((item) => {
-    const data = getStep?.(item.step);
-    return (data?.custom_results ?? []).filter((model) => model.in_report).map((model) => ({ ...item, model, run: familyRun(item.outcome, getStep) }));
+    const experiment = getStep?.(item.step)?.experiment;
+    return experiment ? [{ ...item, experiment, run: familyRun(item.outcome, getStep) }] : [];
   });
   const optionsQuery = useAsync<WorkbenchOptions>(() => api.regressionOptions(), ["regression-options"], { enabled: rows.length > 0 });
   const options = optionsQuery.status === "success" ? optionsQuery.data ?? null : null;
-  // A model on another Y than its step's saved run is compared with the course default on that Y, as the report's
-  // appendix does: every Y's default estimate is in the course overview (the step's bar chart).
-  const otherY = rows.some(({ model, run }) => run?.design?.baseline !== model.baseline);
-  const overviewQuery = useAsync<TeachingOverviewResponse>(() => api.teachingOverview(), ["teaching-overview"], { enabled: otherY });
-  const overview = overviewQuery.status === "success" ? overviewQuery.data ?? null : null;
   return (
     <section className="reg-reported-models" aria-labelledby="reg-reported-models-title">
       <span className="reg-section-step">改模型、对比</span>
-      <h3 id="reg-reported-models-title">你放入报告的模型</h3>
+      <h3 id="reg-reported-models-title">你的模型实验</h3>
       {rows.length === 0
-        ? <p className="muted">还没有放入报告的自选模型（选做）：在步骤 11–14 的“改模型、对比”里保存模型并勾选“放入报告”，报告附录会列出它们。</p>
+        ? <p className="muted">还没有放入报告的模型实验（选做）：在步骤 11–14 的“改模型、对比”里算出一个模型并点“放入报告”，报告附录会把它和默认模型并列。</p>
         : (
-          <div className="table-wrap" role="region" aria-label="放入报告的模型，可横向滚动" tabIndex={0}>
+          <div className="table-wrap" role="region" aria-label="放入报告的模型实验，可横向滚动" tabIndex={0}>
             <table className="data-table reg-reported-table">
-              <thead><tr><th>步骤</th><th>名称</th><th>设定</th><th>X 各项合计（X 每高 1 个百分点）</th><th>同一 Y 的默认模型（两年累计）</th></tr></thead>
+              <thead><tr><th>步骤</th><th>改动</th><th>设定</th><th>X 各项合计（X 每高 1 个百分点）</th><th>默认模型（两年累计）</th></tr></thead>
               <tbody>
-                {rows.map(({ step, family, outcome, model, run }) => {
-                  const sum = xSum(model.snapshot, model.spec);
-                  // The step's default run when it is on the model's Y; otherwise that Y's row of the course overview.
-                  const sameY = run?.design && run.result && run.design.baseline === model.baseline;
-                  const stepDefault = sameY ? snapshotOf({ design: run.design!, result: run.result! }) : null;
-                  const overviewDefault = !sameY ? overviewEstimate(overview?.outcomes[outcome]?.find((item) => item.key === model.baseline)) : null;
-                  const defaultSnapshot: PerPointSource | null = stepDefault ?? overviewDefault?.source ?? null;
-                  const defaultSum = stepDefault?.result.cumulative ?? overviewDefault?.stat;
+                {rows.map(({ step, family, outcome, experiment, run }) => {
+                  const sum = xSum(experiment.snapshot, experiment.spec);
+                  // The step's default run, on the same Y as every experiment.
+                  const stepDefault = run?.design && run.result ? snapshotOf({ design: run.design, result: run.result }) : null;
+                  const defaultSum = stepDefault?.result.cumulative;
                   // Both numbers at the default's decimals, so the two read alike.
-                  const digits = defaultSum && defaultSnapshot ? perPointDigits(outcome, defaultSum, defaultSnapshot) : undefined;
+                  const digits = defaultSum && stepDefault ? perPointDigits(outcome, defaultSum, stepDefault) : undefined;
                   return (
-                    <tr key={`${step}-${model.id}`}>
+                    <tr key={step}>
                       <th scope="row">
                         {onNavigateStep
                           ? <button type="button" className="link-button" onClick={() => onNavigateStep(step)}>步骤 {step} · {family}</button>
                           : `步骤 ${step} · ${family}`}
                       </th>
-                      <td><b>{model.name}</b><br /><small className="muted">Y：{displayBaselineLabel(model.snapshot.depvar_label)}</small></td>
+                      <td><b>{options ? experimentLabel(experiment.spec, options) : "…"}</b><br /><small className="muted">Y：{displayBaselineLabel(experiment.snapshot.depvar_label)}</small></td>
                       <td>{options ? <>
-                        {specSummary(model.spec, options)}
-                        {omittedSummary(model.snapshot, options).map((text) => <p className="muted" key={text}>{text}</p>)}
+                        {specSummary(experiment.spec, options)}
+                        {omittedSummary(experiment.snapshot, options).map((text) => <p className="muted" key={text}>{text}</p>)}
                       </> : "…"}</td>
-                      <td>{sum ? `${perPointReading(outcome, sum, model.snapshot, digits)}（${xSpanLabel(model.spec)}）` : "—"}</td>
-                      <td>{defaultSum && defaultSnapshot ? perPointReading(outcome, defaultSum, defaultSnapshot, digits) : sameY || overviewQuery.status !== "loading" ? "—" : "…"}</td>
+                      <td>{sum ? `${perPointReading(outcome, sum, experiment.snapshot, digits)}（${xSpanLabel(experiment.spec)}）` : "—"}</td>
+                      <td>{defaultSum && stepDefault ? perPointReading(outcome, defaultSum, stepDefault, digits) : "—"}</td>
                     </tr>
                   );
                 })}

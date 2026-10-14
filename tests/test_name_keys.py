@@ -6,18 +6,18 @@ import pytest
 
 from gvcsim import auth
 from gvcsim.classroom import db, management, routes
-from gvcsim.name_keys import name_key
-from gvcsim.regression.workbench import name_problem
+from gvcsim.name_keys import name_key, required_name_key
 
 
 def test_shared_name_keys():
     fixtures = json.loads((Path(__file__).parent / "fixtures/name_keys.json").read_text())
     for name, key in fixtures:
         assert name_key(name) == key
+        # An empty comparison key is no name for a term or class either.
         if not key:
-            assert name_problem(name) == "请输入名称"
-    assert name_problem("👩🏽‍💻") is None
-    assert name_problem("\ud800") is not None
+            with pytest.raises(ValueError):
+                required_name_key(name)
+    assert required_name_key("👩🏽‍💻")
 
 
 def test_academic_names_compare_keys_but_keep_display_and_class_scope(teaching_db):

@@ -42,7 +42,7 @@ from gvcsim.report_gate import _indicator_material_complete, _step_data, _valid_
 from gvcsim.report_labels import DB_TABLE_NAMES, FINAL_DEMAND_NAMES, country_label, sector_label
 from gvcsim.report_observed import _viewed_shock_event_sources
 from gvcsim.report_regression_chart import family_chart, summary_chart
-from gvcsim.report_saved_run import _result_is_reportable, _result_is_qualified
+from gvcsim.report_saved_run import _result_is_reportable
 
 
 def _entity_label(item: dict[str, Any]) -> str:
@@ -678,9 +678,15 @@ def _evidence_summary(
     """``overview`` is the course's estimate of every Y (``_estimate_overview``) for the per-step bar charts;
     without it each chart shows the saved Y alone. ``custom_models`` are the workbench models marked 放入报告
     (``report_workbench.reported_models``): each step names how many the appendix compares."""
+    from gvcsim.regression.spec import ModelSpec
+    from gvcsim.regression.workbench import CUSTOM_LABEL
+
     compared: dict[int, list[str]] = {}
     for model in custom_models or []:
-        compared.setdefault(int(model["step"]), []).append(str(model["name"]))
+        name = str(model["name"])
+        if name == CUSTOM_LABEL:
+            name = f"{name}：{ModelSpec.from_dict(model['spec']).summary()}"
+        compared.setdefault(int(model["step"]), []).append(name)
     lines = [
         "## 关键证据摘要",
         "",
@@ -697,7 +703,6 @@ def _evidence_summary(
     if not runs:
         lines.extend(("- 未保存可展示的回归结果。", ""))
         return lines
-    qualified = _reported_by_step(runs)
     for run in runs:
         step, outcome = run["step"], run["outcome"]
         design, result = run["design"], run["result"]
@@ -705,20 +710,9 @@ def _evidence_summary(
         status = _effective_status(result)
         primary = _primary_coefficient(design, result)
         suppressed = _global_inference_suppressed(result)
-        used_in_table = qualified.get(step) is run
-        # Usually a step has one saved run; only when it has two does the heading say which one the summary uses.
-        several = sum(1 for other in runs if other["step"] == step) > 1
-        marker = (
-            ""
-            if not several
-            else "（用于汇总表）"
-            if used_in_table
-            else ("（另一次计算，未用于汇总表）" if not _result_is_qualified(result, design) else "")
-        )
         coefficient = primary
-        # The step's title names its default Y; the saved run may use another, so the heading names the
-        # regression only and the saved Y is given in the table below ("结果指标 Y").
-        lines.extend((f"### 步骤 {step} · {_regression_heading(step)}{marker}", ""))
+        # One saved run a step, on the step's default Y; the Y is given in the table below ("结果指标 Y").
+        lines.extend((f"### 步骤 {step} · {_regression_heading(step)}", ""))
         if coefficient is None or not isinstance(coefficient.get("coef"), (int, float)):
             lines.extend(
                 (
@@ -767,12 +761,9 @@ def _evidence_summary(
         design_limit = _summary_design_limit(status, support, reasons)
         if design_limit:
             lines.append(f"- **需要写明的限制**：{design_limit}")
-        names = compared.get(step) if used_in_table or not several else None
+        names = compared.get(step)
         if names:
-            lines.append(
-                f"- 你还在本步比较了 {len(names)} 个自己设计的模型（{'、'.join(markdown_name(name) for name in names)}），"
-                "见附录“学生设计的模型”。"
-            )
+            lines.append(f"- 你在本步做了一个模型实验（{markdown_name(names[0])}），见附录“模型实验”。")
         lines.append("")
     return lines
 
@@ -912,7 +903,7 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
         if not step_runs:
             lines.append(f"- 步骤 {step} · {_STEP_TITLES.get(step, '')}：未记录。")
             continue
-        for index, run in enumerate(step_runs):
+        for run in step_runs:
             design, result = run["design"], run["result"]
             support = result.get("support") if isinstance(result.get("support"), dict) else {}
             status = _effective_status(result)
@@ -921,8 +912,6 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
             globally_suppressed = _global_inference_suppressed(result)
             suppressed = globally_suppressed
             heading = f"### 步骤 {step} · {_regression_heading(step)}"
-            if len(step_runs) > 1:
-                heading += f"（保存 {index + 1}/{len(step_runs)}）"
             lines.extend(
                 (
                     heading,

@@ -4,13 +4,11 @@
  * name every term the same way.
  */
 import { groupedFixed } from "./format";
-import { nameKey } from "./name-keys";
 import {
   chartDisplayScale, depvarKind, estimateDigits, globalInferenceIsSuppressed, signed, withCountUnit,
 } from "./regression-verdict";
 import type {
   CoefStat,
-  CustomResult,
   CustomResultSnapshot,
   ModelSpec,
   RegressionOutcome,
@@ -315,57 +313,18 @@ export function omittedSummary(snapshot: CustomResultSnapshot, options: Workbenc
   return [...groups].map(([reason, terms]) => `${reason}：${terms.join("、")}`);
 }
 
-/** "结果N", N one more than the largest number among this step's "结果…" names (the count when none). */
-export function nextResultName(saved: readonly Pick<CustomResult, "name">[]): string {
-  const numbers = saved.map((item) => /^结果(\d+)$/.exec(nameKey(item.name))).filter(Boolean).map((match) => Number(match![1])).filter(Number.isSafeInteger);
-  let next = Math.max(saved.length, ...numbers, 0) + 1;
-  while (saved.some((item) => nameKey(item.name) === nameKey(`结果${next}`))) next += 1;
-  return `结果${next}`;
+/** How the page and the report name a model experiment: its preset's label, else "自定义设定" (the model itself is
+ *  always shown beside the name; the server's workbench.experiment_label). */
+export function experimentLabel(spec: ModelSpec, options: WorkbenchOptions): string {
+  const preset = options.presets.find((item) => sameSpec(item.spec, spec, options));
+  // The name is the server's; an options payload from before it was sent (a deploy in progress) still gets a name.
+  return preset ? preset.label : options.custom_label ?? "自定义设定";
 }
 
-const isTagLetter = (char: string | undefined) => char != null && /[\u{E0020}-\u{E007E}]/u.test(char);
-
-/** A joiner outside the emoji it builds: U+200D not between two emoji (a skin tone or U+FE0F may end the first), or
- * tag letters not in a 🏴 flag ending with the cancel tag; elsewhere it is an invisible mark that makes two
- * identical-looking names differ ("结果1" and "结果1" + U+200D). The server checks the same (workbench._joiner_misplaced). */
-function joinerMisplaced(name: string): boolean {
-  const chars = [...name];
-  for (let index = 0; index < chars.length; index += 1) {
-    const char = chars[index];
-    if (char === "\u200d") {
-      const before = chars[index - 1];
-      const after = chars[index + 1];
-      if (!(before && after && /[\p{So}\p{Sk}\uFE0F]/u.test(before) && /\p{So}/u.test(after))) return true;
-    } else if (isTagLetter(char) || char === "\u{E007F}") {
-      const start = index;
-      while (isTagLetter(chars[index])) index += 1;
-      if (!start || chars[start - 1] !== "\u{1F3F4}" || index === start || chars[index] !== "\u{E007F}") return true;
-    }
-  }
-  return false;
-}
-
-/** Why a name cannot be used (empty, too long, taken in this step), or null. */
-export function nameProblem(
-  name: string, saved: readonly Pick<CustomResult, "id" | "name">[], limit: number, selfId?: string,
-): string | null {
-  const trimmed = name.trim();
-  // Something visible is needed (a name of zero-width or joining characters alone looks empty).
-  if (!nameKey(trimmed) || !/[^\p{Cc}\p{Cf}\p{Mn}\p{Me}\p{Z}]/u.test(trimmed)) return "请输入名称";
-  // Control, zero-width, bidi and line-separator characters, as the server refuses them (workbench.name_problem),
-  // except the joiners inside one emoji (👩‍💻 U+200D, the tag letters of 🏴 flags). With them gone, JavaScript's
-  // trim and Python's strip agree on the rest.
-  if (joinerMisplaced(trimmed) || /(?![\u200d\u{E0020}-\u{E007F}])[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(trimmed)) return "名称不能包含不可见字符";
-  if ([...trimmed].length > limit) return `名称最多 ${limit} 个字符`;
-  if (saved.some((item) => nameKey(item.name) === nameKey(trimmed) && item.id !== selfId)) return `本步已有名为“${trimmed}”的模型`;
-  return null;
-}
-
-function csvField(value: string, typed = false): string {
-  // A typed name that starts like a formula is kept as text when a spreadsheet opens the file. The table's own cells
-  // ("+0.55 个百分点（两年累计）", "-0.3298***") are never formulas, so they keep their sign and get no visible quote.
-  const safe = typed && /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
-  return /[",\n\r]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
+function csvField(value: string): string {
+  // The table's cells ("+0.55 个百分点（两年累计）", "-0.3298***") are never formulas, so they keep their sign and
+  // get no visible quote; no cell holds text a student typed.
+  return /[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }
 
 /** The comparison table as CSV (UTF-8 with BOM, so Excel reads the Chinese): a coefficient row with its stars and a
@@ -388,9 +347,5 @@ export function comparisonCsv(
   for (const row of summaryRows(columns, options)) lines.push([row.label, ...row.cells]);
   lines.push(["设定", ...columns.map((column) => specSummary(column.spec, options))]);
   lines.push([options.footnote.replace("括号内为按国家聚类的标准误", "“标准误”一行为按国家聚类的标准误")]);
-  // Only the header row carries names a student typed (the model names).
-  return `\ufeff${lines.map((line, row) => line.map((cell, index) => csvField(cell, row === 0 && index > 0)).join(",")).join("\r\n")}\r\n`;
+  return `\ufeff${lines.map((line) => line.map(csvField).join(",")).join("\r\n")}\r\n`;
 }
-
-/** What the server takes per step (gvcsim/regression/workbench.py MAX_SAVED, MAX_IN_REPORT); options.limits says the same. */
-export const SAVED_LIMITS: { readonly saved: number; readonly in_report: number } = { saved: 6, in_report: 3 };
