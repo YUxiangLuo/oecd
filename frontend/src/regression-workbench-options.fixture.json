@@ -1,5 +1,5 @@
 {
-  "version": "step10-tariff-teaching-v12",
+  "version": "step10-tariff-teaching-v13",
   "default_spec": {
     "x_lags": [
       0,
@@ -27,8 +27,10 @@
   "presets": [
     {
       "key": "no_exchange_rate",
+      "tier": "core",
+      "tier_label": "必看",
       "label": "去掉汇率变动",
-      "question": "X 各项合计变大还是变小？",
+      "question": "X 各项合计离课程设定值远了多少？",
       "spec": {
         "x_lags": [
           0,
@@ -51,9 +53,65 @@
       }
     },
     {
+      "key": "no_gdp",
+      "tier": "core",
+      "tier_label": "必看",
+      "label": "去掉 GDP 对数",
+      "question": "和去掉汇率变动偏向同一边吗？",
+      "spec": {
+        "x_lags": [
+          0,
+          1
+        ],
+        "controls": [
+          {
+            "name": "teaching_exchange_rate_change",
+            "lag": 0
+          },
+          {
+            "name": "teaching_trade_openness",
+            "lag": 0
+          }
+        ],
+        "fixed_effects": [
+          "country_industry",
+          "year"
+        ]
+      }
+    },
+    {
+      "key": "no_openness",
+      "tier": "core",
+      "tier_label": "必看",
+      "label": "去掉贸易开放度",
+      "question": "这次往哪边偏？",
+      "spec": {
+        "x_lags": [
+          0,
+          1
+        ],
+        "controls": [
+          {
+            "name": "teaching_exchange_rate_change",
+            "lag": 0
+          },
+          {
+            "name": "teaching_log_gdp",
+            "lag": 0
+          }
+        ],
+        "fixed_effects": [
+          "country_industry",
+          "year"
+        ]
+      }
+    },
+    {
       "key": "current_x_only",
+      "tier": "advanced",
+      "tier_label": "进阶",
       "label": "只放当期 X（去掉 L1.X）",
-      "question": "合计和默认模型相差多少？",
+      "question": "少了上一年那一项，合计少了多少？",
       "spec": {
         "x_lags": [
           0
@@ -79,9 +137,41 @@
       }
     },
     {
+      "key": "no_year_effects",
+      "tier": "advanced",
+      "tier_label": "进阶",
+      "label": "去掉年份固定效应",
+      "question": "三组一起涨跌的那部分被算到 X 上了吗？",
+      "spec": {
+        "x_lags": [
+          0,
+          1
+        ],
+        "controls": [
+          {
+            "name": "teaching_exchange_rate_change",
+            "lag": 0
+          },
+          {
+            "name": "teaching_log_gdp",
+            "lag": 0
+          },
+          {
+            "name": "teaching_trade_openness",
+            "lag": 0
+          }
+        ],
+        "fixed_effects": [
+          "country_industry"
+        ]
+      }
+    },
+    {
       "key": "separate_effects",
+      "tier": "advanced",
+      "tier_label": "进阶",
       "label": "固定效应改为国家 + 行业 + 年份",
-      "question": "不勾“国家×行业”，结果怎样变？",
+      "question": "不勾“国家×行业”，合计离设定值多远？",
       "spec": {
         "x_lags": [
           0,
@@ -109,63 +199,11 @@
       }
     },
     {
-      "key": "country_year_effects",
-      "label": "改用国家×年份固定效应",
-      "question": "宏观控制被吸收后，X 各项合计怎样变？",
-      "spec": {
-        "x_lags": [
-          0,
-          1
-        ],
-        "controls": [
-          {
-            "name": "teaching_exchange_rate_change",
-            "lag": 0
-          },
-          {
-            "name": "teaching_log_gdp",
-            "lag": 0
-          },
-          {
-            "name": "teaching_trade_openness",
-            "lag": 0
-          }
-        ],
-        "fixed_effects": [
-          "country_industry",
-          "country_year"
-        ]
-      }
-    },
-    {
-      "key": "no_gdp",
-      "label": "去掉 GDP 对数",
-      "question": "X 各项合计怎样变化？",
-      "spec": {
-        "x_lags": [
-          0,
-          1
-        ],
-        "controls": [
-          {
-            "name": "teaching_exchange_rate_change",
-            "lag": 0
-          },
-          {
-            "name": "teaching_trade_openness",
-            "lag": 0
-          }
-        ],
-        "fixed_effects": [
-          "country_industry",
-          "year"
-        ]
-      }
-    },
-    {
       "key": "extra_controls",
+      "tier": "advanced",
+      "tier_label": "进阶",
       "label": "加上人口增长率和 FDI 净流入占比",
-      "question": "多放变量是否一定更好？",
+      "question": "它们的系数带星吗？合计变了吗？",
       "spec": {
         "x_lags": [
           0,
@@ -198,39 +236,37 @@
           "year"
         ]
       }
-    },
-    {
-      "key": "lag2",
-      "label": "加上两年前的 X（L2.X）",
-      "question": "L2.X 的区间是否包含 0？",
-      "spec": {
-        "x_lags": [
-          0,
-          1,
-          2
-        ],
-        "controls": [
-          {
-            "name": "teaching_exchange_rate_change",
-            "lag": 0
-          },
-          {
-            "name": "teaching_log_gdp",
-            "lag": 0
-          },
-          {
-            "name": "teaching_trade_openness",
-            "lag": 0
-          }
-        ],
-        "fixed_effects": [
-          "country_industry",
-          "year"
-        ]
-      }
     }
   ],
   "custom_label": "自定义设定",
+  "design_values": {
+    "trade": {
+      "FVA_share": -0.55,
+      "DVAex_share": 0.55
+    },
+    "production": {
+      "3b_VA_GVC_C_share": -0.4,
+      "3_VA_GVC_share": -0.7,
+      "3_FGY_GVC_share": -0.45,
+      "3a_VA_GVC_S_share": -0.3,
+      "2_VA_RT_share": -0.3,
+      "1_VA_D_share": 1.0,
+      "3b_FGY_GVC_C_share": 0.0
+    },
+    "length": {
+      "PLv_GVC": -1.8,
+      "PLy_GVC": -1.5,
+      "GVCPs": null
+    },
+    "network": {
+      "weighted_degree": -4000.0,
+      "weighted_indegree": -2000.0,
+      "weighted_outdegree": -2000.0,
+      "betweenesscentrality": -6000.0,
+      "closnesscentrality": -0.5
+    }
+  },
+  "design_value_note": "课程数据按设定生成：每个 Y 的两年累计关联有一个设定值。模型设定对了，估计应落在设定值附近（区间包含它）；漏掉混杂或固定效应，估计会离开设定值。人口增长率、FDI 与 Y 无关，加上它们不改变合计。",
   "x_lags": [
     {
       "lag": 0,
@@ -245,7 +281,7 @@
     {
       "lag": 2,
       "label": "L2.X",
-      "description": "滞后 2 期：两年前的 X"
+      "description": "滞后 2 期：两年前的 X。课程数据里没有两年后的关联，所以加上它后合计几乎不变、它自己的区间应包含 0"
     }
   ],
   "x_lag_note": "数据只到 2020 年、2018 年起加税，滞后 3 期在样本内全为 0，无法估计。",
@@ -341,7 +377,7 @@
     {
       "key": "country_year",
       "label": "国家×年份 FE",
-      "description": "每个国家每年一个截距，包含国家 FE 和年份 FE；会吸收本页全部国家层面的控制变量（包括滞后项），省略这些变量但不因其缺失删样本",
+      "description": "每个国家每年一个截距，包含国家 FE 和年份 FE；会吸收本页全部国家层面的控制变量（包括滞后项），省略这些变量但不因其缺失删样本。课程数据的混杂都在国家层面，所以它和默认模型算出的 X 合计几乎相同：吸收不等于没有控制",
       "includes": [
         "country",
         "year"

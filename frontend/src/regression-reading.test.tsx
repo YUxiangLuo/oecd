@@ -231,3 +231,23 @@ describe("fixed teaching regression reading", () => {
 
 });
 
+
+
+describe("the course's design value on the result card (v13)", () => {
+  test("a recovered design value reads as covered with its deviation; the zero-effect Y and the ratio say so", () => {
+    const run = response();
+    const html = renderToStaticMarkup(<RegressionResultCard outcome="trade" response={run} />);
+    expect(html).toContain("课程数据设定的两年累计为");
+    expect(html).toContain("区间包含设定值（估计偏差 0%）");
+    const zero = response();
+    zero.model_snapshot!.beta = 0;
+    zero.result.coefs[0] = { ...zero.result.coefs[0], coef: 0.01, ci_low: -0.02, ci_high: 0.04 };
+    expect(renderToStaticMarkup(<RegressionResultCard outcome="production" response={zero} />)).toContain("设定值为 0），区间包含 0，与设定一致");
+    const ratio = response();
+    ratio.model_snapshot!.beta = null;
+    expect(renderToStaticMarkup(<RegressionResultCard outcome="length" response={ratio} />)).toContain("没有单一的设定值");
+    const legacy = response();
+    delete (legacy as { model_snapshot?: unknown }).model_snapshot;
+    expect(renderToStaticMarkup(<RegressionResultCard outcome="trade" response={legacy} />)).not.toContain("课程数据设定");
+  });
+});

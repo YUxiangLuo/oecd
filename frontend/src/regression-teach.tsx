@@ -18,7 +18,7 @@ import {
 import { api } from "./api";
 import { useAsync } from "./labs";
 import { experimentLabel, omittedSummary, perPointDigits, perPointReading, snapshotOf, specSummary, xSpanLabel, xSum } from "./regression-workbench-table";
-import type { Experiment, RegressionOutcome, RegressionResponse, WorkbenchOptions } from "./types";
+import type { Experiment, FirstWaveDecomposition, RegressionOutcome, RegressionResponse, WorkbenchOptions } from "./types";
 import { DivergingBarChart, type DivergingBarRow } from "./viz/regression/diverging-bars";
 
 interface SavedRegression {
@@ -213,4 +213,25 @@ export function ReportedExperiments({ getStep, onNavigateStep }: {
         )}
     </section>
   );
+}
+
+
+/**
+ * Under the three-group chart, once the default model is computed: the first wave's change in Y since before its
+ * tariff as the fitted model splits it, in the chart's unit (shares in points), so the chart's drop and the
+ * headline's coefficient are read as one thing. `scale` converts the Y's raw unit to the chart's.
+ */
+export function decompositionSentence(
+  decomposition: FirstWaveDecomposition, metric: string, scale: number, unit: string, digits: number,
+): string {
+  // "8.4 个百分点", "0.320 个长度单位": the chart's unit, counted.
+  const counted = unit.startsWith("个") ? unit : `个${unit}`;
+  const amount = (value: number) => `${(value * scale).toFixed(digits)} ${counted}`;
+  const signedAmount = (value: number) => `${value >= 0 ? "+" : "−"}${Math.abs(value * scale).toFixed(digits)}`;
+  const observed = decomposition.observed;
+  const direction = observed < 0 ? "低" : "高";
+  // "与 GDP 对数同步" keeps a space before a Latin name, "与汇率变动同步" none.
+  const parts = decomposition.terms.map((term) => `${term.name === "x_terms" ? "与关税 X 相关" : `与${/^[A-Za-z]/.test(term.label) ? " " : ""}${term.label}同步`} ${signedAmount(term.change)}`);
+  parts.push(`其余（各年共同的变化与噪声）${signedAmount(decomposition.remainder)}`);
+  return `第一批被加税国家 ${decomposition.year} 年的${metric}比加税前（${decomposition.pre_years.join("、")} 年）平均${direction} ${amount(Math.abs(observed))}。按本次估计拆开：${parts.join("，")}。结论句里的估计只对应“与关税 X 相关”这一部分；第二批税率相同，但对美出口份额小、X 小，所以变化也小。`;
 }

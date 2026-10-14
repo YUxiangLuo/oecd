@@ -907,7 +907,7 @@ def test_regression_design_and_validation(teaching_db):
     assert options.json()["default_spec"] == DEFAULT_SPEC.to_dict()
     assert [item["lag"] for item in options.json()["x_lags"]] == [0, 1, 2]
     assert options.json()["limits"] == {"runs_per_minute": 20}
-    assert [item["key"] for item in options.json()["presets"]][:2] == ["no_exchange_rate", "current_x_only"]
+    assert [item["key"] for item in options.json()["presets"]][:2] == ["no_exchange_rate", "no_gdp"]
     design = client.get("/api/regression/design", params={"outcome": "trade"})
     assert design.status_code == 200
     assert design.json()["outcome"] == "trade"

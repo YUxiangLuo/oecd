@@ -7,6 +7,7 @@ import { groupedFixed } from "./format";
 import {
   chartDisplayScale, depvarKind, estimateDigits, globalInferenceIsSuppressed, signed, withCountUnit,
 } from "./regression-verdict";
+import { formatPValue } from "./regression-statistics";
 import type {
   CoefStat,
   CustomResultSnapshot,
@@ -130,6 +131,7 @@ export function snapshotOf(response: Pick<RegressionResponse, "design" | "result
       f_stat: result.f_stat ?? null,
       f_df: result.f_df ?? null,
       f_p: result.f_p ?? null,
+      root_mse: result.root_mse ?? null,
       n_obs: result.n_obs,
       n_entities: result.n_entities,
       n_times: result.n_times,
@@ -293,7 +295,42 @@ export function summaryRows(columns: TableColumn[], options: WorkbenchOptions): 
         ? "—"
         : `${groupedFixed(snapshot.result.f_stat, 2)}（${df[0]}, ${df[1]}）`;
     }),
+    statistic("f_p", "Prob > F", (snapshot) => (snapshot.result.suppressed ? "—" : formatPValue(snapshot.result.f_p))),
+    statistic("root_mse", "Root MSE", (snapshot) => fixed4(snapshot.result.root_mse)),
   ];
+}
+
+/** How far an estimate's size is from the design value: + larger, − smaller; a sign flip reads beyond −100%. */
+export function designDeviation(estimate: number, design: number): number {
+  if (design === 0) return Number.NaN;
+  return Math.sign(estimate) === Math.sign(design)
+    ? (Math.abs(estimate) - Math.abs(design)) / Math.abs(design)
+    : -(Math.abs(estimate) + Math.abs(design)) / Math.abs(design);
+}
+
+/**
+ * "课程设定值": the two-year total the course data were built around, read per percentage point like the row above,
+ * and how far each column's X-terms sum is from it. Null when the server sent no design value for this Y.
+ */
+export function designValueRow(columns: TableColumn[], outcome: RegressionOutcome, baseline: string, options: WorkbenchOptions): SummaryRow | null {
+  const design = options.design_values?.[outcome]?.[baseline];
+  if (design === undefined) return null;
+  const first = columns.find(({ snapshot, spec }) => xSum(snapshot, spec));
+  if (!first) return null;
+  if (design === null) return { key: "design", label: "课程设定值", cells: columns.map(() => "无单一设定值（比值 Y）") };
+  if (design === 0) return { key: "design", label: "课程设定值", cells: columns.map(() => "设定为 0（与 X 无关）") };
+  const digits = perPointDigits(outcome, xSum(first.snapshot, first.spec)!, first.snapshot);
+  const target = perPointReading(outcome, { coef: design, ci_low: null, ci_high: null }, { depvar_kind: first.snapshot.depvar_kind, result: { suppressed: true } }, digits);
+  return {
+    key: "design",
+    label: "课程设定值（X 每高 1 个百分点）",
+    cells: columns.map(({ spec, snapshot }) => {
+      const sum = xSum(snapshot, spec);
+      if (!sum) return "";
+      const deviation = designDeviation(sum.coef, design);
+      return `${target}；估计偏差 ${deviation > 0 ? "+" : ""}${Math.round(deviation * 100)}%`;
+    }),
+  };
 }
 
 /** Columns with a different sample (observations or years): part of a difference is the sample, not the model. */
@@ -331,14 +368,15 @@ function csvField(value: string): string {
  *  标准误 row for each term, then the fixed effects and statistics, the footnote last. The SE are plain numbers, not
  *  bracketed as on the page: a spreadsheet reads "(0.0330)" as −0.033. */
 export function comparisonCsv(
-  columns: TableColumn[], options: WorkbenchOptions, depvarLabel: string, perPoint?: SummaryRow | null,
+  columns: TableColumn[], options: WorkbenchOptions, depvarLabel: string, perPoint?: SummaryRow | null, design?: SummaryRow | null,
 ): string {
   const lines: string[][] = [[`因变量：${depvarLabel}`, ...columns.map((column) => column.name)]];
-  // As on the page: the per-point row right under the X-terms sum, before a constant.
+  // As on the page: the per-point row and the course's design value right under the X-terms sum, before a constant.
   const rows = coefficientRows(columns, options);
   for (const row of [...rows.filter((item) => item.key !== "_constant"), "per_point" as const, ...rows.filter((item) => item.key === "_constant")]) {
     if (row === "per_point") {
       if (perPoint) lines.push([perPoint.label, ...perPoint.cells]);
+      if (design) lines.push([design.label, ...design.cells]);
       continue;
     }
     lines.push([row.label, ...row.cells.map((item) => (item === "omitted" ? "（省略）" : item?.coef ?? ""))]);

@@ -96,3 +96,5 @@ class RegressionRunResponse(StrictContract):
     disclaimer: str
     variable_catalog: list[dict[str, str]]
     model_snapshot: dict[str, Any]
+    # The first wave's change in Y as the fitted model splits it (teaching runs; None when the panel has no waves).
+    decomposition: dict[str, Any] | None = None

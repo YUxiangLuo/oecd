@@ -22,6 +22,7 @@ import {
   sameSpec,
   samplesDiffer,
   significanceStars,
+  designValueRow,
   snapshotOf,
   specSummary,
   specKey,
@@ -43,6 +44,7 @@ import type {
   RegressionResponse,
   ReportedCustomResult,
   StepStateApi,
+  TeachingBaselineOption,
   WorkbenchOptions,
 } from "./types";
 import { displayBaselineLabel } from "./regression-lessons";
@@ -50,6 +52,8 @@ import { userFacingRequestError } from "./user-facing-error";
 
 export interface WorkbenchDraft {
   spec?: ModelSpec;
+  /** The Y chosen in the workbench when not the step's default Y. */
+  baseline?: string;
 }
 
 export interface WorkbenchStepState extends Record<string, unknown> {
@@ -64,9 +68,10 @@ const DEFAULT_COLUMN = "默认模型";
  *  models, not strings: the report's copy comes back from the database with each control's keys in another order). */
 export function experimentReportChanged(
   stepNumber: number, experiment: Experiment | null | undefined, reported: readonly ReportedCustomResult[] | undefined, options: WorkbenchOptions,
+  stepBaseline: string,
 ): boolean {
-  const mine = experiment ? [specKey(canonicalSpec(experiment.spec, options))] : [];
-  const theirs = (reported ?? []).filter((item) => item.step === stepNumber).map((item) => specKey(canonicalSpec(item.spec, options)));
+  const mine = experiment ? [`${experiment.baseline ?? stepBaseline}:${specKey(canonicalSpec(experiment.spec, options))}`] : [];
+  const theirs = (reported ?? []).filter((item) => item.step === stepNumber).map((item) => `${item.baseline}:${specKey(canonicalSpec(item.spec, options))}`);
   return mine.join("|") !== theirs.join("|");
 }
 
@@ -168,15 +173,16 @@ export function ColumnDetails({ column, options, perPoint }: {
   return (
     <ScrollableRegion className="table-wrap" label={`${column.name}的完整数字，可横向滚动`}>
       <table className="data-table reg-custom-table">
-        <thead><tr><th>变量</th><th>系数</th><th>标准误</th><th>t 值</th><th>p 值</th><th>95% 区间</th><th>X 每高 1 个百分点</th></tr></thead>
+        <thead><tr><th>变量</th><th>系数</th><th>标准误</th><th>t 值</th><th>p 值</th><th>显著性</th><th>95% 区间</th><th>X 每高 1 个百分点</th></tr></thead>
         <tbody>
           {rows.map((coef) => (
             <tr key={coef.name}>
               <td>{termLabel(coef.name, options)}</td>
-              <td>{fixed4(coef.coef)}{result.suppressed ? "" : significanceStars(coef.p)}</td>
+              <td>{fixed4(coef.coef)}</td>
               <td>{result.suppressed ? "—" : `(${fixed4(coef.se)})`}</td>
               <td>{result.suppressed || coef.t == null ? "—" : groupedFixed(coef.t, 2)}</td>
               <td>{result.suppressed ? "—" : formatPValue(coef.p)}</td>
+              <td>{result.suppressed ? "—" : significanceStars(coef.p) || "—"}</td>
               <td>{result.suppressed || coef.ci_low == null || coef.ci_high == null ? "—" : `[${fixed4(coef.ci_low)}, ${fixed4(coef.ci_high)}]`}</td>
               {/* The page's reading, for the X terms' sum (or the single X term) only. */}
               <td>{coef.name === "cumulative" || (xTerms === 1 && Object.values(X_COLUMNS).includes(coef.name)) ? perPoint(coef, column.snapshot) : "—"}</td>
@@ -220,11 +226,13 @@ export function ModelComparisonChart({ columns, outcome }: { columns: TableColum
   </section>;
 }
 
-export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse, state, reportCustomResults, reportOutdated = false }: {
+export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse, baselines, state, reportCustomResults, reportOutdated = false }: {
   stepNumber: number;
   outcome: RegressionOutcome;
   /** The course default model on this step's Y: the first column of the regression table. */
   defaultResponse: RegressionResponse;
+  /** The Ys of the step's family the student may run a model on (the step's default Y among them). */
+  baselines?: TeachingBaselineOption[];
   state: StepStateApi<WorkbenchStepState>;
   /** The model experiments the current report printed (its provenance). */
   reportCustomResults?: ReportedCustomResult[];
@@ -234,9 +242,35 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const options = optionsQuery.status === "success" ? optionsQuery.data ?? null : null;
   const experiment = state.data?.experiment ?? null;
   const draft = state.data?.custom_draft ?? {};
-  const baseline = defaultResponse.design.baseline ?? "";
+  const stepBaseline = defaultResponse.design.baseline ?? "";
+  // The Y the models are run on: the step's Y unless the student chose another of the family. The first column is
+  // then that Y's default model (computed once, cached by the server as the overview already computed it).
+  const [yKey, setYKey] = useState<string>(draft.baseline ?? stepBaseline);
+  const [defaultRuns, setDefaultRuns] = useState<Record<string, RegressionResponse>>({});
+  const [yError, setYError] = useState<string | null>(null);
+  const [loadingY, setLoadingY] = useState(false);
+  const defaultForY: RegressionResponse | null = yKey === stepBaseline ? defaultResponse : defaultRuns[yKey] ?? null;
+  const yOptions: Pick<TeachingBaselineOption, "key" | "label" | "default">[] = baselines?.length
+    ? baselines
+    : [{ key: stepBaseline, label: defaultResponse.design.depvar_label, default: true }];
+  const yLabel = (key: string) => displayBaselineLabel(yOptions.find((item) => item.key === key)?.label ?? defaultRuns[key]?.design.depvar_label ?? key);
   // As the bars and the headline name it ("加权总度", not the schema's "加权总度（入+出）").
-  const depvarLabel = displayBaselineLabel(defaultResponse.design.depvar_label);
+  const depvarLabel = displayBaselineLabel(defaultForY?.design.depvar_label ?? yLabel(yKey));
+  const experimentY = experiment?.baseline ?? stepBaseline;
+  useEffect(() => {
+    if (yKey === stepBaseline || defaultRuns[yKey]) return;
+    const request = new AbortController();
+    setLoadingY(true);
+    setYError(null);
+    api.runRegression(outcome, request.signal, yKey, null)
+      .then((response) => setDefaultRuns((current) => ({ ...current, [yKey]: response })))
+      .catch((cause) => {
+        if (!(cause instanceof DOMException && cause.name === "AbortError")) setYError(userFacingRequestError(cause, "这个 Y 的默认模型没有算出结果"));
+      })
+      .finally(() => setLoadingY(false));
+    return () => request.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- defaultRuns is read, not watched: a fetched Y stays.
+  }, [yKey, stepBaseline, outcome]);
   const [localSpec, setLocalSpec] = useState<ModelSpec | null>(null);
   const spec = localSpec ?? draft.spec ?? options?.default_spec ?? null;
   const [computed, setComputed] = useState<RegressionResponse | null>(null);
@@ -248,6 +282,8 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const [detailColumn, setDetailColumn] = useState(0);
   // The custom form is folded: the presets are the first thing offered.
   const [customOpen, setCustomOpen] = useState(false);
+  // The single-model table (coefficient, SE, t, p, significance, interval) is open: the course asked for it first.
+  const [detailsOpen, setDetailsOpen] = useState(true);
   // A refused calculation (429) shows how long new models must wait. The button stays usable: a model computed before
   // (by anyone) is answered from the server's cache and not counted, and a new one is simply refused again.
   const [retryAt, setRetryAt] = useState<number | null>(null);
@@ -282,6 +318,17 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
     if (retryWait === 0) setError(null);
     state.saveView?.({ custom_draft: { ...draft, spec: next } });
   };
+  /** Another Y of the family: the table starts again from that Y's default model (a computed model is on one Y). */
+  const changeY = (key: string) => {
+    if (key === yKey) return;
+    controller.current?.abort();
+    setYKey(key);
+    setComputed(null);
+    setDetailColumn(0);
+    if (retryWait === 0) setError(null);
+    state.saveView?.({ custom_draft: { ...draft, baseline: key === stepBaseline ? undefined : key } });
+    setAnnouncement(`因变量改为“${yLabel(key)}”；表中第一列是它的默认模型。`);
+  };
   // The computed model belongs to this form; otherwise it is kept but marked out of date.
   const current = Boolean(computed && sameSpec(computed.design.spec!, spec, options));
   const noX = spec.x_lags.length === 0;
@@ -298,7 +345,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
     setRunning(true);
     setError(null);
     try {
-      const response = await api.runRegression(outcome, request.signal, baseline, canonicalSpec(model, options));
+      const response = await api.runRegression(outcome, request.signal, yKey, canonicalSpec(model, options));
       if (response.model_snapshot?.version !== options.version || !response.design.spec) {
         throw new Error("页面版本已更新，请刷新页面后再计算");
       }
@@ -330,28 +377,33 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const computedSpec = current && computed ? computed.design.spec ?? null : null;
   const isDefault = Boolean(computedSpec && sameSpec(computedSpec, options.default_spec, options));
   const latest = computedSpec && !isDefault ? computed : null;
-  const latestIsReported = Boolean(latest && experiment && sameSpec(experiment.spec, latest.design.spec!, options));
-  // Table columns: the default model, the model just computed, and the one in the report when it is another.
+  const latestIsReported = Boolean(latest && experiment && experimentY === yKey && sameSpec(experiment.spec, latest.design.spec!, options));
+  // Table columns: the chosen Y's default model, the model just computed, and the one in the report when it is
+  // another model on this Y (on another Y it is only named below: two Ys cannot share a table).
   const columns: TableColumn[] = [
-    { name: DEFAULT_COLUMN, spec: options.default_spec, snapshot: snapshotOf(defaultResponse) },
+    { name: DEFAULT_COLUMN, spec: options.default_spec, snapshot: snapshotOf(defaultForY ?? defaultResponse) },
     ...(latest ? [{ name: `${latestIsReported ? "已放入报告" : "本次"}：${label(latest.design.spec!)}`, spec: latest.design.spec!, snapshot: snapshotOf(latest) }] : []),
-    ...(experiment && !latestIsReported ? [{ name: `已放入报告：${label(experiment.spec)}`, spec: experiment.spec, snapshot: experiment.snapshot }] : []),
+    ...(experiment && experimentY === yKey && !latestIsReported ? [{ name: `已放入报告：${label(experiment.spec)}`, spec: experiment.spec, snapshot: experiment.snapshot }] : []),
   ];
   const highlighted = latest ? 1 : isDefault ? 0 : -1;
   const coefficients = coefficientRows(columns, options);
   const pointRow = perPointRow(columns, outcome);
+  const designRow = designValueRow(columns, outcome, yKey, options);
   const summary = summaryRows(columns, options);
   const latestColumn: TableColumn | null = computed && computed.design.spec
     ? { name: !current ? "上次计算（设定已更改）" : columns[highlighted]?.name ?? DEFAULT_COLUMN, spec: computed.design.spec, snapshot: snapshotOf(computed) }
     : null;
   const detailColumns = latestColumn ? [latestColumn, ...columns.filter((column) => !sameSpec(column.spec, latestColumn.spec, options))] : columns;
   const shownDetail = Math.min(detailColumn, detailColumns.length - 1);
-  const reportChanged = Boolean(state.materialLocked && reportOutdated && experimentReportChanged(stepNumber, experiment, reportCustomResults, options));
+  const reportChanged = Boolean(state.materialLocked && reportOutdated && experimentReportChanged(stepNumber, experiment, reportCustomResults, options, stepBaseline));
   const cellClass = (index: number) => (index === highlighted ? "reg-custom-current" : undefined);
   const putInReport = () => {
     if (!latest || latestIsReported) return;
-    state.save({ experiment: { spec: latest.design.spec!, saved_at: new Date().toISOString(), snapshot: snapshotOf(latest) } });
-    setAnnouncement(`已把“${label(latest.design.spec!)}”放入报告。`);
+    state.save({ experiment: {
+      spec: latest.design.spec!, ...(yKey !== stepBaseline ? { baseline: yKey } : {}),
+      saved_at: new Date().toISOString(), snapshot: snapshotOf(latest),
+    } });
+    setAnnouncement(`已把“${label(latest.design.spec!)}”放入报告${yKey !== stepBaseline ? `（Y：${depvarLabel}）` : ""}。`);
   };
   const removeFromReport = () => {
     if (!experiment) return;
@@ -363,18 +415,42 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
 
   return (
     <div className="reg-custom">
-      <p className="reg-custom-y">因变量：<b>{depvarLabel}</b>（本步的 Y）。每次只改一处设定，算出后和表中第一列的默认模型比较；只改一项也可能改变样本。</p>
+      <p className="reg-custom-y">
+        <label>因变量：
+          {yOptions.length > 1
+            ? (
+              <select aria-label="因变量" value={yKey} disabled={running || loadingY} onChange={(event) => changeY(event.target.value)}>
+                {yOptions.map((item) => <option key={item.key} value={item.key}>{displayBaselineLabel(item.label)}{item.key === stepBaseline ? "（本步的 Y）" : ""}</option>)}
+              </select>
+            )
+            : <b>{depvarLabel}</b>}
+        </label>
+        {yOptions.length > 1 && yKey === stepBaseline ? "" : yKey === stepBaseline ? "（本步的 Y）" : "（本步家族的另一个指标：表中第一列是它的默认模型；放入报告时一起记录）"}
+        。每次只改一处设定，算出后和表中第一列的默认模型比较；只改一项也可能改变样本。
+      </p>
+      {loadingY && <p className="reg-request-state muted" role="status" aria-busy="true">正在取“{depvarLabel}”的默认模型…</p>}
+      {yError && <div className="error-box async-error" role="alert">{yError}<button type="button" className="secondary" onClick={() => changeY(stepBaseline)}>改回本步的 Y</button></div>}
       <div className="reg-custom-presets" role="group" aria-label="预设实验">
-        <ul>
-          {options.presets.map((item) => (
-            <li key={item.key}>
-              <button type="button" className="reg-preset" aria-pressed={activePreset === item.key} aria-disabled={running || undefined}
-                onClick={() => { if (!running) runPreset(item.spec); }}>
-                <b>{item.label}</b><small>{item.question}</small>
-              </button>
-            </li>
-          ))}
-        </ul>
+        {(["core", "advanced"] as const).map((tier) => {
+          const items = options.presets.filter((item) => (item.tier ?? "core") === tier);
+          if (!items.length) return null;
+          return (
+            <div key={tier} className={`reg-preset-tier reg-preset-tier-${tier}`}>
+              <h5 className="reg-preset-tier-title">{items[0].tier_label ?? (tier === "core" ? "必看" : "进阶")}</h5>
+              <ul>
+                {items.map((item) => (
+                  <li key={item.key}>
+                    <button type="button" className="reg-preset" aria-pressed={activePreset === item.key} aria-disabled={running || undefined}
+                      onClick={() => { if (!running) runPreset(item.spec); }}>
+                      <b>{item.label}</b><small>{item.question}</small>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+        {options.design_value_note && <p className="muted reg-design-note">{options.design_value_note}</p>}
       </div>
       <details className="reg-custom-details reg-custom-form-details" open={customOpen} onToggle={(event) => setCustomOpen(event.currentTarget.open)}>
         <summary>自定义设定（X 的滞后、8 个控制变量、固定效应）</summary>
@@ -421,6 +497,12 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
                   {pointRow.cells.map((value, index) => <td key={index} className={cellClass(index)}>{value}</td>)}
                 </tr>
               )}
+              {designRow && (
+                <tr className="reg-custom-design-row">
+                  <th scope="row">{designRow.label}</th>
+                  {designRow.cells.map((value, index) => <td key={index} className={cellClass(index)}>{value}</td>)}
+                </tr>
+              )}
               {coefficients.filter((row) => row.key === "_constant").map((row) => (
                 <tr key={row.key}>
                   <th scope="row">{row.label}</th>
@@ -459,7 +541,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         {experiment
           ? (
             <p className="reg-custom-report-chip" role="note">
-              <span>已放入报告：<b>{label(experiment.spec)}</b>（{specSummary(experiment.spec, options)}）</span>
+              <span>已放入报告：<b>{label(experiment.spec)}</b>（{specSummary(experiment.spec, options)}{experimentY !== stepBaseline ? `；Y：${yLabel(experimentY)}` : ""}）</span>
               <span aria-hidden="true"> · </span>
               <button type="button" className="link-button danger" onClick={removeFromReport}>移出报告</button>
             </p>
@@ -471,8 +553,8 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         {reportChanged && <p className="reg-rerun-warning reg-replaced-notice" role="status">放入报告的模型与已提交报告里的不同；请到步骤 15 更新报告并重新提交给老师。</p>}
       </div>
 
-      <details className="reg-custom-details" aria-label="单模型详细数字">
-        <summary>查看单模型详细数字（系数、t 值与区间）与导出 CSV{staleMessage ? " · 当前设定待重算" : ""}</summary>
+      <details className="reg-custom-details" aria-label="单模型详细数字" open={detailsOpen} onToggle={(event) => setDetailsOpen(event.currentTarget.open)}>
+        <summary>单模型详细数字（系数、标准误、t 值、p 值、显著性、区间）与导出 CSV{staleMessage ? " · 当前设定待重算" : ""}</summary>
         <label className="reg-custom-detail-pick">查看
           <select value={shownDetail} onChange={(event) => setDetailColumn(Number(event.target.value))}>
             {detailColumns.map((column, index) => <option key={index} value={index}>{column.name}</option>)}
@@ -483,8 +565,8 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         <ColumnDetails column={detailColumns[shownDetail]} options={options} perPoint={perPoint} />
         {detailColumns[shownDetail].snapshot.result.suppressed && <p className="reg-stale-note">{options.suppressed_note}</p>}
         {omittedSummary(detailColumns[shownDetail].snapshot, options).map((note) => <p className="muted" key={note}>{note}</p>)}
-        <p className="muted">系数按 X 以份额计（1 = 100 个百分点）；最后一列换算为 X 每高 1 个百分点。{xSpanLabel(detailColumns[shownDetail].spec)}；括号内为标准误，星号含义见表下注释。</p>
-        <button type="button" className="secondary" onClick={() => download(comparisonCsv(columns, options, depvarLabel, pointRow), `步骤${stepNumber}-回归对比.csv`)}>
+        <p className="muted">系数按 X 以份额计（1 = 100 个百分点）；最后一列换算为 X 每高 1 个百分点。{xSpanLabel(detailColumns[shownDetail].spec)}；括号内为标准误，星号含义见表下注释。{detailColumns[shownDetail].spec.fixed_effects.length ? "带固定效应的模型没有常数项：各单位和各年的截距已被固定效应吸收。" : ""}</p>
+        <button type="button" className="secondary" onClick={() => download(comparisonCsv(columns, options, depvarLabel, pointRow, designRow), `步骤${stepNumber}-回归对比.csv`)}>
           导出 CSV（上面的回归结果表）
         </button>
       </details>

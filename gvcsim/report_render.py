@@ -679,6 +679,8 @@ def _evidence_summary(
     without it each chart shows the saved Y alone. ``custom_models`` are the workbench models marked 放入报告
     (``report_workbench.reported_models``): each step names how many the appendix compares."""
     from gvcsim.regression.spec import ModelSpec
+    from gvcsim.regression.teaching import baseline as teaching_baseline
+    from gvcsim.regression.teaching import default_baseline
     from gvcsim.regression.workbench import CUSTOM_LABEL
 
     compared: dict[int, list[str]] = {}
@@ -686,6 +688,10 @@ def _evidence_summary(
         name = str(model["name"])
         if name == CUSTOM_LABEL:
             name = f"{name}：{ModelSpec.from_dict(model['spec']).summary()}"
+        # On another Y of the family than the step's: said next to the name, as the appendix table is on that Y.
+        outcome, chosen = str(model.get("outcome", "")), model.get("baseline")
+        if chosen and outcome and chosen != default_baseline(outcome).key:
+            name = f"{name}，Y：{y_display(teaching_baseline(outcome, chosen).label)}"
         compared.setdefault(int(model["step"]), []).append(name)
     lines = [
         "## 关键证据摘要",

@@ -39,7 +39,14 @@ import pandas as pd
 # v11: country-year macro controls have separate, deterministic innovations. GDP and openness enter Y;
 # population growth and FDI are negative controls. These are teaching constructions, not WDI observations.
 # v12: position is the ratio of generated lengths, not an independently drawn linear outcome.
-VERSION = "step10-tariff-teaching-v12"
+# v13 (2026-10-14, docs/regression-steps-11-14-optimization-final-2026-10-14.md): every control and fixed-effect
+# change a student can make moves the estimate visibly. GDP's relation is 0.5·β with first-wave economies growing 4%
+# a year faster (leaving GDP out overstates, like the exchange rate); openness relates by −0.006·β with first-wave
+# openness rising 4 points a year (leaving it out understates); the common year trend is a zigzag (0, 0, −4, +2, −4
+# noise units) that no control absorbs (leaving the year effects out understates); the depreciation is 8 points; seven
+# calibration floors are raised so the lowest-ranked units stay in their domains. Noise draws, β, 60/40 and the tariff
+# are v12's.
+VERSION = "step10-tariff-teaching-v13"
 # Seeds the noise draws only (policy assignment is a data rule since v7); changing it would redraw every Y.
 RANDOMIZATION_VERSION = "step10-tariff-teaching-v1"
 X_COLUMN = "teaching_tariff_exposure"
@@ -70,13 +77,15 @@ TAXED_RULE = {
 }
 # Share of a tariff's relation that shows in its year and in the next; the cumulative relation is β.
 LAG_SHARES = (0.6, 0.4)
-COMMON_YEAR_TREND = (-0.4, -0.2, 0.0, 0.2, 0.4)
+# Common year changes in noise-scale units: a zigzag (2018 down, 2019 up, 2020 down) that is not a function of the
+# trending controls, so only the year effects remove it.
+COMMON_YEAR_TREND = (0.0, 0.0, -4.0, 2.0, -4.0)
 EXCHANGE_RATE_COLUMN = "teaching_exchange_rate_change"
 # Exchange-rate change in percentage points (negative = depreciation): country × year uniform noise with this SD,
 # plus this depreciation for first-wave economies from the first wave's start. Each Y moves by factor × β per point,
 # in the tariff's direction (depreciation makes imported inputs dearer), so leaving it out overstates the relation.
 EXCHANGE_RATE_NOISE_SD = 1.0
-EXCHANGE_RATE_DEPRECIATION = -6.0
+EXCHANGE_RATE_DEPRECIATION = -8.0
 EXCHANGE_RATE_GAMMA_FACTOR = -0.0095
 EXCHANGE_RATE = {
     "column": EXCHANGE_RATE_COLUMN,
@@ -91,14 +100,17 @@ OPENNESS_COLUMN = "teaching_trade_openness"
 FDI_COLUMN = "teaching_fdi_gdp"
 # Simulated GDP: every country's log GDP grows by COMMON_GDP_GROWTH a year; first-wave economies grow by
 # WAVE1_EXTRA_GDP_GROWTH a year more from the first year on (a pre-existing path correlated with the tariff: a confounder).
-COMMON_GDP_GROWTH = 0.025
-WAVE1_EXTRA_GDP_GROWTH = 0.012
+COMMON_GDP_GROWTH = 0.015
+WAVE1_EXTRA_GDP_GROWTH = 0.04
 # Simulated trade openness (percent of GDP): a country level plus this rise a year for first-wave economies.
-WAVE1_OPENNESS_RISE = 2.0
+WAVE1_OPENNESS_RISE = 4.0
+# Each Y moves by gamma_factor × β per unit of the control's change from its country level. GDP's factor is positive
+# (faster growth moves Y the way the tariff does: leaving GDP out overstates the relation); openness's is negative
+# (rising openness moves Y against the tariff: leaving it out understates). Population growth and FDI do not enter Y.
 MACRO_CONTROLS = {
-    GDP_COLUMN: {"unit": "ln(USD)", "gamma_factor": 0.08},
+    GDP_COLUMN: {"unit": "ln(USD)", "gamma_factor": 0.5},
     POPULATION_COLUMN: {"unit": "percent per year", "gamma_factor": 0.0},
-    OPENNESS_COLUMN: {"unit": "exports plus imports / GDP, percent", "gamma_factor": 0.0015},
+    OPENNESS_COLUMN: {"unit": "exports plus imports / GDP, percent", "gamma_factor": -0.006},
     FDI_COLUMN: {"unit": "net inflows / GDP, percent", "gamma_factor": 0.0},
 }
 DISCLAIMER = "课程关税实验数据集：X、模拟宏观控制变量与各 Y 按课程数据契约生成，不是 OECD 发布结果。"
@@ -190,7 +202,7 @@ BASELINES: dict[str, tuple[Baseline, ...]] = {
     # v10: the domestic-VA export share is 1 − FVA share − the other parts' share (returned domestic VA, double
     # counting, taxes), so the two shares never exceed gross exports; its relation is the FVA share's, reversed.
     "trade": (
-        Baseline("FVA_share", "外国增加值项占比", "share", -0.55, (0.25, 0.30, 0.006)),
+        Baseline("FVA_share", "外国增加值项占比", "share", -0.55, (0.27, 0.30, 0.006)),
         Baseline(
             "DVAex_share",
             "国内增加值出口占比",
@@ -216,7 +228,7 @@ BASELINES: dict[str, tuple[Baseline, ...]] = {
     # 纯国内 + 传统贸易 + 简单 GVC + 复杂 GVC = 1 and GVC = 简单 + 复杂 in every row (levels chosen so 纯国内 stays
     # inside (0, 1) at the largest exposure).
     "production": (
-        Baseline("3b_VA_GVC_C_share", "复杂 GVC 生产份额", "share", -0.40, (0.14, 0.16, 0.005)),
+        Baseline("3b_VA_GVC_C_share", "复杂 GVC 生产份额", "share", -0.40, (0.19, 0.16, 0.005)),
         Baseline(
             "3_VA_GVC_share",
             "前向 GVC 生产总份额",
@@ -238,10 +250,10 @@ BASELINES: dict[str, tuple[Baseline, ...]] = {
             "简单 GVC 生产份额",
             "share",
             -0.30,
-            (0.12, 0.14, 0.005),
+            (0.14, 0.14, 0.005),
             derived=("3a_VA_GVC_S", "SVA"),
         ),
-        Baseline("2_VA_RT_share", "传统贸易生产份额", "share", -0.30, (0.10, 0.12, 0.004), derived=("2_VA_RT", "SVA")),
+        Baseline("2_VA_RT_share", "传统贸易生产份额", "share", -0.30, (0.14, 0.12, 0.004), derived=("2_VA_RT", "SVA")),
         Baseline(
             "1_VA_D_share",
             "纯国内生产份额",
@@ -278,12 +290,12 @@ BASELINES: dict[str, tuple[Baseline, ...]] = {
             combine=(0.0, (("weighted_indegree", 1.0), ("weighted_outdegree", 1.0))),
         ),
         Baseline(
-            "weighted_indegree", "加权入度", "network", -2000.0, (650.0, 1500.0, 20.0), source="weighted indegree"
+            "weighted_indegree", "加权入度", "network", -2000.0, (1000.0, 1500.0, 20.0), source="weighted indegree"
         ),
         Baseline(
-            "weighted_outdegree", "加权出度", "network", -2000.0, (650.0, 1500.0, 20.0), source="weighted outdegree"
+            "weighted_outdegree", "加权出度", "network", -2000.0, (1000.0, 1500.0, 20.0), source="weighted outdegree"
         ),
-        Baseline("betweenesscentrality", "网络介数（全正边二值）", "network", -6000.0, (2000.0, 2000.0, 60.0)),
+        Baseline("betweenesscentrality", "网络介数（全正边二值）", "network", -6000.0, (3000.0, 2000.0, 60.0)),
         Baseline("closnesscentrality", "接近中心性", "network", -0.50, (0.30, 0.40, 0.005)),
     ),
 }
@@ -406,6 +418,11 @@ def simulation_parameters() -> dict:
         "lag_shares": list(LAG_SHARES),
         "exchange_rate": EXCHANGE_RATE,
         "macro_controls": MACRO_CONTROLS,
+        "macro_paths": {
+            "common_gdp_growth": COMMON_GDP_GROWTH,
+            "first_wave_extra_gdp_growth": WAVE1_EXTRA_GDP_GROWTH,
+            "first_wave_openness_rise": WAVE1_OPENNESS_RISE,
+        },
         "taxed_rule": TAXED_RULE,
         "common_year_trend": {
             "values": list(COMMON_YEAR_TREND),
@@ -872,6 +889,80 @@ def country_exposure_overview(panel: pd.DataFrame) -> dict:
         "untaxed_countries": sum(1 for item in countries if not item["taxed"]),
         "entities": int(rows[["country", "industry"]].drop_duplicates().shape[0]),
         "countries": countries,
+    }
+
+
+def first_wave_decomposition(panel: pd.DataFrame, depvar: str, coefs: dict[str, float]) -> dict | None:
+    """What a fitted model says the first wave's change in Y since before its tariff is made of.
+
+    For the first-wave rows, the mean of Y in the last year minus its mean before the first tariff year (what the
+    three-group chart shows), and each regressor's share of it: its coefficient times the same change in that
+    regressor (X terms summed into one part). The remainder is what the model's fixed effects and residual carry: the
+    year changes common to every group, and noise. None when the panel has no first wave or no pre-period.
+    """
+    columns = getattr(panel, "columns", None)
+    if columns is None or not {"year", "entity_id", WAVE_COLUMN, SURPLUS_COLUMN, depvar}.issubset(columns):
+        return None
+    years = sorted(int(year) for year in panel["year"].unique())
+    try:
+        waves, _, present = _wave_starts_present(panel, years)
+    except (KeyError, ValueError):
+        return None
+    if not present:
+        return None
+    start = wave_start_years(years[0]).get(1)
+    first = waves.eq(1)
+    if start is None or not first.any():
+        return None
+    ordered = panel.sort_values(["entity_id", "year"])
+    pre = ordered.year.lt(start) & first.loc[ordered.index]
+    last = ordered.year.eq(years[-1]) & first.loc[ordered.index]
+    if not pre.any() or not last.any():
+        return None
+
+    def series(name: str) -> pd.Series | None:
+        if name in ordered.columns:
+            return ordered[name]
+        base, separator, lag = name.partition("__lag")
+        if separator and lag == "1" and base in ordered.columns:
+            return ordered.groupby("entity_id")[base].shift(1)
+        return None
+
+    def change(values: pd.Series) -> float:
+        return float(values[last].mean() - values[pre].mean())
+
+    from gvcsim.regression.spec import control_term_label
+
+    def label(name: str) -> str:
+        base, separator, lag = name.partition("__lag")
+        try:
+            return control_term_label(base, int(lag) if separator else 0)
+        except (KeyError, ValueError):
+            return name
+
+    observed = change(ordered[depvar])
+    x_part = 0.0
+    explained = 0.0
+    parts: list[dict[str, float | str]] = []
+    for name, coef in coefs.items():
+        values = series(name)
+        if values is None:
+            continue
+        contribution = coef * change(values)
+        explained += contribution
+        if name in X_LAG_COLUMNS.values():
+            x_part += contribution
+        else:
+            parts.append({"name": name, "label": label(name), "change": contribution})
+    terms: list[dict[str, float | str]] = [{"name": "x_terms", "label": "关税 X", "change": x_part}, *parts]
+    return {
+        "group": "first",
+        "wave_start": int(start),
+        "year": years[-1],
+        "pre_years": [year for year in years if year < start],
+        "observed": observed,
+        "terms": terms,
+        "remainder": observed - explained,
     }
 
 

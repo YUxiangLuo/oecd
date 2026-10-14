@@ -80,10 +80,19 @@ def test_single_changes_cover_x_terms_controls_and_every_other_effect_set():
     assert all(spec != DEFAULT_SPEC.canonical() for _, _, spec in moves)
 
 
-def test_variant_v12_is_the_published_generator_and_applied_restores_every_constant():
+def test_variant_v13_is_the_published_generator_and_applied_restores_every_constant():
+    v13 = teaching_variants.VARIANTS["v13"]
+    assert v13 is teaching_variants.VARIANTS["P17"]
+    assert v13.gdp_gamma == teaching.MACRO_CONTROLS[GDP_COLUMN]["gamma_factor"] == 0.5
+    assert v13.openness_gamma == teaching.MACRO_CONTROLS[OPENNESS_COLUMN]["gamma_factor"] == -0.006
+    assert v13.wave1_extra_growth == teaching.WAVE1_EXTRA_GDP_GROWTH == 0.04
+    assert v13.common_growth == teaching.COMMON_GDP_GROWTH == 0.015
+    assert v13.wave1_openness_rise == teaching.WAVE1_OPENNESS_RISE == 4.0
+    assert v13.fx_depreciation == teaching.EXCHANGE_RATE_DEPRECIATION == -8.0
+    assert v13.year_trend == teaching.COMMON_YEAR_TREND == (0.0, 0.0, -4.0, 2.0, -4.0)
+    assert v13.lows == () and teaching.default_baseline("trade").calibration[0] == 0.27
     v12 = teaching_variants.VARIANTS["v12"]
-    assert v12.gdp_gamma == teaching.MACRO_CONTROLS[GDP_COLUMN]["gamma_factor"]
-    assert v12.wave1_extra_growth == teaching.WAVE1_EXTRA_GDP_GROWTH and v12.lows == ()
+    assert (v12.gdp_gamma, v12.openness_gamma, v12.fx_depreciation) == (0.08, 0.0015, -6.0)
     before = (
         teaching.MACRO_CONTROLS[GDP_COLUMN]["gamma_factor"],
         teaching.MACRO_CONTROLS[OPENNESS_COLUMN]["gamma_factor"],
@@ -94,12 +103,12 @@ def test_variant_v12_is_the_published_generator_and_applied_restores_every_const
         teaching.COMMON_YEAR_TREND,
         teaching.default_baseline("trade").calibration,
     )
-    p17 = teaching_variants.VARIANTS["P17"]
-    with teaching_variants.applied(p17):
-        assert teaching.MACRO_CONTROLS[GDP_COLUMN]["gamma_factor"] == 0.5
-        assert teaching.MACRO_CONTROLS[OPENNESS_COLUMN]["gamma_factor"] == -0.006
-        assert teaching.COMMON_YEAR_TREND == (0.0, 0.0, -4.0, 2.0, -4.0)
-        assert teaching.default_baseline("trade").calibration[0] == 0.27
+    with teaching_variants.applied(v12):
+        assert teaching.MACRO_CONTROLS[GDP_COLUMN]["gamma_factor"] == 0.08
+        assert teaching.MACRO_CONTROLS[OPENNESS_COLUMN]["gamma_factor"] == 0.0015
+        assert teaching.COMMON_YEAR_TREND == (-0.4, -0.2, 0.0, 0.2, 0.4)
+        assert teaching.default_baseline("trade").calibration == (0.25, 0.30, 0.006)
+        assert teaching.baseline("network", "betweenesscentrality").calibration[0] == 2000.0
         # Identity Ys are not recalibrated: only the drawn parts have floors.
         assert teaching.baseline("production", "1_VA_D_share").calibration == (0.0, 0.0, 0.0)
     after = (
@@ -117,3 +126,33 @@ def test_variant_v12_is_the_published_generator_and_applied_restores_every_const
     assert teaching_variants._rel(-0.66, -0.55) == pytest.approx(0.2)
     assert teaching_variants._rel(-0.44, -0.55) == pytest.approx(-0.2)
     assert teaching_variants._rel(0.11, -0.55) == pytest.approx(-1.2)
+
+
+def test_the_v13_omission_predicates_pick_one_change_from_the_default_model():
+    controls = DEFAULT_SPEC.controls
+    no_gdp = tuple(item for item in controls if item[0] != GDP_COLUMN)
+    no_openness = tuple(item for item in controls if item[0] != OPENNESS_COLUMN)
+    assert cms._one_confounder_omitted(_record(ModelSpec((0, 1), no_gdp, ("country_industry", "year"))), GDP_COLUMN)
+    assert not cms._one_confounder_omitted(
+        _record(ModelSpec((0, 1), no_gdp, ("country_industry", "year"))), OPENNESS_COLUMN
+    )
+    assert cms._one_confounder_omitted(
+        _record(ModelSpec((0, 1), no_openness, ("country_industry", "year"))), OPENNESS_COLUMN
+    )
+    # Country × year effects absorb the confounders: not an omission.
+    assert not cms._one_confounder_omitted(
+        _record(ModelSpec((0, 1), no_gdp, ("country_industry", "country_year"))), GDP_COLUMN
+    )
+    assert cms._year_fe_omitted_only(_record(ModelSpec((0, 1), controls, ("country_industry",))))
+    assert not cms._year_fe_omitted_only(_record(ModelSpec((0, 1), no_gdp, ("country_industry",))))
+    assert not cms._year_fe_omitted_only(_record(DEFAULT_SPEC))
+
+
+def test_key_specs_name_the_default_model_and_every_preset():
+    named = cms.key_specs([])
+    labels = [label for label, _key, _spec in named]
+    assert labels[0] == "默认模型"
+    from gvcsim.regression.workbench import PRESETS
+
+    for _key, _tier, label, _question, spec in PRESETS:
+        assert (label, "", spec.canonical()) in named

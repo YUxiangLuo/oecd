@@ -59,6 +59,8 @@ class RegressionResult:
     f_stat: float | None = None
     f_df: list[int] | None = None
     f_p: float | None = None
+    # Root mean squared error of the residuals over the residual degrees of freedom (Stata's Root MSE).
+    root_mse: float | None = None
     # The constant of a model without fixed effects (absent when fixed effects absorb it).
     constant: CoefStat | None = None
     # Sum of the X terms' coefficients (X, L1.X, L2.X): the cumulative relation, with its own clustered SE.

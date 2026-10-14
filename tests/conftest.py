@@ -94,7 +94,7 @@ def freeze_file_metadata(monkeypatch):
 
 @pytest.fixture
 def teaching_db(monkeypatch):
-    """Create a fresh v12 classroom database for each database test."""
+    """Create a fresh v13 classroom database for each database test."""
     import psycopg
 
     from gvcsim import artifacts, config, demo_accounts

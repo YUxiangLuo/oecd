@@ -74,6 +74,7 @@ export function useRegressionRun({ outcome, runName, onStart, onSaved }: {
         design: response.design, result: response.result,
         disclaimer: response.disclaimer,
         model_snapshot: response.model_snapshot, variable_catalog: response.variable_catalog,
+        decomposition: response.decomposition ?? null,
       });
       scrollToVerdictAfterRun.current = true;
       setResult(response);

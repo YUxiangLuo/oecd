@@ -4,12 +4,12 @@ import { useState } from "react";
 import { api, ApiError } from "./api";
 import { ColumnDetails, experimentReportChanged, ModelComparisonChart, RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
 import {
-  canonicalSpec, coefficientRows, comparisonCsv, effectiveEffects, equationPreview, experimentLabel, includedBy, omittedSummary, perPointReading,
+  canonicalSpec, coefficientRows, comparisonCsv, designDeviation, designValueRow, effectiveEffects, equationPreview, experimentLabel, includedBy, omittedSummary, perPointReading,
   perPointRow, samplesDiffer, significanceStars, snapshotOf, specSummary, summaryRows, termLabel,
   type TableColumn,
 } from "./regression-workbench-table";
 import optionsFixture from "./regression-workbench-options.fixture.json";
-import type { CoefStat, Experiment, ModelSpec, RegressionResponse, StepStateApi, WorkbenchOptions } from "./types";
+import type { CoefStat, Experiment, ModelSpec, RegressionResponse, StepStateApi, TeachingBaselineOption, WorkbenchOptions } from "./types";
 
 afterEach(() => { cleanup(); mock.restore(); });
 
@@ -107,6 +107,29 @@ describe("tables", () => {
     { name: "去掉汇率", spec: NO_RATE, snapshot: snapshotOf(NO_RATE_RUN) },
   ];
 
+  test("the design-value row says the course's number per point and each column's deviation from it (v13)", () => {
+    const row = designValueRow(columns, "trade", "FVA_share", options)!;
+    expect(row.label).toBe("课程设定值（X 每高 1 个百分点）");
+    expect(row.cells.every((cell) => cell.startsWith("-0.55 个百分点；估计偏差 "))).toBe(true);
+    expect(designValueRow(columns, "production", "3b_FGY_GVC_C_share", options)!.cells[0]).toBe("设定为 0（与 X 无关）");
+    expect(designValueRow(columns, "length", "GVCPs", options)!.cells[0]).toBe("无单一设定值（比值 Y）");
+    expect(designValueRow(columns, "trade", "unknown", options)).toBeNull();
+    expect(designDeviation(-0.66, -0.55)).toBeCloseTo(0.2);
+    expect(designDeviation(-0.44, -0.55)).toBeCloseTo(-0.2);
+    expect(designDeviation(0.11, -0.55)).toBeCloseTo(-1.2);
+    const summary = summaryRows(columns, options);
+    expect(summary.map((item) => item.key)).toEqual(expect.arrayContaining(["f_p", "root_mse"]));
+  });
+
+  test("the presets are offered in two tiers, 必看 before 进阶, with the design-value note (v13)", () => {
+    expect(options.presets.map((item) => item.tier)).toEqual(["core", "core", "core", "advanced", "advanced", "advanced", "advanced"]);
+    expect(options.presets.map((item) => item.label)).toEqual([
+      "去掉汇率变动", "去掉 GDP 对数", "去掉贸易开放度", "只放当期 X（去掉 L1.X）", "去掉年份固定效应", "固定效应改为国家 + 行业 + 年份", "加上人口增长率和 FDI 净流入占比",
+    ]);
+    expect(options.x_lags[2].description).toContain("没有两年后的关联");
+    expect(options.fixed_effects.find((item) => item.key === "country_year")?.description).toContain("吸收不等于没有控制");
+  });
+
   test("rows are the union of the columns' terms, then each fixed effect and the statistics", () => {
     const rows = coefficientRows(columns, options);
     expect(rows.map((row) => row.label)).toEqual(["X", "L1.X", "汇率变动", "GDP 对数", "贸易开放度", "X 各项合计（累计效应）"]);
@@ -193,6 +216,15 @@ describe("tables", () => {
     expect(omittedSummary(snapshotOf(run), options)).toEqual(["被国家×年份 FE 吸收：汇率变动、增加值总额对数"]);
   });
 
+  test("the CSV carries the course's design value right under the per-point row, as on the page", () => {
+    const named: TableColumn[] = [columns[0], { ...columns[1], name: "本次：去掉汇率变动" }];
+    const csv = comparisonCsv(named, options, "外国增加值项占比", perPointRow(named, "trade"), designValueRow(named, "trade", "FVA_share", options));
+    const lines = csv.slice(1).trimEnd().split("\r\n");
+    const labels = lines.map((line) => line.split(",")[0]);
+    expect(labels.indexOf("课程设定值（X 每高 1 个百分点）")).toBe(labels.indexOf("合计：X 每高 1 个百分点") + 1);
+    expect(lines[labels.indexOf("课程设定值（X 每高 1 个百分点）")]).toMatch(/^课程设定值（X 每高 1 个百分点）,-0\.55 个百分点；估计偏差 [+-]?\d+%,-0\.55 个百分点；估计偏差 \+\d+%$/);
+  });
+
   test("the CSV has a BOM, two rows per term, the fixed effects, the models and the footnote last", () => {
     const named: TableColumn[] = [columns[0], { ...columns[1], name: "本次：去掉汇率变动" }];
     const csv = comparisonCsv(named, options, "外国增加值项占比", perPointRow(named, "trade"));
@@ -215,11 +247,11 @@ describe("report notice", () => {
   test("only the model put into the report counts, as a model", () => {
     const mine = experimentOf(NO_RATE, NO_RATE_RUN);
     const reported = [{ step: 11, name: "去掉汇率变动", outcome: "trade", baseline: "FVA_share", spec: NO_RATE }];
-    expect(experimentReportChanged(11, mine, reported, options)).toBe(false);
-    expect(experimentReportChanged(11, experimentOf({ ...NO_RATE, x_lags: [0] }, NO_RATE_RUN), reported, options)).toBe(true);
-    expect(experimentReportChanged(11, null, reported, options)).toBe(true);
-    expect(experimentReportChanged(12, null, reported, options)).toBe(false);
-    expect(experimentReportChanged(11, mine, undefined, options)).toBe(true);
+    expect(experimentReportChanged(11, mine, reported, options, "FVA_share")).toBe(false);
+    expect(experimentReportChanged(11, experimentOf({ ...NO_RATE, x_lags: [0] }, NO_RATE_RUN), reported, options, "FVA_share")).toBe(true);
+    expect(experimentReportChanged(11, null, reported, options, "FVA_share")).toBe(true);
+    expect(experimentReportChanged(12, null, reported, options, "FVA_share")).toBe(false);
+    expect(experimentReportChanged(11, mine, undefined, options, "FVA_share")).toBe(true);
   });
 
   test("the report's copy may list each control's keys in another order (as the database returns it)", () => {
@@ -227,13 +259,19 @@ describe("report notice", () => {
     const mine = experimentOf(withRate, NO_RATE_RUN);
     const fromDatabase = { ...withRate, controls: [{ lag: 0, name: "teaching_exchange_rate_change" }] };
     const reported = [{ step: 11, name: "x", outcome: "trade", baseline: "FVA_share", spec: fromDatabase }];
-    expect(experimentReportChanged(11, mine, reported, options)).toBe(false);
-    expect(experimentReportChanged(11, mine, [{ ...reported[0], spec: { ...fromDatabase, controls: [{ lag: 1, name: "teaching_exchange_rate_change" }] } }], options)).toBe(true);
+    expect(experimentReportChanged(11, mine, reported, options, "FVA_share")).toBe(false);
+    expect(experimentReportChanged(11, mine, [{ ...reported[0], spec: { ...fromDatabase, controls: [{ lag: 1, name: "teaching_exchange_rate_change" }] } }], options, "FVA_share")).toBe(true);
   });
 });
 
-function Harness({ initial, onSave, onView, locked = false, defaultResponse = DEFAULT_RUN, reported, outdated }: {
+const BASELINES: TeachingBaselineOption[] = [
+  { key: "FVA_share", label: "外国增加值项占比", kind: "share", unit: "", default: true, column: "FVA_share", source: "" },
+  { key: "DVAex_share", label: "国内增加值出口占比", kind: "share", unit: "", default: false, column: "DVAex_share", source: "" },
+];
+
+function Harness({ initial, onSave, onView, locked = false, defaultResponse = DEFAULT_RUN, reported, outdated, baselines }: {
   initial?: WorkbenchStepState; onSave?: (patch: Partial<WorkbenchStepState>) => void; locked?: boolean;
+  baselines?: TeachingBaselineOption[];
   onView?: (patch: Partial<WorkbenchStepState>) => void;
   /** The submitted report's models and whether the report is out of date (step 15's signals). */
   reported?: { step: number; name: string; outcome: string; baseline: string; spec: ModelSpec }[];
@@ -248,7 +286,7 @@ function Harness({ initial, onSave, onView, locked = false, defaultResponse = DE
     saveView: (patch) => { onView?.(patch); setData((current) => ({ ...current, ...patch })); },
     complete: false, syncing: false, syncError: null, syncNow: () => {}, materialLocked: locked,
   };
-  return <RegressionModelWorkbench stepNumber={11} outcome="trade" defaultResponse={defaultResponse} state={state}
+  return <RegressionModelWorkbench stepNumber={11} outcome="trade" defaultResponse={defaultResponse} baselines={baselines} state={state}
     reportCustomResults={reported as never} reportOutdated={outdated} />;
 }
 
@@ -257,6 +295,46 @@ const checkbox = (label: RegExp) => screen.getByRole("checkbox", { name: label }
 const tableHeaders = () => [...document.querySelectorAll(".reg-custom-compare-table thead th")].map((cell) => cell.textContent);
 
 describe("the workbench", () => {
+  test("another Y of the family: its default model is the first column, the design value is its β, the report records the Y", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    const onY = (run: RegressionResponse) => ({ ...run, design: { ...run.design, depvar_label: "国内增加值出口占比" } });
+    const dvaDefault = onY(response(DEFAULT, { teaching_tariff_exposure: 0.33, teaching_tariff_exposure_lag1: 0.2203, [ER]: -0.0052, ...macroValues }, {}, "DVAex_share"));
+    const dvaNoRate = onY(response(NO_RATE, { teaching_tariff_exposure: 0.4608, teaching_tariff_exposure_lag1: 0.244, ...macroValues }, {}, "DVAex_share"));
+    const run = spyOn(api, "runRegression").mockImplementation(((_outcome: string, _signal: AbortSignal, _baseline: string, spec: ModelSpec | null) =>
+      Promise.resolve(spec ? dvaNoRate : dvaDefault)) as never);
+    const saved: Partial<WorkbenchStepState>[] = [];
+    const views: Partial<WorkbenchStepState>[] = [];
+    render(<Harness baselines={BASELINES} onSave={(patch) => saved.push(patch)} onView={(patch) => views.push(patch)} />);
+    const select = await screen.findByRole("combobox", { name: "因变量" });
+    expect([...select.querySelectorAll("option")].map((option) => option.textContent)).toEqual(["外国增加值项占比（本步的 Y）", "国内增加值出口占比"]);
+    expect(run).not.toHaveBeenCalled();
+    await act(async () => { fireEvent.change(select, { target: { value: "DVAex_share" } }); });
+    // The chosen Y's default model is fetched (the server has it cached from the overview) and heads the table.
+    await waitFor(() => expect(run).toHaveBeenCalledWith("trade", expect.anything(), "DVAex_share", null));
+    await screen.findByText("回归结果表（因变量：国内增加值出口占比）");
+    expect(views.at(-1)).toEqual({ custom_draft: { baseline: "DVAex_share" } });
+    await waitFor(() => expect(document.querySelector(".reg-custom-design-row")?.textContent).toContain("0.55 个百分点；估计偏差 +0%"));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^去掉汇率变动/ })); });
+    await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "本次：去掉汇率变动"]));
+    expect(run).toHaveBeenLastCalledWith("trade", expect.anything(), "DVAex_share", expect.objectContaining({ controls: NO_RATE.controls }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /放入报告/ })); });
+    expect(saved.at(-1)?.experiment).toMatchObject({ baseline: "DVAex_share", spec: NO_RATE });
+    expect(document.querySelector(".reg-custom-report-chip")?.textContent).toContain("Y：国内增加值出口占比");
+    // Back on the step's Y: the experiment on the other Y is named, not shown as a column (two Ys share no table).
+    await act(async () => { fireEvent.change(select, { target: { value: "FVA_share" } }); });
+    await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型"]));
+    expect(document.querySelector(".reg-custom-report-chip")?.textContent).toContain("Y：国内增加值出口占比");
+    expect(views.at(-1)?.custom_draft?.baseline).toBeUndefined();
+    expect(views.at(-1)?.custom_draft?.spec).toEqual(NO_RATE);
+  });
+
+  test("an experiment on another Y counts as changed when the report printed it on the step's Y", () => {
+    const mine = { ...experimentOf(NO_RATE, NO_RATE_RUN), baseline: "DVAex_share" };
+    const printed = [{ step: 11, name: "x", outcome: "trade", baseline: "FVA_share", spec: NO_RATE }];
+    expect(experimentReportChanged(11, mine, printed, options, "FVA_share")).toBe(true);
+    expect(experimentReportChanged(11, mine, [{ ...printed[0], baseline: "DVAex_share" }], options, "FVA_share")).toBe(false);
+  });
+
   test("a preset runs its model at once and the result joins the table next to the default", async () => {
     spyOn(api, "regressionOptions").mockResolvedValue(options);
     const run = spyOn(api, "runRegression").mockResolvedValue(NO_RATE_RUN as never);
@@ -447,8 +525,7 @@ describe("the open workbench", () => {
     // The preset no longer reads pressed: the form holds another model.
     expect(screen.getByRole("button", { name: /^去掉汇率变动/ }).getAttribute("aria-pressed")).toBe("false");
     const details = screen.getByRole("group", { name: "单模型详细数字" });
-    expect(details.hasAttribute("open")).toBe(false);
-    fireEvent.click(details.querySelector("summary")!);
+    expect(details.hasAttribute("open")).toBe(true);
     expect(details.textContent).toContain("GDP 对数、贸易开放度");
     expect(details.textContent).toContain("上次计算（设定已更改）");
     expect(details.textContent).toContain("当前设定待重算");
@@ -492,8 +569,9 @@ describe("one column's full numbers", () => {
     run.result.cumulative = { ...coef("cumulative", -1.8414), ci_low: -1.92, ci_high: -1.76 };
     const sum = cells(run, "length").at(-1)!;
     expect(sum[0]).toBe("X 各项合计（累计效应）");
-    expect(sum[1]).toBe("-1.8414***");
-    expect(sum[6]).toBe("-0.0184 个长度单位");
+    expect(sum[1]).toBe("-1.8414");
+    expect(sum[5]).toBe("***");
+    expect(sum[7]).toBe("-0.0184 个长度单位");
   });
 
   test("network coefficients group thousands; nothing reads as a negative zero", () => {
@@ -502,9 +580,9 @@ describe("one column's full numbers", () => {
     run.result.coefs[0] = { ...run.result.coefs[0], ci_low: -2558.542, ci_high: -2402.2026, se: 39.88, t: -62.2 };
     run.result.coefs[2] = { ...run.result.coefs[2], coef: -0.00001, se: 0.00001, t: -0.001, ci_low: -0.00004, ci_high: 0.00002 };
     const rows = cells(run, "network");
-    expect(rows[0].slice(1, 6)).toEqual(["-2,480.3723***", "(39.8800)", "-62.20", "0.0010", "[-2,558.5420, -2,402.2026]"]);
+    expect(rows[0].slice(1, 7)).toEqual(["-2,480.3723", "(39.8800)", "-62.20", "0.0010", "***", "[-2,558.5420, -2,402.2026]"]);
     expect(rows[2][1].startsWith("0.0000")).toBe(true);
-    expect(rows[2][5]).toBe("[0.0000, 0.0000]");
+    expect(rows[2][6]).toBe("[0.0000, 0.0000]");
   });
 
   test.each([

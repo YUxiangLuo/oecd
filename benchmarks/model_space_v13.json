@@ -1,0 +1,3360 @@
+{
+  "release": "8565f226719d4179967f6372dbc7c49e",
+  "fits": 20111,
+  "checks": [
+    {
+      "name": "库对照",
+      "passed": 20111,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    {
+      "name": "可估计",
+      "passed": 20111,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    {
+      "name": "正确设定恢复 β",
+      "passed": 558,
+      "failed": 12,
+      "skipped": 0,
+      "failures": [
+        {
+          "key": "weighted_outdegree",
+          "setting": "default",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2050 rel=+2.5% ci=[-2089, -2011]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+population",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2051 rel=+2.6% ci=[-2089, -2013]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2050 rel=+2.5% ci=[-2089, -2012]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+population+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2051 rel=+2.6% ci=[-2089, -2014]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+icio",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2051 rel=+2.5% ci=[-2088, -2014]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "all8",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2052 rel=+2.6% ci=[-2088, -2017]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2106 rel=+5.3% ci=[-2207, -2005]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+population",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2105 rel=+5.3% ci=[-2205, -2006]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2107 rel=+5.3% ci=[-2206, -2007]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+population+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2106 rel=+5.3% ci=[-2203, -2008]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+icio",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2110 rel=+5.5% ci=[-2210, -2010]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "all8",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2109 rel=+5.5% ci=[-2206, -2013]"
+        }
+      ]
+    },
+    {
+      "name": "正确设定恢复 β（仅看区间）",
+      "passed": 532,
+      "failed": 38,
+      "skipped": 0,
+      "failures": [
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "none",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3049 rel=+1.6% ci=[-0.3096, -0.3003]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3049 rel=+1.6% ci=[-0.3096, -0.3003]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "no_fx",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3049 rel=+1.6% ci=[-0.3096, -0.3003]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "no_gdp",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3049 rel=+1.6% ci=[-0.3096, -0.3003]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "no_openness",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3049 rel=+1.6% ci=[-0.3096, -0.3003]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "fx_only",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3049 rel=+1.6% ci=[-0.3096, -0.3003]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default+population",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3049 rel=+1.6% ci=[-0.3096, -0.3003]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3049 rel=+1.6% ci=[-0.3096, -0.3003]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default+population+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3049 rel=+1.6% ci=[-0.3096, -0.3003]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default+icio",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3049 rel=+1.6% ci=[-0.3096, -0.3003]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "all8",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3049 rel=+1.6% ci=[-0.3096, -0.3003]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default_lag1",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 1
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 1
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 1
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3049 rel=+1.6% ci=[-0.3096, -0.3003]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "fx_lag1+gdp+openness",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 1
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3049 rel=+1.6% ci=[-0.3096, -0.3003]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "none",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3062 rel=+2.1% ci=[-0.3119, -0.3005]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3062 rel=+2.1% ci=[-0.3119, -0.3005]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "no_fx",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3062 rel=+2.1% ci=[-0.3119, -0.3005]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "no_gdp",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3062 rel=+2.1% ci=[-0.3119, -0.3005]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "no_openness",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3062 rel=+2.1% ci=[-0.3119, -0.3005]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "fx_only",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3062 rel=+2.1% ci=[-0.3119, -0.3005]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default+population",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3062 rel=+2.1% ci=[-0.3119, -0.3005]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3062 rel=+2.1% ci=[-0.3119, -0.3005]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default+population+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3062 rel=+2.1% ci=[-0.3119, -0.3005]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default+icio",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3062 rel=+2.1% ci=[-0.3119, -0.3005]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "all8",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3062 rel=+2.1% ci=[-0.3119, -0.3005]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default_lag1",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 1
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 1
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 1
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3062 rel=+2.1% ci=[-0.3119, -0.3005]"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "fx_lag1+gdp+openness",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 1
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3062 rel=+2.1% ci=[-0.3119, -0.3005]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2050 rel=+2.5% ci=[-2089, -2011]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+population",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2051 rel=+2.6% ci=[-2089, -2013]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2050 rel=+2.5% ci=[-2089, -2012]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+population+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2051 rel=+2.6% ci=[-2089, -2014]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+icio",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2051 rel=+2.5% ci=[-2088, -2014]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "all8",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2052 rel=+2.6% ci=[-2088, -2017]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2106 rel=+5.3% ci=[-2207, -2005]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+population",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2105 rel=+5.3% ci=[-2205, -2006]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2107 rel=+5.3% ci=[-2206, -2007]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+population+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2106 rel=+5.3% ci=[-2203, -2008]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+icio",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2110 rel=+5.5% ci=[-2210, -2010]"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "all8",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2109 rel=+5.5% ci=[-2206, -2013]"
+        }
+      ]
+    },
+    {
+      "name": "正确设定恢复 60/40 拆分",
+      "passed": 554,
+      "failed": 16,
+      "skipped": 0,
+      "failures": [
+        {
+          "key": "weighted_degree",
+          "setting": "default",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "x=-2481 lag1=-1575"
+        },
+        {
+          "key": "weighted_degree",
+          "setting": "default+population",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "x=-2483 lag1=-1573"
+        },
+        {
+          "key": "weighted_degree",
+          "setting": "default+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "x=-2481 lag1=-1575"
+        },
+        {
+          "key": "weighted_degree",
+          "setting": "default+population+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "x=-2483 lag1=-1573"
+        },
+        {
+          "key": "weighted_degree",
+          "setting": "all8",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "x=-2483 lag1=-1573"
+        },
+        {
+          "key": "weighted_degree",
+          "setting": "default",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "x=-2482 lag1=-1538"
+        },
+        {
+          "key": "weighted_degree",
+          "setting": "default+population",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "x=-2484 lag1=-1537"
+        },
+        {
+          "key": "weighted_degree",
+          "setting": "default+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "x=-2482 lag1=-1538"
+        },
+        {
+          "key": "weighted_degree",
+          "setting": "default+population+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "x=-2484 lag1=-1537"
+        },
+        {
+          "key": "weighted_degree",
+          "setting": "all8",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "x=-2484 lag1=-1536"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+population",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "x=-1265 lag1=-786.7"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+population+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "x=-1265 lag1=-786.8"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "all8",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "x=-1264 lag1=-788.4"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+population",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "x=-1265 lag1=-757.4"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+population+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "x=-1265 lag1=-757.4"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "all8",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "x=-1265 lag1=-757.4"
+        }
+      ]
+    },
+    {
+      "name": "L2.X 为零",
+      "passed": 285,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    {
+      "name": "汇率斜率",
+      "passed": 180,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    {
+      "name": "GDP 斜率",
+      "passed": 180,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    {
+      "name": "开放度斜率",
+      "passed": 180,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    {
+      "name": "无关控制为零",
+      "passed": 180,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    {
+      "name": "无关控制不改变 β",
+      "passed": 168,
+      "failed": 12,
+      "skipped": 0,
+      "failures": [
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default+population",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3049"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3049"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default+population+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3049"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default+population",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3062"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3062"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default+population+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3062"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+population",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2051"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2050"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+population+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2051"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+population",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2105"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2107"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+population+fdi",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2106"
+        }
+      ]
+    },
+    {
+      "name": "ICIO 控制不改变 β",
+      "passed": 112,
+      "failed": 8,
+      "skipped": 0,
+      "failures": [
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default+icio",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3049 rel=+1.6%"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "all8",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3049 rel=+1.6%"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "default+icio",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3062 rel=+2.1%"
+        },
+        {
+          "key": "3a_VA_GVC_S_share",
+          "setting": "all8",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "country_year"
+            ]
+          },
+          "detail": "cum=-0.3062 rel=+2.1%"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+icio",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2051 rel=+2.5%"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "all8",
+          "spec": {
+            "x_lags": [
+              0,
+              1
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2052 rel=+2.6%"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "default+icio",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2110 rel=+5.5%"
+        },
+        {
+          "key": "weighted_outdegree",
+          "setting": "all8",
+          "spec": {
+            "x_lags": [
+              0,
+              1,
+              2
+            ],
+            "controls": [
+              {
+                "name": "teaching_exchange_rate_change",
+                "lag": 0
+              },
+              {
+                "name": "teaching_log_gdp",
+                "lag": 0
+              },
+              {
+                "name": "teaching_population_growth",
+                "lag": 0
+              },
+              {
+                "name": "teaching_trade_openness",
+                "lag": 0
+              },
+              {
+                "name": "teaching_fdi_gdp",
+                "lag": 0
+              },
+              {
+                "name": "manufacturing_va_share",
+                "lag": 0
+              },
+              {
+                "name": "log_gdp_proxy",
+                "lag": 0
+              },
+              {
+                "name": "export_intensity",
+                "lag": 0
+              }
+            ],
+            "fixed_effects": [
+              "country_industry",
+              "year"
+            ]
+          },
+          "detail": "cum=-2109 rel=+5.5%"
+        }
+      ]
+    },
+    {
+      "name": "漏汇率高估",
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    {
+      "name": "漏 GDP 高估",
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    {
+      "name": "漏开放度低估",
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    {
+      "name": "去掉年份固定效应低估",
+      "passed": 90,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    {
+      "name": "滞后汇率不能替代当期汇率",
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    {
+      "name": "只放当期 X 低估",
+      "passed": 285,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    {
+      "name": "零效应 Y",
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    {
+      "name": "恒等式：前向 GVC 总份额 = 简单 + 复杂",
+      "passed": 1183,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    {
+      "name": "恒等式：纯国内 = 1 − 简单 − 复杂 − 传统",
+      "passed": 1183,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    {
+      "name": "恒等式：加权总度 = 入度 + 出度",
+      "passed": 1183,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    {
+      "name": "贸易：国内增加值出口占比 = −外国增加值项占比的关联",
+      "passed": 133,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    }
+  ],
+  "extras": {
+    "misspecified_specs_whose_interval_still_contains_beta": {
+      "1_VA_D_share": {
+        "contains": 49,
+        "total": 150,
+        "rel_min": -0.5438935335030339,
+        "rel_max": 0.7265680520819686
+      },
+      "2_VA_RT_share": {
+        "contains": 42,
+        "total": 150,
+        "rel_min": -0.6342782884692494,
+        "rel_max": 0.711884641777265
+      },
+      "3_FGY_GVC_share": {
+        "contains": 69,
+        "total": 150,
+        "rel_min": -1.2920506194772898,
+        "rel_max": 0.7595310723835552
+      },
+      "3_VA_GVC_share": {
+        "contains": 49,
+        "total": 150,
+        "rel_min": -0.5051572099460834,
+        "rel_max": 0.7328609422125559
+      },
+      "3a_VA_GVC_S_share": {
+        "contains": 36,
+        "total": 150,
+        "rel_min": -0.7632685815329453,
+        "rel_max": 0.7835651021393625
+      },
+      "3b_VA_GVC_C_share": {
+        "contains": 52,
+        "total": 150,
+        "rel_min": -0.3115736812559376,
+        "rel_max": 0.7389792801848846
+      },
+      "DVAex_share": {
+        "contains": 70,
+        "total": 150,
+        "rel_min": -1.3461821794587927,
+        "rel_max": 0.7774318522781728
+      },
+      "FVA_share": {
+        "contains": 70,
+        "total": 150,
+        "rel_min": -1.1600865233147117,
+        "rel_max": 0.7105403579020575
+      },
+      "PLv_GVC": {
+        "contains": 6,
+        "total": 150,
+        "rel_min": -0.2285860045560438,
+        "rel_max": 3.1271459399032375
+      },
+      "PLy_GVC": {
+        "contains": 137,
+        "total": 150,
+        "rel_min": -0.303484053966784,
+        "rel_max": 1.1171051419563476
+      },
+      "betweenesscentrality": {
+        "contains": 81,
+        "total": 150,
+        "rel_min": -0.36103401811834246,
+        "rel_max": 0.6836819837687438
+      },
+      "closnesscentrality": {
+        "contains": 92,
+        "total": 150,
+        "rel_min": -0.7805224054629054,
+        "rel_max": 0.7629873843079746
+      },
+      "weighted_degree": {
+        "contains": 66,
+        "total": 150,
+        "rel_min": -1.6560909268724644,
+        "rel_max": 0.6979537157952852
+      },
+      "weighted_indegree": {
+        "contains": 69,
+        "total": 150,
+        "rel_min": -1.6697460485383542,
+        "rel_max": 0.6945693840872764
+      },
+      "weighted_outdegree": {
+        "contains": 63,
+        "total": 150,
+        "rel_min": -1.6424358052065748,
+        "rel_max": 0.7013380475032945
+      }
+    },
+    "weak_y_misspecified_significant": {
+      "significant": 112,
+      "total": 150
+    },
+    "position_ratio_signs_well_specified": {
+      "negative": 19
+    }
+  }
+}

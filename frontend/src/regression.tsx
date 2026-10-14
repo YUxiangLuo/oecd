@@ -28,6 +28,7 @@ import {
   parallelTrendsNote, waveMarkers,
 } from "./regression-step/family-bars";
 import { INTERRUPTED_RUN_NOTE, useRegressionRun } from "./regression-step/use-regression-run";
+import { decompositionSentence } from "./regression-teach";
 
 // The step's pieces, re-exported here: the page is what the course imports.
 export { equationSymbol, explanatoryText, sampleFilterLabel } from "./regression-step/model-equation";
@@ -213,6 +214,11 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
                 unit={display.unit ?? lesson.unit}
                 title={`加税前后：各组${latinGap}${lesson.shortMetric}的平均变化`}
               />
+              {result?.decomposition && (
+                <p className="reg-decomposition" role="note">
+                  {decompositionSentence(result.decomposition, lesson.shortMetric, levelScale, display.unit ?? lesson.unit, kind === "share" ? 1 : kind === "network" ? 0 : 3)}
+                </p>
+              )}
               {/* One note, folded: what the chart mixes in, and the premise it can only partly show. */}
               <details className="reg-gap-details">
                 <summary>这张图怎么读</summary>
@@ -304,6 +310,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
               stepNumber={step.n}
               outcome={outcome}
               defaultResponse={result}
+              baselines={baselineOptions}
               state={state as unknown as StepStateApi<WorkbenchStepState>}
               reportCustomResults={reportCustomResults}
               reportOutdated={reportOutdated}

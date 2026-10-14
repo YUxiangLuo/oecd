@@ -22,18 +22,25 @@ from gvcsim.regression.spec import (
     FIXED_EFFECT_LABELS,
     FIXED_EFFECTS,
     GDP_COLUMN,
+    OPENNESS_COLUMN,
     POPULATION_COLUMN,
     X_LAGS,
     ModelSpec,
     x_term_label,
 )
-from gvcsim.regression.teaching import VERSION
+from gvcsim.regression.teaching import OUTCOMES, VERSION, selectable_baselines
 
 # A snapshot holds one result table (about 2 KB); the bound keeps a tampered session from storing anything larger.
 MAX_SNAPSHOT_BYTES = 16_000
 EXPERIMENT_KEYS = frozenset({"spec", "saved_at", "snapshot"})
+# The Y the experiment was run on, when it is not the step's default (a selectable Y of the step's family).
+EXPERIMENT_OPTIONAL_KEYS = frozenset({"baseline"})
 
-X_LAG_DESCRIPTIONS = {0: "当期：今年的 X", 1: "滞后 1 期：上一年的 X", 2: "滞后 2 期：两年前的 X"}
+X_LAG_DESCRIPTIONS = {
+    0: "当期：今年的 X",
+    1: "滞后 1 期：上一年的 X",
+    2: "滞后 2 期：两年前的 X。课程数据里没有两年后的关联，所以加上它后合计几乎不变、它自己的区间应包含 0",
+}
 X_LAG_NOTE = "数据只到 2020 年、2018 年起加税，滞后 3 期在样本内全为 0，无法估计。"
 CONTROL_LAG_LABELS = {0: "当期", 1: "滞后 1 期"}
 CONTROL_LAG_NOTE = (
@@ -44,8 +51,13 @@ FIXED_EFFECT_DESCRIPTIONS = {
     "industry": "每个行业一个截距",
     "country_industry": "每个国家的每个行业一个截距，包含国家 FE 和行业 FE",
     "year": "每年一个截距，扣掉所有单位共同的年度变化",
-    "country_year": "每个国家每年一个截距，包含国家 FE 和年份 FE；会吸收本页全部国家层面的控制变量（包括滞后项），省略这些变量但不因其缺失删样本",
+    "country_year": "每个国家每年一个截距，包含国家 FE 和年份 FE；会吸收本页全部国家层面的控制变量（包括滞后项），省略这些变量但不因其缺失删样本。"
+    "课程数据的混杂都在国家层面，所以它和默认模型算出的 X 合计几乎相同：吸收不等于没有控制",
 }
+DESIGN_VALUE_NOTE = (
+    "课程数据按设定生成：每个 Y 的两年累计关联有一个设定值。模型设定对了，估计应落在设定值附近（区间包含它）；"
+    "漏掉混杂或固定效应，估计会离开设定值。人口增长率、FDI 与 Y 无关，加上它们不改变合计。"
+)
 NO_FIXED_EFFECTS_NOTE = "都不勾时模型加常数项，表下的设定写作“无固定效应”。"
 
 
@@ -53,56 +65,67 @@ def _without(controls: tuple[tuple[str, int], ...], *names: str) -> tuple[tuple[
     return tuple(item for item in controls if item[0] not in names)
 
 
-# The preset experiments, in page order: each changes one thing of the default model, each a contrast the course
-# data were built to show. The question is asked, not answered. Their labels name the experiment in the report.
-PRESETS: tuple[tuple[str, str, str, ModelSpec], ...] = (
+# The preset experiments, in page order, each changing one thing of the default model. The first tier is the three
+# "必看" ones (a confounder left out: the estimate moves away from the course's design value, 15–20% each way on v13
+# data); the second tier is "进阶". Each is a contrast the course data were built to show, and the question is asked,
+# not answered. Their labels name the experiment in the report. Two changes the page also offers (country × year
+# effects, L2.X) leave the estimate unchanged by design and are explained in the custom form instead.
+PRESET_TIERS = {"core": "必看", "advanced": "进阶"}
+PRESETS: tuple[tuple[str, str, str, str, ModelSpec], ...] = (
     (
         "no_exchange_rate",
+        "core",
         "去掉汇率变动",
-        "X 各项合计变大还是变小？",
+        "X 各项合计离课程设定值远了多少？",
         ModelSpec(
             DEFAULT_SPEC.x_lags, _without(DEFAULT_SPEC.controls, EXCHANGE_RATE_COLUMN), DEFAULT_SPEC.fixed_effects
         ),
     ),
     (
-        "current_x_only",
-        "只放当期 X（去掉 L1.X）",
-        "合计和默认模型相差多少？",
-        ModelSpec((0,), DEFAULT_SPEC.controls, DEFAULT_SPEC.fixed_effects),
-    ),
-    (
-        "separate_effects",
-        "固定效应改为国家 + 行业 + 年份",
-        "不勾“国家×行业”，结果怎样变？",
-        ModelSpec(DEFAULT_SPEC.x_lags, DEFAULT_SPEC.controls, ("country", "industry", "year")),
-    ),
-    (
-        "country_year_effects",
-        "改用国家×年份固定效应",
-        "宏观控制被吸收后，X 各项合计怎样变？",
-        ModelSpec(DEFAULT_SPEC.x_lags, DEFAULT_SPEC.controls, ("country_industry", "country_year")),
-    ),
-    (
         "no_gdp",
+        "core",
         "去掉 GDP 对数",
-        "X 各项合计怎样变化？",
+        "和去掉汇率变动偏向同一边吗？",
         ModelSpec(DEFAULT_SPEC.x_lags, _without(DEFAULT_SPEC.controls, GDP_COLUMN), DEFAULT_SPEC.fixed_effects),
     ),
     (
+        "no_openness",
+        "core",
+        "去掉贸易开放度",
+        "这次往哪边偏？",
+        ModelSpec(DEFAULT_SPEC.x_lags, _without(DEFAULT_SPEC.controls, OPENNESS_COLUMN), DEFAULT_SPEC.fixed_effects),
+    ),
+    (
+        "current_x_only",
+        "advanced",
+        "只放当期 X（去掉 L1.X）",
+        "少了上一年那一项，合计少了多少？",
+        ModelSpec((0,), DEFAULT_SPEC.controls, DEFAULT_SPEC.fixed_effects),
+    ),
+    (
+        "no_year_effects",
+        "advanced",
+        "去掉年份固定效应",
+        "三组一起涨跌的那部分被算到 X 上了吗？",
+        ModelSpec(DEFAULT_SPEC.x_lags, DEFAULT_SPEC.controls, ("country_industry",)),
+    ),
+    (
+        "separate_effects",
+        "advanced",
+        "固定效应改为国家 + 行业 + 年份",
+        "不勾“国家×行业”，合计离设定值多远？",
+        ModelSpec(DEFAULT_SPEC.x_lags, DEFAULT_SPEC.controls, ("country", "industry", "year")),
+    ),
+    (
         "extra_controls",
+        "advanced",
         "加上人口增长率和 FDI 净流入占比",
-        "多放变量是否一定更好？",
+        "它们的系数带星吗？合计变了吗？",
         ModelSpec(
             DEFAULT_SPEC.x_lags,
             (*DEFAULT_SPEC.controls, (POPULATION_COLUMN, 0), (FDI_COLUMN, 0)),
             DEFAULT_SPEC.fixed_effects,
         ),
-    ),
-    (
-        "lag2",
-        "加上两年前的 X（L2.X）",
-        "L2.X 的区间是否包含 0？",
-        ModelSpec((0, 1, 2), DEFAULT_SPEC.controls, DEFAULT_SPEC.fixed_effects),
     ),
 )
 CUSTOM_LABEL = "自定义设定"
@@ -124,7 +147,7 @@ def experiment_label(spec: ModelSpec) -> str:
     """How the page and the report name a model experiment: its preset's label, else "自定义设定" (the model itself
     is always shown beside the name, so it is not repeated in it)."""
     canonical = spec.canonical()
-    for _key, label, _question, preset in PRESETS:
+    for _key, _tier, label, _question, preset in PRESETS:
         if preset.canonical() == canonical:
             return label
     return CUSTOM_LABEL
@@ -136,10 +159,23 @@ def options() -> dict[str, Any]:
         "version": VERSION,
         "default_spec": DEFAULT_SPEC.to_dict(),
         "presets": [
-            {"key": key, "label": label, "question": question, "spec": spec.canonical().to_dict()}
-            for key, label, question, spec in PRESETS
+            {
+                "key": key,
+                "tier": tier,
+                "tier_label": PRESET_TIERS[tier],
+                "label": label,
+                "question": question,
+                "spec": spec.canonical().to_dict(),
+            }
+            for key, tier, label, question, spec in PRESETS
         ],
         "custom_label": CUSTOM_LABEL,
+        # The course's design value of each Y's two-year total (the number the data were built around; None for the
+        # position ratio, 0.0 for the zero-effect Y), so the page can say how far an estimate is from it.
+        "design_values": {
+            outcome: {item.key: item.beta for item in selectable_baselines(outcome)} for outcome in OUTCOMES
+        },
+        "design_value_note": DESIGN_VALUE_NOTE,
         "x_lags": [{"lag": lag, "label": x_term_label(lag), "description": X_LAG_DESCRIPTIONS[lag]} for lag in X_LAGS],
         "x_lag_note": X_LAG_NOTE,
         "controls": [
@@ -189,15 +225,35 @@ def _spec_problem(value: Any) -> tuple[ModelSpec | None, str | None]:
     return spec, None
 
 
-def experiment_problem(value: Any) -> str | None:
-    """Why a step's model experiment (the one put into the report) cannot be stored, or None. ``None`` (nothing put
-    into the report) is fine. Checked on every session save."""
+def _baseline_problem(value: Any, outcome: str | None) -> str | None:
+    """Why the experiment's Y cannot be stored: not a selectable Y of the step's family (``outcome``; any name when
+    the step is not known)."""
     if value is None:
         return None
-    if not isinstance(value, dict) or set(value) != EXPERIMENT_KEYS:
+    if not isinstance(value, str) or not 1 <= len(value) <= 60:
+        return "放入报告的模型的因变量无效"
+    if outcome is not None and value not in {item.key for item in selectable_baselines(outcome)}:
+        return "放入报告的模型的因变量不是本步可选的指标"
+    return None
+
+
+def experiment_problem(value: Any, outcome: str | None = None) -> str | None:
+    """Why a step's model experiment (the one put into the report) cannot be stored, or None. ``None`` (nothing put
+    into the report) is fine. Checked on every session save; ``outcome`` is the step's family, which bounds the
+    experiment's optional ``baseline`` (its Y; left out = the step's default Y)."""
+    if value is None:
+        return None
+    if (
+        not isinstance(value, dict)
+        or not EXPERIMENT_KEYS <= set(value)
+        or not set(value) <= EXPERIMENT_KEYS | EXPERIMENT_OPTIONAL_KEYS
+    ):
         return "放入报告的模型的字段不完整"
     spec, problem = _spec_problem(value["spec"])
     if spec is None:
+        return problem
+    problem = _baseline_problem(value.get("baseline"), outcome)
+    if problem is not None:
         return problem
     # The page offers neither (its first column is the default model).
     if spec == DEFAULT_SPEC:
@@ -211,8 +267,12 @@ def experiment_problem(value: Any) -> str | None:
 
 
 def reported_experiment(value: Any) -> dict[str, Any] | None:
-    """What a report prints and depends on of a step's experiment: its ``spec``; None without a valid one. Changing
-    the snapshot, or the half-filled form (``custom_draft``), changes nothing here."""
+    """What a report prints and depends on of a step's experiment: its ``spec`` and, when it is not the step's
+    default Y, its ``baseline``; None without a valid one. Changing the snapshot, or the half-filled form
+    (``custom_draft``), changes nothing here."""
     if experiment_problem(value) is not None or value is None:
         return None
-    return {"spec": value["spec"]}
+    reported: dict[str, Any] = {"spec": value["spec"]}
+    if value.get("baseline"):
+        reported["baseline"] = value["baseline"]
+    return reported

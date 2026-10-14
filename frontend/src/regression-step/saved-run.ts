@@ -1,7 +1,7 @@
 /** What a step keeps of its one run (the course default model on the step's default Y) and how it is restored. */
 import type { QuizCompletionState, RegressionResponse } from "../types";
 
-export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v12";
+export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v13";
 
 /** 自动保存最近一次真实运行，供刷新恢复与报告复估。 */
 export interface SavedRegressionRun {
@@ -12,6 +12,9 @@ export interface SavedRegressionRun {
   /** Required for current teaching runs; optional only so old snapshots can be detected and rejected. */
   model_snapshot?: NonNullable<RegressionResponse["model_snapshot"]>;
   variable_catalog?: NonNullable<RegressionResponse["variable_catalog"]>;
+  /** The first wave's change split by the fitted coefficients (the sentence under the chart); absent in runs saved
+   * before it existed, which then show the chart without the sentence until recomputed. */
+  decomposition?: RegressionResponse["decomposition"];
 }
 
 export interface RegressionStepState extends QuizCompletionState, Record<string, unknown> {
@@ -37,6 +40,7 @@ export function savedRegressionResponse(saved: SavedRegressionRun): RegressionRe
     disclaimer: saved.disclaimer,
     model_snapshot: saved.model_snapshot,
     variable_catalog: saved.variable_catalog,
+    decomposition: saved.decomposition ?? null,
   };
 }
 

@@ -400,6 +400,7 @@ def within_ols(model: PreparedModel, prepared=None) -> RegressionResult:
     r2_within = float(1 - rss / within_ss)
     r2 = float(1 - rss / total_ss_overall) if total_ss_overall > 0 else None
     r2_adj = float(1 - (1 - r2) * (len(y) - 1) / df) if r2 is not None else None
+    root_mse = math.sqrt(rss / df) if df > 0 else None
     depvar_mean = float(model.data[model.depvar].mean())
     depvar_std = float(model.data[model.depvar].std())
     # y is already demeaned: its SD is the within variation the slope is estimated from.
@@ -431,6 +432,7 @@ def within_ols(model: PreparedModel, prepared=None) -> RegressionResult:
         f_stat=f_stat,
         f_df=f_df,
         f_p=f_p,
+        root_mse=root_mse,
         constant=constant,
         cumulative=cumulative,
         omitted=list(model.omitted),
