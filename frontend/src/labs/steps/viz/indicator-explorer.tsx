@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT } from "../../../step-task-card";
+import { MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT, NO_READINGS_NOTE, NOT_RECORDED_HINT, RECORD_CHART_ACTION, RECORDED_CHART_LABEL, REPLACE_MATERIAL_ACTION } from "../../../step-task-card";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { Meta, Step, StepStateApi } from "../../../types";
@@ -455,9 +455,9 @@ export function IndicatorExplorer({
   // Name the actual reason the material cannot be saved instead of one catch-all sentence.
   const blockedReason =
     view === "positioning"
-      ? "定位图只供探索，不记录报告材料。"
+      ? NO_READINGS_NOTE
       : view === "structure"
-      ? "行业结构只供探索，不记录报告材料。"
+      ? NO_READINGS_NOTE
       : selected.length < 2 && !singleAllowed
       ? "只选一个国家时，要把“比较范围”设为“国家整体”才会记录；看某个行业或“行业排名”时，请再加一个对比国家。"
       : query.status === "error"
@@ -486,15 +486,14 @@ export function IndicatorExplorer({
       ([key, value]) =>
         JSON.stringify(state.data?.indicator_selection?.[key as keyof IndicatorSelection]) === JSON.stringify(value),
     );
-  const pendingKey = canSave ? `${materialKey(pending)}|${JSON.stringify({ ...selection, view })}` : "";
   // Recorded on request after submission: the confirmation then says to update the report on step 15.
   const [rechosen, setRechosen] = useState(false);
-  // `chosen`: recorded on the student's request after submission, so the report does not call it automatic.
-  const recordCurrent = (chosen = false) => state.save({
+  // Recorded on the student's request only (the button under the chart): the report calls it 学生选定.
+  const recordCurrent = () => state.save({
     compared: selected,
     observations: pending,
     indicator_selection: { ...selection, view },
-    material_chosen: chosen || undefined,
+    material_chosen: true,
   });
   // View bar: the step's theme first (default entry), then the two views every step must offer.
   const themeLens = topic.composition
@@ -511,40 +510,6 @@ export function IndicatorExplorer({
     ...(topic.key === "trade" ? [] : [{ key: "structure" as const, label: "行业结构" }]),
     { key: "industry", label: "行业排名" },
   ];
-  // Auto-recording replaces the material without a click, so a replacement is announced next to the scope
-  // line ("报告材料已更新为：历年变化 · 外国增加值项占比 · 10 条读数") and fades after a few seconds. `key` is the
-  // chart it announces: once the student moves to another chart (or one that cannot be recorded) the note goes.
-  // `id` changes on every update, so a second update with the same words restarts the timer and the animation.
-  const [flash, setFlash] = useState<{ text: string; key: string; id: number } | null>(null);
-  useEffect(() => {
-    if (!flash) return;
-    const timer = window.setTimeout(() => setFlash(null), 6000);
-    return () => window.clearTimeout(timer);
-  }, [flash]);
-  useEffect(() => {
-    setFlash((old) => (old && old.key !== pendingKey ? null : old));
-  }, [pendingKey]);
-  // A failed or conflicting save (the task card says 报告材料：未保存) withdraws the green "已更新" note:
-  // it is hidden while the error lasts and does not come back after it.
-  useEffect(() => {
-    if (state.syncError) setFlash(null);
-  }, [state.syncError]);
-  const viewName = lenses.find((lens) => lens.key === (composition ? "composition" : view))?.label ?? "";
-  // Report material follows the chart the student is looking at: every complete chart is recorded
-  // automatically, replacing the previous one. Incomplete charts never overwrite a complete record.
-  // Once the report is submitted, browsing leaves the material alone unless the student asks.
-  useEffect(() => {
-    if (!canSave || matches || state.syncing || state.materialLocked) return;
-    if (saved.length) {
-      // The report draws a composition as shares whichever way the page shows it (占比 or 金额), so the material
-      // is named by that: the 占比/金额 switch only changes this page's bars.
-      const what = composition ? `${viewName}${side === "alternate" ? " · 后向" : ""}${view === "evolution" ? " · 历年构成" : ""} · 报告按占比作图` : `${viewName} · ${indicatorName}`;
-      setFlash((old) => ({ text: `报告材料已更新为：${what} · ${pending.length} 条读数`, key: pendingKey, id: (old?.id ?? 0) + 1 }));
-    }
-    recordCurrent();
-    // state/selection objects change every render; pendingKey captures every meaningful change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingKey, matches, state.syncing]);
   const themeActive = composition || view === "directions";
   const chartKey = [view, industry, metric, axes.key, side, start, end, year, limit, trail, amountMode, selected.join(",")].join("|");
   // Notes for values that cannot be computed (zero exports, no GVC production), shown under the trend,
@@ -800,9 +765,9 @@ export function IndicatorExplorer({
       {themeActive && <p className="muted lens-hint">{side === "alternate"
         ? "后向：同样分为四类生产活动，从最终品端回溯；先看复杂 GVC 的占比，再比较与对比国家差异最大的类别。"
         : topic.themeHint}</p>}
-      {view === "positioning" && <p className="muted lens-hint">定位图：每个点是一个经济体{industry ? `（${sectorLabel(industry)}）` : ""}，横轴、纵轴各是一项指标，所选国家高亮；{industry ? "轨迹只在“国家整体”下提供" : `可勾选显示 ${years[0]}→${years.at(-1)} 的轨迹`}。只供探索，不记录报告材料。</p>}
+      {view === "positioning" && <p className="muted lens-hint">定位图：每个点是一个经济体{industry ? `（${sectorLabel(industry)}）` : ""}，横轴、纵轴各是一项指标，所选国家高亮；{industry ? "轨迹只在“国家整体”下提供" : `可勾选显示 ${years[0]}→${years.at(-1)} 的轨迹`}。这张图没有可记录的读数条目。</p>}
       {view === "segments" && <p className="muted lens-hint">段长度对照：每行一段（纯国内、传统贸易、GVC），前向点和后向点用线相连，便于比较哪一段、哪个方向更长；选了多个国家时每国一张。三段长度不能相加。</p>}
-      {view === "structure" && <p className="muted lens-hint">{topic.key === "production" ? "行业结构：所选国家每个行业的四类生产活动份额，按复杂 GVC 生产份额排序；选了多个国家时每国一张。只供探索，不记录报告材料。" : "行业结构：所选国家每个行业的前向与后向 GVC 段长度，等长线（前向 = 后向）上方更偏上游；选了多个国家时每国一张。只供探索，不记录报告材料。"}</p>}
+      {view === "structure" && <p className="muted lens-hint">{topic.key === "production" ? "行业结构：所选国家每个行业的四类生产活动份额，按复杂 GVC 生产份额排序；选了多个国家时每国一张。这张图没有可记录的读数条目。" : "行业结构：所选国家每个行业的前向与后向 GVC 段长度，等长线（前向 = 后向）上方更偏上游；选了多个国家时每国一张。这张图没有可记录的读数条目。"}</p>}
       <div className="controls">
         {view !== "industry" && view !== "structure" && (
           <LabeledControl label="比较范围">
@@ -993,7 +958,6 @@ export function IndicatorExplorer({
             onJump: composition || view === "directions" || view === "positioning" || view === "structure" || view === "segments" ? undefined : jump(metricRef),
           },
         ]}
-        note={flash && flash.key === pendingKey && !state.syncError ? <span key={flash.id} className="scope-flash">✓ {flash.text}</span> : undefined}
       />
       <div className="viz-chart">
       {!validYears ? <div className="error-box" role="alert">
@@ -1320,22 +1284,27 @@ export function IndicatorExplorer({
             {field(key)?.denominator && `分母：${label(field(key)!.denominator!)}（分母为 0 或负数时不显示份额）。`}
           </p>
         ))}
-      <section className="qualified-run-card" aria-label="报告材料">
-        <h3>报告材料 · {saved.length ? `已${state.materialLocked ? "" : "自动"}记录（${saved.length} 条读数）` : "尚未记录"}</h3>
-        <p role="status">
-          {!validYears ? "请先修正年份范围，当前图表才能被记录。" : !canSave
-            // 定位图 and 行业结构 never record: no "暂不能记录" in front of their reason.
-            ? `${view === "positioning" || view === "structure" ? "" : "当前图表暂不能记录："}${blockedReason}${saved.length ? "已记录的材料保持不变。" : ""}`
-            : state.materialLocked
-              ? `${MATERIAL_LOCKED_NOTE}${matches ? `当前图表就是已记录的材料。${rechosen ? MATERIAL_RECHOSEN_NEXT : ""}` : ""}`
-              : matches ? "当前图表已自动记录为本步报告材料；换视角、国家或年份后会自动更新为最后查看的完整图表。" : "正在记录当前图表…"}
-        </p>
+      {/* The one way a chart becomes report material: this button, under every chart, in the same place. */}
+      <div className="material-record" role="group" aria-label="记录报告材料">
+        {!validYears ? <p className="muted" role="status">请先修正年份范围，当前图表才能被记录。</p>
+          : !canSave
+            // 定位图 and 行业结构 have no readings to record: the sentence says so, without "暂不能记录".
+            ? <p className="muted" role="status">{view === "positioning" || view === "structure" ? "" : "当前图表暂不能记录："}{blockedReason}</p>
+          : matches
+            ? <button type="button" className="secondary" disabled aria-disabled="true">{RECORDED_CHART_LABEL}</button>
+            : <button type="button" className="secondary" onClick={() => { setRechosen(Boolean(state.materialLocked)); recordCurrent(); }}>{state.materialLocked && saved.length ? REPLACE_MATERIAL_ACTION : RECORD_CHART_ACTION}</button>}
         {validYears && !canSave && view === "industry" && !rankComplete.length && rankGapList}
+      </div>
+      <section className="qualified-run-card" aria-label="报告材料">
+        <h3>报告材料 · {saved.length ? `已记录（${saved.length} 条读数）` : "尚未记录"}</h3>
+        <p role="status">
+          {!saved.length ? NOT_RECORDED_HINT
+            : state.materialLocked
+              ? `${MATERIAL_LOCKED_NOTE}${matches ? "当前图表就是已记录的材料。" : "要换成当前图表，点上面的“替换报告材料”。"}${rechosen ? MATERIAL_RECHOSEN_NEXT : ""}`
+              : matches ? "当前图表就是已记录的材料；换视角、国家或年份不会改动它。" : "已记录的是另一张图；要换成当前图表，点上面的“把这张图记为本步报告材料”。"}
+        </p>
         {view === "composition" && canSave && matches && (
           <p className="muted composition-material-scale">{COMPOSITION_MATERIAL_SCALE_NOTE}{amountMode ? "本页现在按金额显示。" : ""}</p>
-        )}
-        {state.materialLocked && canSave && !matches && (
-          <button type="button" className="secondary" onClick={() => { setRechosen(true); recordCurrent(true); }}>{MATERIAL_LOCKED_ACTION}</button>
         )}
         {saved.length > 0 && <details>
           <summary>核对已记录的材料 · {saved.length} 条读数</summary>

@@ -8,6 +8,21 @@ import { COMPOSITION_MATERIAL_SCALE_NOTE } from "./indicator-explorer";
 import { LengthVizStep } from "./length";
 import { ProductionVizStep } from "./production";
 import { TradeVizStep } from "./trade";
+import {
+  MATERIAL_LOCKED_NOTE,
+  MATERIAL_RECHOSEN_NEXT,
+  NO_READINGS_NOTE,
+  NOT_RECORDED_HINT,
+  RECORD_CHART_ACTION,
+  RECORDED_CHART_LABEL,
+  REPLACE_MATERIAL_ACTION,
+} from "../../../step-task-card";
+
+/** The chart on screen becomes report material only when the student asks: wait for its button and press it. */
+async function record(view: Pick<ReturnType<typeof render>, "findByRole">, name: string = RECORD_CHART_ACTION) {
+  const button = await view.findByRole("button", { name });
+  await act(async () => { fireEvent.click(button); });
+}
 
 const release = "a".repeat(32);
 const meta: Meta = {
@@ -66,26 +81,37 @@ function setup(Component = TradeVizStep, data?: VizStepState, materialLocked = f
   };
 }
 
-describe("indicator explorer with automatic report material", () => {
-  test("after the report is submitted, browsing never rewrites the material; the student can record on request", async () => {
+describe("indicator explorer with report material recorded on request", () => {
+  test("after the report is submitted, browsing never rewrites the material; the student can replace it on request", async () => {
     const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
     const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
-    const view = setup(TradeVizStep, undefined, true);
+    // The submitted report holds a composition chart; the student now browses the trend.
+    const view = setup(TradeVizStep, {
+      compared: ["CHN", "USA"],
+      observations: [{ entity: "CHN", country: "CHN", year: 2021, metric: "gross_exports", value: 100, unit: "百万美元", scope: "country", source: "explicit-indicator-composition", release }],
+      indicator_selection: { first: "CHN", second: "USA", others: ["USA"], industry: "", metric: "FVA_share", start: 2019, end: 2021, year: 2021, view: "composition", limit: 10 },
+    }, true);
     await view.findByRole("button", { name: "出口构成" });
     fireEvent.click(view.getByRole("button", { name: "历年变化" }));
     expect(await view.findByLabelText("趋势读数")).toBeTruthy();
-    const record = await view.findByRole("button", { name: /改用当前图表作为报告材料/ });
-    expect(view.getByText(/报告已提交：浏览不再自动改动报告材料/)).toBeTruthy();
+    // Under the chart the only action is to replace the submitted material, and it says what that entails.
+    const replace = await view.findByRole("button", { name: REPLACE_MATERIAL_ACTION });
+    expect(view.queryByRole("button", { name: RECORD_CHART_ACTION })).toBeNull();
+    const material = view.getByRole("region", { name: "报告材料" });
+    expect(material.textContent).toContain(`${MATERIAL_LOCKED_NOTE}要换成当前图表，点上面的“替换报告材料”。`);
+    expect(material.textContent).not.toContain(MATERIAL_RECHOSEN_NEXT);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(view.saves).toHaveLength(0);
-    fireEvent.click(record);
+    await act(async () => { fireEvent.click(replace); });
     expect(view.saves).toHaveLength(1);
-    expect(view.saves[0].indicator_selection).toMatchObject({ first: "CHN", second: "USA" });
+    expect(view.saves[0].indicator_selection).toMatchObject({ first: "CHN", second: "USA", view: "trend" });
+    expect(view.saves[0].observations!.every((item) => item.source === "explicit-indicator-trend")).toBe(true);
     // The report must not call the student's own choice an automatic record.
     expect(view.saves[0].material_chosen).toBe(true);
     // The confirmation says what to do next, as step 13 does.
     view.accept();
-    await waitFor(() => expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("当前图表就是已记录的材料。请到步骤 15 更新报告并重新提交给老师。"));
+    await waitFor(() => expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain(`${MATERIAL_LOCKED_NOTE}当前图表就是已记录的材料。${MATERIAL_RECHOSEN_NEXT}`));
+    expect((view.getByRole("button", { name: RECORDED_CHART_LABEL }) as HTMLButtonElement).disabled).toBe(true);
     rows.mockRestore();
     schema.mockRestore();
   });
@@ -111,22 +137,28 @@ describe("indicator explorer with automatic report material", () => {
           if (delayed) view.rerender(<TradeVizStep meta={meta} step={step} state={state(data)} />);
           expect((await view.findByRole("alert")).textContent).toContain("年份范围无效");
           expect(view.queryByText("正在加载所选年份的指标…")).toBeNull();
-          expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("请先修正年份范围");
+          expect(view.getByRole("group", { name: "记录报告材料" }).textContent).toContain("请先修正年份范围");
+          expect(view.queryByRole("button", { name: RECORD_CHART_ACTION })).toBeNull();
           if (!delayed) expect(rows).not.toHaveBeenCalled();
           // An invalid range is never recorded and never overwrites the saved material.
           expect(saves).toHaveLength(0);
           expect(JSON.stringify(data)).toBe(original);
           fireEvent.click(view.getByRole("button", { name: "重置年份" }));
-          await waitFor(() => expect(saves).toHaveLength(1));
           expect(view.queryByRole("alert")).toBeNull();
+          // The reset chart is offered for recording, not recorded by itself.
+          await view.findByRole("button", { name: RECORD_CHART_ACTION });
+          expect(saves).toHaveLength(0);
+          await record(view);
+          expect(saves).toHaveLength(1);
           expect(saves[0].indicator_selection).toMatchObject({ start: 2019, end: 2021, year: 2021 });
+          expect(saves[0].material_chosen).toBe(true);
           expect(rows.mock.calls.every(([year]) => meta.years.includes(year))).toBe(true);
         } finally { rows.mockRestore(); schema.mockRestore(); }
       });
     }
   }
 
-  test("opens on the theme view, records it automatically and follows the chart the student switches to", async () => {
+  test("opens on the theme view, records nothing until asked, and records the chart the student asks for", async () => {
     const rows = spyOn(api, "countryIndicators").mockImplementation(
       async (year) => countryRows(year),
     );
@@ -151,7 +183,11 @@ describe("indicator explorer with automatic report material", () => {
     ]);
     expect(view.getByRole("button", { name: "出口构成" }).getAttribute("aria-pressed")).toBe("true");
     expect(view.queryByRole("group", { name: "补充图表" })).toBeNull();
-    await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("composition"));
+    // Opening the step draws the chart and offers to record it; nothing is recorded by itself.
+    await view.findByRole("button", { name: RECORD_CHART_ACTION });
+    expect(view.saves).toHaveLength(0);
+    expect(view.getByRole("heading", { name: "报告材料 · 尚未记录" })).toBeTruthy();
+    expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain(NOT_RECORDED_HINT);
     fireEvent.click(view.getByRole("button", { name: "历年变化" }));
     expect(await view.findByLabelText("趋势读数")).toBeTruthy();
     expect(view.queryByText(/含 2020 年/)).toBeNull();
@@ -166,9 +202,11 @@ describe("indicator explorer with automatic report material", () => {
     expect(cards[3]).toContain("与对比国家 USA 美国");
     expect(view.getByText(/差距缩小 .* 个百分点/)).toBeTruthy();
     expect(chart.querySelector('[data-series="global-median"]')).not.toBeNull();
-    await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("trend"));
-    expect(view.queryByRole("button", { name: "保存为报告材料" })).toBeNull();
-    view.saves.splice(0, view.saves.length - 1); // keep only the trend record for the checks below
+    // Switching the view records nothing either: the student records the chart they want.
+    await view.findByRole("button", { name: RECORD_CHART_ACTION });
+    expect(view.saves).toHaveLength(0);
+    await record(view);
+    expect(view.saves).toHaveLength(1);
     expect(view.saves[0].indicator_selection).toMatchObject({
       first: "CHN",
       second: "USA",
@@ -176,6 +214,8 @@ describe("indicator explorer with automatic report material", () => {
       metric: "FVA_share",
       view: "trend",
     });
+    expect(view.saves[0].material_chosen).toBe(true);
+    expect(view.saves[0].compared).toEqual(["CHN", "USA"]);
     expect(view.saves[0].observations).toHaveLength(6);
     expect(view.saves[0].observations![0]).toMatchObject({
       country: "CHN",
@@ -185,14 +225,23 @@ describe("indicator explorer with automatic report material", () => {
       release,
     });
     view.accept(); // parent owns persistence; only its rerender marks the selection saved
-    expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("当前图表已自动记录");
+    expect(view.getByRole("heading", { name: "报告材料 · 已记录（6 条读数）" })).toBeTruthy();
+    expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("当前图表就是已记录的材料；换视角、国家或年份不会改动它。");
+    expect((view.getByRole("button", { name: RECORDED_CHART_LABEL }) as HTMLButtonElement).disabled).toBe(true);
     expect(view.saves).toHaveLength(1);
     fireEvent.click(view.getByRole("button", { name: "国家对比" }));
-    await waitFor(() => expect(view.saves).toHaveLength(2));
     // The same-year view shows every economy with the two countries highlighted and ranked, then the ranking bars.
-    expect(view.getByRole("region", { name: /全球分布/ })).toBeTruthy();
+    expect(await view.findByRole("region", { name: /全球分布/ })).toBeTruthy();
     expect(view.getByText(/排名 · 前 20 与所选国家/)).toBeTruthy();
     expect(view.getByRole("img", { name: /CHN 中国 .*第 [0-9]+ 位/ })).toBeTruthy();
+    // The recorded trend stays until the student records this chart instead.
+    await view.findByRole("button", { name: RECORD_CHART_ACTION });
+    expect(view.saves).toHaveLength(1);
+    expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("已记录的是另一张图；要换成当前图表，点上面的“把这张图记为本步报告材料”。");
+    await record(view);
+    expect(view.saves).toHaveLength(2);
+    expect(view.saves[1].indicator_selection?.view).toBe("comparison");
+    expect(view.saves[1].material_chosen).toBe(true);
     expect(
       view.saves[1].observations!.every(
         (x) => x.year === 2021 && x.source === "explicit-indicator-comparison",
@@ -221,8 +270,14 @@ describe("indicator explorer with automatic report material", () => {
     expect(
       (legacy.getByLabelText("对比国家 B") as HTMLSelectElement).value,
     ).toBe("CHN");
-    await waitFor(() => expect(legacy.saves).toHaveLength(1));
+    // Legacy observations (no source) are not this step's material: nothing is recorded yet.
+    await legacy.findByRole("button", { name: RECORD_CHART_ACTION });
+    expect(legacy.getByRole("heading", { name: "报告材料 · 尚未记录" })).toBeTruthy();
+    expect(legacy.saves).toHaveLength(0);
+    await record(legacy);
+    expect(legacy.saves).toHaveLength(1);
     expect(legacy.saves[0].observations!.every((item) => item.source === "explicit-indicator-composition")).toBeTrue();
+    expect(legacy.saves[0].material_chosen).toBe(true);
     cleanup();
     const selection = {
       first: "USA",
@@ -251,7 +306,8 @@ describe("indicator explorer with automatic report material", () => {
         },
       ],
     });
-    await modern.findByText(/已自动记录/);
+    await modern.findByRole("heading", { name: "报告材料 · 已记录（1 条读数）" });
+    expect(modern.saves).toHaveLength(0);
     expect((modern.getByLabelText("国家 A") as HTMLSelectElement).value).toBe(
       "USA",
     );
@@ -283,12 +339,16 @@ describe("indicator explorer with automatic report material", () => {
     fireEvent.change(view.getByLabelText("对比国家 B"), {
       target: { value: "USA" },
     });
-    await waitFor(() => expect(view.saves.length).toBeGreaterThan(0));
+    // The 2020–2021 chart is ready while the superseded 2019 request still hangs.
+    await record(view);
+    expect(view.saves).toHaveLength(1);
     resolveOld(countryRows(2019));
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
     // The late 2019 response belongs to a superseded request and must never reach the record.
+    expect(view.saves).toHaveLength(1);
     expect(view.saves.every((save) => save.observations!.every((x) => x.year >= 2020))).toBeTrue();
     expect(view.saves.at(-1)!.observations).toHaveLength(4);
+    expect(view.saves.at(-1)!.indicator_selection).toMatchObject({ start: 2020, end: 2021, view: "trend" });
     request.mockRestore();
     schema.mockRestore();
   });
@@ -307,7 +367,9 @@ describe("indicator explorer with automatic report material", () => {
     const scope = view.getByLabelText("当前图表范围").textContent ?? "";
     for (const part of ["CHN 中国 与 USA 美国", "国家整体", "2019–2021", "外国增加值项占比"]) expect(scope).toContain(part);
     fireEvent.click(view.getByRole("button", { name: "出口构成" }));
-    await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("composition"));
+    await record(view);
+    expect(view.saves.at(-1)?.indicator_selection?.view).toBe("composition");
+    expect(view.saves.at(-1)?.material_chosen).toBe(true);
     expect(new Set(view.saves.at(-1)!.observations!.map((x) => x.metric))).toEqual(
       new Set([
         "DVAex",
@@ -325,7 +387,9 @@ describe("indicator explorer with automatic report material", () => {
       ),
     ).toBeTrue();
     fireEvent.click(view.getByRole("button", { name: "历年构成" }));
-    await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("evolution"));
+    await record(view);
+    expect(view.saves).toHaveLength(2);
+    expect(view.saves.at(-1)?.indicator_selection?.view).toBe("evolution");
     expect(view.getByRole("button", { name: "出口构成" }).getAttribute("aria-pressed")).toBe("true");
     expect(new Set(view.saves.at(-1)?.observations?.map((item) => item.year))).toEqual(new Set([2019, 2020, 2021]));
     view.accept();
@@ -341,18 +405,26 @@ describe("indicator explorer with automatic report material", () => {
     schema.mockRestore();
   });
 
-  test("the positioning view is exploration only: it never records material and keeps the saved record", async () => {
+  test("the positioning view has no readings to record: it offers no button and keeps the saved record", async () => {
     const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
     const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
     const view = setup();
     await view.findByRole("button", { name: "出口构成" });
-    await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("composition"));
+    await record(view);
+    expect(view.saves.at(-1)?.indicator_selection?.view).toBe("composition");
+    view.accept();
     const before = view.saves.length;
     fireEvent.click(view.getByRole("button", { name: "定位图" }));
     expect(view.getByLabelText("当前图表范围").textContent).toContain("定位图");
-    expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("定位图只供探索，不记录报告材料");
-    // A view that never records does not say "暂不能记录".
-    expect(view.getByRole("region", { name: "报告材料" }).textContent).not.toContain("暂不能记录");
+    const recordGroup = view.getByRole("group", { name: "记录报告材料" });
+    expect(within(recordGroup).getByRole("status").textContent).toBe(NO_READINGS_NOTE);
+    expect(within(recordGroup).queryByRole("button")).toBeNull();
+    // A view that never records does not say "暂不能记录", and nothing on the page calls it 只供探索 any more.
+    expect(recordGroup.textContent).not.toContain("暂不能记录");
+    expect(view.container.textContent).not.toContain("只供探索");
+    // The recorded composition stays the material.
+    expect(view.getByRole("heading", { name: /报告材料 · 已记录（\d+ 条读数）/ })).toBeTruthy();
+    expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("已记录的是另一张图");
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
     expect(view.saves).toHaveLength(before);
     rows.mockRestore();
@@ -394,8 +466,11 @@ describe("indicator explorer with automatic report material", () => {
       "前后向位置", "历年变化", "国家对比", "段长度对照", "定位图", "行业结构", "行业排名",
     ]);
     fireEvent.click(view.getByRole("button", { name: "段长度对照" }));
-    await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("segments"));
+    await record(view);
+    expect(view.saves).toHaveLength(1);
     const saved = view.saves.at(-1)!;
+    expect(saved.indicator_selection?.view).toBe("segments");
+    expect(saved.material_chosen).toBe(true);
     expect(saved.compared).toEqual(["CHN", "USA"]);
     expect(new Set(saved.observations!.map((item) => item.metric))).toEqual(new Set(["PLv_D", "PLy_D", "PLv_RT", "PLy_RT", "PLv_GVC", "PLy_GVC"]));
     expect(saved.observations!.every((item) => item.source === "explicit-indicator-comparison" && item.year === 2021)).toBe(true);
@@ -426,8 +501,11 @@ describe("indicator explorer with automatic report material", () => {
     expect(view.getAllByRole("note").filter((note) => note.textContent?.includes("CHN 中国没有轨迹"))).toHaveLength(1);
     // No trend chart under the trajectory any more: the note below the chart is the one place that says why.
     await waitFor(() => expect(view.container.textContent).toContain("后向 GVC 段长度无法计算"));
+    // The blocked-record notice under the chart repeats the reason by design; the chart area itself says it once.
     const material = view.getByRole("region", { name: "报告材料" }).textContent ?? "";
-    const outside = (view.container.textContent ?? "").replace(material, "");
+    const recordNotice = view.getByRole("group", { name: "记录报告材料" }).textContent ?? "";
+    expect(recordNotice).toContain("当前图表暂不能记录：");
+    const outside = (view.container.textContent ?? "").replace(material, "").replace(recordNotice, "");
     expect(outside.split("后向 GVC 段长度无法计算").length - 1).toBe(1);
     expect(outside).not.toContain("暂不能读出期间变化");
     rows.mockRestore();
@@ -473,14 +551,19 @@ describe("material of one to five economies (design doc 4.1)", () => {
       await view.findByRole("button", { name: "出口构成" });
       // The carried-over single entity opens alone: no comparison select is filled, the add control is offered.
       expect((view.getByLabelText("加一个对比国家（可选）") as HTMLSelectElement).value).toBe("");
-      await waitFor(() => expect(view.saves.at(-1)?.compared).toEqual(["CHN"]));
+      await record(view);
+      expect(view.saves.at(-1)?.compared).toEqual(["CHN"]);
       expect(view.saves.at(-1)!.observations!.every((item) => item.country === "CHN")).toBe(true);
-      // An industry has no global reference, so one economy alone is exploration there.
+      expect(view.saves.at(-1)!.material_chosen).toBe(true);
+      // An industry has no global reference, so one economy alone is exploration there: no button to record it.
       const before = view.saves.length;
       fireEvent.change(view.getByLabelText("比较范围"), { target: { value: "A" } });
-      await view.findByText(/要把“比较范围”设为“国家整体”/);
+      const notice = await view.findByText(/要把“比较范围”设为“国家整体”/);
+      expect(notice.textContent).toContain("当前图表暂不能记录：");
+      expect(view.getByRole("group", { name: "记录报告材料" }).contains(notice)).toBe(true);
+      expect(view.queryByRole("button", { name: RECORD_CHART_ACTION })).toBeNull();
       await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
-      expect(view.saves.slice(before).every((save) => !("observations" in save))).toBe(true);
+      expect(view.saves).toHaveLength(before);
     } finally { rows.mockRestore(); industry.mockRestore(); schema.mockRestore(); }
   });
 
@@ -491,22 +574,31 @@ describe("material of one to five economies (design doc 4.1)", () => {
       const view = mount();
       await view.findByRole("button", { name: "出口构成" });
       fireEvent.click(view.getByRole("button", { name: "历年变化" }));
-      await waitFor(() => expect(view.saves.at(-1)?.compared).toEqual(["CHN", "USA"]));
+      await record(view);
+      expect(view.saves.at(-1)?.compared).toEqual(["CHN", "USA"]);
       fireEvent.change(view.getByLabelText("再加一个对比国家"), { target: { value: "DEU" } });
       fireEvent.click(view.getByRole("button", { name: "添加" }));
-      await waitFor(() => expect(view.saves.at(-1)?.compared).toEqual(["CHN", "USA", "DEU"]));
       expect(view.getByLabelText("对比国家 C")).toBeTruthy();
-      expect(view.container.querySelectorAll("[data-series-group]")).toHaveLength(3);
+      await waitFor(() => expect(view.container.querySelectorAll("[data-series-group]")).toHaveLength(3));
+      // Adding a country changes the chart, not the record, until the student records the new chart.
+      await view.findByRole("button", { name: RECORD_CHART_ACTION });
+      expect(view.saves).toHaveLength(1);
+      await record(view);
+      expect(view.saves).toHaveLength(2);
+      expect(view.saves.at(-1)?.compared).toEqual(["CHN", "USA", "DEU"]);
       expect(view.saves.at(-1)!.indicator_selection).toMatchObject({ first: "CHN", second: "USA", others: ["USA", "DEU"] });
+      expect(view.saves.at(-1)!.material_chosen).toBe(true);
       expect(new Set(view.saves.at(-1)!.observations!.map((item) => item.country))).toEqual(new Set(["CHN", "USA", "DEU"]));
       // Every comparison country gets its own gap card.
       expect(view.getAllByText(/与对比国家/)).toHaveLength(2);
       // Choosing a comparison country as A swaps it with the old A instead of dropping it.
       fireEvent.change(view.getByLabelText("国家 A"), { target: { value: "DEU" } });
-      await waitFor(() => expect(view.saves.at(-1)?.compared).toEqual(["DEU", "USA", "CHN"]));
       const scope = view.getByRole("group", { name: "当前图表范围" });
       const keys = [...scope.querySelectorAll(".scope-country")];
       expect(keys.map((key) => key.textContent)).toEqual(["DEU 德国", "USA 美国", "CHN 中国"]);
+      await record(view);
+      expect(view.saves).toHaveLength(3);
+      expect(view.saves.at(-1)?.compared).toEqual(["DEU", "USA", "CHN"]);
       expect(keys.map((key) => key.querySelector("circle")?.getAttribute("fill"))).toEqual(["#216cc0", "#1baf7a", "#eda100"]);
       expect(keys.map((key) => key.querySelector("line")?.getAttribute("stroke-dasharray"))).toEqual([null, "7 4", "7 4"]);
       fireEvent.click(view.getByRole("button", { name: "出口构成" }));
@@ -515,7 +607,7 @@ describe("material of one to five economies (design doc 4.1)", () => {
   });
 });
 
-describe("readouts and update notes follow the chart on screen (round 10)", () => {
+describe("readouts and the record button follow the chart on screen (round 10)", () => {
   test("a hover readout left open does not survive a change of indicator while the pointer stays on the chart", async () => {
     const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
     const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
@@ -542,31 +634,47 @@ describe("readouts and update notes follow the chart on screen (round 10)", () =
     } finally { rows.mockRestore(); schema.mockRestore(); }
   });
 
-  test("the update note names the indicator, follows each update and goes once the chart cannot be recorded", async () => {
+  test("the record button follows each change of chart, records only on request, and goes once the chart has no readings", async () => {
     const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
     const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
     try {
       const view = setup();
       await view.findByRole("button", { name: "出口构成" });
-      await waitFor(() => expect(view.saves).toHaveLength(1));
+      await record(view);
+      expect(view.saves).toHaveLength(1);
       view.accept();
+      expect((view.getByRole("button", { name: RECORDED_CHART_LABEL }) as HTMLButtonElement).disabled).toBe(true);
+      // Another view: the button offers to record it, the card says the record is another chart, no flash appears.
       fireEvent.click(view.getByRole("button", { name: "历年变化" }));
-      await waitFor(() => expect(view.saves).toHaveLength(2));
-      expect(view.container.querySelector(".scope-flash")?.textContent).toContain("报告材料已更新为：历年变化 · 外国增加值项占比 · ");
-      view.accept();
-      // A second update with another indicator says so (the words used to be identical between indicators).
-      fireEvent.change(view.getByLabelText("指标"), { target: { value: "FVA" } });
-      await waitFor(() => expect(view.saves).toHaveLength(3));
-      expect(view.container.querySelector(".scope-flash")?.textContent).toContain("历年变化 · 外国增加值 · ");
-      view.accept();
-      // 定位图 records nothing: the note about the previous chart must not stay beside it.
-      fireEvent.click(view.getByRole("button", { name: "定位图" }));
-      await view.findByText(/定位图只供探索，不记录报告材料。/, { selector: "[role=status]" });
+      await view.findByRole("button", { name: RECORD_CHART_ACTION });
+      expect(view.saves).toHaveLength(1);
+      expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("已记录的是另一张图");
       expect(view.container.querySelector(".scope-flash")).toBeNull();
-      // Back on the recorded chart nothing was replaced, so no note comes back.
+      expect(view.container.textContent).not.toContain("报告材料已更新为");
+      await record(view);
+      expect(view.saves).toHaveLength(2);
+      expect(view.saves[1].indicator_selection).toMatchObject({ view: "trend", metric: "FVA_share" });
+      view.accept();
+      // Another indicator is another chart: the recorded one stays until the student records this one.
+      fireEvent.change(view.getByLabelText("指标"), { target: { value: "FVA" } });
+      await view.findByRole("button", { name: RECORD_CHART_ACTION });
+      expect(view.saves).toHaveLength(2);
+      await record(view);
+      expect(view.saves).toHaveLength(3);
+      expect(view.saves[2].indicator_selection).toMatchObject({ view: "trend", metric: "FVA" });
+      expect(view.saves[2].material_chosen).toBe(true);
+      view.accept();
+      // 定位图 has no readings to record: no button, one plain sentence in its place.
+      fireEvent.click(view.getByRole("button", { name: "定位图" }));
+      await view.findByText(NO_READINGS_NOTE, { selector: "[role=status]" });
+      expect(view.queryByRole("button", { name: RECORD_CHART_ACTION })).toBeNull();
+      expect(view.queryByRole("button", { name: RECORDED_CHART_LABEL })).toBeNull();
+      expect(view.container.querySelector(".scope-flash")).toBeNull();
+      // Back on the recorded chart: it is the material, so the button is the disabled confirmation.
       fireEvent.click(view.getByRole("button", { name: "历年变化" }));
       await view.findByLabelText("趋势读数");
-      expect(view.container.querySelector(".scope-flash")).toBeNull();
+      expect((await view.findByRole("button", { name: RECORDED_CHART_LABEL }) as HTMLButtonElement).disabled).toBe(true);
+      expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("当前图表就是已记录的材料");
       expect(view.saves).toHaveLength(3);
     } finally { rows.mockRestore(); schema.mockRestore(); }
   });
@@ -604,7 +712,10 @@ describe("readouts and update notes follow the chart on screen (round 10)", () =
       expect(cards.textContent).toContain("为负");
       expect(cards.textContent).not.toContain("对比国家构成不完整");
       expect(view.getByText(/构成份额无法计算，占比图里不画/)).toBeTruthy();
-      expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("为负，构成份额无法计算（不是缺少数据）");
+      const recordGroup = view.getByRole("group", { name: "记录报告材料" });
+      expect(recordGroup.textContent).toContain("当前图表暂不能记录：");
+      expect(recordGroup.textContent).toContain("为负，构成份额无法计算（不是缺少数据）");
+      expect(within(recordGroup).queryByRole("button")).toBeNull();
       // In the 金额 view the card does not send the student to the view they are already in.
       expect(cards.textContent).toContain("切到“金额”可看各分项");
       fireEvent.click(view.getByRole("button", { name: "金额" }));
@@ -672,10 +783,16 @@ describe("行业排名 with an industry that exports nothing (round 12)", () => 
       await waitFor(() => expect(plot.textContent).toContain("无法计算"));
       expect(plot.textContent).not.toContain("缺失");
       expect(view.getByText(/O 公共管理与国防：USA 美国该行业总出口为 0，国内增加值出口占比无法计算（不是缺少数据）。这些行业照常显示，但不记入报告材料/)).toBeTruthy();
-      await waitFor(() => expect(view.saves.length).toBeGreaterThan(0));
+      // The chart is recordable (the complete row carries it), so the button is offered and nothing is saved yet.
+      await view.findByRole("button", { name: RECORD_CHART_ACTION });
+      expect(view.saves).toHaveLength(0);
+      expect(view.getByRole("group", { name: "记录报告材料" }).textContent).not.toContain("暂不能记录");
+      await record(view);
+      expect(view.saves).toHaveLength(1);
       const recorded = view.saves.at(-1)!.observations ?? [];
       expect(recorded.map((item) => [item.country, item.industry])).toEqual([["CHN", "A"], ["USA", "A"]]);
-      expect(view.getByRole("region", { name: "报告材料" }).textContent).not.toContain("暂不能记录");
+      expect(view.saves.at(-1)!.indicator_selection).toMatchObject({ view: "industry", metric: "DVAex_share" });
+      expect(view.saves.at(-1)!.material_chosen).toBe(true);
     } finally { restore(); }
   });
 
@@ -704,13 +821,15 @@ describe("行业排名 with an industry that exports nothing (round 12)", () => 
   test("when no row is complete the notice gives the real reason and does not suggest another year", async () => {
     const { view, restore } = await open(["O"]);
     try {
-      const material = view.getByRole("region", { name: "报告材料" });
-      await waitFor(() => expect(material.textContent).toContain("USA 美国该行业总出口为 0，国内增加值出口占比无法计算（不是缺少数据）"));
-      expect(material.textContent).toContain("请换国家。");
-      expect(material.textContent).not.toContain("缺少数据（缺少的数据留空");
-      expect(material.textContent).not.toContain("换一个年份");
-      // Only the opening 出口构成 chart was recorded; the ranking was not.
-      expect(view.saves.every((saved) => saved.indicator_selection?.view !== "industry")).toBe(true);
+      const notice = view.getByRole("group", { name: "记录报告材料" });
+      await waitFor(() => expect(notice.textContent).toContain("USA 美国该行业总出口为 0，国内增加值出口占比无法计算（不是缺少数据）"));
+      expect(notice.textContent).toContain("当前图表暂不能记录：");
+      expect(notice.textContent).toContain("请换国家。");
+      expect(notice.textContent).not.toContain("缺少数据（缺少的数据留空");
+      expect(notice.textContent).not.toContain("换一个年份");
+      // A ranking with no complete row cannot be recorded: no button, and nothing was saved on the way here.
+      expect(within(notice).queryByRole("button")).toBeNull();
+      expect(view.saves).toHaveLength(0);
     } finally { restore(); }
   });
 });
@@ -744,7 +863,8 @@ test("step 7 四类生产活动 in 金额 describes amounts, and the material sa
   try {
     const view = setup(ProductionVizStep);
     await view.findByRole("button", { name: "四类生产活动" });
-    await waitFor(() => expect(view.saves).toHaveLength(1));
+    await record(view);
+    expect(view.saves).toHaveLength(1);
     view.accept();
     await waitFor(() => expect(view.container.textContent).toContain("四类生产活动各占本国总增加值的份额"));
     const material = view.getByRole("region", { name: "报告材料" });
@@ -760,9 +880,20 @@ test("step 7 四类生产活动 in 金额 describes amounts, and the material sa
 
     // The backward side's note in 金额 does not speak of shares either.
     fireEvent.click(view.getByRole("button", { name: "后向（按最终品）" }));
-    await waitFor(() => expect(view.saves).toHaveLength(2));
     expect(view.container.textContent).toContain("前向、后向的金额不能逐项对照");
-    expect(view.container.querySelector(".scope-flash")?.textContent).toContain("报告材料已更新为：四类生产活动 · 后向 · 报告按占比作图 · ");
+    // The backward composition is another chart: offered for recording, not recorded by itself.
+    await view.findByRole("button", { name: RECORD_CHART_ACTION });
+    expect(view.saves).toHaveLength(1);
+    expect(material.textContent).toContain("已记录的是另一张图");
+    expect(material.textContent).not.toContain(COMPOSITION_MATERIAL_SCALE_NOTE);
+    await record(view);
+    expect(view.saves).toHaveLength(2);
+    expect(view.saves[1].indicator_selection).toMatchObject({ view: "composition", composition_side: "alternate" });
+    expect(view.saves[1].material_chosen).toBe(true);
+    expect(view.container.querySelector(".scope-flash")).toBeNull();
+    view.accept();
+    expect(view.getByLabelText("当前图表范围").textContent).toContain("四类生产活动 · 后向");
+    expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain(`${COMPOSITION_MATERIAL_SCALE_NOTE}本页现在按金额显示。`);
   } finally { rows.mockRestore(); schema.mockRestore(); }
 });
 
@@ -802,9 +933,12 @@ describe("undefined lengths and medians that say nothing (round 11)", () => {
       await view.findByRole("button", { name: "前后向位置" });
       fireEvent.click(view.getByRole("button", { name: "历年变化" }));
       fireEvent.change(view.getByLabelText("比较范围"), { target: { value: "A" } });
-      const material = view.getByRole("region", { name: "报告材料" });
+      // The notice under the chart (where the record button would be) names the real reason.
+      const material = view.getByRole("group", { name: "记录报告材料" });
       await waitFor(() => expect(material.textContent).toContain("该行业没有 GVC 生产（GVC 增加值为 0），前向 GVC 段长度无法计算（不是缺少数据）"));
+      expect(material.textContent).toContain("当前图表暂不能记录：");
       expect(material.textContent).not.toContain("缺少数据（缺少的数据留空");
+      expect(within(material).queryByRole("button")).toBeNull();
       // The empty chart says why in its place; the readings summary does not call the gaps missing.
       const chartStatus = view.getAllByRole("status").find((node) => node.textContent?.includes("没有 GVC 生产") && !material.contains(node));
       expect(chartStatus?.textContent).toContain("（不是缺少数据）；请换一个行业或国家。");
@@ -831,7 +965,7 @@ describe("undefined lengths and medians that say nothing (round 11)", () => {
       const view = setup(LengthVizStep);
       await view.findByRole("button", { name: "前后向位置" });
       fireEvent.change(view.getByLabelText("比较范围"), { target: { value: "A" } });
-      const material = view.getByRole("region", { name: "报告材料" });
+      const material = view.getByRole("group", { name: "记录报告材料" });
       await waitFor(() => expect(material.textContent).toContain("没有 GVC 生产"));
       // The note under the trajectory (there is no trend chart to say it): one sentence for both economies.
       const text = (view.container.textContent ?? "").replace(material.textContent ?? "", "");
@@ -876,7 +1010,7 @@ describe("undefined lengths and medians that say nothing (round 11)", () => {
       const view = setup(LengthVizStep);
       await view.findByRole("button", { name: "前后向位置" });
       fireEvent.change(view.getByLabelText("比较范围"), { target: { value: "A" } });
-      const material = view.getByRole("region", { name: "报告材料" });
+      const material = view.getByRole("group", { name: "记录报告材料" });
       await waitFor(() => expect(material.textContent).toContain("USA 美国在所选年份该行业没有 GVC 生产（GVC 增加值为 0），前向 GVC 段长度无法计算；"));
       expect(material.textContent).toContain("CHN 中国 与 USA 美国在所选年份该行业没有后向 GVC 生产（最终品中的 GVC 增加值为 0），后向 GVC 段长度无法计算（不是缺少数据）");
       expect(material.textContent).not.toContain("CHN 中国 与 USA 美国在所选年份该行业没有 GVC 生产");

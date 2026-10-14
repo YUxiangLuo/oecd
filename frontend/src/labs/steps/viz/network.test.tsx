@@ -1,6 +1,7 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { api } from "../../../api";
+import { NO_READINGS_NOTE, NOT_RECORDED_HINT, RECORD_CHART_ACTION, RECORDED_CHART_LABEL } from "../../../step-task-card";
 import type { Meta, Step } from "../../../types";
 import { NetworkVizStep, STEP10_DEFAULT_LENS } from "./network";
 import type { VizStepState } from "./scaffold";
@@ -15,8 +16,10 @@ function mockApis() {
   spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => ({ rows: [{ country, industry: "C26", year, "weighted degree": country === "CHN" ? 5 : 3, "weighted indegree": 2, "weighted outdegree": country === "CHN" ? 3 : 1, betweenesscentrality: 2 }], total: 1, page: 1, page_size: 200 }));
   spyOn(api, "network").mockResolvedValue({ nodes: [], edges: [] });
 }
+const recordedPatches = (save: { mock: { calls: unknown[][] } }) =>
+  (save.mock.calls as Array<[Partial<VizStepState>]>).map(([patch]) => patch).filter((patch) => "observations" in patch);
 
-test("step 9 records the main comparison automatically; the exploration views sit in the same view bar and never record", async () => {
+test("step 9 records the main comparison only when asked; the exploration views sit in the same view bar and never record", async () => {
   expect(STEP10_DEFAULT_LENS).toBe("heat");
   mockApis();
   const data: VizStepState = { chart: "heat", year: 2020, compared: ["CHN", "USA"], observations: [
@@ -27,17 +30,21 @@ test("step 9 records the main comparison automatically; the exploration views si
   render(<NetworkVizStep meta={meta} step={step} state={{ data, save, syncing: false, syncError: null, syncNow: () => {}, complete: false }} />);
   await screen.findByText("贸易网络当前没有可显示的数据。");
   expect(screen.getByRole("button", { name: "全球贸易网络图" }).getAttribute("aria-pressed")).toBe("true");
-  expect(save.mock.calls.some(([patch]) => "observations" in patch)).toBe(false);
+  expect(recordedPatches(save)).toHaveLength(0);
   fireEvent.click(screen.getByRole("button", { name: "历年变化" }));
   await screen.findByRole("img");
   // Legacy observations without a release do not restore the trend selection;
   // the saved comparison pair (CHN, USA) supplies the initial comparison instead.
   expect(screen.getByLabelText("当前图表范围").textContent).toMatch(/CHN 中国 与 USA 美国.*C26/);
-  expect(screen.queryByRole("button", { name: "保存为报告材料" })).toBeNull();
-  // The complete main chart replaces the legacy record automatically.
-  await waitFor(() => expect(save.mock.calls.some(([patch]) => "observations" in patch)).toBe(true));
-  const recorded = save.mock.calls.map(([patch]) => patch).filter((patch) => "observations" in patch).at(-1)!;
-  expect(recorded.compared).toEqual(["CHN", "USA"]);
+  // The legacy record is another chart: the complete main chart is offered, not recorded, until the student asks.
+  const record = await screen.findByRole("button", { name: RECORD_CHART_ACTION });
+  expect(screen.getByRole("region", { name: "步骤9报告材料" }).textContent).toContain("已记录的是另一张图");
+  expect(recordedPatches(save)).toHaveLength(0);
+  fireEvent.click(record);
+  expect(recordedPatches(save)).toHaveLength(1);
+  const recorded = recordedPatches(save)[0];
+  expect(recorded).toEqual({ compared: ["CHN", "USA"], metric: "weighted degree", observations: expect.any(Array), material_chosen: true });
+  expect(recorded.observations).toHaveLength(4);
   expect(recorded.observations!.every((item) => item.release === meta.dataset!.release_id && item.source === "explicit-network-trend")).toBe(true);
 
   // The global overview leads; the remaining views retain their order.
@@ -60,8 +67,9 @@ test("step 9 records the main comparison automatically; the exploration views si
   await waitFor(() => expect(save.mock.calls.length).toBeGreaterThan(callsBefore));
   expect(save.mock.calls.slice(callsBefore).every(([patch]) => !("observations" in patch))).toBe(true);
   fireEvent.click(within(bar).getByRole("button", { name: "买入与卖出" }));
-  expect(screen.getByLabelText("当前图表范围").textContent).toContain("探索视角，不记录报告材料");
-  expect(screen.getByRole("region", { name: "步骤9报告材料" }).textContent).toContain("这个视角只供探索，不记录报告材料。");
+  expect(screen.getByLabelText("当前图表范围").textContent).toContain("这张图没有可记录的读数条目");
+  expect(screen.getByRole("group", { name: "记录报告材料" }).textContent).toBe(NO_READINGS_NOTE);
+  expect(screen.queryByRole("button", { name: RECORD_CHART_ACTION })).toBeNull();
   expect(screen.getByRole("region", { name: "步骤9报告材料" }).textContent).not.toContain("暂不能记录");
   expect(screen.getAllByRole("region", { name: /行业买入与卖出/ })).toHaveLength(2);
   fireEvent.click(within(bar).getByRole("button", { name: "流量与路径" }));
@@ -76,4 +84,44 @@ test("step 9 records the main comparison automatically; the exploration views si
   expect(save.mock.calls.length).toBe(beforeNetwork);
   fireEvent.click(within(bar).getByRole("button", { name: "历年变化" }));
   expect(screen.getByLabelText("当前图表范围").textContent).toContain("C26");
+  expect(recordedPatches(save)).toHaveLength(1);
+  expect(document.body.textContent).not.toContain("只供探索");
+  expect(document.body.textContent).not.toContain("自动记录");
+});
+
+test("browsing across all six views of step 9 records nothing: material is made only by its button", async () => {
+  mockApis();
+  const data: VizStepState = { chart: "heat", year: 2020, compared: ["CHN", "USA"] };
+  const save = mock((_patch: Partial<VizStepState>) => {});
+  const saveView = mock((_patch: Partial<VizStepState>) => {});
+  render(<NetworkVizStep meta={meta} step={step} state={{ data, save, saveView, syncing: false, syncError: null, syncNow: () => {}, complete: false }} />);
+  await screen.findByText("贸易网络当前没有可显示的数据。");
+  const bar = screen.getByRole("group", { name: "图表视角" });
+  for (const name of ["历年变化", "行业排名", "流量与路径", "买入与卖出", "贸易伙伴", "全球贸易网络图"]) {
+    fireEvent.click(within(bar).getByRole("button", { name }));
+    expect(within(bar).getByRole("button", { name }).getAttribute("aria-pressed")).toBe("true");
+  }
+  // The recording views: change countries, indicator and year while they are complete.
+  fireEvent.click(within(bar).getByRole("button", { name: "历年变化" }));
+  await screen.findByRole("img");
+  fireEvent.change(screen.getByLabelText("国家 A"), { target: { value: "USA" } });
+  await screen.findByRole("img");
+  fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "betweenesscentrality" } });
+  await screen.findByRole("img");
+  fireEvent.click(within(bar).getByRole("button", { name: "行业排名" }));
+  await screen.findByRole("region", { name: "行业排名条形图" });
+  fireEvent.change(screen.getAllByLabelText("年份")[0], { target: { value: "2019" } });
+  await screen.findByRole("region", { name: "行业排名条形图" });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  // Browsing is kept as browsing state only; no observations or material flag were ever saved.
+  expect(saveView.mock.calls.some(([patch]) => "network_browse" in patch)).toBe(true);
+  expect(saveView.mock.calls.every(([patch]) => !("observations" in patch) && !("material_chosen" in patch))).toBe(true);
+  expect(save.mock.calls.every(([patch]) => !("observations" in patch) && !("material_chosen" in patch))).toBe(true);
+  expect(screen.getByRole("region", { name: "步骤9报告材料" }).textContent).toContain(`报告材料 · 尚未记录${NOT_RECORDED_HINT}`);
+  // The complete chart is offered; recording it is the one thing that saves material.
+  fireEvent.click(screen.getByRole("button", { name: RECORD_CHART_ACTION }));
+  // A new pair first clears the material saved for the old one (useVizLab.pickCountries), then the record is saved.
+  expect(recordedPatches(save)).toEqual([{ observations: [] }, expect.objectContaining({ compared: ["USA", "CHN"], metric: "betweenesscentrality", material_chosen: true })]);
+  expect(recordedPatches(save).at(-1)!.observations!.every((item) => item.source === "explicit-network-ranking" && item.year === 2019)).toBe(true);
+  expect(screen.queryByRole("button", { name: RECORDED_CHART_LABEL })).toBeNull();
 });

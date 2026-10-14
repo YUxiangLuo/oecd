@@ -708,3 +708,7 @@ details.reg-custom-section > summary:focus-visible { outline: 2px solid #4b47e0;
 .reg-custom-design-row > * { border-top: 1px dashed #c9cde0; color: #1b4d7a; }
 .reg-design-value { margin: 6px 0 0; font-size: 13.5px; color: #1b4d7a; }
 .reg-decomposition { margin: 8px 0 0; font-size: 13px; line-height: 1.55; color: #2a2f3a; }
+
+/* Steps 6–9: the record button under every chart, in one place, right above the material card. */
+.material-record { margin: 12px 0 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.material-record p { margin: 0; }

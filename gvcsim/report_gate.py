@@ -266,8 +266,8 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
                         "step": step,
                         "title": _STEP_TITLES.get(step, ""),
                         "missing": [
-                            "请查看一张读数完整的图表（只看一个国家时用国家整体口径，或加入 1–4 个对比国家），"
-                            "系统会自动记录为本步报告材料"
+                            "请在一张读数完整的图表下点“把这张图记为本步报告材料”"
+                            "（只看一个国家时用国家整体口径，或加入 1–4 个对比国家）"
                         ],
                     }
                 )
@@ -279,8 +279,8 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
                         "step": step,
                         "title": _STEP_TITLES.get(step, ""),
                         "missing": [
-                            "请查看一张读数完整的行业历年变化或行业排名（可加入 1–4 个对比国家），"
-                            "系统会自动记录为本步报告材料"
+                            "请在一张读数完整的行业历年变化或行业排名下点“把这张图记为本步报告材料”"
+                            "（可加入 1–4 个对比国家）"
                         ],
                     }
                 )
