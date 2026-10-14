@@ -69,16 +69,17 @@ export function focusStepPrimaryAction(content: HTMLElement | null, targetId = S
   return true;
 }
 
-/** Shown on material cards once the report is submitted (steps that record automatically). */
+/** Shown on material cards once the report is submitted (steps that record automatically). The task card itself
+ * says nothing about it: the material card of each step is the one place that does. */
 export const MATERIAL_LOCKED_NOTE = "报告已提交：浏览不再自动改动报告材料。";
-/** The same fact at the top of the task card, whose task lines still describe automatic recording. */
-export const TASK_LOCKED_NOTE = "报告已提交，自动记录已暂停：报告材料保持提交时的内容；要更换，请按本页提示确认。";
-/** Steps whose report material is recorded automatically while browsing (step 1 a cell, 2–5 the selected
- * countries, 6–9 the last chart, 10 the example). Steps 11–14 record a run and say so themselves. */
-export function stepRecordsAutomatically(step: number): boolean {
-  return step >= 1 && step <= 10;
-}
 export const MATERIAL_LOCKED_ACTION = "改用当前图表作为报告材料（之后需在步骤 15 更新报告）";
+/** Steps 6–9 record on request: the button under every chart, its label once the chart is the material, the
+ * replacement wording after submission, and the sentence for a chart that has no readings to record. */
+export const RECORD_CHART_ACTION = "把这张图记为本步报告材料";
+export const RECORDED_CHART_LABEL = "已记录为本步报告材料";
+export const REPLACE_MATERIAL_ACTION = "替换报告材料（之后需在步骤 15 更新报告）";
+export const NO_READINGS_NOTE = "这张图没有可记录的读数条目。";
+export const NOT_RECORDED_HINT = "尚未记录：在任一张图下点“把这张图记为本步报告材料”。";
 /** After the student re-uses a choice as material on a submitted report: what to do next (as step 13 says). */
 export const MATERIAL_RECHOSEN_NEXT = "请到步骤 15 更新报告并重新提交给老师。";
 
@@ -115,7 +116,6 @@ export function StepTaskCard({
   // The server counts step 15 complete only once the report is handed in, so a draft is still to do.
   const done = complete;
   const material = stepMaterialStatusText(step, materialStatus);
-  const materialLocked = (reportState === "pending" || reportState === "graded") && stepRecordsAutomatically(step.n);
   const completionLabel = step.lab === "rep" ? "报告" : "理解题";
   const compact = step.n >= 11 && step.n <= 14 && Boolean(step.regression_outcome);
   return (
@@ -132,7 +132,6 @@ export function StepTaskCard({
           </span>
         </div>
       </div>
-      {materialLocked && <p className="step-task-locked" role="note">{TASK_LOCKED_NOTE}</p>}
       {/* Tasks read as one light flow line (steps 11–14 have two short ones). The step's reading caveat
           (step.tip) is deliberately not shown: it distracted students. The concept is taught on the page itself. */}
       <ol className="step-task-list">

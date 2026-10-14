@@ -65,6 +65,24 @@ describe("report tables", () => {
     expect(render()).toBe(render()); // No render-time counters shared between reports/renders.
   });
 
+  test("foldSections wraps each h2 section in details: appendix-like sections closed, the rest and legacy titles open", () => {
+    const markdown = "# 报告\n\n> 前言\n\n## 结论\n\n结论段\n\n## 关键证据摘要\n\n证据\n\n## 理解题答题记录\n\n答题\n\n## 保存的实验快照\n\n快照\n\n## 旧版标题\n\n旧";
+    const element = document.createElement("div");
+    element.innerHTML = renderToStaticMarkup(createElement(ReportMarkdown, { markdown, foldSections: true }));
+    const sections = [...element.querySelectorAll("details.report-section")];
+    expect(sections.map((item) => item.querySelector("summary h2")?.textContent)).toEqual(["结论", "关键证据摘要", "理解题答题记录", "保存的实验快照", "旧版标题"]);
+    expect(sections.map((item) => item.hasAttribute("open"))).toEqual([true, true, false, false, true]);
+    // The body of a section sits inside its details; what precedes the first h2 is not wrapped.
+    expect(sections[2].textContent).toContain("答题");
+    expect(element.querySelector("blockquote")?.closest("details")).toBeNull();
+    expect(element.querySelector("h1")?.closest("details")).toBeNull();
+    // The teacher's page (no flag) keeps the flat document.
+    const flat = document.createElement("div");
+    flat.innerHTML = renderToStaticMarkup(createElement(ReportMarkdown, { markdown }));
+    expect(flat.querySelector("details")).toBeNull();
+    expect([...flat.querySelectorAll("h2")].map((e) => e.textContent)).toEqual(["结论", "关键证据摘要", "理解题答题记录", "保存的实验快照", "旧版标题"]);
+  });
+
   test("only a table that overflows sideways is a Tab stop named 可横向滚动", () => {
 
     const table = "| 项目 | 结果 |\n|---|---|\n| 系数 | 0.01 |";

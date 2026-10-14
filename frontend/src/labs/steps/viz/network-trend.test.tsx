@@ -1,6 +1,7 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api } from "../../../api";
+import { MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT, NO_READINGS_NOTE, NOT_RECORDED_HINT, RECORD_CHART_ACTION, RECORDED_CHART_LABEL, REPLACE_MATERIAL_ACTION } from "../../../step-task-card";
 import type { IndustryPage, Meta } from "../../../types";
 import { NetworkTrend, networkTrendPoints } from "./network-trend";
 import { networkRanking } from "./network-ranking";
@@ -18,6 +19,11 @@ const mockReference = () => spyOn(api, "industryDistribution").mockImplementatio
 const meta: Meta = { countries: ["CHN", "USA", "DEU"], sectors: ["C26", "C27"], years: [2020, 2018, 2019], dataset: { release_id: "a".repeat(32), years: [2018, 2019, 2020] } };
 const row = (country: string, year: number, value: number | null, industry = "C26") => ({ country, year, industry, betweenesscentrality: value });
 const page = (rows: ReturnType<typeof row>[]): IndustryPage => ({ rows, total: rows.length, page: 1, page_size: 200 });
+/** The one way a chart becomes material: its button under the chart (browsing never records). */
+const recordButton = () => screen.findByRole("button", { name: RECORD_CHART_ACTION });
+const recordGroup = () => screen.getByRole("group", { name: "记录报告材料" });
+const materialCard = () => screen.getByRole("region", { name: "步骤9报告材料" });
+const recordedButton = () => screen.getByRole("button", { name: RECORDED_CHART_LABEL }) as HTMLButtonElement;
 
 test("sorts time, separates countries and industries, and preserves zero versus missing", () => {
   expect(networkTrendPoints([
@@ -29,7 +35,8 @@ test("sorts time, separates countries and industries, and preserves zero versus 
   ]);
 });
 
-test("requires at least two years that are valid for both countries before anything is recorded", async () => {
+
+test("requires at least two years that are valid for both countries before the chart can be recorded", async () => {
   spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) =>
     page([
       row(
@@ -46,12 +53,14 @@ test("requires at least two years that are valid for both countries before anyth
   render(<NetworkTrend meta={meta} initialCountry="CHN" onRecord={save} />);
   fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "betweenesscentrality" } });
   await screen.findByRole("img");
-  await waitFor(() => expect(screen.getByText(/至少需要两个共同有效年份/)).toBeTruthy());
-  expect(screen.queryByRole("button", { name: "保存为报告材料" })).toBeNull();
+  await waitFor(() => expect(recordGroup().textContent).toBe("当前图表暂不能记录：所选国家至少需要两个共同有效年份。"));
+  expect(screen.queryByRole("button", { name: RECORD_CHART_ACTION })).toBeNull();
+  expect(materialCard().textContent).toContain(NOT_RECORDED_HINT);
   expect(save).not.toHaveBeenCalled();
 });
 
-test("renders gaps without joining them, records the complete two-country view automatically, and never records stale requests", async () => {
+
+test("renders gaps without joining them, records the complete two-country view only when asked, and never offers a pending request", async () => {
   let resolveGerman!: (page: IndustryPage) => void;
   spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => {
     if (country === "DEU" && year === 2020) return new Promise((resolve) => { resolveGerman = resolve; });
@@ -68,31 +77,40 @@ test("renders gaps without joining them, records the complete two-country view a
   expect(screen.getByLabelText("趋势读数").textContent).toContain("同行业全球中位数");
   // Two isolated observations must not be connected over the missing 2019 value.
   expect(document.querySelectorAll('svg line[data-series="CHN"]').length).toBe(0);
-  await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+  // Browsing records nothing: the complete chart is offered, and recorded only by its button.
+  const record = await recordButton();
+  expect(save).not.toHaveBeenCalled();
+  fireEvent.click(record);
+  expect(save).toHaveBeenCalledTimes(1);
   const [countries, observations] = save.mock.calls[0] as unknown as [string[], Array<Record<string, unknown>>];
   expect(countries).toEqual(["CHN", "USA"]);
   expect(observations.map(({ country, year, value }) => [country, year, value])).toEqual([
     ["CHN", 2018, 10], ["CHN", 2020, 12], ["USA", 2018, 70], ["USA", 2020, 72],
   ]);
   expect(observations.every((item) => item.source === "explicit-network-trend" && item.release === "a".repeat(32))).toBe(true);
-  // While Germany's 2020 request is pending nothing new is recorded.
+  // While Germany's 2020 request is pending the chart cannot be recorded.
   fireEvent.change(screen.getByLabelText("对比国家 B"), { target: { value: "DEU" } });
   expect(screen.queryByRole("img")).toBeNull();
+  expect(screen.queryByRole("button", { name: RECORD_CHART_ACTION })).toBeNull();
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(save).toHaveBeenCalledTimes(1);
   resolveGerman(page([row("DEU", 2020, 99)]));
-  await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+  fireEvent.click(await recordButton());
+  expect(save).toHaveBeenCalledTimes(2);
   const [germanCountries, germanObservations] = save.mock.calls[1] as unknown as [string[], Array<Record<string, unknown>>];
   expect(germanCountries).toEqual(["CHN", "DEU"]);
   expect(germanObservations.some((item) => item.country === "DEU" && item.value === 99)).toBe(true);
-  // An industry without readings never overwrites the record.
+  // An industry without readings offers nothing to record.
   fireEvent.change(screen.getByLabelText("行业"), { target: { value: "C27" } });
   expect(screen.getByText("该行业没有数据，请更换行业、指标或国家。")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: RECORD_CHART_ACTION })).toBeNull();
+  expect(recordGroup().textContent).toContain("当前图表暂不能记录");
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(save).toHaveBeenCalledTimes(2);
 });
 
-test("ranking records the selected metric and displayed industries, then drills into the same trend", async () => {
+
+test("ranking records the selected metric and displayed industries when asked, then drills into the same trend", async () => {
   spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => ({
     ...page([]), rows: [
       { ...row(country, year, 999), "weighted degree": country === "CHN" ? 20 : 90 },
@@ -107,28 +125,33 @@ test("ranking records the selected metric and displayed industries, then drills 
   // Each industry shows its global median on both bars, and country A's rank in that industry worldwide.
   await waitFor(() => expect(document.querySelectorAll("[data-global-median]")).toHaveLength(4));
   expect(screen.getAllByText("全球第 3 位 / 76")).toHaveLength(2);
-  const rankingCall = () => (save.mock.calls as unknown as Array<[string[], Array<Record<string, unknown>>]>)
-    .find(([, observations]) => observations[0]?.source === "explicit-network-ranking");
-  await waitFor(() => expect(rankingCall()).toBeTruthy());
-  const [countries, observations] = rankingCall()!;
+  // Opening the ranking records nothing; its button does.
+  const record = await recordButton();
+  expect(save).not.toHaveBeenCalled();
+  fireEvent.click(record);
+  expect(save).toHaveBeenCalledTimes(1);
+  const [countries, observations] = save.mock.calls[0] as unknown as [string[], Array<Record<string, unknown>>];
   expect(countries).toEqual(["CHN", "USA"]);
   expect(observations.map(({ country, industry, year, value }) => [country, industry, year, value])).toEqual([
     ["CHN", "C27", 2020, 50], ["USA", "C27", 2020, 3], ["CHN", "C26", 2020, 20], ["USA", "C26", 2020, 90],
   ]);
-  expect(observations.every((item) => item.metric === "weighted degree" && item.unit === "百万美元")).toBe(true);
+  expect(observations.every((item) => item.source === "explicit-network-ranking" && item.metric === "weighted degree" && item.unit === "百万美元")).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: /查看 C27.*历年变化/ }));
   expect((screen.getByLabelText("行业") as HTMLSelectElement).value).toBe("C27");
   expect((screen.getByLabelText("网络指标") as HTMLSelectElement).value).toBe("weighted degree");
   expect((screen.getByLabelText("对比国家 B") as HTMLSelectElement).value).toBe("USA");
   expect(screen.getByRole("img").getAttribute("aria-label")).toContain("加权总度");
-  // The drilled-in trend becomes the record.
-  await waitFor(() => {
-    const last = save.mock.calls.at(-1) as unknown as [string[], Array<Record<string, unknown>>];
-    expect(last[1].every((item) => item.industry === "C27" && item.source === "explicit-network-trend")).toBe(true);
-  });
+  // Drilling in records nothing by itself; the drilled-in trend becomes the record when asked.
+  expect(save).toHaveBeenCalledTimes(1);
+  fireEvent.click(await recordButton());
+  expect(save).toHaveBeenCalledTimes(2);
+  const last = save.mock.calls.at(-1) as unknown as [string[], Array<Record<string, unknown>>];
+  expect(last[1].length).toBeGreaterThan(0);
+  expect(last[1].every((item) => item.industry === "C27" && item.source === "explicit-network-trend")).toBe(true);
 });
 
-test("the record follows the current chart, waits while a sync is in flight, and exposes sync failures", async () => {
+
+test("recording takes a click, never a browse; the card says whether the chart on screen is the recorded one; sync failures are exposed", async () => {
   spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => ({
     ...page([]), rows: [{ ...row(country, year, country === "CHN" ? 7 : 3), "weighted degree": country === "CHN" ? 80 : 15 }],
   }));
@@ -136,57 +159,86 @@ test("the record follows the current chart, waits while a sync is in flight, and
   const retry = mock(() => {});
   const props = { meta, initialCountry: "CHN", onRecord: save, onRetrySync: retry };
   const { rerender } = render(<NetworkTrend {...props} />);
-  await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+  const record = await recordButton();
+  expect(save).not.toHaveBeenCalled();
+  expect(materialCard().textContent).toContain("报告材料 · 尚未记录");
+  expect(materialCard().textContent).toContain(NOT_RECORDED_HINT);
+  fireEvent.click(record);
+  expect(save).toHaveBeenCalledTimes(1);
   const saved = save.mock.calls[0][1];
   expect(saved.every((item) => item.metric === "weighted degree")).toBe(true);
   rerender(<NetworkTrend {...props} observations={saved} />);
-  expect(screen.getByRole("region", { name: "步骤9报告材料" }).textContent).toContain("当前图表已自动记录");
+  expect(materialCard().textContent).toContain(`报告材料 · 已记录（${saved.length} 条读数）`);
+  expect(materialCard().textContent).toContain("当前图表就是已记录的材料：CHN 中国 与 USA 美国 · C26 计算机电子光学 · 2018–2020 年趋势 · 加权总度。换视角、国家或指标不会改动它。");
+  expect(recordedButton().disabled).toBe(true);
   rerender(<NetworkTrend {...props} observations={saved} syncing />);
+  expect(screen.getByText("正在同步实验记录…")).toBeTruthy();
+  // Changing the indicator shows another chart; nothing is recorded until the student asks.
   fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "betweenesscentrality" } });
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(save).toHaveBeenCalledTimes(1);
+  expect(materialCard().textContent).toContain("已记录的是另一张图；要换成当前图表，点上面的“把这张图记为本步报告材料”。");
   rerender(<NetworkTrend {...props} observations={saved} syncError="offline" />);
   expect(screen.getByRole("alert").textContent).toContain("还没保存成功");
   fireEvent.click(screen.getByRole("button", { name: "重试同步" }));
   expect(retry).toHaveBeenCalledTimes(1);
-  await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+  fireEvent.click(await recordButton());
+  expect(save).toHaveBeenCalledTimes(2);
   const updated = save.mock.calls[1][1];
   expect(updated).toHaveLength(6);
   expect(updated.map((item) => item.value)).toEqual([7, 7, 7, 3, 3, 3]);
   expect(updated.every((item) => item.metric === "betweenesscentrality")).toBe(true);
-  // The task card says 报告材料：未保存 while the save fails: no green "已更新为" note beside it.
+  // No flash announces the change: the card and the button say what is recorded.
   expect(document.querySelector(".scope-flash")).toBeNull();
+  expect(document.body.textContent).not.toContain("报告材料已更新为");
   rerender(<NetworkTrend {...props} observations={updated} />);
-  expect(document.querySelector(".scope-flash")?.textContent).toContain("报告材料已更新为");
+  expect(materialCard().textContent).toContain("当前图表就是已记录的材料：CHN 中国 与 USA 美国 · C26 计算机电子光学 · 2018–2020 年趋势 · betweenesscentrality。");
+  expect(recordedButton().disabled).toBe(true);
+  expect(document.body.textContent).not.toContain("报告材料已更新为");
 });
 
-test("after the report is submitted, step 9 records only when the student asks", async () => {
+
+test("after the report is submitted, step 9 replaces its material only when the student asks, then points to step 15", async () => {
   spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([row(country, year, (country === "CHN" ? 10 : 70) + year - 2018)]));
   mockReference();
   const save = mock(() => {});
-  const view = render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={save} locked />);
+  const release = "a".repeat(32);
+  // Material recorded before submission: the pair's 加权总度 trend (readings the data no longer matches).
+  const earlier: VizObservation[] = ["CHN", "USA"].flatMap((country) => [2018, 2019, 2020].map((year) => ({
+    entity: `${country}·C26`, country, industry: "C26", year, value: 1, metric: "weighted degree", unit: "百万美元", source: "explicit-network-trend", release,
+  })));
+  const props = { meta, initialCountry: "CHN", initialCountries: ["CHN", "USA"], observations: earlier, onRecord: save, locked: true };
+  const view = render(<NetworkTrend {...props} />);
   fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "betweenesscentrality" } });
-  const record = await screen.findByRole("button", { name: /改用当前图表作为报告材料/ });
-  expect(screen.getByText(/报告已提交：浏览不再自动改动报告材料/)).toBeTruthy();
+  const replace = await screen.findByRole("button", { name: REPLACE_MATERIAL_ACTION });
+  expect(screen.queryByRole("button", { name: RECORD_CHART_ACTION })).toBeNull();
+  expect(materialCard().textContent).toContain(`${MATERIAL_LOCKED_NOTE}要换成当前图表，点上面的“替换报告材料”。`);
+  expect(materialCard().textContent).not.toContain(MATERIAL_RECHOSEN_NEXT);
   expect(save).not.toHaveBeenCalled();
-  fireEvent.click(record);
+  fireEvent.click(replace);
   expect(save).toHaveBeenCalledTimes(1);
-  // Once the parent holds the recorded readings, the confirmation says what to do next.
   const [countries, observations] = (save.mock.calls[0] as unknown as [string[], VizObservation[]]);
   expect(countries).toEqual(["CHN", "USA"]);
-  view.rerender(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} observations={observations} onRecord={save} locked />);
-  expect(screen.getByRole("region", { name: "步骤9报告材料" }).textContent).toContain("当前图表就是已记录的材料。请到步骤 15 更新报告并重新提交给老师。");
+  expect(observations.every((item) => item.metric === "betweenesscentrality")).toBe(true);
+  expect(materialCard().textContent).toContain(MATERIAL_RECHOSEN_NEXT);
+  // Once the parent holds the recorded readings, the confirmation says what to do next.
+  view.rerender(<NetworkTrend {...props} observations={observations} />);
+  expect(materialCard().textContent).toContain(`${MATERIAL_LOCKED_NOTE}当前图表就是已记录的材料。${MATERIAL_RECHOSEN_NEXT}`);
+  expect(recordedButton().disabled).toBe(true);
 });
 
-test("one economy alone records against the same-industry reference", async () => {
+
+test("one economy alone can be recorded against the same-industry reference", async () => {
   spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([row(country, year, (country === "CHN" ? 10 : 70) + year - 2018)]));
   mockReference();
   const save = mock((_countries: string[], _observations: VizObservation[]) => {});
   render(<NetworkTrend meta={meta} initialCountry="CHN" onRecord={save} />);
   fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "betweenesscentrality" } });
-  await waitFor(() => expect(save).toHaveBeenCalled());
+  fireEvent.click(await recordButton());
+  expect(save.mock.calls.at(-1)![0]).toEqual(["CHN", "USA"]);
   fireEvent.click(screen.getByRole("button", { name: /^移除对比国家 B/ }));
-  await waitFor(() => expect(save.mock.calls.at(-1)![0]).toEqual(["CHN"]));
+  fireEvent.click(await recordButton());
+  expect(save.mock.calls.at(-1)![0]).toEqual(["CHN"]);
   expect(save.mock.calls.at(-1)![1].every((item) => item.country === "CHN")).toBe(true);
   // A second comparison country can be added; the scope card lists all three.
   // Choosing in the add control only stages the country; 添加 commits it.
@@ -194,9 +246,12 @@ test("one economy alone records against the same-industry reference", async () =
   fireEvent.click(screen.getByRole("button", { name: "添加" }));
   fireEvent.change(screen.getByLabelText("再加一个对比国家"), { target: { value: "DEU" } });
   fireEvent.click(screen.getByRole("button", { name: "添加" }));
-  await waitFor(() => expect(save.mock.calls.at(-1)![0]).toEqual(["CHN", "USA", "DEU"]));
+  fireEvent.click(await recordButton());
+  expect(save.mock.calls.at(-1)![0]).toEqual(["CHN", "USA", "DEU"]);
+  expect(save).toHaveBeenCalledTimes(3);
   expect(screen.getByLabelText("当前图表范围").textContent).toContain("CHN 中国、USA 美国、DEU 德国");
 });
+
 
 test("an all-zero trend (an industry with no output) is refused with a reason and keeps the earlier material", async () => {
   spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => ({
@@ -209,24 +264,30 @@ test("an all-zero trend (an industry with no output) is refused with a reason an
   const save = mock((_countries: string[], _observations: VizObservation[]) => {});
   const props = { meta, initialCountry: "CHN", onRecord: save };
   const { rerender } = render(<NetworkTrend {...props} />);
-  await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+  fireEvent.click(await recordButton());
+  expect(save).toHaveBeenCalledTimes(1);
   const useful = save.mock.calls[0][1];
   rerender(<NetworkTrend {...props} observations={useful} />);
+  expect(recordedButton().disabled).toBe(true);
   fireEvent.change(screen.getByLabelText("行业"), { target: { value: "C27" } });
-  const material = screen.getByRole("region", { name: "步骤9报告材料" });
-  await waitFor(() => expect(material.textContent).toContain("全部为 0"));
-  expect(material.textContent).toContain("没有可比较的差别");
-  expect(material.textContent).toContain("已记录的材料保持不变");
+  await waitFor(() => expect(recordGroup().textContent).toContain("全部为 0"));
+  expect(recordGroup().textContent).toContain("当前图表暂不能记录：图上所选国家历年的加权总度全部为 0（真实的 0，例如没有生产或连接，不是缺少数据），没有可比较的差别，不记录为报告材料。");
+  expect(screen.queryByRole("button", { name: RECORD_CHART_ACTION })).toBeNull();
+  // Nothing is recorded, so the earlier material stays and the card still lists it.
+  expect(materialCard().textContent).toContain(`报告材料 · 已记录（${useful.length} 条读数）`);
+  expect(materialCard().textContent).toContain("已记录的是另一张图");
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(save).toHaveBeenCalledTimes(1);
   // Every value equal but not zero is refused as well.
   fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "betweenesscentrality" } });
   fireEvent.change(screen.getByLabelText("行业"), { target: { value: "C26" } });
-  await waitFor(() => expect(material.textContent).toContain("相同（都是 5）"));
+  await waitFor(() => expect(recordGroup().textContent).toContain("相同（都是 5）"));
+  expect(screen.queryByRole("button", { name: RECORD_CHART_ACTION })).toBeNull();
   expect(save).toHaveBeenCalledTimes(1);
 });
 
-test("the update note names the indicator and goes when the chart can no longer be recorded", async () => {
+
+test("the material card says whether the chart on screen is the recorded one, and moving between charts changes nothing", async () => {
   spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => ({
     ...page([]), rows: [{ ...row(country, year, country === "CHN" ? 7 : 3), "weighted degree": country === "CHN" ? 80 + year : 15 + year }],
   }));
@@ -234,16 +295,32 @@ test("the update note names the indicator and goes when the chart can no longer 
   const save = mock((_countries: string[], _observations: VizObservation[]) => {});
   const props = { meta, initialCountry: "CHN", onRecord: save };
   const { rerender } = render(<NetworkTrend {...props} />);
-  await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-  rerender(<NetworkTrend {...props} observations={save.mock.calls[0][1]} />);
-  expect(document.querySelector(".scope-flash")).toBeNull();
+  fireEvent.click(await recordButton());
+  const saved = save.mock.calls[0][1];
+  rerender(<NetworkTrend {...props} observations={saved} />);
+  expect(materialCard().textContent).toContain("报告材料 · 已记录（6 条读数）");
+  expect(materialCard().textContent).toContain("当前图表就是已记录的材料：CHN 中国 与 USA 美国 · C26 计算机电子光学 · 2018–2020 年趋势 · 加权总度。换视角、国家或指标不会改动它。");
+  expect(recordedButton().disabled).toBe(true);
+  // Another chart on screen: the card points to the button, and the move itself records nothing.
   fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "betweenesscentrality" } });
-  await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
-  rerender(<NetworkTrend {...props} observations={save.mock.calls[1][1]} />);
-  expect(document.querySelector(".scope-flash")?.textContent).toContain("报告材料已更新为：历年变化 · C26 计算机电子光学 · betweenesscentrality · 6 条读数");
-  // An exploration view records nothing: the note about the trend must not stay beside it.
+  expect(materialCard().textContent).toContain("已记录的是另一张图；要换成当前图表，点上面的“把这张图记为本步报告材料”。");
+  expect(screen.getByRole("button", { name: RECORD_CHART_ACTION })).toBeTruthy();
+  expect(save).toHaveBeenCalledTimes(1);
+  // An exploration view has no readings to record; the card still says another chart is recorded.
   fireEvent.click(screen.getByRole("button", { name: "流量与路径" }));
-  expect(document.querySelector(".scope-flash")).toBeNull();
+  expect(recordGroup().textContent).toBe(NO_READINGS_NOTE);
+  expect(screen.getByLabelText("当前图表范围").textContent).toContain("这张图没有可记录的读数条目");
+  expect(screen.queryByRole("button", { name: RECORD_CHART_ACTION })).toBeNull();
+  expect(materialCard().textContent).toContain("已记录的是另一张图");
+  // Back on the recorded chart.
+  fireEvent.click(screen.getByRole("button", { name: "历年变化" }));
+  fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "weighted degree" } });
+  expect(materialCard().textContent).toContain("当前图表就是已记录的材料：CHN 中国 与 USA 美国 · C26 计算机电子光学 · 2018–2020 年趋势 · 加权总度。");
+  expect(recordedButton().disabled).toBe(true);
+  expect(save).toHaveBeenCalledTimes(1);
+  expect(document.body.textContent).not.toContain("报告材料已更新为");
+  expect(document.body.textContent).not.toContain("只供探索");
+  expect(document.body.textContent).not.toContain("自动记录");
 });
 
 test("path metrics of an industry that reaches no other industry are undefined, not 0", async () => {
@@ -301,6 +378,7 @@ test("T 离心率: undefined for every selected economy, the reason is said once
   expect(screen.queryByText(/图上留空/)).toBeNull();
 });
 
+
 test("加权总度 of an industry with no flows anywhere (T) reads as real zeros, with its 指标 named (round 12)", async () => {
   spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) =>
     page([{ country, year, industry: "C26", "weighted degree": 0, Eccentricity: 0 } as unknown as ReturnType<typeof row>]),
@@ -312,16 +390,17 @@ test("加权总度 of an industry with no flows anywhere (T) reads as real zeros
   };
   const save = mock(() => {});
   render(<NetworkTrend meta={meta} schema={schema} initialCountry="CHN" onRecord={save} />);
-  const material = screen.getByRole("region", { name: "步骤9报告材料" });
-  await waitFor(() => expect(material.textContent).toContain("全部为 0（真实的 0，例如没有生产或连接，不是缺少数据）"));
+  // The reason sits where the record button would be.
+  await waitFor(() => expect(recordGroup().textContent).toContain("全部为 0（真实的 0，例如没有生产或连接，不是缺少数据）"));
   expect(screen.getByText(/都是 0：这是真实的 0/)).toBeTruthy();
   expect(screen.queryByText("该行业没有数据，请更换行业、指标或国家。")).toBeNull();
-  expect(material.textContent).not.toContain("至少需要两个共同有效年份");
+  expect(recordGroup().textContent).not.toContain("至少需要两个共同有效年份");
+  expect(screen.queryByRole("button", { name: RECORD_CHART_ACTION })).toBeNull();
   // A pick the list does not offer (the select then reads "") falls back to 加权总度 instead of a blank 指标.
   fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "不存在的指标" } });
   const scope = screen.getByRole("group", { name: "当前图表范围" });
   await waitFor(() => expect(scope.textContent).toContain("指标加权总度"));
-  expect(material.textContent).toContain("全部为 0");
+  expect(recordGroup().textContent).toContain("全部为 0");
   expect(save).not.toHaveBeenCalled();
 });
 

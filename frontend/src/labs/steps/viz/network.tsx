@@ -1,7 +1,7 @@
 /**
  * 步骤 9 · 网络可视化 —— 故事:「流量规模(加权总度)与只看连接的介数会讲同一个故事吗?」
  *
- * 记录视角:历年变化与行业排名,以全部经济体同一行业为参照,再与对比国家比较;按学生最后查看的完整图表自动记录报告材料。
+ * 记录视角:历年变化与行业排名,以全部经济体同一行业为参照,再与对比国家比较;学生在图下点按钮把当前图表记为报告材料。
  * 探索视角(同一视角栏,不记录材料):
  *   流量与路径  一国各行业的加权总度(对数)×介数散点
  *   买入与卖出  一国各行业的加权入度与出度蝴蝶图
@@ -61,7 +61,7 @@ function TradeNetworkOverview({ meta, year, onYear }: {
       what={<>节点是经济体，箭头从出口方指向进口方，表示跨国的中间品和最终品贸易（不含国内）。边越粗，贸易流量越大；节点大小默认表示 GVC 生产份额，可切换指标。</>}
       read={<>悬停国家查看贸易伙伴，点击节点进入大图，查看主要流入、流出伙伴。节点按预设地理区域摆放，不是算法聚类结果。</>}
       find={<>比较中国、美国、德国的主要贸易联系，观察区域内和区域间的流向。</>}
-      note="本图展示全球经济体，只供探索，不记录报告材料。数据包含完整跨国贸易边，默认按阈值筛选显示；调整显示比例不改变伙伴详情的贸易额或完整网络上的中心性。国家级贸易图不能直接解释国家×行业的中心性。"
+      note="本图展示全球经济体，没有可记录的读数条目。数据包含完整跨国贸易边，默认按阈值筛选显示；调整显示比例不改变伙伴详情的贸易额或完整网络上的中心性。国家级贸易图不能直接解释国家×行业的中心性。"
     >
       <div className="controls" style={{ marginBottom: 12 }}>
         <YearSelect years={meta.years} year={year} onChange={onYear} />
@@ -95,7 +95,7 @@ function IndustryHeatTable({ meta, year, onYear, drill, heatSort, heatCoverage, 
       what={<>选一个国家，每行是一个行业。加权总度是买入加卖出的金额（自环，即行业卖给自己的部分，在两边各计一次）；介数只看连接、不看金额。可切换排序，查看前 15 个或全部行业。</>}
       read={<>介数高只说明在只看连接的网络里，更多节点对的最短路线经过这个行业；它不能证明流量大，也不能说明是经济枢纽或瓶颈。对比加权总度和介数两种排序，看它们是否一致。</>}
       find={<>找一个加权总度高、但介数低的行业，想想为什么。</>}
-      note="本表只供查数，不记录报告材料；报告材料由上方主图自动记录。指标在完整的全球国家×行业网络上计算，选择国家只改变显示哪些行。介数不区分流量大小：很小和很大的正流量按同样长度计，只作参考。"
+      note="本表只供查数，没有可记录的读数条目；报告材料在上方主图下点按钮记录。指标在完整的全球国家×行业网络上计算，选择国家只改变显示哪些行。介数不区分流量大小：很小和很大的正流量按同样长度计，只作参考。"
     >
       <div className="controls" style={{ marginBottom: 12 }}>
         <YearSelect years={meta.years} year={year} onChange={onYear} />
@@ -189,7 +189,7 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
         locked={state.materialLocked}
         onRecord={(countries, records) => {
           pickCountries(countries);
-          state.save({ compared: countries, metric: records[0]?.metric, observations: records });
+          state.save({ compared: countries, metric: records[0]?.metric, observations: records, material_chosen: true });
         }}
         extraLenses={[{ key: "partners", label: "贸易伙伴" }, { key: "global-network", label: "全球贸易网络图" }]}
         renderExtra={(key, countries, trendYear, onTrendYear) => key === "global-network"

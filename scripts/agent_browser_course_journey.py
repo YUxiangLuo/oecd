@@ -117,12 +117,20 @@ def main():
                     ),
                 )
             elif 6 <= step <= 8:
-                # The first visit carries the comparison pair over from the previous step and
-                # records the current complete chart automatically; there is no button to press.
+                # The first visit carries the comparison pair over from the previous step; the chart on screen
+                # becomes report material only when the student presses the button under it.
+                student.run(
+                    "wait",
+                    "--fn",
+                    "Boolean(document.querySelector('[aria-label=\"记录报告材料\"] button:not([disabled])'))",
+                )
+                student.button("把这张图记为本步报告材料")
                 wait_saved(
                     step,
                     lambda row: (
-                        {"CHN", "USA"}.issubset(row.get("compared", [])) and len(row.get("observations", [])) >= 2
+                        {"CHN", "USA"}.issubset(row.get("compared", []))
+                        and len(row.get("observations", [])) >= 2
+                        and row.get("material_chosen") is True
                     ),
                 )
             elif step == 9:
@@ -147,11 +155,19 @@ def main():
                     'section[aria-label="行业网络指标趋势"] select[name="network-metric"]',
                     "betweenesscentrality",
                 )
+                # Recorded on request, once the trend for the new metric has loaded.
+                student.run(
+                    "wait",
+                    "--fn",
+                    "Boolean(document.querySelector('[aria-label=\"记录报告材料\"] button:not([disabled])'))",
+                )
+                student.button("把这张图记为本步报告材料")
                 wait_saved(
                     step,
                     lambda row: (
                         {"CHN", "USA"}.issubset(row.get("compared", []))
                         and any(o.get("metric") == "betweenesscentrality" for o in row.get("observations", []))
+                        and row.get("material_chosen") is True
                     ),
                 )
             elif step == 10:

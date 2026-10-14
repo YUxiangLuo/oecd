@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
-import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT } from "../../../step-task-card";
+import { MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT, NO_READINGS_NOTE, NOT_RECORDED_HINT, RECORD_CHART_ACTION, RECORDED_CHART_LABEL, REPLACE_MATERIAL_ACTION } from "../../../step-task-card";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { IndicatorSchema, Meta } from "../../../types";
@@ -44,6 +44,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   syncing?: boolean;
   syncError?: string | null;
   onRetrySync?: () => void;
+  /** Records the chart on screen as the step's material (the student asked: `material_chosen`). */
   onRecord: (countries: string[], observations: VizObservation[]) => void;
   /** The report is submitted: record only when the student asks (see StepStateApi.materialLocked). */
   locked?: boolean;
@@ -206,33 +207,6 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   const savedYears = [...new Set(observations.map((item) => item.year))].sort((a, b) => a - b);
   const savedCountries = [...new Set(observations.map((item) => item.country))];
   const savedIndustries = [...new Set(observations.map((item) => item.industry).filter(Boolean))];
-  const pendingKey = canRecord && release ? `${selected.join(",")}|${materialKey(pendingObservations)}` : "";
-  // A replacement made without a click is announced next to the scope line and fades after a few seconds. It
-  // names the indicator, restarts on every update (`id`) and goes as soon as the chart on screen is another one.
-  const [flash, setFlash] = useState<{ text: string; key: string; id: number } | null>(null);
-  useEffect(() => {
-    if (!flash) return;
-    const timer = window.setTimeout(() => setFlash(null), 6000);
-    return () => window.clearTimeout(timer);
-  }, [flash]);
-  useEffect(() => {
-    setFlash((old) => (old && old.key !== pendingKey ? null : old));
-  }, [pendingKey]);
-  // The task card says 报告材料：未保存 while a save fails or conflicts; the green note must not contradict it.
-  useEffect(() => {
-    if (syncError) setFlash(null);
-  }, [syncError]);
-  // Report material follows the chart the student is looking at; incomplete charts never overwrite it.
-  useEffect(() => {
-    if (!pendingKey || matchesSaved || syncing || locked) return;
-    if (observations.length) {
-      const text = `报告材料已更新为：${view === "trend" ? `历年变化 · ${sectorLabel(industry)}` : `行业排名 · ${year} 年`} · ${label} · ${pendingObservations.length} 条读数`;
-      setFlash((old) => ({ text, key: pendingKey, id: (old?.id ?? 0) + 1 }));
-    }
-    onRecord(selected, pendingObservations);
-    // pendingKey captures every meaningful change of the pending comparison.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingKey, matchesSaved, syncing]);
   return <section className="reg-section-card" aria-label="行业网络指标趋势">
     <h3>行业的网络位置怎样变化？在全部经济体的同一行业中处于什么位置？</h3>
     {shownCarriedNote && <p className="muted indicator-carried-note" role="note">{shownCarriedNote}</p>}
@@ -286,8 +260,8 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       active={view}
       onPick={setView}
     />
-    {view === "topology" && <p className="muted lens-hint">流量与路径：每个点是一个行业。横轴是买卖总金额（加权总度，对数刻度），纵轴是介数（经过它的最短路线所占比例，对所有节点对求和）。两种排序是否一致？选了多个国家时每国一张。只供探索，不记录报告材料。</p>}
-    {view === "flows" && <p className="muted lens-hint">买入与卖出：每行一个行业，左边是加权入度（买入），右边是加权出度（卖出），按加权总度排序；左边条长的行业主要是买方，右边条长的主要是卖方。只供探索，不记录报告材料。</p>}
+    {view === "topology" && <p className="muted lens-hint">流量与路径：每个点是一个行业。横轴是买卖总金额（加权总度，对数刻度），纵轴是介数（经过它的最短路线所占比例，对所有节点对求和）。两种排序是否一致？选了多个国家时每国一张。这张图没有可记录的读数条目。</p>}
+    {view === "flows" && <p className="muted lens-hint">买入与卖出：每行一个行业，左边是加权入度（买入），右边是加权出度（卖出），按加权总度排序；左边条长的行业主要是买方，右边条长的主要是卖方。这张图没有可记录的读数条目。</p>}
     {(view === "topology" || view === "flows") && <div className="controls">
       <LabeledControl label="年份">{(id) => <select id={id} value={year} onChange={(event) => setYear(Number(event.target.value))}>{years.map((value) => <option key={value} value={value}>{value}</option>)}</select>}</LabeledControl>
       {view === "flows" && <LabeledControl label="显示行业">{(id) => <select id={id} value={flowsLimit} onChange={(event) => setFlowsLimit(Number(event.target.value))}><option value={15}>前 15 个</option><option value={200}>全部行业</option></select>}</LabeledControl>}
@@ -315,9 +289,8 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         { label: "所选国家", value: view === "global-network" ? "全球经济体" : joinCountries(selected) },
         { label: "年份", value: String(year) },
         { label: "视角", value: view === "topology" ? "流量与路径" : view === "flows" ? "买入与卖出" : extraLenses.find((lens) => lens.key === view)?.label ?? view },
-        { label: "材料", value: "探索视角，不记录报告材料" },
+        { label: "材料", value: "这张图没有可记录的读数条目" },
       ]}
-      note={flash && flash.key === pendingKey && !syncError ? <span key={flash.id} className="scope-flash">✓ {flash.text}</span> : undefined}
     />
     {!recordable && view !== "topology" && view !== "flows" ? renderExtra?.(view, selected, year, setYear) : query.status !== "success" ? <AsyncStateMessage status={query.status} error={query.error} loadingLabel="正在加载历年行业指标…" onRetry={query.retry} /> : view === "topology" ? (
       // One scatter per row: in two columns the 660-wide chart shrank its axis text to about 7px.
@@ -411,23 +384,24 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     </>}
     {(view === "trend" || view === "partners" ? years.includes(2020) : year === 2020) && <Year2020Note />}
     {recordable && schema?.fields[metric]?.desc && <p className="muted viz-metric-desc">{label}：{schema.fields[metric].desc}</p>}
-    <section className="qualified-run-card" aria-label="步骤9报告材料">
-      <h3>报告材料 · {observations.length ? `已${locked ? "" : "自动"}记录（${observations.length} 条读数）` : "尚未记录"}</h3>
-      <p role="status">{!canRecord
-        // An exploration view never records: it says so plainly, not as a temporary "暂不能记录".
-        ? `${!recordable ? "这个视角只供探索，不记录报告材料。"
-          : "当前图表暂不能记录："}${!recordable ? ""
-          : flatValue !== null && query.status === "success" ? `图上${view === "trend" ? `所选国家历年的${label}` : `显示的行业的${label}`}全部${flatValue === 0 ? "为 0（真实的 0，例如没有生产或连接，不是缺少数据）" : `相同（都是 ${indicatorNumber(flatValue, unit)}）`}，没有可比较的差别，不记录为报告材料；请换一个${view === "trend" ? "行业" : "年份"}或指标。`
+    {/* The one way a chart becomes report material: this button, under every chart, in the same place. */}
+    <div className="material-record" role="group" aria-label="记录报告材料">
+      {!canRecord
+        ? <p className="muted" role="status">{!recordable ? NO_READINGS_NOTE : `当前图表暂不能记录：${`${flatValue !== null && query.status === "success" ? `图上${view === "trend" ? `所选国家历年的${label}` : `显示的行业的${label}`}全部${flatValue === 0 ? "为 0（真实的 0，例如没有生产或连接，不是缺少数据）" : `相同（都是 ${indicatorNumber(flatValue, unit)}）`}，没有可比较的差别，不记录为报告材料。`
           : view === "trend" ? (undefinedThroughout.length ? `${joinCountries(undefinedThroughout)}在所选年份都没有${label}读数（该行业无连接）；请换一个行业、指标或国家。`
-            : undefinedPoints.length ? `有的年份该行业无连接，${label}无法定义；所选国家至少需要两个共同有效年份，请换一个行业、指标或国家。` : "所选国家至少需要两个共同有效年份。") : "显示的行业里，至少要有一个行业所有所选国家都有数据。"}${observations.length ? "已记录的材料保持不变。" : ""}`
-        : locked
-          ? `${MATERIAL_LOCKED_NOTE}${matchesSaved ? `当前图表就是已记录的材料。${rechosen ? MATERIAL_RECHOSEN_NEXT : ""}` : ""}`
+            : undefinedPoints.length ? `有的年份该行业无连接，${label}无法定义；所选国家至少需要两个共同有效年份，请换一个行业、指标或国家。` : "所选国家至少需要两个共同有效年份。") : "显示的行业里，至少要有一个行业所有所选国家都有数据。"}`}`}</p>
         : matchesSaved
-          ? `当前图表已自动记录：${joinCountries(selected)} · ${view === "trend" ? `${sectorLabel(industry)} · ${years[0]}–${years.at(-1)} 年趋势` : `${year} 年行业排名`} · ${label}。换视角、国家或指标后会自动更新。`
-          : "正在记录当前图表…"}</p>
-      {locked && canRecord && !matchesSaved && (
-        <button type="button" className="secondary" onClick={() => { setRechosen(true); onRecord(selected, pendingObservations); }}>{MATERIAL_LOCKED_ACTION}</button>
-      )}
+          ? <button type="button" className="secondary" disabled aria-disabled="true">{RECORDED_CHART_LABEL}</button>
+          : <button type="button" className="secondary" onClick={() => { setRechosen(locked); onRecord(selected, pendingObservations); }}>{locked && observations.length ? REPLACE_MATERIAL_ACTION : RECORD_CHART_ACTION}</button>}
+    </div>
+    <section className="qualified-run-card" aria-label="步骤9报告材料">
+      <h3>报告材料 · {observations.length ? `已记录（${observations.length} 条读数）` : "尚未记录"}</h3>
+      <p role="status">{!observations.length ? NOT_RECORDED_HINT
+        : locked
+          ? `${MATERIAL_LOCKED_NOTE}${matchesSaved ? "当前图表就是已记录的材料。" : "要换成当前图表，点上面的“替换报告材料”。"}${rechosen ? MATERIAL_RECHOSEN_NEXT : ""}`
+        : matchesSaved
+          ? `当前图表就是已记录的材料：${joinCountries(selected)} · ${view === "trend" ? `${sectorLabel(industry)} · ${years[0]}–${years.at(-1)} 年趋势` : `${year} 年行业排名`} · ${label}。换视角、国家或指标不会改动它。`
+          : "已记录的是另一张图；要换成当前图表，点上面的“把这张图记为本步报告材料”。"}</p>
       {observations.length ? <details>
         <summary>核对已记录的材料 · {observations.length} 条读数</summary>
         <p>{joinCountries(savedCountries)} · {schema?.fields[observations[0].metric ?? ""]?.label ?? observations[0].metric} · {observations[0].unit}</p>

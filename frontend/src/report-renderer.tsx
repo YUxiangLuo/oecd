@@ -919,6 +919,39 @@ function rehypeReportTableLabels() {
   };
 }
 
+/** The report's h2 sections a student does not need open while writing: folded on the student page (never for
+ * the teacher, never when printing). Any other title, including a legacy one, stays open. */
+export const FOLDED_REPORT_SECTIONS: ReadonlySet<string> = new Set([
+  "理解题答题记录", "保存的实验快照", "技术附录：保存的回归结果", "附录：模型实验", "数据检查", "数据与方法说明", "方法参考文献", "报告溯源",
+]);
+
+/** Wraps each h2 and what follows it (up to the next h2) in details.report-section, the h2 inside its summary.
+ * Done on the parsed tree, as the table labels are: a reflection fence may contain "## ". */
+function rehypeFoldSections() {
+  return (tree: ReportNode) => {
+    const text = (node: ReportNode): string => node.type === "text" ? node.value ?? "" : (node.children ?? []).map(text).join("");
+    const out: ReportNode[] = [];
+    let section: ReportNode | null = null;
+    for (const node of tree.children ?? []) {
+      if (node.type === "element" && node.tagName === "h2") {
+        const title = text(node).replace(/\s+/g, " ").trim();
+        section = {
+          type: "element",
+          tagName: "details",
+          properties: { className: ["report-section"], open: !FOLDED_REPORT_SECTIONS.has(title) },
+          children: [{ type: "element", tagName: "summary", properties: {}, children: [node] }],
+        };
+        out.push(section);
+      } else if (section) {
+        section.children!.push(node);
+      } else {
+        out.push(node);
+      }
+    }
+    tree.children = out;
+  };
+}
+
 /**
  * A report table in its scroll region. Only a table wider than the report column (measured, and re-measured when
  * either resizes) is a Tab stop and is named "可横向滚动"; one that fits is not an extra stop for keyboard users.
@@ -976,13 +1009,16 @@ function ReportLink({ node: _node, href, children, ...props }: ComponentPropsWit
   );
 }
 
-/** Shared student/teacher report body. Raw HTML is intentionally not enabled. */
-export function ReportMarkdown({ markdown, className = "report-md" }: { markdown: string; className?: string }) {
+/** Shared student/teacher report body. Raw HTML is intentionally not enabled. ``foldSections`` (the student's
+ * step 15) folds the appendix-like sections; the teacher's page and the printed PDF show everything. */
+export function ReportMarkdown({ markdown, className = "report-md", foldSections = false }: {
+  markdown: string; className?: string; foldSections?: boolean;
+}) {
   return (
     <article className={className} style={{ whiteSpace: "normal" }}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeReportTableLabels]}
+        rehypePlugins={foldSections ? [rehypeReportTableLabels, rehypeFoldSections] : [rehypeReportTableLabels]}
         skipHtml
         components={{
           code: ReportCode,

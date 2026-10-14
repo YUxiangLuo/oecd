@@ -107,7 +107,7 @@ def main():
             # A submitted report pauses automatic recording: the new example is shown (the view-only
             # browse_selection may follow it) but not recorded, so neither step 10's material, step 11's estimate
             # nor the report changes (past the autosave delay).
-            browser.run("wait", "--text", "自动记录已暂停")
+            browser.run("wait", "--text", "报告已提交")
             time.sleep(2)
             current, report = snapshot()
 

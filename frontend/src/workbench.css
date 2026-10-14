@@ -64,6 +64,9 @@
 }
 .comparison-summary span, .comparison-summary small { display: block; color: #616b7d; font-size: 10.5px; line-height: 1.4; word-break: keep-all; overflow-wrap: anywhere; }
 .comparison-summary b { display: block; margin: 4px 0 3px; color: #293342; font-size: 13px; line-height: 1.35; word-break: keep-all; overflow-wrap: anywhere; }
+/* Two cards in view; the rest open with 更多读数 (card-grid.tsx). */
+.comparison-summary.folded > div:nth-child(n + 3) { display: none; }
+.comparison-summary-toggle { margin: -12px 0 14px; font-size: 12px; }
 /* The rounding note sits right under the cards it explains, taking the gap the cards leave below them. */
 .comparison-summary:has(+ .trend-rounding-note) { margin-bottom: 6px; }
 .trend-rounding-note { margin: 0 0 18px; font-size: 11px; }
@@ -705,3 +708,7 @@ details.reg-custom-section > summary:focus-visible { outline: 2px solid #4b47e0;
 .reg-custom-design-row > * { border-top: 1px dashed #c9cde0; color: #1b4d7a; }
 .reg-design-value { margin: 6px 0 0; font-size: 13.5px; color: #1b4d7a; }
 .reg-decomposition { margin: 8px 0 0; font-size: 13px; line-height: 1.55; color: #2a2f3a; }
+
+/* Steps 6–9: the record button under every chart, in one place, right above the material card. */
+.material-record { margin: 12px 0 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.material-record p { margin: 0; }
