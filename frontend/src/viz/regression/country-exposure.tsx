@@ -126,6 +126,7 @@ export function CountryExposureChart({ data, limit }: {
   // The focused item draws its own ring (an SVG group shows no outline in every browser).
   const [focused, setFocused] = useState<number | null>(null);
   const nodeRefs = useRef<(Element & { focus: () => void } | null)[]>([]);
+  const tableRef = useRef<HTMLDetailsElement>(null);
   const [expanded, setExpanded] = useState(false);
   const allTaxed = data.countries.filter((row) => row.taxed);
   const limited = limit != null && limit > 0 && allTaxed.length > limit && !expanded;
@@ -152,6 +153,8 @@ export function CountryExposureChart({ data, limit }: {
 
   const focusAt = (index: number) => {
     setActiveIndex(index);
+    // The untaxed codes sit in the folded readings table: open it before focusing one of them.
+    if (index >= taxed.length && tableRef.current && !tableRef.current.open) tableRef.current.open = true;
     nodeRefs.current[index]?.focus();
   };
   const onKeyDown = (event: KeyboardEvent, index: number) => {
@@ -241,7 +244,7 @@ export function CountryExposureChart({ data, limit }: {
             <span key={wave.wave}><i style={{ background: wave.wave === 2 ? TAXED_LATER : TAXED }} />{WAVE_NAMES[wave.wave] ?? `第 ${wave.wave} 批`}被加税（{wave.count} 国，{wave.start} 年起）</span>
           ))
           : <span><i style={{ background: TAXED }} />被加税（{allTaxed.length} 国，按 X 从高到低）</span>}
-        <span><i className="line" style={{ background: UNTAXED }} />未被加税（{untaxed.length} 国，X = 0，列在图下）</span>
+        <span><i className="line" style={{ background: UNTAXED }} />未被加税（{untaxed.length} 国，X = 0，列在读数表中）</span>
       </div>
       {taxed.length > 0 && (
         <div ref={measure}>
@@ -258,27 +261,28 @@ export function CountryExposureChart({ data, limit }: {
           {expanded ? `只看 X 最高的 ${limit} 国` : `展开全部 ${allTaxed.length} 个被加税国家`}
         </button>
       )}
-      {untaxed.length > 0 && (
-        <div className="country-exposure-untaxed" role="group" aria-label={`${untaxed.length} 国未被加税，X = 0`}>
-          <b><i style={{ background: UNTAXED }} aria-hidden="true" />{untaxed.length} 国未被加税（X = 0）</b>
-          <span className="country-exposure-codes">
-            {untaxed.map((row, i) => {
-              const index = taxed.length + i;
-              return (
-                <span key={row.country} data-country={row.country}
-                  ref={(node) => { nodeRefs.current[index] = node; }}
-                  role="graphics-symbol" {...itemProps(row, index)}>
-                  {row.country}
-                </span>
-              );
-            })}
-          </span>
-        </div>
-      )}
       {/* The rule and the imposer are stated once, in the policy line above the chart. */}
       <p className="country-exposure-note">悬停或用方向键查看每个国家的 X{ruleText ? " 与对美货物顺差" : ""}。</p>
-      <details className="country-exposure-table">
-        <summary>{data.countries.length} 国读数表</summary>
+      <details className="country-exposure-table" ref={tableRef}>
+        <summary>{data.countries.length} 国读数表{untaxed.length ? `（含 ${untaxed.length} 国未被加税）` : ""}</summary>
+      {untaxed.length > 0 && (
+          <div className="country-exposure-untaxed" role="group" aria-label={`${untaxed.length} 国未被加税，X = 0`}>
+            <b><i style={{ background: UNTAXED }} aria-hidden="true" />{untaxed.length} 国未被加税（X = 0）</b>
+            <span className="country-exposure-codes">
+              {untaxed.map((row, i) => {
+                const index = taxed.length + i;
+                return (
+                  <span key={row.country} data-country={row.country}
+                    ref={(node) => { nodeRefs.current[index] = node; }}
+                    role="graphics-symbol" {...itemProps(row, index)}>
+                    {row.country}
+                  </span>
+                );
+              })}
+            </span>
+          </div>
+        )}
+
         <ScrollableRegion className="table-wrap bounded-data-table" label={`${data.countries.length} 国读数表，可滚动`}>
           <table className="data-table">
             <thead><tr><th>国家</th><th className="text-col">是否被加税</th><th>{data.year} 年各货物行业平均 X（个百分点）</th><th>X &gt; 0 的行业</th>{showBalance && <th>{ruleYear(rule)}对美货物顺差（负数为逆差）</th>}</tr></thead>

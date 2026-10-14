@@ -48,13 +48,13 @@ test("taxed bars are sorted, orange and scaled; untaxed countries form one group
     // Values in percentage points beside each bar.
     expect(bars[0].textContent).toContain("14.30");
     expect(bars[4].textContent).toContain("0.51");
-    // The untaxed group: a label and one code per country, no bars.
+    // The untaxed group: a label and one code per country, no bars, inside the folded readings table.
     const group = screen.getByRole("group", { name: "3 国未被加税，X = 0" });
     expect(group.textContent).toContain("3 国未被加税（X = 0）");
     expect([...group.querySelectorAll("[data-country]")].map((item) => item.getAttribute("data-country"))).toEqual(["AUT", "CHN", "MEX"]);
     // The legend counts both groups; the untaxed ones are listed under the chart.
     expect([...document.querySelectorAll(".country-exposure-legend span")].map((item) => item.textContent)).toEqual([
-      "被加税（5 国，按 X 从高到低）", "未被加税（3 国，X = 0，列在图下）",
+      "被加税（5 国，按 X 从高到低）", "未被加税（3 国，X = 0，列在读数表中）",
     ]);
     // The USA is the imposer: never a bar or a code (the policy line above the chart says so, not the chart).
     expect(document.querySelector('[data-country="USA"]')).toBeNull();
@@ -303,7 +303,7 @@ test("teaching data v10: the two waves have their own colour and legend entry, a
     expect(fill("CAN")).toBe(TAXED);
     expect(fill("CRI")).toBe(TAXED_LATER);
     expect([...document.querySelectorAll(".country-exposure-legend span")].map((item) => item.textContent)).toEqual([
-      "第一批被加税（2 国，2018 年起）", "第二批被加税（3 国，2019 年起）", "未被加税（3 国，X = 0，列在图下）",
+      "第一批被加税（2 国，2018 年起）", "第二批被加税（3 国，2019 年起）", "未被加税（3 国，X = 0，列在读数表中）",
     ]);
     expect(bars.find((bar) => bar.getAttribute("data-country") === "CRI")!.getAttribute("aria-label")).toStartWith("CRI 哥斯达黎加：第二批，2019 年起加税，2020 年各货物行业平均 X");
     // The folded 75 国读数表 says the wave too.

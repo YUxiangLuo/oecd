@@ -188,33 +188,31 @@ try {
   if (!onlyViz) {
   await open(page, 10, `document.querySelectorAll(".shock-workbench select").length >= 3`);
   await page.eval(`(() => { const s = document.querySelectorAll(".shock-workbench select");
-    window.__select(s[0], "CAN"); window.__select(s[1], "CRI"); window.__select(s[2], "C29"); return true; })()`);
-  await page.waitFor(`window.__find("CRI 哥斯达黎加 · C29") && document.querySelector(".teaching-example-summary")`);
+    window.__select(s[0], "CAN"); window.__select(s[1], "AUS"); window.__select(s[2], "C29"); return true; })()`);
+  await page.waitFor(`window.__find("AUS 澳大利亚 · C29") && document.querySelector(".teaching-example-summary")`);
   await Bun.sleep(2500);
-  await scrollTo(page, `[...document.querySelectorAll(".shock-workbench h4")].find((h) => h.textContent.trim() === "逐年表")`, 8);
-  await save("10-shocks.png", await page.screenshot(), student.username, "Step 10 year table (Canada vs Costa Rica, motor vehicles: w, τ, X, L1.X and the exchange-rate change) above the two-wave ranking of the 37 taxed countries.");
+  // The year table is folded under the example: open it, then frame it.
+  const yearTable = `[...document.querySelectorAll(".shock-workbench details")].find((d) => d.querySelector("summary")?.textContent.startsWith("逐年表"))`;
+  await page.eval(`(() => { const d = ${yearTable}; d.open = true; return true; })()`);
+  await Bun.sleep(400);
+  await scrollTo(page, `${yearTable}.querySelector("summary")`, 8);
+  await save("10-shocks.png", await page.screenshot(), student.username, "Step 10 year table (Canada vs Australia, motor vehicles: w, τ, X, L1.X and the exchange-rate change) under the example, above the ranking of the taxed countries.");
 
   await open(page, 11, `document.querySelector(".diverging-bars svg") && document.querySelector(".reg-example-effect")`);
   await scrollTo(page, `document.querySelector(".reg-family-bars") ?? document.querySelector(".diverging-bars")`, 12);
   await save("11-regression-result.png", await page.screenshot(), student.username, "Step 11 after the run: one bar per Y and the two-year headline with its current-year and next-year parts.");
 
-  // 改模型、对比: drop the exchange-rate control, compute, and show the unsaved column beside the default model.
-  await page.eval(`(() => {
-    const section = document.querySelector(".reg-custom-section");
-    [...section.querySelectorAll("input[type=checkbox]")].find((box) => box.closest("label")?.textContent.includes("汇率变动")).click();
-    return true; })()`);
-  await Bun.sleep(300);
-  await page.eval(`(() => { [...document.querySelectorAll(".reg-custom-section button")].find((b) => b.textContent.trim() === "计算这个模型").click(); return true; })()`);
-  await page.waitFor(`[...document.querySelectorAll(".reg-custom-compare-table thead th")].some((th) => th.textContent.includes("本次计算（未保存）"))`, 60_000);
+  // 改模型、对比: open the fold, run the 去掉汇率变动 preset, show its column beside the default model, put it in the report.
+  await page.eval(`(() => { const d = document.querySelector(".reg-custom-section"); if (d && !d.open) d.querySelector("summary").click(); return true; })()`);
+  await page.waitFor(`[...document.querySelectorAll(".reg-custom-presets button")].some((b) => b.textContent.startsWith("去掉汇率变动"))`, 30_000);
+  await page.eval(`(() => { [...document.querySelectorAll(".reg-custom-presets button")].find((b) => b.textContent.startsWith("去掉汇率变动")).click(); return true; })()`);
+  await page.waitFor(`[...document.querySelectorAll(".reg-custom-compare-table thead th")].some((th) => th.textContent.includes("本次：去掉汇率变动"))`, 90_000);
   await settled(page);
   await scrollTo(page, `[...document.querySelectorAll(".reg-custom-section h4")].find((h) => h.textContent.startsWith("回归结果表"))`, 120);
-  await save("11-regression-workbench.png", await page.screenshot(), student.username, "Step 11 改模型、对比: the model without the exchange-rate control (unsaved, highlighted) beside the default model.");
-  // Save it and put it in the report, so the generated report carries the appendix 学生设计的模型.
-  await page.eval(`(() => { window.__type(document.querySelector(".reg-custom-save input"), "去掉汇率变动");
-    [...document.querySelectorAll(".reg-custom-save button")].find((b) => b.textContent.trim() === "保存").click(); return true; })()`);
-  await page.waitFor(`document.querySelector('input[aria-label="把 去掉汇率变动 放入报告"]')`, 20_000);
-  await page.eval(`(() => { document.querySelector('input[aria-label="把 去掉汇率变动 放入报告"]').click(); return true; })()`);
-  await page.waitFor(`document.querySelector('input[aria-label="把 去掉汇率变动 放入报告"]').checked`, 20_000);
+  await save("11-regression-workbench.png", await page.screenshot(), student.username, "Step 11 改模型、对比: the 去掉汇率变动 preset beside the default model, with the 课程设定值 row.");
+  // Put it in the report, so the generated report carries the appendix 模型实验.
+  await page.eval(`(() => { [...document.querySelectorAll(".reg-custom-report button")].find((b) => /放入报告/.test(b.textContent)).click(); return true; })()`);
+  await page.waitFor(`document.querySelector(".reg-custom-report-chip")`, 20_000);
   await settled(page);
   if (onlyReg) {
     await page.close();
