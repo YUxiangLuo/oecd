@@ -539,6 +539,24 @@ export function ReportLab({
   const visibleBlocked = blocked.length > 0 ? blocked : reportGate ?? [];
 
   useEffect(() => { void preloadReportRenderer().catch(() => {}); }, []);
+  // The report's folded sections print open (a closed details prints nothing), whether the export button or
+  // Ctrl+P starts the print; afterwards they fold again.
+  useEffect(() => {
+    const opened: HTMLDetailsElement[] = [];
+    const before = () => {
+      document.querySelectorAll<HTMLDetailsElement>(".report-body details.report-section:not([open])").forEach((item) => {
+        item.open = true;
+        opened.push(item);
+      });
+    };
+    const after = () => { opened.splice(0).forEach((item) => { item.open = false; }); };
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    return () => {
+      window.removeEventListener("beforeprint", before);
+      window.removeEventListener("afterprint", after);
+    };
+  }, []);
   // A newer acknowledged session supersedes a gate returned for an older snapshot.
   useEffect(() => { setBlocked([]); }, [reportGate]);
   // A gate panel the student is sent to highlights briefly, so the click visibly did something.
@@ -817,15 +835,15 @@ export function ReportLab({
         </nav>
       </section>
       {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} flash={gateFlash} verb={reportGateVerb(report)} />}
-      {/* Open: the four steps' results and the models marked for the report are what the analysis below cites. */}
-      <section className="report-reference" aria-labelledby="report-regression-results-title">
-        <h3 id="report-regression-results-title" className="report-reference-title">四步回归结果</h3>
+      {/* Open while the analysis is written (it cites these); folded once the report is handed in. */}
+      <details className="report-reference" aria-labelledby="report-regression-results-title" open={!(report?.state === "pending" || report?.state === "graded")}>
+        <summary><h3 id="report-regression-results-title" className="report-reference-title">四步回归结果</h3></summary>
         <p className="muted">四个 Y 的单位不同，条长都换算成标准差；条末先写各自单位的值。</p>
         <RegressionSummaryBars getStep={getStep} />
         <RegressionEvidenceMatrix getStep={getStep} />
         <ReportedExperiments getStep={getStep} onNavigateStep={onNavigateStep} />
         <p className="muted">课程模拟回归按你的例子换算的结果在步骤 11–14，不是该例子的单独估计；步骤 6–9 的真实 ICIO 图表读数会自动写进报告。这里只列出已保存的结果，结论要你自己写；自定义模型的解释跨度以所选 X 滞后为准。</p>
-      </section>
+      </details>
       <section className="report-reflection" aria-labelledby={REPORT_REFLECTION_TITLE_ID}>
         <div>
           <span className="reg-section-step">你的分析 · 自动保存</span>
@@ -940,7 +958,7 @@ export function ReportLab({
       {error && <div ref={errorRef} className="error-box report-error" role="alert">{error}</div>}
 
       {report ? (
-        <div className="report-body" id="report-preview" ref={previewRef} tabIndex={-1} role="region" aria-label="报告正文"><ReportPrintGrade report={report} /><ReportMarkdown markdown={report.markdown} /></div>
+        <div className="report-body" id="report-preview" ref={previewRef} tabIndex={-1} role="region" aria-label="报告正文"><ReportPrintGrade report={report} /><ReportMarkdown markdown={report.markdown} foldSections /></div>
       ) : (
         <p className="muted">{gated ? "补齐上方清单中的缺项后，可以先生成草稿预览，再提交。" : "可以先生成草稿预览，再提交。"}区间包含 0、或者没算出估计值的结果，也要写进报告。</p>
       )}

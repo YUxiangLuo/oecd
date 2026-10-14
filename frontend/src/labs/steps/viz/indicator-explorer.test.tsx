@@ -359,7 +359,7 @@ describe("indicator explorer with automatic report material", () => {
     schema.mockRestore();
   });
 
-  test("length defaults to separate forward/backward trends plus a time trajectory", async () => {
+  test("length defaults to the time trajectory alone; the forward/backward trends live under 历年变化", async () => {
     const rows = spyOn(api, "countryIndicators").mockImplementation(
       async (year) => countryRows(year),
     );
@@ -368,16 +368,12 @@ describe("indicator explorer with automatic report material", () => {
       fields: {},
     });
     const view = setup(LengthVizStep);
-    await view.findByRole("heading", { name: /前向 GVC 段长度/ });
     expect(
-      await view.findByRole("img", { name: /前向 GVC 段长度历年变化/ }),
+      await view.findByRole("img", { name: /前向与后向 GVC 段长度历年轨迹/ }),
     ).toBeTruthy();
-    expect(
-      view.getByRole("img", { name: /后向 GVC 段长度历年变化/ }),
-    ).toBeTruthy();
-    expect(
-      view.getByRole("img", { name: /前向与后向 GVC 段长度历年轨迹/ }),
-    ).toBeTruthy();
+    expect(view.queryByRole("img", { name: /前向 GVC 段长度历年变化/ })).toBeNull();
+    expect(view.queryByRole("img", { name: /后向 GVC 段长度历年变化/ })).toBeNull();
+    expect(view.container.textContent).toContain("切换到“历年变化”");
     const scope = view.getByRole("group", { name: "当前图表范围" });
     const keys = [...scope.querySelectorAll(".scope-country")];
     expect(keys.map((key) => key.textContent)).toEqual(["CHN 中国", "USA 美国"]);
@@ -427,13 +423,13 @@ describe("indicator explorer with automatic report material", () => {
     const view = setup(LengthVizStep);
     const legend = await waitFor(() => { const found = view.container.querySelector('[data-legend="CHN"]'); expect(found).toBeTruthy(); return found!; });
     expect(legend.textContent).toBe("CHN 中国 · 无轨迹");
-    // The trajectory note, not the rounding note under the other chart's trend cards.
     expect(view.getAllByRole("note").filter((note) => note.textContent?.includes("CHN 中国没有轨迹"))).toHaveLength(1);
-    await waitFor(() => expect(view.container.textContent).toContain("暂不能读出期间变化"));
-    // The trend chart's reading says it; the note below the charts does not repeat it.
+    // No trend chart under the trajectory any more: the note below the chart is the one place that says why.
+    await waitFor(() => expect(view.container.textContent).toContain("后向 GVC 段长度无法计算"));
     const material = view.getByRole("region", { name: "报告材料" }).textContent ?? "";
     const outside = (view.container.textContent ?? "").replace(material, "");
     expect(outside.split("后向 GVC 段长度无法计算").length - 1).toBe(1);
+    expect(outside).not.toContain("暂不能读出期间变化");
     rows.mockRestore();
     schema.mockRestore();
   });
@@ -837,9 +833,9 @@ describe("undefined lengths and medians that say nothing (round 11)", () => {
       fireEvent.change(view.getByLabelText("比较范围"), { target: { value: "A" } });
       const material = view.getByRole("region", { name: "报告材料" });
       await waitFor(() => expect(material.textContent).toContain("没有 GVC 生产"));
-      const charts = view.getAllByRole("status").filter((node) => !material.contains(node) && node.textContent?.includes("无法计算"));
-      const text = charts.map((node) => node.textContent).join("\n");
-      expect(text).toContain("CHN 中国 与 USA 美国在所选年份该行业没有 GVC 生产（GVC 增加值为 0），前向 GVC 段长度无法计算（不是缺少数据）");
+      // The note under the trajectory (there is no trend chart to say it): one sentence for both economies.
+      const text = (view.container.textContent ?? "").replace(material.textContent ?? "", "");
+      expect(text).toContain("CHN 中国 与 USA 美国在所选年份该行业没有 GVC 生产（GVC 增加值为 0），前向 GVC 段长度无法计算");
       expect(text).not.toContain("；USA 美国在所选年份");
     } finally { rows.mockRestore(); perCountry.mockRestore(); schema.mockRestore(); }
   });

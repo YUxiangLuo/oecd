@@ -920,7 +920,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
             {dbObservationSentence((selectedObservation.table as DbTableKind | undefined) ?? table, selectedObservation.row, selectedObservation.column)} = {fmtDb(selectedObservation.value)} 百万美元
             {observationSource ? `（${observationSource}）` : ""}
             {selectedObservation.value === 0 ? `。${zeroCellNote((selectedObservation.table as DbTableKind | undefined) ?? table)}` : ""}
-            {selectedObservation.auto && !state.materialLocked ? "。系统已先记录这个单元格，点击其他数值即可替换。" : ""}
+            {selectedObservation.auto && !state.materialLocked ? "（系统先记录的；点其他数值即替换）" : ""}
           </span>
         ) : <span className="empty">尚未记录</span>}
         {state.materialLocked && <span className="muted">{MATERIAL_LOCKED_NOTE.replace("浏览", "点击单元格")}{rechosen && !pickedCell ? `已改为记录这个单元格。${MATERIAL_RECHOSEN_NEXT}` : ""}</span>}

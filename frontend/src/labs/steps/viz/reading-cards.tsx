@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { CardGrid } from "./card-grid";
 import { cjkJoin } from "../../../format";
 import { countryLabel, medianSkipReason } from "../../../viz";
 import { finiteValue, NO_RANK, NO_RANK_NOTE, rankText, type CompositionSpec, type YearDistribution } from "./indicator-model";
@@ -18,7 +19,7 @@ export interface ReadingCard {
 export function ReadingCards({ label, cards }: { label: string; cards: ReadingCard[] }) {
   if (!cards.length) return null;
   return (
-    <div className="comparison-summary" role="group" aria-label={label}>
+    <CardGrid label={label}>
       {cards.map((card, index) => (
         <div key={index}>
           <span>{card.eyebrow}</span>
@@ -26,7 +27,7 @@ export function ReadingCards({ label, cards }: { label: string; cards: ReadingCa
           {card.small && <small>{card.small}</small>}
         </div>
       ))}
-    </div>
+    </CardGrid>
   );
 }
 

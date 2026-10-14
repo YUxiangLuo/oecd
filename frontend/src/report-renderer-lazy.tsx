@@ -40,7 +40,7 @@ class RendererBoundary extends Component<{ children: ReactNode }, { failed: bool
   }
 }
 
-export function ReportMarkdown(props: { markdown: string; className?: string }) {
+export function ReportMarkdown(props: { markdown: string; className?: string; foldSections?: boolean }) {
   return (
     <RendererBoundary>
       <Suspense fallback={<div className="muted">正在加载报告渲染器…</div>}>

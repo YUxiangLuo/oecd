@@ -7,7 +7,6 @@ import {
   materialStatusForStep,
   reportMaterialStatus,
   stepPrimaryActionLabel,
-  TASK_LOCKED_NOTE,
   stepTaskTitleId,
 } from "./step-task-card";
 import type { Step } from "./types";
@@ -168,24 +167,17 @@ describe("shared step task card", () => {
     expect(renderToStaticMarkup(<StepTaskCard step={reportStep} complete={false} materialStatus="saving" />)).toContain("你的分析：保存中");
   });
 
-  test("after submission, steps that record automatically say at the top that recording has stopped", () => {
+  test("after submission the task card carries no banner: each step's material card says it once", () => {
     const step = (n: number, lab: Step["lab"] = "viz"): Step => ({
       n, stage: 3, lab, status: "demo", title: `步骤${n}`, goal: "目标",
-      tasks: ["系统自动把你最后看的完整图表记为报告材料", "比较", "答题"], concept: "", tip: "", deps: [],
+      tasks: ["在图下点“记为本步报告材料”", "比较", "答题"], concept: "", tip: "", deps: [],
       handoff: { input: "", action: "", output: "" },
     });
-    const card = (n: number, reportState?: "draft" | "pending" | "graded", lab?: Step["lab"]) =>
-      renderToStaticMarkup(<StepTaskCard step={step(n, lab)} complete materialStatus="ready" reportExists reportState={reportState} />);
-    for (const n of [1, 2, 6, 9, 10]) {
-      const html = card(n, "pending");
-      expect(html).toContain(TASK_LOCKED_NOTE);
-      // Near the top: before the task lines that still describe automatic recording.
-      expect(html.indexOf(TASK_LOCKED_NOTE)).toBeLessThan(html.indexOf("系统自动把"));
+    for (const [n, reportState] of [[1, "pending"], [6, "pending"], [7, "graded"], [10, "pending"], [15, "pending"]] as const) {
+      const html = renderToStaticMarkup(<StepTaskCard step={step(n, n === 15 ? "rep" : "viz")} complete materialStatus="ready" reportExists reportState={reportState} />);
+      expect(html).not.toContain("自动记录已暂停");
+      expect(html).not.toContain("step-task-locked");
     }
-    expect(card(7, "graded")).toContain(TASK_LOCKED_NOTE);
-    expect(card(7, "draft")).not.toContain(TASK_LOCKED_NOTE);
-    expect(card(7)).not.toContain(TASK_LOCKED_NOTE);
-    expect(card(15, "pending", "rep")).not.toContain(TASK_LOCKED_NOTE);
   });
 
   test("focuses the real workbench and scrolls only its nested course container", () => {

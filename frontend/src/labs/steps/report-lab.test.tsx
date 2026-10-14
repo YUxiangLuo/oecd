@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { api, ApiError } from "../../api";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ToastHost } from "../../toast";
@@ -1048,4 +1048,25 @@ test("the report status is compared by version, state and grade", () => {
   expect(reportStatusChanged(graded, { ...graded, state: "pending", graded_at: null })).toBe(true);
   expect(reportStatusChanged(graded, { ...graded, updated_at: "2026-08-14T00:00:00Z" })).toBe(true);
   expect(reportStatusChanged(null, graded)).toBe(true);
+});
+
+
+test("the student's report folds its appendix sections, opens them all while printing, and folds the results panel once handed in", async () => {
+  const sectioned = { ...report("draft"), markdown: "# 报告\n\n## 结论\n\n结论段\n\n## 理解题答题记录\n\n答题\n\n## 报告溯源\n\n溯源" };
+  const view = render(<ReportLab {...finishProps} report={sectioned} />);
+  await waitFor(() => expect(view.container.querySelectorAll(".report-body details.report-section")).toHaveLength(3));
+  const open = () => [...view.container.querySelectorAll<HTMLDetailsElement>(".report-body details.report-section")].map((item) => item.open);
+  expect(open()).toEqual([true, false, false]);
+  // Ctrl+P or the export button: a closed details prints nothing, so every section opens for the print and folds back after.
+  act(() => { window.dispatchEvent(new Event("beforeprint")); });
+  expect(open()).toEqual([true, true, true]);
+  act(() => { window.dispatchEvent(new Event("afterprint")); });
+  expect(open()).toEqual([true, false, false]);
+  // The 四步回归结果 panel is open while writing (a draft), folded once the report is with the teacher.
+  const panel = () => view.container.querySelector<HTMLDetailsElement>("details.report-reference")!;
+  expect(panel().open).toBe(true);
+  expect(panel().querySelector("summary")?.textContent).toBe("四步回归结果");
+  view.rerender(<ReportLab {...finishProps} report={{ ...sectioned, state: "pending" }} />);
+  expect(panel().open).toBe(false);
+  view.unmount();
 });

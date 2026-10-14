@@ -414,7 +414,7 @@ export function ShockLab({ meta, step: _step, state }: {
       <span className="reg-section-step">举例</span>
       <h3>回归要用到的变量：以一个国家×行业为例</h3>
       <p className="teaching-example-lead">
-        先在逐年表里认识 X、L1.X 和汇率变动；默认回归还控制 GDP 对数与贸易开放度。选一个国家和一个行业，可再选一个对照国家；默认是被加税的加拿大和未被加税的哥斯达黎加（两国汽车业都主要出口到美国），行业为 C29 汽车及零部件。步骤 11–14 会把回归结果换算到这个例子上。所选例子只用于展示与换算，不是回归样本筛选；回归仍使用课程规定的样本。
+        先在逐年表里认识 X、L1.X 和汇率变动；默认回归还控制 GDP 对数与贸易开放度。选一个国家和一个行业，可再选一个对照国家；默认是被加税的加拿大和未被加税的澳大利亚（加拿大汽车业九成出口到美国；澳大利亚未被加税，X 始终为 0），行业为 C29 汽车及零部件。步骤 11–14 会把回归结果换算到这个例子上。所选例子只用于展示与换算，不是回归样本筛选；回归仍使用课程规定的样本。
       </p>
       {/* One strip says what the model's variables are; the four cards with sources are folded under it. */}
       <p className="teaching-definitions">

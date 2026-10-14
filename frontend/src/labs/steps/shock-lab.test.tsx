@@ -67,7 +67,7 @@ test("step 10 uses the dedicated teaching tariff panel independently of the old 
 test("step 10 prefers the configured two-country industry example", () => {
   const meta: Meta = {
     years: [2016, 2017, 2018, 2019, 2020],
-    countries: ["CAN", "CHN", "CRI", "KOR", "MEX", "USA"],
+    countries: ["AUS", "CAN", "CHN", "CRI", "KOR", "MEX", "USA"],
     sectors: ["C26", "C29"],
   };
   const html = renderToStaticMarkup(<ShockLab meta={meta} step={step} state={{
@@ -75,7 +75,7 @@ test("step 10 prefers the configured two-country industry example", () => {
     syncError: null, syncNow: () => {},
   }} />);
   expect(html).toContain('<option value="CAN" selected="">CAN 加拿大</option>');
-  expect(html).toContain('<option value="CRI" selected="">CRI 哥斯达黎加</option>');
+  expect(html).toContain('<option value="AUS" selected="">AUS 澳大利亚</option>');
   expect(html).toContain('<option value="C29" selected="">C29 汽车及零部件</option>');
 });
 
@@ -246,17 +246,17 @@ test("only an example the student picked counts as chosen; an older default save
 });
 
 test("a fresh step 10 always opens on C29 (the autos example), whatever step 9 looked at; a saved choice wins", async () => {
-  const meta: Meta = { years: tenYears, countries: ["CAN", "CRI", "USA"], sectors: ["C26", "C29"] };
+  const meta: Meta = { years: tenYears, countries: ["AUS", "CAN", "USA"], sectors: ["C26", "C29"] };
   const groups = tenGroups();
   const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.5, country === "CAN")));
   const save = mock(() => {});
-  // Nothing saved yet: CAN vs CRI in C29, as the lead text says.
+  // Nothing saved yet: CAN vs AUS in C29, as the lead text says.
   render(<ShockLab meta={meta} step={step} state={tenState(undefined, save)} />);
-  await waitFor(() => expect(series).toHaveBeenCalledWith(["CAN", "CRI"], "C29"));
+  await waitFor(() => expect(series).toHaveBeenCalledWith(["CAN", "AUS"], "C29"));
   expect((screen.getByRole("combobox", { name: "行业" }) as HTMLSelectElement).value).toBe("C29");
   expect(series).not.toHaveBeenCalledWith(expect.anything(), "C26");
   const lead = document.querySelector(".teaching-example-lead")!.textContent!;
-  expect(lead).toContain("两国汽车业都主要出口到美国");
+  expect(lead).toContain("未被加税的澳大利亚");
   expect(lead).toContain("行业为 C29 汽车及零部件");
   expect(lead).not.toContain("步骤 9");
   await waitFor(() => expect(save).toHaveBeenCalled());
@@ -265,7 +265,7 @@ test("a fresh step 10 always opens on C29 (the autos example), whatever step 9 l
   // A saved step 10 choice keeps leading.
   const kept = mock(() => {});
   const saved = {
-    compared: ["CAN", "CRI"], teaching_industry: "C26", teaching_example_chosen: true,
+    compared: ["CAN", "AUS"], teaching_industry: "C26", teaching_example_chosen: true,
     teaching_observation: { country: "CAN", industry: "C26", year: 2020, teaching_export_share_w: 0.5, teaching_tariff_rate_tau: 0.25, teaching_tariff_exposure: 0.125, version: "step10-tariff-teaching-v5" },
   };
   render(<ShockLab meta={meta} step={step} state={tenState(saved, kept)} />);

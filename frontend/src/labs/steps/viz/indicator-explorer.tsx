@@ -570,9 +570,10 @@ export function IndicatorExplorer({
   const emptyStatus = (key: string) => allUndefined(key)
     ? `${notesFor(key).join("；")}（不是缺少数据）；请换一个${industry ? "行业或" : ""}国家。`
     : undefined;
+  // 前后向位置 draws the trajectory only (no trend chart says the reason in its place), so its notes are complete.
   const undefinedNotes = (view === "trend" || view === "comparison" ? [metric] : view === "directions" ? metrics : [])
-    .filter((key) => !allUndefined(key))
-    .flatMap((key) => notesFor(key, view === "trend" || view === "directions"));
+    .filter((key) => view === "directions" || !allUndefined(key))
+    .flatMap((key) => notesFor(key, view === "trend"));
   // Trend readouts and cards: an undefined reading says "无法计算" and why, with its year, not "缺失".
   const trendEmpty = (key: string) => (country: string, at: number) => (undefinedReason(country, key, at) ? "无法计算" : null);
   const trendReason = (key: string) => (country: string, at: number) => {
@@ -1033,23 +1034,6 @@ export function IndicatorExplorer({
                 cloudYear={chartYears.at(-1)}
                 years={chartYears}
               />
-              {metrics.map((key) => (
-                <IndicatorTrendChart
-                  key={key}
-                  rows={scoped}
-                  countries={selected}
-                  years={chartYears}
-                  metric={key}
-                  label={label(key)}
-                  unit={unit(key)}
-                  distribution={referenceFor(key)}
-                  mode="context"
-                  emptyStatus={emptyStatus(key)}
-                  emptyReading={trendEmpty(key)}
-                  reasonFor={trendReason(key)}
-                  industry={industry}
-                />
-              ))}
             </>}
           {view === "comparison" && !industry && referenceFor(metric)[0] && (
             <>

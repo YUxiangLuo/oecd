@@ -6,6 +6,7 @@ import { changeReading, finiteValue, NO_OUTPUT, NO_RANK, NO_RANK_NOTE, rankText,
 import { integerDomain, niceDomain } from "../../../viz/nice-ticks";
 import { stripNegativeZero } from "../../../format";
 import type { Row } from "./scaffold";
+import { CardGrid } from "./card-grid";
 
 /** Axis ticks: round values, trailing zeros trimmed ("10%", "1.5"). */
 export const indicatorTick = (value: number | null, unit: string) => {
@@ -179,7 +180,7 @@ export function TrendSummary({
   });
   return (
     <>
-    <div className="comparison-summary" role="group" aria-label="趋势读数">
+    <CardGrid label="趋势读数">
       <div>
         <span>{scopeLabel(first, industry)} · {metricLabel ? `${metricLabel} · ` : ""}{firstYear}→{lastYear}</span>
         <b>{changeReading(start, end, unit, digits)}</b>
@@ -219,7 +220,7 @@ export function TrendSummary({
         </div>
       )}
       {gapCards}
-    </div>
+    </CardGrid>
     <p className="muted trend-rounding-note" role="note">{CHANGE_ROUNDING_NOTE}</p>
     </>
   );
