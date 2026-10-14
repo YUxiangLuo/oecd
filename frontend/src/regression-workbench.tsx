@@ -505,7 +505,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         {detailColumns[shownDetail].snapshot.result.suppressed && <p className="reg-stale-note">{options.suppressed_note}</p>}
         {omittedSummary(detailColumns[shownDetail].snapshot, options).map((note) => <p className="muted" key={note}>{note}</p>)}
         <p className="muted">系数按 X 以份额计（1 = 100 个百分点）；最后一列换算为 X 每高 1 个百分点。{xSpanLabel(detailColumns[shownDetail].spec)}；括号内为标准误，星号含义见表下注释。{detailColumns[shownDetail].spec.fixed_effects.length ? "带固定效应的模型没有常数项：各单位和各年的截距已被固定效应吸收。" : ""}</p>
-        <button type="button" className="secondary" onClick={() => download(comparisonCsv(columns, options, depvarLabel, pointRow), `步骤${stepNumber}-回归对比.csv`)}>
+        <button type="button" className="secondary" onClick={() => download(comparisonCsv(columns, options, depvarLabel, pointRow, designRow), `步骤${stepNumber}-回归对比.csv`)}>
           导出 CSV（上面的回归结果表）
         </button>
       </details>

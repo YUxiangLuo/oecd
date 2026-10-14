@@ -216,6 +216,15 @@ describe("tables", () => {
     expect(omittedSummary(snapshotOf(run), options)).toEqual(["被国家×年份 FE 吸收：汇率变动、增加值总额对数"]);
   });
 
+  test("the CSV carries the course's design value right under the per-point row, as on the page", () => {
+    const named: TableColumn[] = [columns[0], { ...columns[1], name: "本次：去掉汇率变动" }];
+    const csv = comparisonCsv(named, options, "外国增加值项占比", perPointRow(named, "trade"), designValueRow(named, "trade", "FVA_share", options));
+    const lines = csv.slice(1).trimEnd().split("\r\n");
+    const labels = lines.map((line) => line.split(",")[0]);
+    expect(labels.indexOf("课程设定值（X 每高 1 个百分点）")).toBe(labels.indexOf("合计：X 每高 1 个百分点") + 1);
+    expect(lines[labels.indexOf("课程设定值（X 每高 1 个百分点）")]).toMatch(/^课程设定值（X 每高 1 个百分点）,-0\.55 个百分点；估计偏差 [+-]?\d+%,-0\.55 个百分点；估计偏差 \+\d+%$/);
+  });
+
   test("the CSV has a BOM, two rows per term, the fixed effects, the models and the footnote last", () => {
     const named: TableColumn[] = [columns[0], { ...columns[1], name: "本次：去掉汇率变动" }];
     const csv = comparisonCsv(named, options, "外国增加值项占比", perPointRow(named, "trade"));

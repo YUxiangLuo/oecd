@@ -196,9 +196,15 @@ describe("simple regression workbench", () => {
 
   test("restores the saved run on refresh; a record on another Y is not the step's result; never starts from the matching step 6-9 indicator", async () => {
     mockApis();
-    const saved = savedRun("FVA_share", "外国增加值项占比", -0.5, -0.6, -0.4);
+    const saved = {
+      ...savedRun("FVA_share", "外国增加值项占比", -0.5, -0.6, -0.4),
+      decomposition: { group: "first", wave_start: 2018, year: 2020, pre_years: [2016, 2017], observed: -0.084, remainder: -0.025,
+        terms: [{ name: "x_terms", label: "关税 X", change: -0.016 }, { name: "teaching_exchange_rate_change", label: "汇率变动", change: -0.043 }] },
+    };
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: saved } as never }} />);
     await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("外国增加值项占比平均低 0.50 个百分点"));
+    // The sentence under the chart comes back with the saved run (it is saved with it), not only after a fresh run.
+    expect(document.querySelector(".reg-decomposition")?.textContent).toContain("与关税 X 相关 −1.6，与汇率变动同步 −4.3，其余");
     // The saved run, not the overview, is the selected bar: page and report agree.
     await screen.findByRole("button", { name: "外国增加值项占比：-0.50 个百分点，95% 区间 [-0.60, -0.40]，已保存" });
     expect(document.body.textContent).not.toContain("教学模拟");

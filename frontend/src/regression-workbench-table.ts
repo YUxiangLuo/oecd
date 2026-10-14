@@ -368,14 +368,15 @@ function csvField(value: string): string {
  *  标准误 row for each term, then the fixed effects and statistics, the footnote last. The SE are plain numbers, not
  *  bracketed as on the page: a spreadsheet reads "(0.0330)" as −0.033. */
 export function comparisonCsv(
-  columns: TableColumn[], options: WorkbenchOptions, depvarLabel: string, perPoint?: SummaryRow | null,
+  columns: TableColumn[], options: WorkbenchOptions, depvarLabel: string, perPoint?: SummaryRow | null, design?: SummaryRow | null,
 ): string {
   const lines: string[][] = [[`因变量：${depvarLabel}`, ...columns.map((column) => column.name)]];
-  // As on the page: the per-point row right under the X-terms sum, before a constant.
+  // As on the page: the per-point row and the course's design value right under the X-terms sum, before a constant.
   const rows = coefficientRows(columns, options);
   for (const row of [...rows.filter((item) => item.key !== "_constant"), "per_point" as const, ...rows.filter((item) => item.key === "_constant")]) {
     if (row === "per_point") {
       if (perPoint) lines.push([perPoint.label, ...perPoint.cells]);
+      if (design) lines.push([design.label, ...design.cells]);
       continue;
     }
     lines.push([row.label, ...row.cells.map((item) => (item === "omitted" ? "（省略）" : item?.coef ?? ""))]);

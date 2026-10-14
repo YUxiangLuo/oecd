@@ -378,6 +378,8 @@ PYTHONPATH=. uv run python scripts/check_model_space.py distinct --out dogfood-o
 **测试**：后端 pytest 全套通过（含 `tests/test_check_model_space.py` 新增的预设元组与 v13 判定测试）；前端 `bun run test:unit` 通过；本地 CI 见下。
 
 **本地 CI**（`scripts/local_ci.sh`，2026-10-14，运行 20261014T091333Z）：全部通过。ruff／mypy／bash -n；后端 1,237 个测试通过，覆盖率 92%；前端 944 个测试通过；构建模式；浏览器 journeys（学生 15 步、报告生成与提交、教师评分、改密、可访问性）无错误。
+**深度 dogfood（round 10，`dogfood-output/round10-v13-deep-20261014/`，不入库）**：接口对四步默认 Y 各 14 个设定共 59 次运行，与全模型空间扫描记录逐系数一致（相对差 < 1e-9），分解恒等式、Root MSE、常数项规则、快照 β 与限流均正确；报告附录四步的“课程设定值”行偏差与接口一致；浏览器逐步点完 7 个预设与 4 条自定义路径（加 L2.X、无固定效应、去掉全部 X、加国家×年份 FE），28 个预设单元格的偏差与接口一致，放入／移出／替换报告、提交、教师端评阅页附录、1000 px 宽度均正常。两处缺陷已修并有测试：刷新后分解句丢失（保存的运行现在带 `decomposition`），导出 CSV 缺“课程设定值”行。两项观察未改：报告附录的统计块没有 Prob > F 与 Root MSE；极小系数在四位小数下显示为 0.0000。
+
 <!-- v13-verify-end -->
 
 ## 附录 A：各候选的完整设定表（步骤 11 默认 Y 以外的 Y 见 `teaching_variants.py table` 输出）
