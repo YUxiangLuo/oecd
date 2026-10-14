@@ -232,7 +232,7 @@ describe("ReportedExperiments", () => {
       }));
       await waitFor(() => expect(view.container.textContent).toContain("被国家×年份 FE 吸收：汇率变动"));
       // Not a preset: named as a custom setting.
-      expect(view.container.querySelector("tbody tr td b")?.textContent).toStartWith("自定义设定：");
+      expect(view.container.querySelector("tbody tr td b")?.textContent).toBe("自定义设定");
     } finally { cleanup(); options.mockRestore(); }
   });
 

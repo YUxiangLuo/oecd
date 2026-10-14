@@ -105,7 +105,7 @@ PRESETS: tuple[tuple[str, str, str, ModelSpec], ...] = (
         ModelSpec((0, 1, 2), DEFAULT_SPEC.controls, DEFAULT_SPEC.fixed_effects),
     ),
 )
-CUSTOM_LABEL_PREFIX = "自定义设定："
+CUSTOM_LABEL = "自定义设定"
 HINTS = (
     "在课程模拟数据中，每次只改一处设定，与第一列的默认模型比较：X 各项的系数和合计变了多少？观测值和年份是否相同？",
     "与 Y 无关的变量在 10% 水平上大约每 10 次也会出现一次 *，不要只凭一颗星下结论。",
@@ -121,12 +121,13 @@ SUPPRESSED_NOTE = "未通过估计检查，已隐藏推断结果（标准误、t
 
 
 def experiment_label(spec: ModelSpec) -> str:
-    """How the page and the report name a model experiment: its preset's label, else "自定义设定：" + the model."""
+    """How the page and the report name a model experiment: its preset's label, else "自定义设定" (the model itself
+    is always shown beside the name, so it is not repeated in it)."""
     canonical = spec.canonical()
     for _key, label, _question, preset in PRESETS:
         if preset.canonical() == canonical:
             return label
-    return CUSTOM_LABEL_PREFIX + canonical.summary()
+    return CUSTOM_LABEL
 
 
 def options() -> dict[str, Any]:
@@ -138,7 +139,7 @@ def options() -> dict[str, Any]:
             {"key": key, "label": label, "question": question, "spec": spec.canonical().to_dict()}
             for key, label, question, spec in PRESETS
         ],
-        "custom_label_prefix": CUSTOM_LABEL_PREFIX,
+        "custom_label": CUSTOM_LABEL,
         "x_lags": [{"lag": lag, "label": x_term_label(lag), "description": X_LAG_DESCRIPTIONS[lag]} for lag in X_LAGS],
         "x_lag_note": X_LAG_NOTE,
         "controls": [

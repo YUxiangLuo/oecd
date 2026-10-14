@@ -2949,10 +2949,7 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     failing = _complete()
     failing["steps"]["11"]["data"]["experiment"] = _experiment(ModelSpec((0,), (), ("year",)))
     lines = build(failing, "同学").markdown.split("## 附录：模型实验", 1)[1]
-    assert (
-        "- 自定义设定：X；无控制变量；年份 FE：X；无控制变量；年份 FE。这次没能重算：关税暴露 X 在这个设定下无法估计"
-        in lines
-    )
+    assert "- 自定义设定：X；无控制变量；年份 FE。这次没能重算：关税暴露 X 在这个设定下无法估计" in lines
     # The rest of this test reads a teaching-shaped panel with two tariff waves.
     panel = _panel()
     monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: (artifacts.release_identity(tmp_path), panel))
@@ -2960,8 +2957,8 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
 
     no_rate = ModelSpec((0, 1), ((GDP_COLUMN, 0), (OPENNESS_COLUMN, 0)), ("country_industry", "year"))
     country_year = ModelSpec((0, 1), ((EXCHANGE_RATE_COLUMN, 0),), ("country_industry", "country_year"))
-    custom_name = "自定义设定：X + L1.X；汇率变动；国家×行业 + 国家×年份 FE"
-    escaped_name = "自定义设定：X \\+ L1\\.X；汇率变动；国家×行业 \\+ 国家×年份 FE"
+    custom_name = "自定义设定"
+    escaped_name = "自定义设定"
     session = _complete()
     # The fixture panel carries step 11's Y only: step 11 recomputes, step 13 says it could not, step 12 has none.
     session["steps"]["11"]["data"]["experiment"] = _experiment(country_year)
@@ -3022,7 +3019,12 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     ]
     # Each step's evidence names its experiment.
     summary = markdown.split("## 关键证据摘要", 1)[1].split("## 理解题答题记录", 1)[0]
-    assert f"- 你在本步做了一个模型实验（{escaped_name}），见附录“模型实验”。" in summary
+    # A custom model is named by its model in the summary sentence (its name alone says only 自定义设定), escaped
+    # as a typed name would be.
+    assert (
+        "- 你在本步做了一个模型实验（自定义设定：X \\+ L1\\.X；汇率变动；国家×行业 \\+ 国家×年份 FE），见附录“模型实验”。"
+        in summary
+    )
     assert "- 你在本步做了一个模型实验（去掉汇率变动），见附录“模型实验”。" in summary
     assert summary.count("你在本步做了一个模型实验") == 2
     # The methods note says the appendix is the one part recomputed.

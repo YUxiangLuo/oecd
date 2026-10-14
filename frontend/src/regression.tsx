@@ -158,9 +158,11 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
   );
   const overviewItems = overviewQuery.status === "success" ? overviewQuery.data?.outcomes[outcome] ?? [] : [];
 
-  // 只在学生点运行按钮之后滚到结论；会话恢复和点条形图都不滚动。
+  // 只在学生点运行按钮之后滚到结论；会话恢复和点条形图都不滚动。The bars sit above the verdict and arrive with the
+  // overview a moment after the result: scroll once they are in (or failed), so the target does not move afterwards.
+  const overviewSettled = overviewQuery.status === "success" || overviewQuery.status === "error";
   useEffect(() => {
-    if (!result || !scrollToVerdictAfterRun.current) return;
+    if (!result || !overviewSettled || !scrollToVerdictAfterRun.current) return;
     scrollToVerdictAfterRun.current = false;
     const frame = window.requestAnimationFrame(() => {
       scrollRegressionVerdict(
@@ -171,7 +173,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
       document.getElementById("reg-result-title")?.focus({ preventScroll: true });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [result]);
+  }, [result, overviewSettled]);
 
   const bars = result && overviewItems.length > 0 ? familyBarRows(outcome, overviewItems, defaultKey, result) : null;
   const previewRow = bars && previewKey ? bars.rows.find((row) => row.key === previewKey) ?? null : null;

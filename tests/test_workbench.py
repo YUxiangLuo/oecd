@@ -75,10 +75,10 @@ def test_options_list_every_choice_in_page_order_with_the_default_and_the_limits
     specs = [json.dumps(item["spec"], sort_keys=True) for item in presets]
     assert len(set(specs)) == len(specs) and json.dumps(DEFAULT_SPEC.to_dict(), sort_keys=True) not in specs
     assert all(item["question"].endswith("？") and ModelSpec.from_dict(item["spec"]) for item in presets)
-    assert options["custom_label_prefix"] == "自定义设定："
+    assert options["custom_label"] == "自定义设定"
     # The report names an experiment after its preset, else as a custom setting (the page says the same).
     assert workbench.experiment_label(ModelSpec.from_dict(presets[0]["spec"])) == "去掉汇率变动"
-    assert workbench.experiment_label(ModelSpec((0,), (), ("year",))) == "自定义设定：X；无控制变量；年份 FE"
+    assert workbench.experiment_label(ModelSpec((0,), (), ("year",))) == "自定义设定"
 
 
 @pytest.fixture

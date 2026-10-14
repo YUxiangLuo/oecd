@@ -691,6 +691,7 @@ details.reg-custom-section > summary:focus-visible { outline: 2px solid #4b47e0;
 .reg-custom-status { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; min-height: 0; font-size: 12.5px; }
 .reg-custom-status:empty { display: none; }
 .reg-custom-default-note { margin: 0; }
-.reg-custom-report { display: grid; gap: 8px; }
+.reg-custom-report { display: grid; gap: 8px; justify-items: start; }
+.reg-custom-report > p { justify-self: stretch; }
 .reg-custom-report-chip { margin: 0; padding: 7px 10px; border-radius: 7px; background: #eef8f1; color: #1c4d2f; font-size: 12.5px; line-height: 1.6; }
 .reg-custom-report-none { margin: 0; font-size: 12.5px; }

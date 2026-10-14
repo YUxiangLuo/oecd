@@ -97,7 +97,7 @@ describe("experiment labels", () => {
     expect(experimentLabel({ ...DEFAULT, x_lags: [0] }, options)).toBe("只放当期 X（去掉 L1.X）");
     // Written in another order, it is the same model.
     expect(experimentLabel({ ...NO_RATE, controls: [...NO_RATE.controls].reverse() }, options)).toBe("去掉汇率变动");
-    expect(experimentLabel({ x_lags: [0], controls: [], fixed_effects: ["year"] }, options)).toBe("自定义设定：X；无控制变量；年份 FE");
+    expect(experimentLabel({ x_lags: [0], controls: [], fixed_effects: ["year"] }, options)).toBe("自定义设定");
   });
 });
 

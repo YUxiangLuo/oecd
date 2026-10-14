@@ -178,7 +178,7 @@ student02 的步骤 11 记录约 20 KB，四步约 80 KB，占 300 KB 保存预�
 ### 7.2 阶段 2（2026-10-14，同一分支）
 
 - 条形图只读：点另一条在图下显示该 Y 的读数（来自已加载的 overview，不调服务器、不保存）；报告材料固定为本步默认 Y 的默认模型；删去灰条确认框、“已保存”切换、按条归因的替换提示、条下重试与 `qualified_run`。
-- 工作台：先列 7 个预设实验（服务端 `options().presets`，点一下即计算），自定义表单折叠；结果表为“默认模型 / 本次 / 已放入报告”；每步一个 `experiment`（`{spec, saved_at, snapshot}`，移出为 `null`）；命名由预设决定，自定义写作“自定义设定：” + 模型摘要，前后端同一规则，不再有学生输入的名称。
+- 工作台：先列 7 个预设实验（服务端 `options().presets`，点一下即计算），自定义表单折叠；结果表为“默认模型 / 本次 / 已放入报告”；每步一个 `experiment`（`{spec, saved_at, snapshot}`，移出为 `null`）；命名由预设决定，不匹配预设的写作“自定义设定”（模型摘要另列），前后端同一规则，不再有学生输入的名称。
 - 后端：`regression/workbench.py` 以 `experiment_problem`／`reported_experiment`／`experiment_label` 取代 `custom_results_problem`、命名校验与上限；`report_saved_run._saved_runs` 只读 `run`；`classroom/routes.py` 拒绝旧契约键 `qualified_run`、`custom_results`；报告指纹投影 `experiment.spec`；附录改名“附录：模型实验”，每步一表；关键证据摘要每步一句“你在本步做了一个模型实验（…）”。
 - 版本：`SESSION_VERSION` → `experiment-session-simple-v4`，`TEACHING_DB_VERSION` → `gvcsim-teaching-db-v15`；按 README 约定新建空库，不迁移。
 - 步骤 15：页顶“你的模型实验”表（`ReportedExperiments`）；报告附录与摘要同步。
@@ -191,3 +191,9 @@ student02 的步骤 11 记录约 20 KB，四步约 80 KB，占 300 KB 保存预�
 - `frontend/src/regression.tsx` 拆为页面（315 行，4 个 state、2 个 ref、3 个 effect）和 `frontend/src/regression-step/` 下的五个模块：方程说明、结论卡、保存的运行、本类条形图与趋势图辅助、运行 hook（请求、中断、429 倒计时）。页面继续再导出课程其他文件用到的名字，行为不变。
 - `scripts/agent_browser_course_journey.py` 的默认模型项集合改为从 `DEFAULT_SPEC` 取 X 滞后与全部控制变量（原先只含汇率变动，与 v12 默认模型不符，使浏览器验收在步骤 11 误报）。
 - 验证：`scripts/local_ci.sh` 全部通过（Gephi 基准、`ruff`／`mypy`、后端 1,228 个测试、覆盖率 92%、前端 940 个测试、学生 15 步与教师浏览器验收）；证据目录 `dogfood-output/local-ci/20261014T025947Z-1280154`。
+
+### 7.4 Dogfood（2026-10-14，round 8）
+
+- 用 agent-browser 真实操作步骤 10–15 与教师评阅（账号 student03、teacher；截图与发现见 `dogfood-output/round8-20261014/FINDINGS.md`）。
+- 修正：自定义设定的模型名改为“自定义设定”（摘要另列，报告摘要句附摘要）；计算后等条形图到达再滚到结论；报告按钮不再撑满整行；前端在 `options` 缺 `custom_label` 时回退命名。
+- 未改：提交后替换模型时两条提示并列；折叠卡片与底部圆点条只在自动滚动时可能重叠。

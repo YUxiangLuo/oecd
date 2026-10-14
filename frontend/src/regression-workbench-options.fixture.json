@@ -230,7 +230,7 @@
       }
     }
   ],
-  "custom_label_prefix": "自定义设定：",
+  "custom_label": "自定义设定",
   "x_lags": [
     {
       "lag": 0,

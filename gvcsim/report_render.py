@@ -678,9 +678,15 @@ def _evidence_summary(
     """``overview`` is the course's estimate of every Y (``_estimate_overview``) for the per-step bar charts;
     without it each chart shows the saved Y alone. ``custom_models`` are the workbench models marked 放入报告
     (``report_workbench.reported_models``): each step names how many the appendix compares."""
+    from gvcsim.regression.spec import ModelSpec
+    from gvcsim.regression.workbench import CUSTOM_LABEL
+
     compared: dict[int, list[str]] = {}
     for model in custom_models or []:
-        compared.setdefault(int(model["step"]), []).append(str(model["name"]))
+        name = str(model["name"])
+        if name == CUSTOM_LABEL:
+            name = f"{name}：{ModelSpec.from_dict(model['spec']).summary()}"
+        compared.setdefault(int(model["step"]), []).append(name)
     lines = [
         "## 关键证据摘要",
         "",

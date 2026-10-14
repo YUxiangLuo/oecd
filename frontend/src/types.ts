@@ -947,8 +947,8 @@ export interface WorkbenchOptions {
   no_fixed_effects_note: string;
   /** The preset experiments, in page order: each changes one thing of the default model and asks a question. */
   presets: { key: string; label: string; question: string; spec: ModelSpec }[];
-  /** How a model that matches no preset is named ("自定义设定：" + its summary), on the page and in the report. */
-  custom_label_prefix: string;
+  /** How a model that matches no preset is named ("自定义设定"), on the page and in the report. */
+  custom_label: string;
   limits: { runs_per_minute: number };
   hints: string[];
   footnote: string;

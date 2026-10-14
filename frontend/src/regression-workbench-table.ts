@@ -313,11 +313,12 @@ export function omittedSummary(snapshot: CustomResultSnapshot, options: Workbenc
   return [...groups].map(([reason, terms]) => `${reason}：${terms.join("、")}`);
 }
 
-/** How the page and the report name a model experiment: its preset's label, else "自定义设定：" + the model
- *  (the server's workbench.experiment_label). */
+/** How the page and the report name a model experiment: its preset's label, else "自定义设定" (the model itself is
+ *  always shown beside the name; the server's workbench.experiment_label). */
 export function experimentLabel(spec: ModelSpec, options: WorkbenchOptions): string {
   const preset = options.presets.find((item) => sameSpec(item.spec, spec, options));
-  return preset ? preset.label : `${options.custom_label_prefix}${specSummary(spec, options)}`;
+  // The name is the server's; an options payload from before it was sent (a deploy in progress) still gets a name.
+  return preset ? preset.label : options.custom_label ?? "自定义设定";
 }
 
 function csvField(value: string): string {
