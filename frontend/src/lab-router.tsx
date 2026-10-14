@@ -8,6 +8,8 @@ import type { SessionStatus } from "./use-session";
 import type { ReactNode } from "react";
 
 interface LabRouterProps {
+  /** The course\'s steps, for step 15\'s 你记录的材料 table. */
+  steps?: Step[];
   /** The step's quiz panel; a regression step places it after its result, before the optional workbench. */
   quiz?: ReactNode;
   step: Step;
@@ -45,6 +47,7 @@ export function LabRouter({
   getStep,
   getConfirmedStep,
   quiz,
+  steps,
 }: LabRouterProps) {
   if (step.lab === "db") return <DbLab state={state} releaseMeta={meta} />;
   if (step.lab === "shock") return meta ? <ShockLab meta={meta} step={step} state={state} /> : null;
@@ -70,6 +73,7 @@ export function LabRouter({
     return (
       <ReportLab
         key="report"
+        steps={steps}
         state={state}
         report={report}
         sessionUpdatedAt={sessionUpdatedAt}

@@ -26,6 +26,7 @@ import {
   gradedExportRefusal,
   reportStatusChanged,
   revealWithOffset,
+  RecordedMaterials,
 } from "./report-lab";
 import { useState } from "react";
 
@@ -1069,4 +1070,25 @@ test("the student's report folds its appendix sections, opens them all while pri
   view.rerender(<ReportLab {...finishProps} report={{ ...sectioned, state: "pending" }} />);
   expect(panel().open).toBe(false);
   view.unmount();
+});
+
+
+test("你记录的材料 lists every step 1–14 in the words its material card used, and links a missing step back", () => {
+  const steps = [1, 2, 6, 11, 15].map((n) => ({ n, title: `步骤名${n}`, lab: n === 15 ? "rep" : "viz" }));
+  const data: Record<number, Record<string, unknown>> = {
+    1: { observation: { row: "CHN_A01", column: "USA_A01", value: 1 }, material_label: "2020 年 CHN 中国·A01（供给）→ USA 美国·A01（使用）= 228.07 百万美元" },
+    2: { observations: [{ country: "CHN" }] },
+    11: { run: { result: {} }, material_label: "默认模型：外国增加值项占比两年累计 -0.55 个百分点" },
+  };
+  const navigated: number[] = [];
+  render(<RecordedMaterials steps={steps as never} getStep={(n: number) => data[n] as never} blocked={[{ step: 6, title: "步骤名6", missing: ["请在一张读数完整的图表下点“把这张图记为本步报告材料”"] }]} onNavigateStep={(n: number) => { navigated.push(n); }} />);
+  const rows = [...document.querySelectorAll(".report-materials tbody tr")].map((row) => [...row.children].map((cell) => cell.textContent));
+  expect(rows).toEqual([
+    ["步骤 1 · 步骤名1", "已记录", "2020 年 CHN 中国·A01（供给）→ USA 美国·A01（使用）= 228.07 百万美元"],
+    ["步骤 2 · 步骤名2", "已记录", "已记录（旧记录，到本步查看）"],
+    ["步骤 6 · 步骤名6", "未记录", "请在一张读数完整的图表下点“把这张图记为本步报告材料”"],
+    ["步骤 11 · 步骤名11", "已记录", "默认模型：外国增加值项占比两年累计 -0.55 个百分点"],
+  ]);
+  fireEvent.click(screen.getByRole("button", { name: "步骤 6 · 步骤名6" }));
+  expect(navigated).toEqual([6]);
 });

@@ -143,7 +143,17 @@ describe("simple regression workbench", () => {
     expect(run.mock.calls[0][2]).toBeNull();
     expect(saves).toHaveLength(1);
     expect((saves[0].run as { design: { baseline: string } }).design.baseline).toBe("FVA_share");
-    expect(Object.keys(saves[0])).toEqual(["run"]);
+    // The run travels with its one-sentence label, which step 15 repeats; nothing else is saved.
+    expect(saves[0]).toEqual({ run: expect.anything(), material_label: expect.any(String) });
+    expect(saves[0].material_label).toMatch(/^默认模型：外国增加值项占比两年累计 /);
+    // The shared card sits after the result and before the quiz, saying what 计算 saved.
+    const material = document.getElementById("step-material-action")!;
+    expect(material.className).toContain("material-card--recorded");
+    expect(material.querySelector(".material-card-summary")?.textContent).toBe("默认模型：外国增加值项占比（已计算）");
+    expect(material.querySelector(".material-card-extra")?.textContent).toBe("记入报告的模型实验：无（选做，在下方“改模型、对比”里算出一个模型后点“也记入报告”）。");
+    expect(material.querySelector(".material-card-how")?.textContent).toBe("点“计算”后自动保存本步默认 Y 的默认模型结果；重新计算得到相同的数字。");
+    expect(material.compareDocumentPosition(document.querySelector(".verdict-card")!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(material.compareDocumentPosition(document.querySelector("details.reg-custom-section")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const pressed = screen.getAllByRole("button", { pressed: true });
     expect(pressed).toHaveLength(1);
     expect(pressed[0].getAttribute("aria-label")).toBe(`${FVA_BAR}，已保存`);

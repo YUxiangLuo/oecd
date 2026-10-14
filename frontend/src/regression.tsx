@@ -3,7 +3,7 @@ import { scrollIntoCourseContent } from "./content-scroll";
 import { api } from "./api";
 import { useAsync } from "./labs";
 import { DEFAULT_BASELINES, displayBaselineLabel, GENERATED_DATA_NOTE, lessonFor, lessonQuestion } from "./regression-lessons";
-import { chartDisplayScale, depvarKind } from "./regression-verdict";
+import { chartDisplayScale, depvarKind, headlineCoefficient } from "./regression-verdict";
 import { exampleWasChosen } from "./labs/steps/shock-lab";
 import type {
   Meta,
@@ -14,12 +14,17 @@ import type {
   TeachingGroupsResponse,
   TeachingOverviewResponse,
   TeachingPanelResponse,
+  Experiment,
+  WorkbenchOptions,
 } from "./types";
 import { TARIFF_IMPOSER, teachingExample, type TeachingExampleSelection } from "./teaching-example";
 import { userFacingRequestError } from "./user-facing-error";
 import { countryLabel, GroupChangeChart, sectorLabel } from "./viz";
 import { DivergingBarChart } from "./viz/regression/diverging-bars";
 import { RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
+import { experimentLabel, perPointDigits, perPointReading } from "./regression-workbench-table";
+import { MaterialCard } from "./material-card";
+import { regressionMaterialLabel } from "./material-label";
 import { DesignEquation } from "./regression-step/model-equation";
 import { RegressionResultCard, type RegressionExample } from "./regression-step/result-card";
 import { regressionRunSnapshotIdentity, savedRegressionResponse, TEACHING_MODEL_VERSION, type RegressionStepState } from "./regression-step/saved-run";
@@ -96,7 +101,21 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
     outcome,
     runName,
     onStart: () => { setOverviewWanted(true); setPreviewKey(null); },
-    onSaved: (saved) => state.save({ run: saved }),
+    onSaved: (saved) => {
+      // The same estimate the headline prints (the X terms' sum, or a single X's coefficient), so the card and
+      // step 15 repeat the headline's number.
+      const stat = headlineCoefficient(saved);
+      const source = { depvar_kind: saved.design.depvar_kind ?? "", result: { suppressed: false } };
+      // The bounds at the estimate's own precision (the headline's), not at theirs.
+      const digits = stat ? perPointDigits(outcome, stat, source) : undefined;
+      state.save({ run: saved, material_label: regressionMaterialLabel({
+        depvar: displayBaselineLabel(saved.design.depvar_label),
+        reading: stat ? perPointReading(outcome, stat, source, digits) : null,
+        interval: stat && stat.ci_low != null && stat.ci_high != null
+          ? `${perPointReading(outcome, { ...stat, coef: stat.ci_low }, source, digits)} 至 ${perPointReading(outcome, { ...stat, coef: stat.ci_high }, source, digits)}`
+          : null,
+      }) });
+    },
   });
 
   // Before the run: the taxed vs untaxed comparison that the regression then quantifies.
@@ -180,6 +199,11 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
   const previewRow = bars && previewKey ? bars.rows.find((row) => row.key === previewKey) ?? null : null;
   const identity = !bars ? null : outcome === "production" ? forwardShareIdentity(overviewItems) : outcome === "network" ? degreeIdentity(overviewItems) : null;
   const latinGap = /^[A-Za-z]/.test(lesson.shortMetric) ? " " : "";
+  const experiment = (state.data as { experiment?: Experiment | null } | undefined)?.experiment ?? null;
+  const optionsQuery = useAsync<WorkbenchOptions>(() => api.regressionOptions(), ["regression-options"]);
+  const experimentLine = experiment && optionsQuery.status === "success" && optionsQuery.data
+    ? `记入报告的模型实验：${experimentLabel(experiment.spec, optionsQuery.data)}${experiment.baseline && experiment.baseline !== defaultKey ? `（Y：${displayBaselineLabel(baselineOptions.find((option) => option.key === experiment.baseline)?.label ?? experiment.baseline)}）` : ""}（选做）。`
+    : experiment ? "记入报告的模型实验：1 个（选做）。" : null;
 
   return (
     <div className="reg-workbench">
@@ -293,6 +317,19 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
           </div>
         </div>
       )}
+
+      {/* 本步报告材料: the default model's result (saved by 计算) and the one experiment put into the report. */}
+      <MaterialCard
+        state={result && savedUsable ? "recorded" : result ? "recorded" : "missing"}
+        summary={result
+          ? (state.data?.material_label as string | undefined) ?? `默认模型：${displayBaselineLabel(result.design.depvar_label)}（已计算）`
+          : `尚未记录：点“计算${runName}”后自动保存默认模型的结果。`}
+        extra={result ? (experimentLine ?? "记入报告的模型实验：无（选做，在下方“改模型、对比”里算出一个模型后点“也记入报告”）。") : null}
+        how={result ? "点“计算”后自动保存本步默认 Y 的默认模型结果；重新计算得到相同的数字。" : undefined}
+        syncing={state.syncing}
+        syncError={state.syncError}
+        onRetrySync={state.syncNow}
+      />
 
       {/* 3 · The quiz: the step is complete once it is answered, before anything optional. */}
       {quiz}

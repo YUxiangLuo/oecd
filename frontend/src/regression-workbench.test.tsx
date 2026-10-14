@@ -317,7 +317,7 @@ describe("the workbench", () => {
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^去掉汇率变动/ })); });
     await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "本次：去掉汇率变动"]));
     expect(run).toHaveBeenLastCalledWith("trade", expect.anything(), "DVAex_share", expect.objectContaining({ controls: NO_RATE.controls }));
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /放入报告/ })); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /也记入报告（选做）$/ })); });
     expect(saved.at(-1)?.experiment).toMatchObject({ baseline: "DVAex_share", spec: NO_RATE });
     expect(document.querySelector(".reg-custom-report-chip")?.textContent).toContain("Y：国内增加值出口占比");
     // Back on the step's Y: the experiment on the other Y is named, not shown as a column (two Ys share no table).
@@ -350,7 +350,7 @@ describe("the workbench", () => {
     expect(screen.getByRole("button", { name: /^去掉汇率变动/ }).getAttribute("aria-pressed")).toBe("true");
     await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "本次：去掉汇率变动"]));
     expect(document.querySelector("th.reg-custom-current")?.textContent).toBe("本次：去掉汇率变动");
-    expect(screen.getByRole("button", { name: "把“去掉汇率变动”放入报告" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "把“去掉汇率变动”也记入报告（选做）" })).toBeTruthy();
   });
 
   test("the custom form sends the canonical spec; the computed model can be put into the report, replaced and removed", async () => {
@@ -370,25 +370,27 @@ describe("the workbench", () => {
     expect(run).toHaveBeenCalledWith("trade", expect.anything(), "FVA_share", NO_RATE);
     await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "本次：去掉汇率变动"]));
     // Into the report: the one model of this step.
-    fireEvent.click(screen.getByRole("button", { name: "把“去掉汇率变动”放入报告" }));
+    fireEvent.click(screen.getByRole("button", { name: "把“去掉汇率变动”也记入报告（选做）" }));
     expect(saves).toHaveLength(1);
     expect(saves[0].experiment).toMatchObject({ spec: NO_RATE });
     expect(saves[0].experiment!.snapshot.result.cumulative?.coef).toBeCloseTo(-0.7048);
-    await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "已放入报告：去掉汇率变动"]));
-    expect(document.querySelector(".reg-custom-report-chip")?.textContent).toContain("已放入报告：去掉汇率变动");
-    expect(screen.queryByRole("button", { name: /放入报告$/ })).toBeNull();
+    await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "已记入报告：去掉汇率变动"]));
+    expect(document.querySelector(".reg-custom-report-chip")?.textContent).toContain("已记入报告：去掉汇率变动");
+    expect(screen.queryByRole("button", { name: /也记入报告（选做）$/ })).toBeNull();
+    expect(screen.getByRole("status").textContent).toBe("已把“去掉汇率变动”记入报告。");
     // Another model computed: it can replace the one in the report; both show until then.
     const xOnly = response({ ...DEFAULT, x_lags: [0] }, { teaching_tariff_exposure: -0.46, [ER]: 0.005, ...macroValues });
     run.mockResolvedValue(xOnly as never);
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^只放当期 X/ })); });
-    await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "本次：只放当期 X（去掉 L1.X）", "已放入报告：去掉汇率变动"]));
-    fireEvent.click(screen.getByRole("button", { name: "用“只放当期 X（去掉 L1.X）”替换报告里的模型" }));
+    await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "本次：只放当期 X（去掉 L1.X）", "已记入报告：去掉汇率变动"]));
+    fireEvent.click(screen.getByRole("button", { name: "用“只放当期 X（去掉 L1.X）”替换记入报告的模型" }));
     expect(saves.at(-1)!.experiment).toMatchObject({ spec: canonicalSpec({ ...DEFAULT, x_lags: [0] }, options) });
-    await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "已放入报告：只放当期 X（去掉 L1.X）"]));
+    await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "已记入报告：只放当期 X（去掉 L1.X）"]));
     // Out of the report again.
-    fireEvent.click(screen.getByRole("button", { name: "移出报告" }));
+    fireEvent.click(screen.getByRole("button", { name: "从报告移除" }));
     expect(saves.at(-1)).toEqual({ experiment: null });
-    await waitFor(() => expect(screen.getByText(/还没有模型放入报告/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/^还没有记入报告的模型实验（选做）：算出一个模型后点“也记入报告”/)).toBeTruthy());
+    expect(screen.getByRole("status").textContent).toBe("已把“只放当期 X（去掉 L1.X）”从报告移除。");
     // Changing the form marks the shown result as out of date.
     fireEvent.click(checkbox(/^L2\.X/));
     expect(screen.getByRole("note").textContent).toContain("设定已更改");
@@ -403,7 +405,7 @@ describe("the workbench", () => {
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "计算这个模型" })); });
     expect(await screen.findByText("这就是本步的默认模型（表中第一列）。")).toBeTruthy();
     expect(document.querySelector("th.reg-custom-current")?.textContent).toBe("默认模型");
-    expect(screen.queryByRole("button", { name: /放入报告/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /记入报告/ })).toBeNull();
   });
 
   test("the model in the report is shown on return, and after a submitted report removing it says the report changed", async () => {
@@ -411,12 +413,12 @@ describe("the workbench", () => {
     const reported = [{ step: 11, name: "去掉汇率变动", outcome: "trade", baseline: "FVA_share", spec: NO_RATE }];
     const saves: Partial<WorkbenchStepState>[] = [];
     render(<Harness initial={{ experiment: experimentOf(NO_RATE, NO_RATE_RUN) }} onSave={(patch) => saves.push(patch)} locked reported={reported} outdated />);
-    await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "已放入报告：去掉汇率变动"]));
-    expect(screen.getByText(/报告已提交/)).toBeTruthy();
-    expect(screen.queryByText(/放入报告的模型与已提交报告里的不同/)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "移出报告" }));
+    await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "已记入报告：去掉汇率变动"]));
+    expect(document.querySelector(".reg-rerun-warning")?.textContent).toBe("报告已提交记入、替换或移除报告里的模型都会改变报告；之后要到步骤 15 更新报告，并重新提交给老师。");
+    expect(screen.queryByText(/记入报告的模型与已提交报告里的不同/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "从报告移除" }));
     expect(saves).toEqual([{ experiment: null }]);
-    await waitFor(() => expect(screen.getByText("放入报告的模型与已提交报告里的不同；请到步骤 15 更新报告并重新提交给老师。")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("记入报告的模型与已提交报告里的不同；请到步骤 15 更新报告并重新提交给老师。")).toBeTruthy());
   });
 
   test("the CSV is the table on screen, with the model just computed", async () => {
@@ -549,7 +551,7 @@ describe("the open workbench", () => {
     expect(document.querySelector(".reg-custom-form-details")!.hasAttribute("open")).toBe(false);
     expect(tableHeaders()).toEqual(["变量", "默认模型"]);
     expect(document.querySelector(".reg-custom-point-row")?.textContent).toBe("合计：X 每高 1 个百分点-0.55 个百分点（两年累计）");
-    expect(screen.getByText(/还没有模型放入报告/)).toBeTruthy();
+    expect(screen.getByText("还没有记入报告的模型实验（选做）：算出一个模型后点“也记入报告”，报告附录“模型实验”会把它和默认模型并列。")).toBeTruthy();
   });
 });
 

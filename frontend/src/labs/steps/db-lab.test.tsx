@@ -190,12 +190,21 @@ describe("step 1 after the report is submitted", () => {
     expect(other.getAttribute("aria-label")).toContain("已选中，尚未改为报告材料");
     expect(screen.getByRole("button", { name: /→ USA 美国·D01T02[^（]*（列·使用方）.*已记录$/ }).className).toContain("selected");
 
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^改为记录这个单元格/ })); });
-    const replaced = saved.find((patch) => (patch as { observation?: unknown }).observation) as { observation: { column: string; value: number } };
+    // The card's one button names the picked cell and warns about step 15.
+    const card = document.getElementById("step-material-action")!;
+    expect(card.className).toContain("material-card--recorded");
+    expect(card.querySelector(".material-card-how")!.textContent).toContain("点击单元格只会选中，要换成报告材料请点下面的按钮。");
+    expect(card.querySelector(".material-card-how")!.textContent).toContain("报告已提交：浏览不再自动改动报告材料。");
+    const replaceButton = screen.getByRole("button", { name: /^改为记录 .*→ CHN 中国·D01T02[^（]*（列·使用方） = 10 百万美元（之后需在步骤 15 更新报告）$/ });
+    expect(replaceButton.className).toContain("material-card-action");
+    await act(async () => { fireEvent.click(replaceButton); });
+    const replaced = saved.find((patch) => (patch as { observation?: unknown }).observation) as { observation: { column: string; value: number }; material_label?: string };
     expect(replaced.observation.column).toBe("CHN_D01T02");
     expect(replaced.observation.value).toBe(10);
-    // The strip confirms the switch and says what to do next, as step 13 does.
-    expect(document.querySelector(".db-observation")!.textContent).toContain("已改为记录这个单元格。请到步骤 15 更新报告并重新提交给老师。");
+    expect(replaced.material_label).toMatch(/→ CHN 中国·D01T02[^（]*（列·使用方） = 10 百万美元$/);
+    // The card confirms the switch and says what to do next, as step 13 does; the button is gone.
+    expect(card.querySelector(".material-card-how")!.textContent).toContain("请到步骤 15 更新报告并重新提交给老师。");
+    expect(card.querySelector(".material-card-action")).toBeNull();
   });
 });
 
@@ -235,9 +244,14 @@ describe("step 1 round 10 fixes", () => {
       row_country: "CHN", col_country: "USA", row_sector: "", col_sector: "",
     };
     render(<DbLab state={idleState({ observation })} releaseMeta={null as Meta | null} />);
-    const strip = (await screen.findByText("已记录的单元格")).closest(".observation-strip")!;
-    expect(strip.textContent).toContain("= 0 百万美元");
-    expect(strip.textContent).toContain("所选单元格为 0（这两个国家×行业之间没有中间投入流量）");
+    const card = (await screen.findByText("本步报告材料")).closest(".material-card")!;
+    expect(card.className).toContain("material-card--recorded");
+    expect(card.querySelector(".material-chip")!.textContent).toBe("已记录");
+    const summary = card.querySelector(".material-card-summary")!;
+    expect(summary.textContent).toContain("= 0 百万美元");
+    expect(summary.textContent).toContain("所选单元格为 0（这两个国家×行业之间没有中间投入流量）");
+    // The strip above the table is gone: the card under the table is the only place the record is shown.
+    expect(document.querySelector(".observation-strip.db-observation")).toBeNull();
   });
 
   test("account definitions are focusable ⓘ buttons; the column band label is sticky", async () => {

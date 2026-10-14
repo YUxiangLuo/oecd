@@ -6,7 +6,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../../../api";
 import { sameJsonValue } from "../../../session-store";
-import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT, STEP_MATERIAL_ACTION_ID } from "../../../step-task-card";
+import { MATERIAL_LOCKED_ACTION } from "../../../step-task-card";
+import { AUTO_RECORD_HOW, MaterialCard } from "../../../material-card";
 import type { IndicatorSchema, Meta, StepStateApi } from "../../../types";
 import { cjkSpace } from "../../../format";
 import { countryLabel } from "../../../viz";
@@ -17,8 +18,7 @@ import {
   COUNTRY_METRIC,
   type IndicatorGroupKey,
   type IndicatorStepState,
-  indicatorMaterialPatch,
-} from "./indicator-table";
+  indicatorMaterialPatch, type IndicatorObservation } from "./indicator-table";
 
 /** The country whose reading is recorded: the one being viewed, else CHN (the decomposition's default). */
 export function autoMaterialCountry(meta: Meta, selected: string): string {
@@ -71,13 +71,13 @@ export function useAutoMaterial({ topic, meta, state, country, year, schema, bro
   // Once the report is submitted, browsing leaves the material alone (see `record`).
   useEffect(() => {
     if (!patch || current || state.materialLocked) return;
-    state.save({ ...patch, country: browseCountry ?? patch.country, material_chosen: undefined });
+    state.save({ ...patch, country: browseCountry ?? patch.country, material_chosen: undefined, material_label: indicatorMaterialLabel(patch.observations ?? [], schema.status === "success" ? schema.data : null) });
     // state is a new object each render; the key and match flag capture every meaningful change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patchKey, current]);
 
   // Marked as the student's choice, so the report does not call it an automatic record.
-  const record = patch && !current ? () => state.save({ ...patch, material_chosen: true }) : undefined;
+  const record = patch && !current ? () => state.save({ ...patch, material_chosen: true, material_label: indicatorMaterialLabel(patch.observations ?? [], schema.status === "success" ? schema.data : null) }) : undefined;
   return {
     country: recorded, metric, current, record,
     loadFailed: countryQuery.status === "error",
@@ -91,7 +91,13 @@ export function countryScope(label: string): string {
   return label.endsWith("）") ? `${label.slice(0, -1)}，国家整体）` : `${label}（国家整体）`;
 }
 
-export function AutoMaterialStatus({ state, schema, metric, current, record, loadFailed, loadError = null, onRetryLoad, where, lead, note }: {
+/** The sentence a reading is recorded as: "2020 年 外国增加值项占比：CHN 中国 11.730%". */
+export function indicatorMaterialLabel(observations: readonly IndicatorObservation[], schema: IndicatorSchema | null | undefined): string {
+  if (!observations.length) return "";
+  return `${cjkSpace(`${observations[0].year} 年`, fieldLabel(observations[0].metric, schema))}：${observations.map((item) => `${countryLabel(item.country)} ${fmtField(item.value, item.metric, schema)}${item.unit === "百万美元" ? " 百万美元" : ""}`).join("；")}`;
+}
+
+export function AutoMaterialStatus({ state, schema, metric, current, record: _record, loadFailed, loadError = null, onRetryLoad, where, lead, note }: {
   state: StepStateApi<IndicatorStepState>;
   schema: IndicatorSchema | null | undefined;
   /** The step's country-level indicator, named in the explanation line. */
@@ -114,20 +120,23 @@ export function AutoMaterialStatus({ state, schema, metric, current, record, loa
   // Locked material is shown as saved even when the student browses something else. A record saved by an
   // earlier version may hold two countries; it is shown as recorded.
   const recorded = current || state.materialLocked ? state.data?.observations ?? [] : [];
-  // Recorded on request after submission: say what to do next while the record is the current choice.
   const [rechosen, setRechosen] = useState(false);
+  const scope = cjkSpace(lead ? "记录的是同一年的" : "同一年的", countryScope(metric ? fieldLabel(metric, schema) : "本步指标"));
   return (
-    <div id={STEP_MATERIAL_ACTION_ID} tabIndex={-1} className={`auto-material${loadFailed && recorded.length === 0 ? " auto-material--failed" : ""}`}>
-      <b>报告材料 · {state.materialLocked ? "已记录" : "自动记录"}</b>
-      {recorded.length > 0
-        ? <span role="status">{cjkSpace(`${recorded[0].year} 年`, fieldLabel(recorded[0].metric, schema))}：{recorded.map((item) => `${countryLabel(item.country)} ${fmtField(item.value, item.metric, schema)}${item.unit === "百万美元" ? " 百万美元" : ""}`).join("；")}</span>
-        : <span role="status">
-          {loadFailed ? userFacingRequestError(loadError, "国家整体数据加载失败") : "正在记录当前选择…"}
-          {loadFailed && onRetryLoad && <button type="button" className="secondary" onClick={(event) => { const button = event.currentTarget; onRetryLoad(); keepFocusNear(button); }}>重试</button>}
-        </span>}
-      {state.materialLocked
-        ? <small>{MATERIAL_LOCKED_NOTE}{rechosen && current ? `当前选择就是已记录的材料。${MATERIAL_RECHOSEN_NEXT}` : ""}{/* What the recorded value is still needs saying after submission (step 5: not the table's numbers). */}{note ? `${note}` : ""}{record && <button type="button" className="secondary" onClick={() => { setRechosen(true); record(); }}>{MATERIAL_LOCKED_ACTION.replace("图表", "选择")}</button>}</small>
-        : <small>{lead ?? `记录${where}`}{cjkSpace(lead ? "记录的是同一年的" : "同一年的", countryScope(metric ? fieldLabel(metric, schema) : "本步指标"))}，换国家或年份后自动更新，无需另外保存。{note ? ` ${note}` : ""}</small>}
-    </div>
+    <MaterialCard
+      state={recorded.length ? "recorded" : loadFailed ? "blocked" : "missing"}
+      summary={recorded.length
+        ? indicatorMaterialLabel(recorded, schema)
+        : loadFailed
+          ? <>{userFacingRequestError(loadError, "国家整体数据加载失败")}{onRetryLoad && <button type="button" className="secondary" onClick={(event) => { const button = event.currentTarget; onRetryLoad(); keepFocusNear(button); }}>重试</button>}</>
+          : "正在记录当前选择…"}
+      how={`${lead ?? `记录${where}`}${scope}，${AUTO_RECORD_HOW}${note ? ` ${note}` : ""}`}
+      locked={state.materialLocked}
+      rechosen={rechosen && current}
+      action={state.materialLocked && _record ? { label: MATERIAL_LOCKED_ACTION.replace("当前图表", "当前选择"), onClick: () => { setRechosen(true); _record(); } } : null}
+      syncing={state.syncing}
+      syncError={state.syncError}
+      onRetrySync={state.syncNow}
+    />
   );
 }

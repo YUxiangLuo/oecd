@@ -72,24 +72,33 @@ describe("automatic material status line", () => {
   test("shows the one recorded reading and no comparison country", async () => {
     const render = await status([reading("CHN", 0.1173)]);
     const html = render(true);
-    expect(html).toContain("报告材料 · 自动记录");
-    expect(html).toContain("2020 年外国增加值项占比：CHN 中国 11.730%");
-    expect(html).toContain("记录上方所选国家同一年的外国增加值项占比（国家整体），换国家或年份后自动更新");
+    // The shared card: title, chip, one summary sentence and the how-line; no bespoke heading.
+    expect(html).toContain('class="material-card material-card--recorded"');
+    expect(html).toContain('<span class="material-chip material-chip--recorded">已记录</span>');
+    expect(html).not.toContain("报告材料 · 自动记录");
+    expect(html).toContain('<p class="material-card-summary" role="status">2020 年外国增加值项占比：CHN 中国 11.730%</p>');
+    expect(html).toContain("记录上方所选国家同一年的外国增加值项占比（国家整体），随你的选择自动记录，无需另外保存。");
+    expect(html).not.toContain("material-card-action");
     expect(html).not.toContain("对比国家");
     expect(html).not.toContain("<select");
     expect(html).not.toContain("（默认）");
     // A saved record from an earlier selection is not shown as if it matched the current one.
     const stale = render(false);
     expect(stale).not.toContain("CHN 中国 11.730%");
-    expect(stale).toContain("正在记录当前选择");
+    expect(stale).toContain('class="material-card material-card--missing"');
+    expect(stale).toContain(">尚未记录</span>");
+    expect(stale).toContain("正在记录当前选择…");
   });
 
   test("a locked two-country record from an earlier version is shown as recorded, with the way to replace it", async () => {
     const render = await status([reading("CHN", 0.1173), reading("USA", 0.0551)], { materialLocked: true }, { record: () => {} });
     const html = render(false);
-    expect(html).toContain("报告材料 · 已记录");
-    expect(html).toContain("2020 年外国增加值项占比：CHN 中国 11.730%；USA 美国 5.510%");
-    expect(html).toContain("改用当前选择");
+    expect(html).toContain('class="material-card material-card--recorded"');
+    expect(html).toContain(">已记录</span>");
+    expect(html).not.toContain("报告材料 · 已记录");
+    expect(html).toContain('<p class="material-card-summary" role="status">2020 年外国增加值项占比：CHN 中国 11.730%；USA 美国 5.510%</p>');
+    expect(html).toContain("随你的选择自动记录，无需另外保存。 报告已提交：浏览不再自动改动报告材料。");
+    expect(html).toContain('<button type="button" class="secondary material-card-action">改用当前选择作为报告材料（之后需在步骤 15 更新报告）</button>');
     expect(html).not.toContain("正在记录当前选择");
   });
 });
@@ -101,9 +110,12 @@ test("after 改用当前选择 on a submitted report, the line says to update th
   const props = (current: boolean, record?: () => void) => ({ state, schema: null, metric: "FVA_share", current, record, loadFailed: false, where: "上方所选国家" });
   const view = render(createElement(AutoMaterialStatus, props(false, () => {})));
   expect(view.container.textContent).not.toContain("请到步骤 15");
-  fireEvent.click(screen.getByRole("button", { name: /改用当前选择/ }));
+  fireEvent.click(screen.getByRole("button", { name: "改用当前选择作为报告材料（之后需在步骤 15 更新报告）" }));
   view.rerender(createElement(AutoMaterialStatus, props(true)));
-  expect(view.container.textContent).toContain("当前选择就是已记录的材料。请到步骤 15 更新报告并重新提交给老师。");
+  const how = view.container.querySelector(".material-card-how")!.textContent;
+  expect(how).toContain("报告已提交：浏览不再自动改动报告材料。请到步骤 15 更新报告并重新提交给老师。");
+  // Once the choice is recorded, the card offers no further button.
+  expect(view.container.querySelector(".material-card-action")).toBeNull();
   cleanup();
 });
 
@@ -141,6 +153,8 @@ describe("recording under the report lock", () => {
       await waitFor(() => expect(open.saves).toHaveLength(1));
       expect("material_chosen" in open.saves[0] && open.saves[0].material_chosen === undefined).toBe(true);
       expect(open.saves[0].compared).toEqual(["CHN"]);
+      // The sentence shown on the card travels with the record so step 15 repeats the same words.
+      expect(open.saves[0].material_label).toBe("2020 年 FVA_share：CHN 中国 11.730%");
       cleanup();
 
       const locked = await run(true);
@@ -150,6 +164,7 @@ describe("recording under the report lock", () => {
       expect(locked.saves).toHaveLength(1);
       expect(locked.saves[0].material_chosen).toBe(true);
       expect(locked.saves[0].compared).toEqual(["CHN"]);
+      expect(locked.saves[0].material_label).toBe("2020 年 FVA_share：CHN 中国 11.730%");
     } finally {
       cleanup();
       rows.mockRestore();

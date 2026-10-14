@@ -231,9 +231,9 @@ def _baseline_problem(value: Any, outcome: str | None) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str) or not 1 <= len(value) <= 60:
-        return "放入报告的模型的因变量无效"
+        return "记入报告的模型的因变量无效"
     if outcome is not None and value not in {item.key for item in selectable_baselines(outcome)}:
-        return "放入报告的模型的因变量不是本步可选的指标"
+        return "记入报告的模型的因变量不是本步可选的指标"
     return None
 
 
@@ -248,7 +248,7 @@ def experiment_problem(value: Any, outcome: str | None = None) -> str | None:
         or not EXPERIMENT_KEYS <= set(value)
         or not set(value) <= EXPERIMENT_KEYS | EXPERIMENT_OPTIONAL_KEYS
     ):
-        return "放入报告的模型的字段不完整"
+        return "记入报告的模型的字段不完整"
     spec, problem = _spec_problem(value["spec"])
     if spec is None:
         return problem
@@ -259,10 +259,10 @@ def experiment_problem(value: Any, outcome: str | None = None) -> str | None:
     if spec == DEFAULT_SPEC:
         return "默认模型就是表中第一列，不用放入报告"
     if not isinstance(value["saved_at"], str) or not 1 <= len(value["saved_at"]) <= 40:
-        return "放入报告的模型的保存时间无效"
+        return "记入报告的模型的保存时间无效"
     snapshot = value["snapshot"]
     if not isinstance(snapshot, dict) or len(json.dumps(snapshot, ensure_ascii=False).encode()) > MAX_SNAPSHOT_BYTES:
-        return "放入报告的模型的结果快照无效或过大"
+        return "记入报告的模型的结果快照无效或过大"
     return None
 
 
