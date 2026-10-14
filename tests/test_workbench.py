@@ -26,14 +26,9 @@ from gvcsim.session import empty_session, make_record
 PANEL = _panel()
 
 
-def _saved(name="结果1", *, in_report=False, spec=None, baseline="FVA_share", **changes):
+def _experiment(spec=None, **changes):
     item = {
-        "id": f"id-{name}",
-        "name": name,
-        "outcome": "trade",
-        "baseline": baseline,
         "spec": (spec or ModelSpec((0,), (), ("country_industry", "year"))).canonical().to_dict(),
-        "in_report": in_report,
         "saved_at": "2026-10-11T09:00:00Z",
         "snapshot": {"result": {"coefs": []}},
     }
@@ -64,8 +59,26 @@ def test_options_list_every_choice_in_page_order_with_the_default_and_the_limits
     assert effects["country_industry"]["includes"] == ["country", "industry"]
     assert effects["country_year"]["includes"] == ["country", "year"]
     assert "吸收本页全部国家层面的控制变量" in effects["country_year"]["description"]
-    assert options["limits"] == {"saved": 6, "in_report": 3, "compared": 4, "name_length": 20, "runs_per_minute": 20}
+    assert options["limits"] == {"runs_per_minute": 20}
     assert len(options["hints"]) == 2 and options["footnote"].startswith("注：括号内为按国家聚类的标准误。")
+    # The preset experiments: each changes one thing of the default model, none is the default, no two alike.
+    presets = options["presets"]
+    assert [item["label"] for item in presets] == [
+        "去掉汇率变动",
+        "只放当期 X（去掉 L1.X）",
+        "固定效应改为国家 + 行业 + 年份",
+        "改用国家×年份固定效应",
+        "去掉 GDP 对数",
+        "加上人口增长率和 FDI 净流入占比",
+        "加上两年前的 X（L2.X）",
+    ]
+    specs = [json.dumps(item["spec"], sort_keys=True) for item in presets]
+    assert len(set(specs)) == len(specs) and json.dumps(DEFAULT_SPEC.to_dict(), sort_keys=True) not in specs
+    assert all(item["question"].endswith("？") and ModelSpec.from_dict(item["spec"]) for item in presets)
+    assert options["custom_label_prefix"] == "自定义设定："
+    # The report names an experiment after its preset, else as a custom setting (the page says the same).
+    assert workbench.experiment_label(ModelSpec.from_dict(presets[0]["spec"])) == "去掉汇率变动"
+    assert workbench.experiment_label(ModelSpec((0,), (), ("year",))) == "自定义设定：X；无控制变量；年份 FE"
 
 
 @pytest.fixture
@@ -279,132 +292,92 @@ def test_the_coefficient_check_scales_with_the_coefficient():
     assert not summarize_benchmark(model, result(-3945.78), result(-3945.78 + 1e-5))["coef_check_passed"]
 
 
-# Distinct non-default models, for lists of saved models (the same model may be saved once per Y).
-_DISTINCT_SPECS = [
-    ModelSpec(lags, (), ("country_industry", "year")) for lags in ((0,), (0, 1), (0, 2), (1,), (0, 1, 2), (2,), (1, 2))
-]
-
-
-def test_saved_models_are_checked_before_the_session_is_stored():
-    good = [_saved("结果1"), _saved("结果2", in_report=True, spec=_DISTINCT_SPECS[1])]
-    assert workbench.custom_results_problem(good, "trade") is None
-    assert workbench.custom_results_problem([], "trade") is None
+def test_the_experiment_is_checked_before_the_session_is_stored():
+    assert workbench.experiment_problem(_experiment()) is None
+    assert workbench.experiment_problem(None) is None
     cases = [
-        ({}, "列表"),
-        ([_saved(f"结果{index}") for index in range(7)], "最多保存 6 个"),
-        ([_saved("结果1"), _saved("结果1", id="other")], "已有名为“结果1”"),
-        ([_saved("结果1"), _saved("结果2", id="id-结果1")], "编号"),
-        ([_saved("一" * 21)], "1–20 个字符"),
-        ([_saved(" 结果1")], "1–20 个字符"),
-        ([_saved("")], "请输入名称"),
-        ([_saved("\u200b")], "请输入名称"),
-        ([_saved("结果\u200b")], "不可见字符"),
-        ([_saved("\u200d")], "请输入名称"),
-        ([_saved("\u3164")], "请输入名称"),
-        ([_saved("\u2800")], "请输入名称"),
-        ([_saved("结果1"), _saved("结果１\u3164", id="other")], "已有名为"),
-        ([_saved("A（班）"), _saved("a(班)", id="other")], "已有名为"),
-        ([_saved("结果\u202e1")], "不可见字符"),
-        ([_saved("结果\u001f")], "不可见字符"),
-        # A joiner outside an emoji is an invisible mark: "结果1" + U+200D would look like "结果1".
-        ([_saved("结果1\u200d")], "不可见字符"),
-        ([_saved("结\u200d果")], "不可见字符"),
-        ([_saved("结果\U000e0041")], "不可见字符"),
-        ([_saved("🏴\U000e0067")], "不可见字符"),
-        # Names that differ only in format characters or U+FE0F read the same: one name.
-        ([_saved("🏳️\u200d🌈"), _saved("🏳\u200d🌈", id="other")], "已有名为"),
-        ([_saved(name=["结果1"])], "请输入名称"),
-        ([_saved(spec=DEFAULT_SPEC)], "默认模型"),
-        ([_saved("结果1"), _saved("结果2")], "这个设定已保存为“结果1”"),
-        ([_saved(baseline=["FVA_share"])], "Y 不在当前课程数据中"),
-        ([_saved(outcome=["trade"])], "结果指标"),
+        ([], "字段不完整"),
+        ({k: v for k, v in _experiment().items() if k != "saved_at"}, "字段不完整"),
+        (_experiment(name="结果1"), "字段不完整"),
+        (_experiment(spec=DEFAULT_SPEC), "默认模型"),
         (
-            [_saved() | {"spec": {"x_lags": [0, 1.0], "controls": [], "fixed_effects": ["country_industry", "year"]}}],
+            _experiment()
+            | {"spec": {"x_lags": [0, 1.0], "controls": [], "fixed_effects": ["country_industry", "year"]}},
             "滞后期",
         ),
         (
-            [_saved() | {"spec": {"x_lags": [0], "controls": [{"name": ["汇率"], "lag": 0}], "fixed_effects": []}}],
+            _experiment() | {"spec": {"x_lags": [0], "controls": [{"name": ["汇率"], "lag": 0}], "fixed_effects": []}},
             "名称",
         ),
-        ([_saved() | {"spec": {"x_lags": [0], "controls": [], "fixed_effects": [{"a": 1}]}}], "名称"),
+        (_experiment() | {"spec": {"x_lags": [0], "controls": [], "fixed_effects": [{"a": 1}]}}, "名称"),
         (
-            [
-                _saved()
-                | {"spec": {"x_lags": [0], "controls": [{"name": "log_gdp_proxy", "lag": 1.0}], "fixed_effects": []}}
-            ],
+            _experiment()
+            | {"spec": {"x_lags": [0], "controls": [{"name": "log_gdp_proxy", "lag": 1.0}], "fixed_effects": []}},
             "滞后期",
         ),
-        ([_saved(outcome="network")], "结果指标"),
-        ([_saved(baseline="PLy_GVC")], "Y 不在当前课程数据中"),
-        ([_saved(spec=None) | {"spec": {"x_lags": [1, 0], "controls": [], "fixed_effects": []}}], "规范形式"),
-        ([_saved() | {"spec": {"x_lags": [3], "controls": [], "fixed_effects": []}}], "滞后期"),
-        (
-            [_saved(f"结果{index}", in_report=True, spec=_DISTINCT_SPECS[index]) for index in range(4)],
-            "最多 3 个模型放入报告",
-        ),
-        ([{k: v for k, v in _saved().items() if k != "saved_at"}], "字段不完整"),
-        ([_saved(in_report="yes")], "是或否"),
-        ([_saved(snapshot={"padding": "x" * 20_000})], "过大"),
+        (_experiment() | {"spec": {"x_lags": [1, 0], "controls": [], "fixed_effects": []}}, "规范形式"),
+        (_experiment() | {"spec": {"x_lags": [3], "controls": [], "fixed_effects": []}}, "滞后期"),
+        (_experiment(saved_at=""), "保存时间"),
+        (_experiment(snapshot={"padding": "x" * 20_000}), "过大"),
+        (_experiment(snapshot=[]), "快照"),
     ]
     for value, message in cases:
-        problem = workbench.custom_results_problem(value, "trade")
+        problem = workbench.experiment_problem(value)
         assert problem is not None and message in problem, (value, problem)
-    # As the database returns a saved model (jsonb orders keys by length): each control as {"lag", "name"}.
+    # As the database returns it (jsonb orders keys by length): each control as {"lag", "name"}.
     with_rate = ModelSpec((0, 1, 2), ((EXCHANGE_RATE_COLUMN, 0),), ("country_industry", "year")).to_dict()
     stored = {**with_rate, "controls": [{"lag": 0, "name": EXCHANGE_RATE_COLUMN}]}
     assert json.dumps(stored) != json.dumps(with_rate)
-    assert workbench.custom_results_problem([_saved(spec=None) | {"spec": stored}], "trade") is None
-    # Emoji joined by U+200D are one visible character each, not invisible text.
-    for name in (
-        "家👨\u200d👩\u200d👧\u200d👦",
-        "👩\u200d💻",
-        "🏳️\u200d🌈",
-        "👩🏽\u200d💻",
-        "🏃\u200d♂️",
-        "🏴\U000e0067\U000e0062\U000e0073\U000e0063\U000e0074\U000e007f",
-    ):
-        assert workbench.custom_results_problem([_saved(name)], "trade") is None, name
-    # The same model on another Y is a different saved model.
-    assert workbench.custom_results_problem([_saved("结果1"), _saved("结果2", baseline="DVAex_share")], "trade") is None
+    assert workbench.experiment_problem(_experiment() | {"spec": stored}) is None
+    assert workbench.reported_experiment(_experiment() | {"spec": stored}) == {"spec": stored}
+    assert (
+        workbench.reported_experiment(None) is None and workbench.reported_experiment(_experiment(saved_at="")) is None
+    )
 
 
-def test_put_session_refuses_an_invalid_saved_model_and_keeps_a_valid_one(monkeypatch):
+def test_put_session_keeps_a_valid_experiment_and_refuses_an_invalid_one(monkeypatch):
     persisted = []
     monkeypatch.setattr(
         classroom_routes.db, "save_session", lambda *args: persisted.append(args) or {"updated_at": "saved-at"}
     )
     monkeypatch.setattr(classroom_routes.db, "latest_report", lambda _username: None)
     session = empty_session()
-    session["steps"]["11"] = make_record({"custom_results": [_saved("结果1")], "custom_draft": {"anything": [1]}})
+    session["steps"]["11"] = make_record({"experiment": _experiment(), "custom_draft": {"anything": [1]}})
     response = classroom_routes.put_session(
         classroom_routes.SessionRequest(session=session, base_updated_at=None), {"sub": "student"}
     )
     assert "session" not in response
     assert response["updated_at"] == "saved-at"
     assert "completion" in response
-    assert persisted[0][1]["steps"]["11"]["data"]["custom_results"] == [_saved("结果1")]
+    assert persisted[0][1]["steps"]["11"]["data"]["experiment"] == _experiment()
+    # Removed from the report: the key says so.
+    session["steps"]["11"]["data"]["experiment"] = None
+    classroom_routes.put_session(
+        classroom_routes.SessionRequest(session=session, base_updated_at=None), {"sub": "student"}
+    )
+    assert persisted[1][1]["steps"]["11"]["data"]["experiment"] is None
 
-    session["steps"]["11"]["data"]["custom_results"] = [_saved("结果1"), _saved("结果1", id="x")]
+    session["steps"]["11"]["data"]["experiment"] = _experiment(spec=DEFAULT_SPEC)
     with pytest.raises(classroom_routes.HTTPException) as refused:
         classroom_routes.put_session(
             classroom_routes.SessionRequest(session=session, base_updated_at=None), {"sub": "student"}
         )
     assert refused.value.status_code == 422
-    assert refused.value.detail == "步骤 11 自己设计的模型没有保存：本步已有名为“结果1”的模型。"
-    assert len(persisted) == 1
+    assert refused.value.detail == "步骤 11 放入报告的模型没有保存：默认模型就是表中第一列，不用放入报告。"
+    assert len(persisted) == 2
 
 
-def test_put_session_refuses_saved_models_outside_the_regression_steps(monkeypatch):
+def test_put_session_refuses_an_experiment_outside_the_regression_steps(monkeypatch):
     monkeypatch.setattr(classroom_routes.db, "save_session", lambda *args: {"updated_at": "saved-at"})
     monkeypatch.setattr(classroom_routes.db, "latest_report", lambda _username: None)
     session = empty_session()
-    session["steps"]["5"] = make_record({"custom_results": [{"in_report": True, "name": {"x": 1}}]})
+    session["steps"]["5"] = make_record({"experiment": {"spec": {"x": 1}}})
     with pytest.raises(classroom_routes.HTTPException) as refused:
         classroom_routes.put_session(
             classroom_routes.SessionRequest(session=session, base_updated_at=None), {"sub": "student"}
         )
     assert refused.value.status_code == 422
-    assert "步骤 5 没有“自己设计模型”" in refused.value.detail
+    assert "步骤 5 没有“改模型、对比”" in refused.value.detail
     # Nor do such entries count in the fingerprint (an older record may still hold them).
     base = empty_session()
     assert records.report_fingerprint(session) == records.report_fingerprint(
@@ -412,17 +385,32 @@ def test_put_session_refuses_saved_models_outside_the_regression_steps(monkeypat
     )
 
 
-def test_put_session_answers_422_not_500_for_a_tampered_saved_model(monkeypatch):
+def test_put_session_refuses_the_records_of_the_earlier_contract(monkeypatch):
+    """A second saved run (``qualified_run``) and the list of named models (``custom_results``) are not carried over."""
+    monkeypatch.setattr(classroom_routes.db, "save_session", lambda *args: {"updated_at": "saved-at"})
+    monkeypatch.setattr(classroom_routes.db, "latest_report", lambda _username: None)
+    for legacy in ("qualified_run", "custom_results"):
+        session = empty_session()
+        session["steps"]["12"] = make_record({legacy: []})
+        with pytest.raises(classroom_routes.HTTPException) as refused:
+            classroom_routes.put_session(
+                classroom_routes.SessionRequest(session=session, base_updated_at=None), {"sub": "student"}
+            )
+        assert refused.value.status_code == 422
+        assert f"步骤 12 的记录来自旧版本（{legacy}）" in refused.value.detail
+
+
+def test_put_session_answers_422_not_500_for_a_tampered_experiment(monkeypatch):
     monkeypatch.setattr(classroom_routes.db, "save_session", lambda *args: {"updated_at": "saved-at"})
     monkeypatch.setattr(classroom_routes.db, "latest_report", lambda _username: None)
     for tampered in (
-        _saved(baseline=["FVA_share"]),
-        _saved(baseline={"a": 1}),
-        _saved() | {"spec": {"x_lags": [0], "controls": [{"name": ["汇率"], "lag": 0}], "fixed_effects": []}},
-        _saved() | {"spec": {"x_lags": [0, 1.0], "controls": [], "fixed_effects": ["country_industry", "year"]}},
+        ["FVA_share"],
+        {"spec": {"a": 1}, "saved_at": "x", "snapshot": {}},
+        _experiment() | {"spec": {"x_lags": [0], "controls": [{"name": ["汇率"], "lag": 0}], "fixed_effects": []}},
+        _experiment() | {"spec": {"x_lags": [0, 1.0], "controls": [], "fixed_effects": ["country_industry", "year"]}},
     ):
         session = empty_session()
-        session["steps"]["11"] = make_record({"custom_results": [tampered]})
+        session["steps"]["11"] = make_record({"experiment": tampered})
         with pytest.raises(classroom_routes.HTTPException) as refused:
             classroom_routes.put_session(
                 classroom_routes.SessionRequest(session=session, base_updated_at=None), {"sub": "student"}
@@ -431,29 +419,29 @@ def test_put_session_answers_422_not_500_for_a_tampered_saved_model(monkeypatch)
         assert "unhashable" not in refused.value.detail and "instance" not in refused.value.detail
 
 
-def test_report_fingerprint_counts_only_what_the_report_prints_of_the_saved_models():
+def test_report_fingerprint_counts_only_what_the_report_prints_of_the_experiment():
     session = empty_session()
     session["steps"]["11"] = make_record({"quiz": {"a": 1}})
     base = records.report_fingerprint(session)
 
-    def with_models(*models, draft=None):
+    def with_experiment(experiment="none", draft=None):
         changed = copy.deepcopy(session)
-        changed["steps"]["11"]["data"]["custom_results"] = list(models)
+        if experiment != "none":
+            changed["steps"]["11"]["data"]["experiment"] = experiment
         if draft is not None:
             changed["steps"]["11"]["data"]["custom_draft"] = draft
         return records.report_fingerprint(changed)
 
-    # Not in the report: saving, deleting, a different snapshot or a half-filled form change nothing.
-    assert with_models() == base
-    assert with_models(_saved("结果1"), _saved("结果2")) == base
-    assert with_models(_saved("结果1", snapshot={"result": {"coefs": [1]}}), draft={"x_lags": [0]}) == base
-    # In the report: marking one, renaming it or changing its model does.
-    reported = with_models(_saved("结果1", in_report=True))
+    # Not in the report: no experiment, one removed, or a half-filled form change nothing.
+    assert with_experiment() == base
+    assert with_experiment(None) == base
+    assert with_experiment(None, draft={"x_lags": [0]}) == base
+    # In the report: putting one in, or changing its model, does; its snapshot and time do not.
+    reported = with_experiment(_experiment())
     assert reported != base
-    assert with_models(_saved("结果1", in_report=True, snapshot={"other": True}), _saved("结果2")) == reported
-    assert with_models(_saved("结果A", in_report=True, id="id-结果1")) != reported
+    assert with_experiment(_experiment(snapshot={"other": True}, saved_at="2026-10-12T00:00:00Z")) == reported
     other_spec = ModelSpec((0, 1), (), ("country_industry", "year"))
-    assert with_models(_saved("结果1", in_report=True, spec=other_spec)) != reported
+    assert with_experiment(_experiment(spec=other_spec)) != reported
 
 
 def test_a_saved_default_run_must_record_its_model():
@@ -514,7 +502,7 @@ def test_report_generation_charges_the_reported_models_once_the_gate_passes(monk
 
     charged = []
     session = empty_session()
-    session["steps"]["11"] = make_record({"custom_results": [_saved("结果1", in_report=True)]})
+    session["steps"]["11"] = make_record({"experiment": _experiment()})
     monkeypatch.setattr(classroom_routes.quiz_config, "load_bank", quizzes.default_bank)
     monkeypatch.setattr(classroom_routes, "_workspace", lambda _sub: (session, None, None))
     monkeypatch.setattr(

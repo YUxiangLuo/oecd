@@ -118,7 +118,7 @@ def main():
             )
             assert code == 200
             token = request(base, "POST", "/api/auth/login", {"username": username, "password": password})[1]["token"]
-            initial = {"version": "experiment-session-simple-v3", "steps": {}, "shared": {}}
+            initial = {"version": "experiment-session-simple-v4", "steps": {}, "shared": {}}
             _, saved = request(
                 base, "PUT", "/api/classroom/session", {"session": initial, "base_updated_at": None}, token
             )

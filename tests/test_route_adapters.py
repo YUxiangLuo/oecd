@@ -906,13 +906,8 @@ def test_regression_design_and_validation(teaching_db):
     assert options.status_code == 200
     assert options.json()["default_spec"] == DEFAULT_SPEC.to_dict()
     assert [item["lag"] for item in options.json()["x_lags"]] == [0, 1, 2]
-    assert options.json()["limits"] == {
-        "saved": 6,
-        "in_report": 3,
-        "compared": 4,
-        "name_length": 20,
-        "runs_per_minute": 20,
-    }
+    assert options.json()["limits"] == {"runs_per_minute": 20}
+    assert [item["key"] for item in options.json()["presets"]][:2] == ["no_exchange_rate", "current_x_only"]
     design = client.get("/api/regression/design", params={"outcome": "trade"})
     assert design.status_code == 200
     assert design.json()["outcome"] == "trade"

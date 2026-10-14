@@ -80,15 +80,15 @@ _WORKBENCH_STEPS = frozenset(str(item["n"]) for item in STEPS if item.get("regre
 
 
 def _report_data(step: str, data: dict[str, Any]) -> dict[str, Any]:
-    """A step's data as the report reads it. The workbench's saved models count only by what the report prints of
-    them (name, Y and model of those marked 放入报告); with none marked, the key is left out, so a session that never
-    used the workbench keeps the fingerprint it had before."""
-    from gvcsim.regression.workbench import reported_custom_results
+    """A step's data as the report reads it. The workbench's experiment counts only by what the report prints of it
+    (its model); without one, the key is left out, so a session that never used the workbench keeps the fingerprint
+    it had before."""
+    from gvcsim.regression.workbench import reported_experiment
 
-    projected = {k: v for k, v in data.items() if k not in _VIEW_ONLY_KEYS and k != "custom_results"}
-    reported = reported_custom_results(data.get("custom_results")) if step in _WORKBENCH_STEPS else []
-    if reported:
-        projected["custom_results"] = reported
+    projected = {k: v for k, v in data.items() if k not in _VIEW_ONLY_KEYS and k != "experiment"}
+    reported = reported_experiment(data.get("experiment")) if step in _WORKBENCH_STEPS else None
+    if reported is not None:
+        projected["experiment"] = reported
     return projected
 
 

@@ -7,7 +7,7 @@ import math
 from copy import deepcopy
 from typing import Any
 
-SESSION_VERSION = "experiment-session-simple-v3"
+SESSION_VERSION = "experiment-session-simple-v4"
 MAX_SESSION_BYTES = 300_000
 MAX_STEPS = 15
 SHARED_KEYS = {"regression_settings"}

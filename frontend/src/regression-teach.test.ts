@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   RegressionEvidenceMatrix,
   RegressionSummaryBars,
-  ReportedCustomModels,
+  ReportedExperiments,
   familyVerdict,
   regressionSummaryRows,
 } from "./regression-teach";
@@ -57,35 +57,6 @@ describe("familyVerdict", () => {
       expect(familyVerdict(outcome)).toBeNull();
     });
   }
-
-  test("prefers the report's qualified run over a later insufficient exploration", () => {
-    const qualified = response("trade", coefficient(-0.02, -0.03, -0.01));
-    const latest = response("trade", coefficient(-0.02, -0.03, -0.01));
-    latest.result.status = "insufficient";
-    latest.result.support = {
-      treated_clusters: 1, untreated_clusters: 75, treated_entities: 4, untreated_entities: 296,
-      total_entities: 300, reversal_entities: [], reversal_share: 0, absorbing: true,
-      status: "insufficient", reasons: ["处理支持度不足"], min_treated_clusters: 5,
-      max_reversal_share: 0.05, suppress_inference: true,
-    };
-    latest.result.coefs = [{
-      name: "teaching_tariff_exposure", coef: -0.02, se: 0.01, t: 1, p: null, stars: "", ci_low: null, ci_high: null,
-    }];
-    const verdict = familyVerdict(
-      "trade",
-      (step: number) => step === 11 ? { run: { design: latest.design, result: latest.result }, qualified_run: { design: qualified.design, result: qualified.result } } : undefined,
-    );
-    expect(verdict?.state).toBe("negative");
-  });
-
-  test("falls back to the qualified sibling run after refresh", () => {
-    const saved = response("production", coefficient(0.01, -0.02, 0.04));
-    const verdict = familyVerdict(
-      "production",
-      (step: number) => step === 12 ? { qualified_run: { design: saved.design, result: saved.result } } : undefined,
-    );
-    expect(verdict?.state).toBe("insufficient");
-  });
 });
 
 describe("student-first regression reading", () => {
@@ -93,7 +64,7 @@ describe("student-first regression reading", () => {
     const trade = response("trade", coefficient(-0.02, -0.03, -0.01));
     const html = renderToStaticMarkup(createElement(RegressionEvidenceMatrix, {
       getStep: (step: number) => step === 11
-        ? { qualified_run: { design: trade.design, result: trade.result } }
+        ? { run: { design: trade.design, result: trade.result } }
         : undefined,
     }));
     expect(html).toContain("四步结果汇总");
@@ -215,7 +186,7 @@ describe("RegressionSummaryBars", () => {
   });
 });
 
-describe("ReportedCustomModels", () => {
+describe("ReportedExperiments", () => {
   const withSum = (value: number, low: number, high: number) => {
     const run = response("trade", coefficient(value, low, high));
     run.design.baseline = "FVA_share";
@@ -223,77 +194,51 @@ describe("ReportedCustomModels", () => {
     run.result.cumulative = { ...coefficient(value, low, high), name: "cumulative" };
     return run;
   };
+  const noRateSpec = { x_lags: [0, 1], controls: [{ name: "teaching_log_gdp", lag: 0 }, { name: "teaching_trade_openness", lag: 0 }], fixed_effects: ["country_industry", "year"] };
 
-  test("lists each model marked for the report with its sum next to the step's default model", () => {
+  test("lists each step's experiment, named after its preset, with its sum next to the step's default model", async () => {
     const defaultRun = withSum(-0.55, -0.57, -0.53);
     const noRate = withSum(-0.70, -0.75, -0.65);
-    const model = (name: string, inReport: boolean) => ({
-      id: name, name, outcome: "trade" as const, baseline: "FVA_share", in_report: inReport, saved_at: "2026-10-11",
-      spec: { x_lags: [0, 1], controls: [], fixed_effects: ["country_industry", "year"] }, snapshot: snapshotOf(noRate),
-    });
-    const html = renderToStaticMarkup(createElement(ReportedCustomModels, {
-      getStep: (step: number) => step === 11
-        ? { run: { design: defaultRun.design, result: defaultRun.result }, custom_results: [model("去掉汇率", true), model("没放入", false)] }
-        : undefined,
-    }));
-    const dom = new DOMParser().parseFromString(html, "text/html");
-    const rows = [...dom.querySelectorAll("tbody tr")].map((row) => [...row.children].map((cell) => cell.textContent));
-    expect(rows).toHaveLength(1);
-    expect(rows[0][0]).toBe("步骤 11 · 贸易流");
-    expect(rows[0][1]).toContain("去掉汇率");
-    // The model's sum says which years it covers; both read at the default's decimals.
-    expect(rows[0][3]).toBe("-0.70 个百分点（两年累计）");
-    expect(rows[0][4]).toBe("-0.55 个百分点");
-  });
-
-  test("a model on another Y than the step's saved run is compared with the course default on that Y", async () => {
-    const saved = withSum(-0.55, -0.57, -0.53); // the step's run is on FVA_share
-    const dvaex = withSum(0.7057, 0.6566, 0.7548);
-    const estimate = (key: string, coef: number, low: number, high: number) => ({
-      key, label: key, kind: "share", default: key === "FVA_share", coef, ci_low: low, ci_high: high, p: 0.001, status: "ok",
-      suppress_inference: false, depvar_std: 1, depvar_within_std: 1, depvar_mean: 1, n_obs: 10,
-    });
-    const overview = spyOn(api, "teachingOverview").mockResolvedValue({
-      version: "v10", disclaimer: "",
-      outcomes: { trade: [estimate("FVA_share", -0.5504, -0.567, -0.534), estimate("DVAex_share", 0.549, 0.533, 0.565)], production: [], length: [], network: [] },
-    });
-    const model = {
-      id: "m", name: "去掉汇率", outcome: "trade" as const, baseline: "DVAex_share", in_report: true, saved_at: "2026-10-11",
-      spec: { x_lags: [0, 1], controls: [], fixed_effects: ["country_industry", "year"] }, snapshot: snapshotOf(dvaex),
-    };
+    const options = spyOn(api, "regressionOptions").mockResolvedValue(optionsFixture as WorkbenchOptions);
     try {
-      const view = render(createElement(ReportedCustomModels, {
-        getStep: (step: number) => step === 11 ? { run: { design: saved.design, result: saved.result }, custom_results: [model] } : undefined,
+      const view = render(createElement(ReportedExperiments, {
+        getStep: (step: number) => step === 11
+          ? { run: { design: defaultRun.design, result: defaultRun.result }, experiment: { spec: noRateSpec, saved_at: "2026-10-14", snapshot: snapshotOf(noRate) } }
+          : step === 12 ? { run: { design: defaultRun.design, result: defaultRun.result }, experiment: null } : undefined,
       }));
-      await waitFor(() => expect(view.container.querySelector("tbody tr td:last-child")?.textContent).toBe("+0.55 个百分点"));
-      // The model reads at that default's decimals, as on the workbench's table.
-      expect(view.container.querySelectorAll("tbody tr td")[2].textContent).toBe("+0.71 个百分点（两年累计）");
-    } finally {
-      overview.mockRestore();
-      cleanup();
-    }
+      await waitFor(() => expect(view.container.querySelector("tbody tr td b")?.textContent).toBe("去掉汇率变动"));
+      const rows = [...view.container.querySelectorAll("tbody tr")].map((row) => [...row.children].map((cell) => cell.textContent));
+      expect(rows).toHaveLength(1);
+      expect(rows[0][0]).toBe("步骤 11 · 贸易流");
+      expect(rows[0][2]).toContain("X + L1.X；GDP 对数、贸易开放度；国家×行业 + 年份 FE");
+      // The model's sum says which years it covers; both read at the default's decimals.
+      expect(rows[0][3]).toBe("-0.70 个百分点（两年累计）");
+      expect(rows[0][4]).toBe("-0.55 个百分点");
+    } finally { cleanup(); options.mockRestore(); }
   });
 
   test("discloses selected controls omitted from the actual saved estimate", async () => {
     const run = withSum(-0.55, -0.57, -0.53);
     run.result.omitted = [{ name: "teaching_exchange_rate_change", reason: "absorbed", by: "国家×年份" }];
-    const model = {
-      id: "absorbed", name: "国家年份模型", outcome: "trade" as const, baseline: "FVA_share", in_report: true, saved_at: "2026-10-13",
+    const experiment = {
+      saved_at: "2026-10-13",
       spec: { x_lags: [0, 1], controls: [{ name: "teaching_exchange_rate_change", lag: 0 }], fixed_effects: ["country_year"] },
       snapshot: snapshotOf(run),
     };
     const options = spyOn(api, "regressionOptions").mockResolvedValue(optionsFixture as WorkbenchOptions);
     try {
-      const view = render(createElement(ReportedCustomModels, {
-        getStep: (step: number) => step === 11 ? { run, custom_results: [model] } : undefined,
+      const view = render(createElement(ReportedExperiments, {
+        getStep: (step: number) => step === 11 ? { run, experiment } : undefined,
       }));
       await waitFor(() => expect(view.container.textContent).toContain("被国家×年份 FE 吸收：汇率变动"));
+      // Not a preset: named as a custom setting.
+      expect(view.container.querySelector("tbody tr td b")?.textContent).toStartWith("自定义设定：");
     } finally { cleanup(); options.mockRestore(); }
   });
 
   test("says how to add one when none is marked", () => {
-    const html = renderToStaticMarkup(createElement(ReportedCustomModels, { getStep: () => undefined }));
-    expect(html).toContain("还没有放入报告的自选模型（选做）");
+    const html = renderToStaticMarkup(createElement(ReportedExperiments, { getStep: () => undefined }));
+    expect(html).toContain("还没有放入报告的模型实验（选做）");
     expect(html).not.toContain("<table");
   });
 });

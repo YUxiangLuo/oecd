@@ -17,7 +17,7 @@ from gvcsim import report_workbench, teaching_report
 from gvcsim.classroom import db, management, quiz_config, records
 from gvcsim.name_keys import normalize_academic_name, required_name_key
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
-from gvcsim.regression.workbench import custom_results_problem
+from gvcsim.regression.workbench import experiment_problem
 from gvcsim.regression_routes import REPORT_BILLING, ReportBilling, charge_report_runs, finish_report_runs
 from gvcsim.report_gate import check_gate
 from gvcsim.report_saved_run import _STEP_OUTCOMES, _parse_saved_run
@@ -184,30 +184,36 @@ def _checked_session(raw: dict[str, Any]) -> dict[str, Any]:
                 status_code=422,
                 detail="步骤 10 记录的例子已过期：请回到步骤 10，等关税数据加载完成后再继续。",
             )
-    # Only steps 11–14 have the workbench: saved models anywhere else are never shown or printed, so not stored.
+    # Only steps 11–14 have the workbench: an experiment anywhere else is never shown or printed, so not stored.
     workbench_steps = {str(step) for step in _STEP_OUTCOMES}
     for key, value in payload.get("steps", {}).items():
         data = value.get("data") if isinstance(value, dict) else None
-        if isinstance(data, dict) and "custom_results" in data and key not in workbench_steps:
-            raise HTTPException(status_code=422, detail=f"步骤 {key} 没有“自己设计模型”，不能保存模型。")
+        if isinstance(data, dict) and "experiment" in data and key not in workbench_steps:
+            raise HTTPException(status_code=422, detail=f"步骤 {key} 没有“改模型、对比”，不能放入模型。")
     # A stale DID or renamed-column snapshot may remain visible to the student,
     # but it must never be silently persisted as completion evidence for v1.
     for step in range(11, 15):
         data = payload.get("steps", {}).get(str(step), {}).get("data", {})
         if not isinstance(data, dict):
             continue
-        for key in ("run", "qualified_run"):
-            raw_run = data.get(key)
-            if raw_run is not None and _parse_saved_run(raw_run, _STEP_OUTCOMES[step]) is None:
+        # The record of an earlier contract (a second saved run, a list of named models) is not carried over.
+        for legacy in ("qualified_run", "custom_results"):
+            if legacy in data:
                 raise HTTPException(
                     status_code=422,
-                    detail=f"步骤 {step} 保存的回归结果已过期，请回到步骤 {step} 点“{_run_button(step)}”重新计算。",
+                    detail=f"步骤 {step} 的记录来自旧版本（{legacy}），当前课程不再使用；请刷新页面后重新计算。",
                 )
-        # The workbench's saved models (自己设计模型): the report recomputes the ones marked 放入报告.
-        if "custom_results" in data:
-            problem = custom_results_problem(data["custom_results"], _STEP_OUTCOMES[step])
+        raw_run = data.get("run")
+        if raw_run is not None and _parse_saved_run(raw_run, _STEP_OUTCOMES[step]) is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"步骤 {step} 保存的回归结果已过期，请回到步骤 {step} 点“{_run_button(step)}”重新计算。",
+            )
+        # The workbench's experiment put into the report: the report recomputes it from its spec.
+        if "experiment" in data:
+            problem = experiment_problem(data["experiment"])
             if problem:
-                raise HTTPException(status_code=422, detail=f"步骤 {step} 自己设计的模型没有保存：{problem}。")
+                raise HTTPException(status_code=422, detail=f"步骤 {step} 放入报告的模型没有保存：{problem}。")
     return payload
 
 

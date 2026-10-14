@@ -1712,67 +1712,6 @@ def test_non_inferential_saved_run_does_not_satisfy_valid_regression_gate(status
     assert any(item["step"] == 11 and "计算贸易流回归" in "".join(item["missing"]) for item in blocked)
 
 
-def test_qualified_run_on_same_step_still_satisfies_gate_after_insufficient_latest(tmp_path, monkeypatch):
-    _artifacts(tmp_path)
-    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
-    session = _complete()
-    session["steps"]["11"]["data"]["qualified_run"] = session["steps"]["11"]["data"]["run"]
-    session["steps"]["11"]["data"]["run"] = {
-        "design": {"outcome": "trade", "equation": "y = policy + FE", "shock_type": "export_control"},
-        "result": {
-            "status": "insufficient",
-            "support": {"status": "insufficient", "suppress_inference": True, "treated_clusters": 1},
-            "n_obs": 10,
-            "coefs": [{"name": "export_control_treated×post", "coef": -0.01}],
-        },
-    }
-    _sign_run(session["steps"]["11"]["data"]["run"])
-
-    assert check_gate(session) == []
-    report = build(session, "同学")
-    assert "四项回归结果汇总" in report.markdown
-    assert "下表按四步保存的设定列出服务器计算的结果" in report.markdown
-    assert "这一项不显示 95% 区间" in report.markdown or "受关税影响的国家太少" in report.markdown
-    assert X_COLUMN in report.markdown
-
-
-def test_exact_run_identity_prevents_unsigned_latest_from_shadowing_distinct_qualified_run(tmp_path, monkeypatch):
-    _artifacts(tmp_path)
-    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
-    session = _complete()
-    qualified = _ok_run("trade")
-    qualified["result"]["notes"] = ["QUALIFIED_COLLISION_FIXTURE"]
-    latest = json.loads(json.dumps(qualified))
-    latest["result"]["status"] = "insufficient"
-    latest["result"]["status_reasons"] = ["测试诊断"]
-    latest["result"]["support"] = {
-        "status": "insufficient",
-        "suppress_inference": True,
-        "reasons": ["测试诊断"],
-    }
-    for coefficient in [*latest["result"]["coefs"], latest["result"]["cumulative"]]:
-        coefficient.update(p=None, ci_low=None, ci_high=None)
-    latest["result"]["notes"] = ["LATEST_COLLISION_FIXTURE"]
-    session["steps"]["11"]["data"].update({"run": latest, "qualified_run": qualified})
-
-    step_runs = [run for run in teaching_report._saved_runs(session) if run["step"] == 11]
-    gate_runs = [run for run in teaching_report._gate_qualified_runs(session) if run["step"] == 11]
-    qualified_runs = [run for run in step_runs if report_saved_run._result_is_qualified(run["result"], run["design"])]
-    markdown = build(session, "同学").markdown
-
-    assert len(step_runs) == 2
-    assert gate_runs == step_runs
-    assert len(qualified_runs) == 1
-    assert qualified_runs[0]["result"]["notes"] == ["QUALIFIED_COLLISION_FIXTURE"]
-    assert "LATEST_COLLISION_FIXTURE" in markdown
-    assert "QUALIFIED_COLLISION_FIXTURE" in markdown
-
-    identical = _complete()
-    identical_run = identical["steps"]["12"]["data"]["run"]
-    identical["steps"]["12"]["data"]["qualified_run"] = identical_run
-    assert len([run for run in teaching_report._saved_runs(identical) if run["step"] == 12]) == 1
-
-
 def test_comparison_table_keeps_fixed_shock_and_estimand_label(tmp_path, monkeypatch):
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
@@ -2044,7 +1983,6 @@ def test_report_marks_suppressed_inference_and_reasons(tmp_path, monkeypatch):
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
-    session["steps"]["11"]["data"]["qualified_run"] = session["steps"]["11"]["data"]["run"]
     session["steps"]["11"]["data"]["run"] = {
         "design": {"outcome": "trade", "depvar_label": "FVA 份额", "equation": "y = policy + FE"},
         "result": {
@@ -2119,20 +2057,12 @@ def test_report_translates_settings_controls_and_rounds_display_values(tmp_path,
 
 
 @pytest.mark.parametrize("status", ["insufficient", "invalid_design"])
-@pytest.mark.parametrize("has_older_qualified_run", [False, True])
-def test_complete_stopped_diagnosis_satisfies_report_gate_without_hiding_it(
-    tmp_path, monkeypatch, status, has_older_qualified_run
-):
-    from copy import deepcopy
-
+def test_complete_stopped_diagnosis_satisfies_report_gate_without_hiding_it(tmp_path, monkeypatch, status):
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
     data = session["steps"]["11"]["data"]
-    if has_older_qualified_run:
-        data["qualified_run"] = deepcopy(data["run"])
-    else:
-        assert "qualified_run" not in data
+    assert "qualified_run" not in data
     result = data["run"]["result"]
     result["status"] = status
     result["status_reasons"] = ["实际配对支持不足或处理路径不相容"]
@@ -2145,7 +2075,6 @@ def test_complete_stopped_diagnosis_satisfies_report_gate_without_hiding_it(
     assert "这一项不显示 95% 区间" in report.markdown
     assert "实际配对支持不足或处理路径不相容" in report.markdown
     # A forged inferential field cannot turn a stopped result into acceptable evidence.
-    data.pop("qualified_run", None)
     result["coefs"][0]["p"] = 0.001
     assert any(item["step"] == 11 for item in check_gate(session))
 
@@ -2993,25 +2922,20 @@ def test_report_example_conversion_groups_thousands_like_the_page():
     assert _example_size("network", 12.345) == "12.3 个中心性原始单位"
 
 
-def _custom(name: str, spec, *, in_report: bool = True, baseline: str = "FVA_share", snapshot=None) -> dict:
+def _experiment(spec, snapshot=None) -> dict:
     return {
-        "id": f"id-{name}",
-        "name": name,
-        "outcome": "trade",
-        "baseline": baseline,
         "spec": spec.canonical().to_dict(),
-        "in_report": in_report,
         "saved_at": "2026-10-11T09:00:00Z",
         "snapshot": snapshot or {"result": {"coefs": [{"name": "teaching_tariff_exposure", "coef": 99.0}]}},
     }
 
 
-def test_report_appendix_recomputes_the_models_marked_for_the_report(tmp_path, monkeypatch):
-    """自己设计模型: each Y gets a table with the default model first; the numbers come from the saved spec, so a
-    tampered snapshot changes nothing, and models not marked 放入报告 are left out."""
+def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report(tmp_path, monkeypatch):
+    """模型实验: each step with an experiment gets a table with the default model first; the numbers come from the
+    saved model, so a tampered snapshot changes nothing, and a step without one (or with it removed) is left out."""
     from gvcsim import regression_routes
     from gvcsim.regression.design import RegressionDesign
-    from gvcsim.regression.spec import DEFAULT_SPEC, EXCHANGE_RATE_COLUMN, ModelSpec
+    from gvcsim.regression.spec import DEFAULT_SPEC, EXCHANGE_RATE_COLUMN, GDP_COLUMN, OPENNESS_COLUMN, ModelSpec
 
     from test_model_spec import _panel
 
@@ -3019,81 +2943,94 @@ def test_report_appendix_recomputes_the_models_marked_for_the_report(tmp_path, m
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     regression_routes.clear_result_cache()
     plain = build(_complete(), "同学")
-    assert "附录：学生设计的模型" not in plain.markdown and "按你保存的设定" not in plain.markdown
+    assert "附录：模型实验" not in plain.markdown and "按你保存的设定" not in plain.markdown
     assert plain.provenance["custom_results"] == []
-    # The small release fixture has no tariff (X = 0 everywhere): each model says it could not be recomputed.
+    # The small release fixture has no tariff (X = 0 everywhere): the model says it could not be recomputed.
     failing = _complete()
-    failing["steps"]["11"]["data"]["custom_results"] = [_custom("结果1", ModelSpec((0,), (), ("year",)))]
-    lines = build(failing, "同学").markdown.split("## 附录：学生设计的模型", 1)[1]
-    assert "- 结果1：X；无控制变量；年份 FE。这次没能重算：关税暴露 X 在这个设定下无法估计" in lines
+    failing["steps"]["11"]["data"]["experiment"] = _experiment(ModelSpec((0,), (), ("year",)))
+    lines = build(failing, "同学").markdown.split("## 附录：模型实验", 1)[1]
+    assert (
+        "- 自定义设定：X；无控制变量；年份 FE：X；无控制变量；年份 FE。这次没能重算：关税暴露 X 在这个设定下无法估计"
+        in lines
+    )
     # The rest of this test reads a teaching-shaped panel with two tariff waves.
     panel = _panel()
     monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: (artifacts.release_identity(tmp_path), panel))
     regression_routes.clear_result_cache()
 
-    no_rate = ModelSpec((0, 1), (), ("country_industry", "year"))
+    no_rate = ModelSpec((0, 1), ((GDP_COLUMN, 0), (OPENNESS_COLUMN, 0)), ("country_industry", "year"))
     country_year = ModelSpec((0, 1), ((EXCHANGE_RATE_COLUMN, 0),), ("country_industry", "country_year"))
+    custom_name = "自定义设定：X + L1.X；汇率变动；国家×行业 + 国家×年份 FE"
+    escaped_name = "自定义设定：X \\+ L1\\.X；汇率变动；国家×行业 \\+ 国家×年份 FE"
     session = _complete()
-    session["steps"]["11"]["data"]["custom_results"] = [
-        _custom("去掉汇率", no_rate),
-        _custom("没放入报告", ModelSpec((0,), (), ()), in_report=False),
-        _custom("国家×年份*", country_year),
-    ]
+    # The fixture panel carries step 11's Y only: step 11 recomputes, step 13 says it could not, step 12 has none.
+    session["steps"]["11"]["data"]["experiment"] = _experiment(country_year)
+    session["steps"]["12"]["data"]["experiment"] = None
+    session["steps"]["13"]["data"]["experiment"] = _experiment(no_rate)
     report = build(session, "同学")
     markdown = report.markdown
-    appendix = markdown.split("## 附录：学生设计的模型", 1)[1].split("\n## ", 1)[0]
-    assert "| 变量 | 默认模型 | 去掉汇率 | 国家×年份\\* |" in appendix
+    appendix = markdown.split("## 附录：模型实验", 1)[1].split("\n## ", 1)[0]
+    assert "每步最多一个" in appendix
+    # One table a step; a preset's model is named after the preset, any other as a custom setting (escaped).
+    assert "### 步骤 11 · 贸易流回归（Y：外国增加值项占比）" in appendix
+    assert f"| 变量 | 默认模型 | {escaped_name} |" in appendix
+    assert "### 步骤 13 · 长度回归（Y：" in appendix
+    assert "| 变量 | 默认模型 | 去掉汇率变动 |" in appendix
+    assert "### 步骤 12" not in appendix and "### 步骤 14" not in appendix
     assert "控制变量都是国家层面的逐年数值：汇率变动 = 本币兑美元的年变动（百分点，负为贬值）（课程生成）" in appendix
     assert "GDP 对数 = ln（模拟 GDP，美元）；首年以 ICIO 国家增加值规模校准（课程生成）" in appendix
-    assert "贸易开放度 = 模拟进出口总额 / GDP（%），不是 ICIO 出口强度（课程生成）" in appendix
-    assert "没放入报告" not in appendix
+    step11 = appendix.split("### 步骤 13", 1)[0]
     # The recomputed numbers, not the snapshot's 99.
-    for spec in (DEFAULT_SPEC, no_rate):
+    for spec in (DEFAULT_SPEC, country_year):
         run = regression_routes.cached_run(panel, RegressionDesign("trade", teaching=True, spec=spec))
         x = next(item for item in run["result"]["coefs"] if item["name"] == X_COLUMN)
-        assert _fixed4(x["coef"]) in appendix
+        assert _fixed4(x["coef"]) in step11
     assert "99.0000" not in appendix
     # Coefficient and SE belong to the same printable row/cell, never separate pagination units.
-    x_row = next(line for line in appendix.splitlines() if line.startswith("| X |"))
-    assert x_row.count(" `(") == 3
+    x_row = next(line for line in step11.splitlines() if line.startswith("| X |"))
+    assert x_row.count(" `(") == 2
     assert not any(line.startswith("|  |") for line in appendix.splitlines())
     # The exchange rate is absorbed by country × year effects and said so; the default column's model is summarised.
     assert (
-        "- 国家×年份\\*：X + L1.X；汇率变动；国家×行业 + 国家×年份 FE；已省略（被国家×年份 FE 吸收：汇率变动）"
-        in appendix
+        f"- {escaped_name}：X + L1.X；汇率变动；国家×行业 + 国家×年份 FE；已省略（被国家×年份 FE 吸收：汇率变动）"
+        in step11
     )
-    assert "- 默认模型：X + L1.X；汇率变动、GDP 对数、贸易开放度；国家×行业 + 年份 FE" in appendix
-    assert "| 国家×年份 FE | 否 | 否 | 是 |" in appendix
-    assert "| 国家 FE | 是 | 是 | 是 |" in appendix
-    assert "| 观测值 |" in appendix and "| 组内 R² |" in appendix and "| F（自由度） |" in appendix
+    assert "- 默认模型：X + L1.X；汇率变动、GDP 对数、贸易开放度；国家×行业 + 年份 FE" in step11
+    assert "| 国家×年份 FE | 否 | 是 |" in step11
+    assert "| 国家 FE | 是 | 是 |" in step11
+    assert "| 观测值 |" in step11 and "| 组内 R² |" in step11 and "| F（自由度） |" in step11
     # Under the cumulative relation, each column's sum per 1 percentage point of X, as the page's table reads it.
-    per_point = next(line for line in appendix.splitlines() if line.startswith("| 合计：X 每高 1 个百分点 |"))
-    assert appendix.index("| X 各项合计（累计效应） |") < appendix.index(per_point)
+    per_point = next(line for line in step11.splitlines() if line.startswith("| 合计：X 每高 1 个百分点 |"))
+    assert step11.index("| X 各项合计（累计效应） |") < step11.index(per_point)
     cells = per_point.strip(" |").split(" | ")[1:]
-    assert len(cells) == 3 and all(cell.endswith(" 个百分点（两年累计）") for cell in cells)
+    assert len(cells) == 2 and all(cell.endswith(" 个百分点（两年累计）") for cell in cells)
     default_run = regression_routes.cached_run(panel, RegressionDesign("trade", teaching=True, spec=DEFAULT_SPEC))
     assert cells[0] == f"{default_run['result']['cumulative']['coef']:+.2f} 个百分点（两年累计）"
-    (chart,) = [json.loads(block) for block in re.findall(r"```gvcsim-chart\n(.*?)\n```", appendix, re.S)]
-    assert [item["label"] for item in chart["items"]] == ["默认模型", "去掉汇率", "国家×年份*"]
-    for bar, spec in zip(chart["items"], (DEFAULT_SPEC, no_rate, country_year), strict=True):
+    (chart,) = [json.loads(block) for block in re.findall(r"```gvcsim-chart\n(.*?)\n```", step11, re.S)]
+    assert [item["label"] for item in chart["items"]] == ["默认模型", custom_name]
+    for bar, spec in zip(chart["items"], (DEFAULT_SPEC, country_year), strict=True):
         recomputed = regression_routes.cached_run(panel, RegressionDesign("trade", teaching=True, spec=spec))
         for key, source in (("value", "coef"), ("ci_low", "ci_low"), ("ci_high", "ci_high")):
             assert bar[key] == recomputed["result"]["cumulative"][source]
+    # Step 13 could not be recomputed on this fixture: said per column, no chart.
+    step13 = appendix.split("### 步骤 13", 1)[1]
+    assert step13.count("这次没能重算") == 2 and "```gvcsim-chart" not in step13
     assert "注：括号内为按国家聚类的标准误。\\*\\*\\* p\\<0.01" in appendix
     assert report.provenance["custom_results"] == [
-        {"step": 11, "name": "去掉汇率", "outcome": "trade", "baseline": "FVA_share", "spec": no_rate.to_dict()},
-        {"step": 11, "name": "国家×年份*", "outcome": "trade", "baseline": "FVA_share", "spec": country_year.to_dict()},
+        {"step": 11, "name": custom_name, "outcome": "trade", "baseline": "FVA_share", "spec": country_year.to_dict()},
+        {"step": 13, "name": "去掉汇率变动", "outcome": "length", "baseline": "PLv_GVC", "spec": no_rate.to_dict()},
     ]
-    # Each step's evidence names the models the appendix compares.
+    # Each step's evidence names its experiment.
     summary = markdown.split("## 关键证据摘要", 1)[1].split("## 理解题答题记录", 1)[0]
-    assert "- 你还在本步比较了 2 个自己设计的模型（去掉汇率、国家×年份\\*），见附录“学生设计的模型”。" in summary
-    assert summary.count("你还在本步比较了") == 1
+    assert f"- 你在本步做了一个模型实验（{escaped_name}），见附录“模型实验”。" in summary
+    assert "- 你在本步做了一个模型实验（去掉汇率变动），见附录“模型实验”。" in summary
+    assert summary.count("你在本步做了一个模型实验") == 2
     # The methods note says the appendix is the one part recomputed.
-    assert "“学生设计的模型”附录中的模型则按你保存的设定在生成报告时重新计算。" in markdown
+    assert "“模型实验”附录中的模型则按你保存的设定在生成报告时重新计算。" in markdown
 
     tampered = copy.deepcopy(session)
-    tampered["steps"]["11"]["data"]["custom_results"][0]["snapshot"] = {"result": {"coefs": [{"coef": -1e9}]}}
-    tampered_appendix = build(tampered, "同学").markdown.split("## 附录：学生设计的模型", 1)[1].split("\n## ", 1)[0]
+    tampered["steps"]["11"]["data"]["experiment"]["snapshot"] = {"result": {"coefs": [{"coef": -1e9}]}}
+    tampered_appendix = build(tampered, "同学").markdown.split("## 附录：模型实验", 1)[1].split("\n## ", 1)[0]
     assert tampered_appendix == appendix
     regression_routes.clear_result_cache()
 

@@ -521,7 +521,7 @@ export type IndustryPage = PagedRows;
 
 /** 实验会话:逐步实验状态的可恢复模型(契约见 gvcsim/session.py)。 */
 /** 当前学期只接受 simple-v2；其它会话版本一律拒绝。 */
-export const SESSION_VERSION = "experiment-session-simple-v3";
+export const SESSION_VERSION = "experiment-session-simple-v4";
 
 export interface SessionRecord<T = unknown> {
   data: T;
@@ -607,7 +607,7 @@ export interface ClassroomReport {
     years: number[];
     session_fingerprint: string;
     runs: ReportRun[];
-    /** The workbench models the report printed (自己设计模型 marked 放入报告); absent on older reports. */
+    /** The model experiments the report printed (one a step at most); absent on older reports. */
     custom_results?: ReportedCustomResult[];
   };
   state: "draft" | "pending" | "graded";
@@ -945,9 +945,11 @@ export interface WorkbenchOptions {
   control_lag_note: string;
   fixed_effects: { key: string; label: string; description: string; includes: string[] }[];
   no_fixed_effects_note: string;
-  limits: { saved: number; in_report: number; compared: number; name_length: number; runs_per_minute: number };
-  /** "试一试": one change at a time, each a contrast the course data were built to show. */
-  tries: string[];
+  /** The preset experiments, in page order: each changes one thing of the default model and asks a question. */
+  presets: { key: string; label: string; question: string; spec: ModelSpec }[];
+  /** How a model that matches no preset is named ("自定义设定：" + its summary), on the page and in the report. */
+  custom_label_prefix: string;
+  limits: { runs_per_minute: number };
   hints: string[];
   footnote: string;
   sample_differs_note: string;
@@ -966,14 +968,9 @@ export interface CustomResultSnapshot {
   };
 }
 
-/** steps[11–14].data.custom_results[]: one saved workbench model. */
-export interface CustomResult {
-  id: string;
-  name: string;
-  outcome: RegressionOutcome;
-  baseline: string;
+/** steps[11–14].data.experiment: the one workbench model the step put into the report (on the step's default Y). */
+export interface Experiment {
   spec: ModelSpec;
-  in_report: boolean;
   saved_at: string;
   snapshot: CustomResultSnapshot;
 }

@@ -7,7 +7,7 @@ from gvcsim.classroom import records
 
 def _session():
     return {
-        "version": "experiment-session-simple-v3",
+        "version": "experiment-session-simple-v4",
         "steps": {
             "1": {"data": {"slice": {"year": 2020}, "observation": {"row": "CHN_A01_02", "value": 1.0}}},
             "2": {"data": {"year": 2020, "country": "CHN", "compared": ["CHN", "USA"], "observations": [{"value": 1}]}},

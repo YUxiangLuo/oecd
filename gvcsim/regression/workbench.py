@@ -1,38 +1,37 @@
-"""The "自己设计模型（选做）" panel of steps 11–14: what a student may choose, and how saved models are kept.
+"""The "改模型、对比（选做）" panel of steps 11–14: what a student may choose, the preset experiments, and the one
+model experiment a step may put into the report.
 
-The page renders its choices from ``options()``; a saved model (``steps[N].data.custom_results[]``) is checked by
-``custom_results_problem`` before the session is stored. A saved model's ``snapshot`` is for the page only: the
-report recomputes every model it prints from the saved ``(outcome, baseline, spec)``.
+The page renders its choices from ``options()``; the experiment a student put into the report
+(``steps[N].data.experiment``) is checked by ``experiment_problem`` before the session is stored. Its ``snapshot`` is
+for the page only: the report recomputes the model it prints from the saved ``spec`` on the step's default Y.
 """
 
 from __future__ import annotations
 
 import json
-import unicodedata
 from typing import Any
 
 from gvcsim import config
-from gvcsim.name_keys import name_key
 from gvcsim.regression.spec import (
     CONTROL_LAGS,
     CONTROLS,
     DEFAULT_SPEC,
+    EXCHANGE_RATE_COLUMN,
+    FDI_COLUMN,
     FIXED_EFFECT_INCLUDES,
     FIXED_EFFECT_LABELS,
     FIXED_EFFECTS,
+    GDP_COLUMN,
+    POPULATION_COLUMN,
     X_LAGS,
     ModelSpec,
     x_term_label,
 )
-from gvcsim.regression.teaching import VERSION, selectable_baselines
+from gvcsim.regression.teaching import VERSION
 
-MAX_SAVED = 6
-MAX_IN_REPORT = 3
-MAX_COMPARED = 4
-NAME_MAX_LENGTH = 20
 # A snapshot holds one result table (about 2 KB); the bound keeps a tampered session from storing anything larger.
 MAX_SNAPSHOT_BYTES = 16_000
-CUSTOM_RESULT_KEYS = frozenset({"id", "name", "outcome", "baseline", "spec", "in_report", "saved_at", "snapshot"})
+EXPERIMENT_KEYS = frozenset({"spec", "saved_at", "snapshot"})
 
 X_LAG_DESCRIPTIONS = {0: "当期：今年的 X", 1: "滞后 1 期：上一年的 X", 2: "滞后 2 期：两年前的 X"}
 X_LAG_NOTE = "数据只到 2020 年、2018 年起加税，滞后 3 期在样本内全为 0，无法估计。"
@@ -48,14 +47,65 @@ FIXED_EFFECT_DESCRIPTIONS = {
     "country_year": "每个国家每年一个截距，包含国家 FE 和年份 FE；会吸收本页全部国家层面的控制变量（包括滞后项），省略这些变量但不因其缺失删样本",
 }
 NO_FIXED_EFFECTS_NOTE = "都不勾时模型加常数项，表下的设定写作“无固定效应”。"
-# "试一试": one change at a time, each a contrast the course data were built to show; questions only, no answers.
-TRIES = (
-    "去掉“汇率变动”：X 各项合计变大还是变小？再改用“国家×年份”固定效应呢？",
-    "只放当期 X（去掉 L1.X）：合计和默认模型相差多少？",
-    "固定效应改成“国家 + 行业 + 年份”（不勾“国家×行业”）：结果怎样变？",
-    "去掉 GDP 对数或贸易开放度：X 各项合计怎样变化？",
-    "加上人口增长率、FDI 净流入占比，或 L2.X：多放变量是否一定更好？",
+
+
+def _without(controls: tuple[tuple[str, int], ...], *names: str) -> tuple[tuple[str, int], ...]:
+    return tuple(item for item in controls if item[0] not in names)
+
+
+# The preset experiments, in page order: each changes one thing of the default model, each a contrast the course
+# data were built to show. The question is asked, not answered. Their labels name the experiment in the report.
+PRESETS: tuple[tuple[str, str, str, ModelSpec], ...] = (
+    (
+        "no_exchange_rate",
+        "去掉汇率变动",
+        "X 各项合计变大还是变小？",
+        ModelSpec(
+            DEFAULT_SPEC.x_lags, _without(DEFAULT_SPEC.controls, EXCHANGE_RATE_COLUMN), DEFAULT_SPEC.fixed_effects
+        ),
+    ),
+    (
+        "current_x_only",
+        "只放当期 X（去掉 L1.X）",
+        "合计和默认模型相差多少？",
+        ModelSpec((0,), DEFAULT_SPEC.controls, DEFAULT_SPEC.fixed_effects),
+    ),
+    (
+        "separate_effects",
+        "固定效应改为国家 + 行业 + 年份",
+        "不勾“国家×行业”，结果怎样变？",
+        ModelSpec(DEFAULT_SPEC.x_lags, DEFAULT_SPEC.controls, ("country", "industry", "year")),
+    ),
+    (
+        "country_year_effects",
+        "改用国家×年份固定效应",
+        "宏观控制被吸收后，X 各项合计怎样变？",
+        ModelSpec(DEFAULT_SPEC.x_lags, DEFAULT_SPEC.controls, ("country_industry", "country_year")),
+    ),
+    (
+        "no_gdp",
+        "去掉 GDP 对数",
+        "X 各项合计怎样变化？",
+        ModelSpec(DEFAULT_SPEC.x_lags, _without(DEFAULT_SPEC.controls, GDP_COLUMN), DEFAULT_SPEC.fixed_effects),
+    ),
+    (
+        "extra_controls",
+        "加上人口增长率和 FDI 净流入占比",
+        "多放变量是否一定更好？",
+        ModelSpec(
+            DEFAULT_SPEC.x_lags,
+            (*DEFAULT_SPEC.controls, (POPULATION_COLUMN, 0), (FDI_COLUMN, 0)),
+            DEFAULT_SPEC.fixed_effects,
+        ),
+    ),
+    (
+        "lag2",
+        "加上两年前的 X（L2.X）",
+        "L2.X 的区间是否包含 0？",
+        ModelSpec((0, 1, 2), DEFAULT_SPEC.controls, DEFAULT_SPEC.fixed_effects),
+    ),
 )
+CUSTOM_LABEL_PREFIX = "自定义设定："
 HINTS = (
     "在课程模拟数据中，每次只改一处设定，与第一列的默认模型比较：X 各项的系数和合计变了多少？观测值和年份是否相同？",
     "与 Y 无关的变量在 10% 水平上大约每 10 次也会出现一次 *，不要只凭一颗星下结论。",
@@ -70,11 +120,25 @@ SAMPLE_DIFFERS_NOTE = "这几列的样本不同，差异有一部分来自样本
 SUPPRESSED_NOTE = "未通过估计检查，已隐藏推断结果（标准误、t 值、p 值、星号与区间）。"
 
 
+def experiment_label(spec: ModelSpec) -> str:
+    """How the page and the report name a model experiment: its preset's label, else "自定义设定：" + the model."""
+    canonical = spec.canonical()
+    for _key, label, _question, preset in PRESETS:
+        if preset.canonical() == canonical:
+            return label
+    return CUSTOM_LABEL_PREFIX + canonical.summary()
+
+
 def options() -> dict[str, Any]:
-    """Everything the workbench offers, in page order, with the default model and the limits."""
+    """Everything the workbench offers, in page order, with the default model, the presets and the limits."""
     return {
         "version": VERSION,
         "default_spec": DEFAULT_SPEC.to_dict(),
+        "presets": [
+            {"key": key, "label": label, "question": question, "spec": spec.canonical().to_dict()}
+            for key, label, question, spec in PRESETS
+        ],
+        "custom_label_prefix": CUSTOM_LABEL_PREFIX,
         "x_lags": [{"lag": lag, "label": x_term_label(lag), "description": X_LAG_DESCRIPTIONS[lag]} for lag in X_LAGS],
         "x_lag_note": X_LAG_NOTE,
         "controls": [
@@ -99,80 +163,14 @@ def options() -> dict[str, Any]:
         ],
         "no_fixed_effects_note": NO_FIXED_EFFECTS_NOTE,
         "limits": {
-            "saved": MAX_SAVED,
-            "in_report": MAX_IN_REPORT,
-            "compared": MAX_COMPARED,
-            "name_length": NAME_MAX_LENGTH,
             # New calculations per student and minute (a model computed before does not count); said when refused.
             "runs_per_minute": config.REGRESSION_RUNS_PER_MINUTE,
         },
-        "tries": list(TRIES),
         "hints": list(HINTS),
         "footnote": FOOTNOTE,
         "sample_differs_note": SAMPLE_DIFFERS_NOTE,
         "suppressed_note": SUPPRESSED_NOTE,
     }
-
-
-# Invisible or layout characters (control, zero-width, bidi override, line/paragraph separators): a name made of
-# them looks empty or reorders the text around it in the report. The page refuses the same set (nameProblem).
-_NAME_FORBIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Zl", "Zp"})
-# Format characters that build one visible emoji (👩‍💻, 👨‍👩‍👧‍👦 joined by U+200D; tag letters of 🏴 flags).
-_EMOJI_JOINERS = frozenset({"\u200d", *map(chr, range(0xE0020, 0xE0080))})
-_INVISIBLE_ALONE = frozenset({"Cc", "Cf", "Mn", "Me", "Zs", "Zl", "Zp"})
-_ZWJ, _TAG_FLAG, _TAG_END = "\u200d", "\U0001f3f4", "\U000e007f"
-
-
-def _tag_letter(char: str) -> bool:
-    return "\U000e0020" <= char <= "\U000e007e"
-
-
-def _joiner_misplaced(name: str) -> bool:
-    """A joiner outside the emoji it builds: U+200D not between two emoji (a skin tone or U+FE0F may end the first),
-    or tag letters not in a 🏴 flag ending with the cancel tag. Elsewhere it is an invisible mark that makes two
-    identical-looking names differ ("结果1" and "结果1" + U+200D) or carries hidden text. The page checks the same."""
-    index = 0
-    while index < len(name):
-        char = name[index]
-        if char == _ZWJ:
-            before = name[index - 1] if index else ""
-            after = name[index + 1] if index + 1 < len(name) else ""
-            if not (
-                before
-                and after
-                and (unicodedata.category(before) in {"So", "Sk"} or before == "\ufe0f")
-                and unicodedata.category(after) == "So"
-            ):
-                return True
-        elif _tag_letter(char) or char == _TAG_END:
-            start = index
-            while index < len(name) and _tag_letter(name[index]):
-                index += 1
-            if not start or name[start - 1] != _TAG_FLAG or index == start or name[index : index + 1] != _TAG_END:
-                return True
-        index += 1
-    return False
-
-
-def _name_key(name: str) -> str:
-    return name_key(name)
-
-
-def name_problem(name: Any) -> str | None:
-    """Why a saved model's name cannot be stored, or None; the page's ``nameProblem`` gives the same answers."""
-    if (
-        not isinstance(name, str)
-        or not name_key(name)
-        or not any(unicodedata.category(char) not in _INVISIBLE_ALONE for char in name)
-    ):
-        return "请输入名称"
-    if _joiner_misplaced(name) or any(
-        unicodedata.category(char) in _NAME_FORBIDDEN_CATEGORIES and char not in _EMOJI_JOINERS for char in name
-    ):
-        return "名称不能包含不可见字符"
-    if name != name.strip() or len(name) > NAME_MAX_LENGTH:
-        return f"模型名称应为 1–{NAME_MAX_LENGTH} 个字符，前后不留空格"
-    return None
 
 
 def _spec_problem(value: Any) -> tuple[ModelSpec | None, str | None]:
@@ -190,67 +188,30 @@ def _spec_problem(value: Any) -> tuple[ModelSpec | None, str | None]:
     return spec, None
 
 
-def custom_results_problem(value: Any, outcome: str) -> str | None:
-    """Why a step's saved models cannot be stored, or None. Checked on every session save."""
-    if not isinstance(value, list):
-        return "已保存的模型必须是列表"
-    if len(value) > MAX_SAVED:
-        return f"每步最多保存 {MAX_SAVED} 个模型"
-    baselines = {item.key for item in selectable_baselines(outcome)}
-    ids: set[str] = set()
-    names: set[str] = set()
-    models: dict[tuple[str, str], str] = {}
-    in_report = 0
-    for item in value:
-        if not isinstance(item, dict) or set(item) != CUSTOM_RESULT_KEYS:
-            return "已保存模型的字段不完整"
-        identifier, name = item["id"], item["name"]
-        if not isinstance(identifier, str) or not 1 <= len(identifier) <= 64 or identifier in ids:
-            return "已保存模型的编号无效或重复"
-        ids.add(identifier)
-        problem = name_problem(name)
-        if problem:
-            return problem
-        if _name_key(name) in names:
-            return f"本步已有名为“{name}”的模型"
-        names.add(_name_key(name))
-        if not isinstance(item["outcome"], str) or item["outcome"] != outcome:
-            return "已保存模型的结果指标与本步不符"
-        if not isinstance(item["baseline"], str) or item["baseline"] not in baselines:
-            return "已保存模型的 Y 不在当前课程数据中"
-        spec, problem = _spec_problem(item["spec"])
-        if spec is None:
-            return problem
-        # The page offers neither (its first column is the default model; a repeat shows the saved one).
-        if spec == DEFAULT_SPEC:
-            return "默认模型就是表中第一列，不用另存"
-        key = (item["baseline"], json.dumps(spec.to_dict()))
-        if key in models:
-            return f"这个设定已保存为“{models[key]}”"
-        models[key] = name
-        if not isinstance(item["in_report"], bool):
-            return "“放入报告”必须是是或否"
-        in_report += item["in_report"]
-        if not isinstance(item["saved_at"], str) or not 1 <= len(item["saved_at"]) <= 40:
-            return "已保存模型的保存时间无效"
-        snapshot = item["snapshot"]
-        if (
-            not isinstance(snapshot, dict)
-            or len(json.dumps(snapshot, ensure_ascii=False).encode()) > MAX_SNAPSHOT_BYTES
-        ):
-            return "已保存模型的结果快照无效或过大"
-    if in_report > MAX_IN_REPORT:
-        return f"每步最多 {MAX_IN_REPORT} 个模型放入报告"
+def experiment_problem(value: Any) -> str | None:
+    """Why a step's model experiment (the one put into the report) cannot be stored, or None. ``None`` (nothing put
+    into the report) is fine. Checked on every session save."""
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != EXPERIMENT_KEYS:
+        return "放入报告的模型的字段不完整"
+    spec, problem = _spec_problem(value["spec"])
+    if spec is None:
+        return problem
+    # The page offers neither (its first column is the default model).
+    if spec == DEFAULT_SPEC:
+        return "默认模型就是表中第一列，不用放入报告"
+    if not isinstance(value["saved_at"], str) or not 1 <= len(value["saved_at"]) <= 40:
+        return "放入报告的模型的保存时间无效"
+    snapshot = value["snapshot"]
+    if not isinstance(snapshot, dict) or len(json.dumps(snapshot, ensure_ascii=False).encode()) > MAX_SNAPSHOT_BYTES:
+        return "放入报告的模型的结果快照无效或过大"
     return None
 
 
-def reported_custom_results(value: Any) -> list[dict[str, Any]]:
-    """The saved models a report prints and depends on: ``(name, outcome, baseline, spec)`` of each one marked
-    放入报告, in saved order. Saving, deleting or re-running a model that is not in the report changes nothing here."""
-    if not isinstance(value, list):
-        return []
-    return [
-        {key: item.get(key) for key in ("name", "outcome", "baseline", "spec")}
-        for item in value
-        if isinstance(item, dict) and item.get("in_report") is True
-    ]
+def reported_experiment(value: Any) -> dict[str, Any] | None:
+    """What a report prints and depends on of a step's experiment: its ``spec``; None without a valid one. Changing
+    the snapshot, or the half-filled form (``custom_draft``), changes nothing here."""
+    if experiment_problem(value) is not None or value is None:
+        return None
+    return {"spec": value["spec"]}

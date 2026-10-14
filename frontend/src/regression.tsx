@@ -4,7 +4,6 @@ import { api, ApiError } from "./api";
 import { groupedFixed, percentagePoints } from "./format";
 import { useAsync } from "./labs";
 import { DEFAULT_BASELINES, displayBaselineLabel, GENERATED_DATA_NOTE, GENERATED_Y_DISCLOSURE, lessonFor, lessonQuestion } from "./regression-lessons";
-import { nextRegressionSave } from "./regression-save";
 import {
   BAR_UNIT_TITLES,
   barFigures,
@@ -25,7 +24,6 @@ import {
 } from "./regression-verdict";
 import { exampleWasChosen, workedNumbers } from "./labs/steps/shock-lab";
 import type {
-  ClassroomReport,
   DepvarKind,
   Meta,
   QuizCompletionState,
@@ -47,8 +45,7 @@ import { userFacingRequestError } from "./user-facing-error";
 import { countryLabel, GroupChangeChart, sectorLabel } from "./viz";
 import type { GroupLine } from "./viz/regression/charts";
 import { TAXED, TAXED_LATER, UNTAXED } from "./viz/regression/palette";
-import { DivergingBarChart, type DivergingBarRow } from "./viz/regression/diverging-bars";
-import { ConfirmModal } from "./teacher/ui";
+import { DivergingBarChart, spokenBar, type DivergingBarRow } from "./viz/regression/diverging-bars";
 import { RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
 import { NEGATIVE, POSITIVE, UNCERTAIN } from "./viz/regression/palette";
 
@@ -345,8 +342,8 @@ export interface SavedRegressionRun {
 }
 
 interface RegressionStepState extends QuizCompletionState, Record<string, unknown> {
+  /** The step's one saved run: the course default model on the step's default Y (the report material). */
   run?: SavedRegressionRun;
-  qualified_run?: SavedRegressionRun;
 }
 
 const SAVED_REGRESSION_BENCHMARK: RegressionResponse["benchmark"] = {
@@ -462,35 +459,6 @@ export function familyBarRows(
   return { rows, unitTitle: BAR_UNIT_TITLES[unit] };
 }
 
-/**
- * After the report was submitted, this step's saved material differs from what the report used; said by what
- * replaced it on this visit (a bar click or the run button), or plainly after a reload.
- */
-export const REPLACED_NOTICE = {
-  bar: "已改为保存这个 Y 的结果；报告已提交，请到步骤 15 更新报告并重新提交给老师。",
-  button: "已改为保存这次算出的结果；报告已提交，请到步骤 15 更新报告并重新提交给老师。",
-  saved: "本步保存的结果与已提交报告里的不同；请到步骤 15 更新报告并重新提交给老师。",
-} as const;
-
-/** What the report was built from: its frozen copy of each step's saved runs. */
-export type ReportRuns = ClassroomReport["provenance"]["runs"];
-
-/**
- * Whether this step's saved runs (`run`, and `qualified_run` when it differs, as the report reads them) differ from
- * the runs the report was built from. Together with the report being out of date (the signal the sidebar and
- * step 15 use), this says the update is needed because of this step.
- */
-export function stepMaterialChanged(
-  stepNumber: number,
-  data: { run?: Pick<SavedRegressionRun, "design" | "result">; qualified_run?: Pick<SavedRegressionRun, "design" | "result"> } | undefined,
-  reportRuns: ReportRuns | undefined,
-): boolean {
-  const identity = (run: { design: unknown; result: unknown }) => canonicalSnapshot({ design: run.design, result: run.result });
-  const saved = new Set([data?.run, data?.qualified_run].filter((run) => run != null).map(identity));
-  const reported = new Set((reportRuns ?? []).filter((run) => run.step === stepNumber).map(identity));
-  return saved.size !== reported.size || [...saved].some((item) => !reported.has(item));
-}
-
 /** The 加税前后 chart's lines: the two tariff waves and the untaxed countries; a server before v10 sends one taxed group. */
 export function groupLines(series: TeachingGroupSeries): GroupLine[] {
   if (series.first?.length || series.second?.length) {
@@ -553,17 +521,22 @@ export function forwardShareIdentity(items: TeachingEstimate[]): string | null {
 const interruptedRuns = new Set<RegressionOutcome>();
 export const INTERRUPTED_RUN_NOTE = "上次计算没有完成，请重新计算。";
 
-/** The bars' title: a click (or Enter on the focused bar) saves that Y. */
+/** The bars' title: a click (or Enter on the focused bar) shows that Y's reading; nothing is saved. */
 export function familyBarsTitle(count: number): string {
-  return `本类 ${count} 个 Y · 点击任一条即改为保存该 Y（键盘：方向键切换，Enter 保存）`;
+  return `本类 ${count} 个 Y · 点击任一条查看该 Y 的读数（键盘：方向键切换，Enter 查看）`;
+}
+
+/** Under the bars after a click on another Y: its reading, and that the step's material stays the default Y. */
+export function barPreviewText(row: DivergingBarRow, defaultLabel: string): string {
+  return `预览 · ${spokenBar(row)}。本步的结论和报告材料仍是${defaultLabel}。`;
 }
 
 /**
  * One regression step (11–14). Each step is self-contained: it reads only its own saved run. One button runs the
- * step's default Y and draws a bar for every Y of the family; clicking a bar runs that Y, which becomes the
- * headline and the saved report material.
+ * course default model on the step's default Y; that run is the headline and the report material. The bars show
+ * every Y of the family; a click on another bar previews its reading and saves nothing.
  */
-export function RegressionRunLab({ step, meta, state, getStep, reportRuns, reportCustomResults, reportOutdated = false, quiz }: {
+export function RegressionRunLab({ step, meta, state, getStep, reportCustomResults, reportOutdated = false, quiz }: {
   step: Step;
   /** The step's quiz panel: placed after the result, before the optional workbench. */
   quiz?: ReactNode;
@@ -571,9 +544,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
   state: StepStateApi<RegressionStepState>;
   /** Read-only: the example the student chose in step 10. */
   getStep?: <T>(step: number) => T | undefined;
-  /** The runs the current report was built from (its provenance). */
-  reportRuns?: ReportRuns;
-  /** The workbench models the current report printed (its provenance). */
+  /** The model experiments the current report printed (its provenance). */
   reportCustomResults?: ReportedCustomResult[];
   /** The report needs updating: the same signal as the sidebar and step 15 (unsaved edits, or the server says so). */
   reportOutdated?: boolean;
@@ -585,20 +556,10 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
   const [result, setResult] = useState<RegressionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
-  // A grey (方向不确定) bar is for reading its interval by hover; a click on it saves it, so ask first.
-  const [pendingUncertain, setPendingUncertain] = useState<{ key: string; label: string } | null>(null);
   // A run cut off by leaving the step earlier: said once, until the next run starts.
   const [interrupted, setInterrupted] = useState(() => interruptedRuns.has(outcome));
-  // Said by the polite live region after a bar saved its Y ("已保存：…"): keyboard focus stays on the bars.
-  const [savedAnnouncement, setSavedAnnouncement] = useState("");
-  // What replaced the saved material on this visit, for the notice's wording: a bar click or the run button.
-  const [replacedBy, setReplacedBy] = useState<"bar" | "button" | null>(null);
-  // A failed request is retried as it was: the Y of a failed bar click, not the Y saved before it.
-  const [failedRequest, setFailedRequest] = useState<{ key: string | null; fromBar: boolean } | null>(null);
-  const replacedNoticeRef = useRef<HTMLParagraphElement>(null);
-  const revealReplacedNotice = useRef(false);
-  const barErrorRef = useRef<HTMLDivElement>(null);
-  const revealBarError = useRef(false);
+  // Another Y's bar was clicked: its reading is shown under the bars (nothing is saved).
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
   // The bars are fetched with the first run (or with a restored one), never before.
   const [overviewWanted, setOverviewWanted] = useState(false);
   // A 429 carries Retry-After: the retry button waits it out with a visible countdown.
@@ -630,7 +591,10 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
   const modelDesign = result?.design ?? (designQuery.status === "success" ? designQuery.data ?? null : null);
   const groups = groupsQuery.status === "success" ? groupsQuery.data : null;
   const baselineOptions = groups?.baselines?.[outcome] ?? [];
+  // The step's Y: its family's default, which the step title names. The result and the report use it only.
   const defaultKey = baselineOptions.find((option) => option.default)?.key ?? DEFAULT_BASELINES[outcome];
+  const defaultOption = baselineOptions.find((option) => option.key === defaultKey);
+  const lesson = lessonFor(outcome, defaultKey, result?.design.baseline_label ?? defaultOption?.label);
 
   // After the run: the estimate converted to the example(s) followed from step 10 (one country or two).
   const stepTen = getStep?.<TeachingExampleSelection & { teaching_observation?: unknown }>(10);
@@ -650,7 +614,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
     ? exampleCountries.flatMap((country): RegressionExample[] => {
       const row = exampleQuery.data!.rows.find((item) => item.country === country && item.year === lastYear);
       // Word joiners keep "·" with the country, so a line never starts with "·C29".
-      const label = `${countryLabel(country)}\u2060·\u2060${sectorLabel(example.industry)}`;
+      const label = `${countryLabel(country)}⁠·⁠${sectorLabel(example.industry)}`;
       if (country === TARIFF_IMPOSER) return [{ label, x: 0, imposer: true }];
       return row ? [{
         label, x: row.teaching_tariff_exposure, tau: row.teaching_tariff_rate_tau, w: row.teaching_export_share_w,
@@ -671,28 +635,19 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
     };
   }, []);
 
-  // 会话异步到达：刷新或换设备后恢复本步上次算出的结果（也就是报告材料里的那个 Y），而不是空白面板。
+  // 会话异步到达：刷新或换设备后恢复本步上次算出的结果（也就是报告材料），而不是空白面板。
   const savedRun = state.data?.run;
-  // After submission: the report is out of date and this step's saved runs are not the ones it was built from.
-  // Going back to the Y the report used (e.g. 恢复默认 after a trial click) withdraws the notice, as the sidebar does.
-  const showReplaced = Boolean(state.materialLocked && savedRun && reportOutdated
-    && stepMaterialChanged(step.n, state.data, reportRuns));
   const savedRunIdentity = savedRun ? regressionRunSnapshotIdentity(savedRun) : null;
-  const savedUsable = savedRun?.model_snapshot?.version === TEACHING_MODEL_VERSION && Boolean(savedRun.variable_catalog);
-  const savedKey = savedRun?.design?.baseline ?? defaultKey;
-  // A saved Y the current release does not offer is not shown as a result; the step starts again from its default.
+  const savedVersionOk = savedRun?.model_snapshot?.version === TEACHING_MODEL_VERSION && Boolean(savedRun.variable_catalog);
+  // Only a run on the step's default Y is the step's result (a record from before the Y was fixed is not restored).
   const groupsSettled = groupsQuery.status === "success" || groupsQuery.status === "error";
-  const savedOffered = baselineOptions.length === 0 || baselineOptions.some((option) => option.key === savedKey);
+  const savedUsable = savedVersionOk && groupsSettled && savedRun?.design?.baseline === defaultKey;
   useEffect(() => {
-    if (running || runningRef.current || result || !savedUsable || !groupsSettled || !savedOffered) return;
+    if (running || runningRef.current || result || !savedUsable) return;
     setResult(savedRegressionResponse(savedRun!));
-  }, [result, running, savedRunIdentity, groupsSettled, savedOffered]);
-  const staleSavedY = savedUsable && groupsSettled && !savedOffered && !result;
+  }, [result, running, savedRunIdentity, savedUsable]);
+  const staleSavedY = savedVersionOk && groupsSettled && !savedUsable && !result;
 
-  // The Y shown and saved: the last run's, else the step's default (never another step's choice).
-  const selectedKey = result?.design.baseline ?? defaultKey;
-  const selectedOption = baselineOptions.find((option) => option.key === selectedKey);
-  const lesson = lessonFor(outcome, selectedKey, result?.design.baseline_label ?? selectedOption?.label);
   const overviewQuery = useAsync<TeachingOverviewResponse>(
     () => api.teachingOverview(),
     ["teaching-overview"],
@@ -700,8 +655,8 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
   );
   const overviewItems = overviewQuery.status === "success" ? overviewQuery.data?.outcomes[outcome] ?? [] : [];
 
-  /** Run one Y (null: the default) with the step's single model; the response replaces the saved material. */
-  const run = async (key: string | null, fromButton: boolean) => {
+  /** Run the step's model (the default Y); the response is the step's result and its report material. */
+  const run = async () => {
     if (runningRef.current) return;
     runningRef.current = true;
     const controller = new AbortController();
@@ -709,44 +664,26 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
     setRunning(true);
     setOverviewWanted(true);
     setError(null);
-    setFailedRequest(null);
     setInterrupted(false);
-    setSavedAnnouncement("");
+    setPreviewKey(null);
     try {
-      const response = await api.runRegression(outcome, controller.signal, key == null || key === defaultKey ? null : key);
+      const response = await api.runRegression(outcome, controller.signal, null);
       if (!mountedRef.current) return;
       if (response.model_snapshot?.version !== TEACHING_MODEL_VERSION || !response.variable_catalog) {
         throw new Error(`页面版本已更新，结果没有保存。请刷新页面后再点“计算${runName}”`);
       }
-      const saved = nextRegressionSave(state.data, {
-        design: response.design, result: response.result,
-        disclaimer: response.disclaimer,
-        model_snapshot: response.model_snapshot, variable_catalog: response.variable_catalog,
-      });
       state.save({
-        run: saved.run,
-        ...(saved.qualified_run ? { qualified_run: saved.qualified_run } : {}),
+        run: {
+          design: response.design, result: response.result,
+          disclaimer: response.disclaimer,
+          model_snapshot: response.model_snapshot, variable_catalog: response.variable_catalog,
+        },
       });
-      // A bar click keeps keyboard focus on the bars (the live region says what was saved); only the button
-      // moves on to the answer.
-      scrollToVerdictAfterRun.current = fromButton;
-      if (!fromButton) {
-        setSavedAnnouncement(`已保存：${lessonFor(outcome, response.design.baseline, response.design.baseline_label).shortMetric}`);
-      }
-      // After the report was submitted, the notice (shown while this differs from the report) says what replaced it.
-      if (state.materialLocked) {
-        setReplacedBy(fromButton ? "button" : "bar");
-        revealReplacedNotice.current = !fromButton;
-      }
+      scrollToVerdictAfterRun.current = true;
       setResult(response);
     } catch (cause) {
-      focusSavedBarAfterRun.current = false;
       if (mountedRef.current) {
-        // A bar (or 恢复默认) was saving another Y: said so ("保存国内增加值出口占比没有成功"), not as a calculation.
-        const failedLabel = lessonFor(outcome, key ?? defaultKey, baselineOptions.find((option) => option.key === (key ?? defaultKey))?.label).shortMetric;
-        setError(userFacingRequestError(cause, fromButton ? `${runName}未完成` : `保存“${failedLabel}”没有成功`));
-        setFailedRequest({ key, fromBar: !fromButton });
-        revealBarError.current = !fromButton;
+        setError(userFacingRequestError(cause, `${runName}未完成`));
         if (cause instanceof ApiError && cause.status === 429 && cause.retryAfter) {
           setNow(Date.now());
           setRetryAt(Date.now() + cause.retryAfter * 1000);
@@ -774,69 +711,28 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
     return () => window.cancelAnimationFrame(frame);
   }, [result]);
 
-  // 恢复默认 removes its own chip: keyboard focus moves to the bar that is saved now, not to the page.
-  const focusSavedBarAfterRun = useRef(false);
-  useEffect(() => {
-    if (!result || !focusSavedBarAfterRun.current) return;
-    focusSavedBarAfterRun.current = false;
-    const frame = window.requestAnimationFrame(() => {
-      verdictAnchorRef.current?.querySelector<SVGGElement>("[data-bar][data-selected='true']")?.focus();
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [result]);
-
-  // A bar click after submission: the notice under the bars is brought into view (never focused, so keyboard focus
-  // stays on the bars). The run button's path scrolls to the verdict anchor, which holds the bars and the notice.
-  useEffect(() => {
-    if (!showReplaced || !revealReplacedNotice.current) return;
-    revealReplacedNotice.current = false;
-    const frame = window.requestAnimationFrame(() => {
-      const reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      replacedNoticeRef.current?.scrollIntoView?.({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [showReplaced, result]);
-
-  const bars = result && overviewItems.length > 0 ? familyBarRows(outcome, overviewItems, selectedKey, result) : null;
-  // A failed bar click: the error and its retry sit under the bars, where the click happened (the run card and
-  // its button can be far above, out of view), and are brought into view; keyboard focus stays on the bars.
-  const errorAtBars = Boolean(error && failedRequest?.fromBar && bars);
-  useEffect(() => {
-    if (!errorAtBars || !revealBarError.current) return;
-    revealBarError.current = false;
-    const frame = window.requestAnimationFrame(() => {
-      const reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      barErrorRef.current?.scrollIntoView?.({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [errorAtBars, error]);
+  const bars = result && overviewItems.length > 0 ? familyBarRows(outcome, overviewItems, defaultKey, result) : null;
+  const previewRow = bars && previewKey ? bars.rows.find((row) => row.key === previewKey) ?? null : null;
   const identity = !bars ? null : outcome === "production" ? forwardShareIdentity(overviewItems) : outcome === "network" ? degreeIdentity(overviewItems) : null;
-  const defaultLabel = lessonFor(outcome, defaultKey, baselineOptions.find((option) => option.default)?.label).shortMetric;
   const latinGap = /^[A-Za-z]/.test(lesson.shortMetric) ? " " : "";
-  const replacedNotice = REPLACED_NOTICE[replacedBy ?? "saved"];
-  // The retry repeats the failed request; a failed bar click names its Y ("重试：保存国内增加值出口占比").
-  const failedKey = failedRequest?.key ?? defaultKey;
-  const failedBarLabel = failedRequest?.fromBar
-    ? lessonFor(outcome, failedKey, baselineOptions.find((option) => option.key === failedKey)?.label).shortMetric
-    : null;
 
   return (
     <div className="reg-workbench">
       {result && <nav className="reg-page-links" aria-label="回归页快捷入口">
-        <a href="#regression-results">查看已保存结果</a>
-        <a href="#regression-model">修改模型（选做）</a>
+        <a href="#regression-results">查看结果</a>
+        <a href="#regression-model">改模型、对比（选做）</a>
       </nav>}
       {/* 1 · The data first: the question and the three groups before and after the tariffs. */}
       <section className="reg-run-card">
         <span className="reg-section-step">先看数据</span>
-        <h3>{lessonQuestion(outcome, selectedKey)}</h3>
+        <h3>{lessonQuestion(outcome, defaultKey)}</h3>
         {staleSavedY && (
-          <p className="reg-boundary" role="status">上次计算的 Y（{displayBaselineLabel(savedRun?.design?.baseline_label) || "—"}）不在当前课程数据中，已恢复为本步默认指标，请重新计算。</p>
+          <p className="reg-boundary" role="status">上次保存的结果（{displayBaselineLabel(savedRun?.design?.baseline_label) || "—"}）不是本步的 Y，请重新计算。</p>
         )}
         {groups && (() => {
-          const series = selectedKey === defaultKey ? groups.outcomes[outcome] : groups.series?.[outcome]?.[selectedKey];
+          const series = groups.outcomes[outcome];
           if (!series) return null;
-          const kind = result ? depvarKind(outcome, result.design) : kindOf(selectedOption?.kind ?? "", outcome);
+          const kind = result ? depvarKind(outcome, result.design) : kindOf(defaultOption?.kind ?? "", outcome);
           const display = chartDisplayScale(outcome, { depvar_kind: kind });
           // display.scale converts β to "per 1 percentage point of X"; the chart shows Y levels, which need ×100
           // for shares (percentage points) and ×1 for lengths and centrality.
@@ -866,7 +762,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
         )}
       </section>
 
-      {/* 2 · The course default model, said before it is computed; the run button computes it for every Y. */}
+      {/* 2 · The course default model, said before it is computed; one button computes it. */}
       <section className="reg-run-card">
         <span className="reg-section-step">默认模型</span>
         {modelDesign
@@ -876,49 +772,33 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
             : <div className="reg-request-state muted" role="status" aria-busy="true">正在读取模型…</div>}
         {/* Said before the run (the result card repeats it), so the Y is never read as OECD data first. */}
         {!result && <p className="muted reg-data-note reg-data-note-before" role="note">{GENERATED_DATA_NOTE}</p>}
-        {/* Once a result exists, recalculating is a secondary action; it replaces saved material. */}
-        {/* After a failed bar click the retry sits under the bars; this button recalculates the saved Y as usual. */}
+        {/* Once a result exists, recalculating is a secondary action (the same model gives the same numbers). */}
         <button
-          className={result && (!error || errorAtBars) ? "run-btn secondary" : "run-btn"}
+          className={result && !error ? "run-btn secondary" : "run-btn"}
           onClick={() => {
             if (running || retryWait > 0) return;
-            void run(failedRequest && !errorAtBars ? failedRequest.key : result ? selectedKey : null, true);
+            void run();
           }}
           // aria-disabled while running keeps keyboard focus on the button instead of dropping it to the page.
           aria-disabled={running || retryWait > 0}
         >
           {running ? "正在计算…"
             : retryWait > 0 ? `重试（${retryWait} 秒后）`
-              : error && !errorAtBars ? (failedBarLabel ? `重试：保存“${failedBarLabel}”` : `重试：计算${runName}`)
+              : error ? `重试：计算${runName}`
                 : result ? `重新计算${runName}`
                   : groups ? `计算${runName}（用全部 ${groups.sample.rows.toLocaleString("zh-CN")} 条记录）` : `计算${runName}`}
         </button>
         {/* Mounted before it has text, so screen readers announce the change. */}
-        <span className={running ? "muted reg-inline-status" : "sr-only"} role="status" aria-live="polite">{running ? "正在计算…" : savedAnnouncement}</span>
+        <span className={running ? "muted reg-inline-status" : "sr-only"} role="status" aria-live="polite">{running ? "正在计算…" : ""}</span>
         {interrupted && !running && <p className="reg-boundary reg-interrupted-note" role="status">{INTERRUPTED_RUN_NOTE}</p>}
-        {/* Before a replacement; afterwards the notice sits under the bars, where the click happened. */}
-        {!running && savedRun && state.materialLocked && (!showReplaced || !bars) && (
-          showReplaced
-            ? <p className="reg-rerun-warning reg-replaced-notice" role="status">{replacedNotice}</p>
-            : <p className="reg-rerun-warning" role="note"><b>报告已提交</b>重新计算或点击另一条，会替换报告材料里保存的结果；之后要到步骤 15 更新报告，并重新提交给老师。</p>
-        )}
       </section>
 
       {/* One action: the run button above doubles as the retry (it shows the wait after "too many requests"). */}
-      {error && !errorAtBars && <div className="error-box async-error" role="alert"><span>{error}</span></div>}
+      {error && <div className="error-box async-error" role="alert"><span>{error}</span></div>}
 
       {result && (
         <div className={error ? "reg-results reg-results-stale" : "reg-results"}>
-          {error && !errorAtBars && <p className="reg-stale-note" role="note">这次计算没有成功；下面仍是上次保存的结果。</p>}
-          {pendingUncertain && (
-            <ConfirmModal
-              title="改为保存方向不确定的这一项？"
-              message={`“${pendingUncertain.label}”的 95% 区间包含 0，方向不确定。点“改为保存”后，本步写进报告的结果会改成这一项，不再是默认的${defaultLabel}。只想看它的区间，把鼠标停在条上（或用方向键选中）即可，不用点击。`}
-              confirmLabel="改为保存"
-              onConfirm={() => { const { key } = pendingUncertain; void run(key, false); }}
-              onClose={() => setPendingUncertain(null)}
-            />
-          )}
+          {error && <p className="reg-stale-note" role="note">这次计算没有成功；下面仍是上次保存的结果。</p>}
           <div ref={verdictAnchorRef} className="verdict-anchor" id="regression-results" tabIndex={-1}>
             {bars ? (
               <div className="reg-family-bars">
@@ -926,48 +806,15 @@ export function RegressionRunLab({ step, meta, state, getStep, reportRuns, repor
                   rows={bars.rows}
                   unitTitle={bars.unitTitle}
                   title={familyBarsTitle(bars.rows.length)}
-                  onSelect={(key) => {
-                    if (key === selectedKey) return;
-                    const row = bars.rows.find((item) => item.key === key);
-                    if (row?.uncertain) setPendingUncertain({ key, label: row.label });
-                    else void run(key, false);
-                  }}
+                  onSelect={(key) => setPreviewKey(key === defaultKey ? null : key)}
                   disabled={running}
                 >
-                  {/* A bar click saves its Y for the report: when that is not the step's default, say so and offer the way back. */}
-                  {selectedKey !== defaultKey && (
-                    <p className="reg-saved-chip" role="note">
-                      <span>当前保存：{lesson.shortMetric}（不是本步默认）</span>
-                      <span aria-hidden="true"> · </span>
-                      <button type="button" className="reg-saved-chip-reset" aria-disabled={running || undefined}
-                        onClick={() => { if (running) return; focusSavedBarAfterRun.current = true; void run(defaultKey, false); }}>
-                        恢复默认（{defaultLabel}）
-                      </button>
-                    </p>
+                  {/* A click on another Y: its reading, here under the bars; the step's result stays the default Y. */}
+                  {previewRow && (
+                    <p className="reg-bar-preview" role="status">{barPreviewText(previewRow, lesson.shortMetric)}</p>
                   )}
                   {identity && <p className="muted reg-identity-note">{identity}</p>}
-                  {/* Next to the bar that was clicked, so the student sees it without scrolling up. */}
-                  {showReplaced && (
-                    <p ref={replacedNoticeRef} className="reg-rerun-warning reg-replaced-notice" role="status">{replacedNotice}</p>
-                  )}
                 </DivergingBarChart>
-                {/* Under the bars, not faded with them: what failed, that the bars still show the saved Y, and the retry. */}
-                {errorAtBars && (
-                  <div ref={barErrorRef} className="error-box async-error reg-bar-error" role="alert">
-                    <span>{error}<span className="reg-bar-error-note">图和下面仍是上次保存的结果（{lesson.shortMetric}）。</span></span>
-                    <button type="button" className="secondary" aria-disabled={running || retryWait > 0 || undefined}
-                      onClick={() => {
-                        if (running || retryWait > 0 || !failedRequest) return;
-                        // The button goes with the error: keyboard focus moves to the bar being saved, then (on success)
-                        // to the saved bar.
-                        verdictAnchorRef.current?.querySelector<SVGGElement>(`[data-bar="${failedKey}"]`)?.focus();
-                        focusSavedBarAfterRun.current = true;
-                        void run(failedRequest.key, false);
-                      }}>
-                      {retryWait > 0 ? `重试（${retryWait} 秒后）` : `重试：保存“${failedBarLabel}”`}
-                    </button>
-                  </div>
-                )}
               </div>
             ) : overviewQuery.status === "error" && overviewQuery.error
               ? <RegressionRequestError label="条形图" error={overviewQuery.error} onRetry={overviewQuery.retry} />

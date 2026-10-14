@@ -193,17 +193,10 @@ def _saved_runs(session: dict[str, Any]) -> list[dict[str, Any]]:
     runs: list[dict[str, Any]] = []
     for step, outcome in sorted(_STEP_OUTCOMES.items()):
         data = session.get("steps", {}).get(str(step), {}).get("data", {})
-        seen: set[str] = set()
-        for key in ("run", "qualified_run"):
-            raw = data.get(key) if isinstance(data, dict) else None
-            parsed = _parse_saved_run(raw, outcome)
-            if parsed is None:
-                continue
+        raw = data.get("run") if isinstance(data, dict) else None
+        parsed = _parse_saved_run(raw, outcome)
+        if parsed is not None:
             design, result = parsed
-            identity = json.dumps({"design": design, "result": result}, sort_keys=True, ensure_ascii=False)
-            if identity in seen:
-                continue
-            seen.add(identity)
             assert isinstance(raw, dict)
             runs.append(
                 {

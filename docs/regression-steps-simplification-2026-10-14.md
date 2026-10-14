@@ -164,3 +164,24 @@ student02 的步骤 11 记录约 20 KB，四步约 80 KB，占 300 KB 保存预�
 - 本地启动：`uv run gvcsim classroom-init`（库 `gvcsim_cc_demo_20261014`）→ `uv run gvcsim compute`（约 8 分钟，生成 release `93c4752…`）→ `gvcsim serve --port 8000` + `vite preview --port 4173`。
 - `student` 逐页截图步骤 10–14（初始与运行后）；`student02` 经 `seed_full_journey.py` 完成 15 步，步骤 11 保存自设模型并放入报告，步骤 15 生成草稿：报告 25,654 字符、548 行，含“附录：学生设计的模型 · 步骤 11”一节。
 - 以上数字只适用于本次基线和 demo 账号，不是容量或验收结论。
+
+## 7. 实施记录
+
+### 7.1 阶段 1（2026-10-14，分支 `regression-simplification`，ed06138）
+
+- 理解题经 `lab-router.tsx` 传入回归步骤，排在结论卡之后；“改模型、对比（选做）”改为折叠的 `<details>`，展开后才加载选项。
+- 方程逐项解释在步骤 11 展开、12–14 折叠；趋势图说明折叠为“这张图怎么读”。
+- 步骤 10：四块变量卡合并为一条定义带（原卡片折叠在“各变量的定义与来源”下），逐年表折叠，排序图默认只显示 X 最高的 15 国。
+- 页面高度：步骤 10 约 4,500 → 2,500 像素，步骤 11 约 4,900 → 2,700 像素（跑完回归、工作台折叠时）。
+- 验证：`bunx tsc`、`bun test` 962 通过；demo 截图核对。
+
+### 7.2 阶段 2（2026-10-14，同一分支）
+
+- 条形图只读：点另一条在图下显示该 Y 的读数（来自已加载的 overview，不调服务器、不保存）；报告材料固定为本步默认 Y 的默认模型；删去灰条确认框、“已保存”切换、按条归因的替换提示、条下重试与 `qualified_run`。
+- 工作台：先列 7 个预设实验（服务端 `options().presets`，点一下即计算），自定义表单折叠；结果表为“默认模型 / 本次 / 已放入报告”；每步一个 `experiment`（`{spec, saved_at, snapshot}`，移出为 `null`）；命名由预设决定，自定义写作“自定义设定：” + 模型摘要，前后端同一规则，不再有学生输入的名称。
+- 后端：`regression/workbench.py` 以 `experiment_problem`／`reported_experiment`／`experiment_label` 取代 `custom_results_problem`、命名校验与上限；`report_saved_run._saved_runs` 只读 `run`；`classroom/routes.py` 拒绝旧契约键 `qualified_run`、`custom_results`；报告指纹投影 `experiment.spec`；附录改名“附录：模型实验”，每步一表；关键证据摘要每步一句“你在本步做了一个模型实验（…）”。
+- 版本：`SESSION_VERSION` → `experiment-session-simple-v4`，`TEACHING_DB_VERSION` → `gvcsim-teaching-db-v15`；按 README 约定新建空库，不迁移。
+- 步骤 15：页顶“你的模型实验”表（`ReportedExperiments`）；报告附录与摘要同步。
+- 文档：README、DEPLOY.md、技术手册 2.2／3.1／3.3／7.2／7.3／8.1／8.2／10.3、实验手册步骤 11–15 相关段落、`docs/student-manual/README.md`（截图未重拍，已注明）。
+- 验证：`uv run ruff check .`、`ruff format --check .`、`mypy` 通过；`pytest` 1,228 通过（专用测试库）；`bunx tsc`、`bun test` 940 通过（删除了约 3,000 行绑定旧语义的测试，新增预设、放入／替换／移出、旧契约拒绝等用例）；demo（新建 v15 库、`seed_full_journey.py` 为 student02 走完 15 步）上核对：步骤 11 点另一条只出预览，预设“去掉汇率变动”一键计算并放入报告，步骤 15 面板与草稿报告“附录：模型实验”均按保存设定重算。
+- 未做：实验手册 PDF 与图 10、14–16、18 未重拍；`scripts/accept_workbench_reports.py` 已改为每步一个实验但未在隔离库上重跑；阶段 3（`regression.tsx` 拆分）未开始。

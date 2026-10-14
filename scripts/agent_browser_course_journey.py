@@ -220,7 +220,6 @@ def main():
                 coefficient = next(item for item in result["coefs"] if item["name"] == X_COLUMN)
                 if result["status"] == "insufficient":
                     # Small CI panels must stop inference without blocking the course.
-                    assert not row.get("qualified_run")
                     assert support["suppress_inference"] is True
                     assert support["reasons"] and all(reason.strip() for reason in support["reasons"])
                     assert all(coefficient[key] is None for key in ("p", "ci_low", "ci_high"))
@@ -230,7 +229,7 @@ def main():
                     assert support.get("suppress_inference") is not True
                     assert 0 <= coefficient["p"] <= 1
                     assert coefficient["ci_low"] <= coefficient["ci_high"]
-                    assert row["qualified_run"] == row["run"]
+                assert "qualified_run" not in row
             student.run("screenshot", str(output / f"step-{step}.png"))
             results.append({"step": step, "passed": True})
             print(json.dumps(results[-1]), flush=True)

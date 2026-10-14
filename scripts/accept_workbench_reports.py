@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """HTTP acceptance on explicitly disposable accounts; never initializes/resets a DB.
 
-prepare saves complete public-API evidence and 12 actual custom-model snapshots.
+prepare saves complete public-API evidence and one actual model-experiment snapshot a step.
 Restart the isolated API (all workers) before run to measure genuinely cold reports.
 Credentials are a JSON array of {username,password} in GVCSIM_ACCEPT_ACCOUNTS.
 Only aggregate timings/status codes are emitted, never response bodies or identities.
@@ -23,7 +23,7 @@ from urllib.parse import urlsplit
 from seed_full_journey import _request_json, seed_full_journey
 from gvcsim.regression.spec import CONTROLS
 from gvcsim.regression.teaching import selectable_baselines
-from gvcsim.regression.workbench import custom_results_problem
+from gvcsim.regression.workbench import experiment_problem
 
 
 OUTCOMES = ((11, "trade"), (12, "production"), (13, "length"), (14, "network"))
@@ -104,27 +104,22 @@ def execute(a: Acceptance, accounts: list[dict], mode: str):
             workspace = a.request("seed-read", "GET", "/api/classroom/session", token)
             session = workspace["session"]
             for step, outcome in OUTCOMES:
-                items = []
-                for j, model in enumerate(models(slot, outcome)):
-                    response = a.request("prepare-custom", "POST", "/api/regression/run", token, model)
-                    snapshot = {
-                        "depvar_label": response["design"]["depvar_label"],
-                        "depvar_kind": response["design"].get("depvar_kind", ""),
-                        "result": response["result"],
-                    }
-                    items.append(
-                        dict(
-                            model,
-                            id=f"accept-{step}-{j}",
-                            name=f"验收模型{j + 1}",
-                            in_report=True,
-                            saved_at=datetime.now(timezone.utc).isoformat(),
-                            snapshot=snapshot,
-                        )
-                    )
-                if custom_results_problem(items, outcome) is not None:
-                    raise RuntimeError("invalid real model snapshots")
-                session["steps"][str(step)]["data"]["custom_results"] = items
+                # One experiment a step: the first of this slot's distinct models.
+                model = models(slot, outcome)[0]
+                response = a.request("prepare-custom", "POST", "/api/regression/run", token, model)
+                snapshot = {
+                    "depvar_label": response["design"]["depvar_label"],
+                    "depvar_kind": response["design"].get("depvar_kind", ""),
+                    "result": response["result"],
+                }
+                experiment = {
+                    "spec": model["spec"],
+                    "saved_at": datetime.now(timezone.utc).isoformat(),
+                    "snapshot": snapshot,
+                }
+                if experiment_problem(experiment) is not None:
+                    raise RuntimeError("invalid real model snapshot")
+                session["steps"][str(step)]["data"]["experiment"] = experiment
             saved = a.request(
                 "prepare-save",
                 "PUT",
@@ -139,12 +134,11 @@ def execute(a: Acceptance, accounts: list[dict], mode: str):
         if workspace["report_gate"] or workspace["material_gate"]:
             raise RuntimeError("run requires prepared complete sessions")
         for step, outcome in OUTCOMES:
-            items = workspace["session"]["steps"][str(step)]["data"]["custom_results"]
+            experiment = workspace["session"]["steps"][str(step)]["data"].get("experiment")
             if (
-                custom_results_problem(items, outcome) is not None
-                or len(items) != 3
-                or not all(item["in_report"] for item in items)
-                or [{k: item[k] for k in ("outcome", "baseline", "spec")} for item in items] != models(slot, outcome)
+                experiment_problem(experiment) is not None
+                or experiment is None
+                or experiment["spec"] != models(slot, outcome)[0]["spec"]
             ):
                 raise RuntimeError("run requires this harness's prepared models")
 

@@ -33,9 +33,9 @@ export function spokenBar(row: DivergingBarRow, highlight = "已保存"): string
 }
 
 export const UNCERTAIN_TEXT = "方向不确定";
-/** The saved bar's tooltip line: it is the Y the report uses, so clicking it does nothing. */
-export const SAVED_TIP = "已保存（报告用这个 Y）";
-export const SELECT_TIP = "点击即改为保存此 Y";
+/** The saved bar's tooltip line: it is the step's Y, the one the report uses; clicking it does nothing. */
+export const SAVED_TIP = "已保存（本步的结论和报告用这个 Y）";
+export const SELECT_TIP = "点击查看这个 Y 的读数（不改变报告材料）";
 const LABEL_SIZE = 12.5, SUB_SIZE = 11, VALUE_SIZE = 12, TAG_SIZE = 10.5;
 const ROW_H = 42, LINE_H = 15, BAR_H = 20, PAD_T = 10, AXIS_H = 44, GAP = 7, COLUMN_GAP = 16, EDGE = 10;
 /** Narrowest and widest drawing widths: the chart is drawn at its container's width, so text keeps its size. */

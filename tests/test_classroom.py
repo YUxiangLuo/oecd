@@ -78,7 +78,7 @@ def test_v14_schema_contains_release_auth_class_and_quiz_contracts(teaching_db):
         "reports",
         "quiz_config",
     }
-    assert db.TEACHING_DB_VERSION == "gvcsim-teaching-db-v14"
+    assert db.TEACHING_DB_VERSION == "gvcsim-teaching-db-v15"
     assert "auth_version" in account_columns
     assert "release_id" in session_columns
 
