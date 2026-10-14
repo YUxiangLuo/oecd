@@ -992,6 +992,8 @@ export interface CustomResultSnapshot {
 /** steps[11–14].data.experiment: the one workbench model the step put into the report (on the step's default Y). */
 export interface Experiment {
   spec: ModelSpec;
+  /** The Y it was run on when not the step's default Y (a selectable Y of the step's family). */
+  baseline?: string;
   saved_at: string;
   snapshot: CustomResultSnapshot;
 }

@@ -211,7 +211,7 @@ def _checked_session(raw: dict[str, Any]) -> dict[str, Any]:
             )
         # The workbench's experiment put into the report: the report recomputes it from its spec.
         if "experiment" in data:
-            problem = experiment_problem(data["experiment"])
+            problem = experiment_problem(data["experiment"], _STEP_OUTCOMES[step])
             if problem:
                 raise HTTPException(status_code=422, detail=f"步骤 {step} 放入报告的模型没有保存：{problem}。")
     return payload

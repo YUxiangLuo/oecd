@@ -64,8 +64,8 @@ def _x_span(spec: ModelSpec) -> str:
 
 def reported_models(session: dict[str, Any]) -> list[dict[str, Any]]:
     """The model experiment each step put into the report, step by step (at most one a step):
-    ``{step, name, outcome, baseline, spec}``, on the step's default Y. The session route checks it on save; an entry
-    that no longer passes is left out."""
+    ``{step, name, outcome, baseline, spec}``, on the Y the student chose (the step's default Y unless the experiment
+    names another of the family). The session route checks it on save; an entry that no longer passes is left out."""
     models: list[dict[str, Any]] = []
     for step, outcome in sorted(_STEP_OUTCOMES.items()):
         data = session.get("steps", {}).get(str(step), {}).get("data", {})
@@ -77,7 +77,7 @@ def reported_models(session: dict[str, Any]) -> list[dict[str, Any]]:
                 "step": step,
                 "name": workbench.experiment_label(ModelSpec.from_dict(reported["spec"])),
                 "outcome": outcome,
-                "baseline": default_baseline(outcome).key,
+                "baseline": reported.get("baseline") or default_baseline(outcome).key,
                 "spec": reported["spec"],
             }
         )
@@ -442,7 +442,7 @@ def custom_model_sections(tables: list[dict[str, Any]]) -> list[str]:
     lines = [
         "## 附录：模型实验",
         "",
-        "以下是你在步骤 11–14 的“改模型、对比（选做）”中放入报告的模型实验，每步最多一个，都在本步默认的 Y 上。"
+        "以下是你在步骤 11–14 的“改模型、对比（选做）”中放入报告的模型实验，每步最多一个，在你选的 Y 上（默认是本步的 Y）。"
         "数字由服务器在生成报告时按保存的设定重新计算；每张表的第一列是本步的默认模型，便于对照。",
         "",
     ]

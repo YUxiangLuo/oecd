@@ -310,6 +310,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
               stepNumber={step.n}
               outcome={outcome}
               defaultResponse={result}
+              baselines={baselineOptions}
               state={state as unknown as StepStateApi<WorkbenchStepState>}
               reportCustomResults={reportCustomResults}
               reportOutdated={reportOutdated}

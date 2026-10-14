@@ -9,7 +9,7 @@ import {
   type TableColumn,
 } from "./regression-workbench-table";
 import optionsFixture from "./regression-workbench-options.fixture.json";
-import type { CoefStat, Experiment, ModelSpec, RegressionResponse, StepStateApi, WorkbenchOptions } from "./types";
+import type { CoefStat, Experiment, ModelSpec, RegressionResponse, StepStateApi, TeachingBaselineOption, WorkbenchOptions } from "./types";
 
 afterEach(() => { cleanup(); mock.restore(); });
 
@@ -247,11 +247,11 @@ describe("report notice", () => {
   test("only the model put into the report counts, as a model", () => {
     const mine = experimentOf(NO_RATE, NO_RATE_RUN);
     const reported = [{ step: 11, name: "去掉汇率变动", outcome: "trade", baseline: "FVA_share", spec: NO_RATE }];
-    expect(experimentReportChanged(11, mine, reported, options)).toBe(false);
-    expect(experimentReportChanged(11, experimentOf({ ...NO_RATE, x_lags: [0] }, NO_RATE_RUN), reported, options)).toBe(true);
-    expect(experimentReportChanged(11, null, reported, options)).toBe(true);
-    expect(experimentReportChanged(12, null, reported, options)).toBe(false);
-    expect(experimentReportChanged(11, mine, undefined, options)).toBe(true);
+    expect(experimentReportChanged(11, mine, reported, options, "FVA_share")).toBe(false);
+    expect(experimentReportChanged(11, experimentOf({ ...NO_RATE, x_lags: [0] }, NO_RATE_RUN), reported, options, "FVA_share")).toBe(true);
+    expect(experimentReportChanged(11, null, reported, options, "FVA_share")).toBe(true);
+    expect(experimentReportChanged(12, null, reported, options, "FVA_share")).toBe(false);
+    expect(experimentReportChanged(11, mine, undefined, options, "FVA_share")).toBe(true);
   });
 
   test("the report's copy may list each control's keys in another order (as the database returns it)", () => {
@@ -259,13 +259,19 @@ describe("report notice", () => {
     const mine = experimentOf(withRate, NO_RATE_RUN);
     const fromDatabase = { ...withRate, controls: [{ lag: 0, name: "teaching_exchange_rate_change" }] };
     const reported = [{ step: 11, name: "x", outcome: "trade", baseline: "FVA_share", spec: fromDatabase }];
-    expect(experimentReportChanged(11, mine, reported, options)).toBe(false);
-    expect(experimentReportChanged(11, mine, [{ ...reported[0], spec: { ...fromDatabase, controls: [{ lag: 1, name: "teaching_exchange_rate_change" }] } }], options)).toBe(true);
+    expect(experimentReportChanged(11, mine, reported, options, "FVA_share")).toBe(false);
+    expect(experimentReportChanged(11, mine, [{ ...reported[0], spec: { ...fromDatabase, controls: [{ lag: 1, name: "teaching_exchange_rate_change" }] } }], options, "FVA_share")).toBe(true);
   });
 });
 
-function Harness({ initial, onSave, onView, locked = false, defaultResponse = DEFAULT_RUN, reported, outdated }: {
+const BASELINES: TeachingBaselineOption[] = [
+  { key: "FVA_share", label: "外国增加值项占比", kind: "share", unit: "", default: true, column: "FVA_share", source: "" },
+  { key: "DVAex_share", label: "国内增加值出口占比", kind: "share", unit: "", default: false, column: "DVAex_share", source: "" },
+];
+
+function Harness({ initial, onSave, onView, locked = false, defaultResponse = DEFAULT_RUN, reported, outdated, baselines }: {
   initial?: WorkbenchStepState; onSave?: (patch: Partial<WorkbenchStepState>) => void; locked?: boolean;
+  baselines?: TeachingBaselineOption[];
   onView?: (patch: Partial<WorkbenchStepState>) => void;
   /** The submitted report's models and whether the report is out of date (step 15's signals). */
   reported?: { step: number; name: string; outcome: string; baseline: string; spec: ModelSpec }[];
@@ -280,7 +286,7 @@ function Harness({ initial, onSave, onView, locked = false, defaultResponse = DE
     saveView: (patch) => { onView?.(patch); setData((current) => ({ ...current, ...patch })); },
     complete: false, syncing: false, syncError: null, syncNow: () => {}, materialLocked: locked,
   };
-  return <RegressionModelWorkbench stepNumber={11} outcome="trade" defaultResponse={defaultResponse} state={state}
+  return <RegressionModelWorkbench stepNumber={11} outcome="trade" defaultResponse={defaultResponse} baselines={baselines} state={state}
     reportCustomResults={reported as never} reportOutdated={outdated} />;
 }
 
@@ -289,6 +295,46 @@ const checkbox = (label: RegExp) => screen.getByRole("checkbox", { name: label }
 const tableHeaders = () => [...document.querySelectorAll(".reg-custom-compare-table thead th")].map((cell) => cell.textContent);
 
 describe("the workbench", () => {
+  test("another Y of the family: its default model is the first column, the design value is its β, the report records the Y", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    const onY = (run: RegressionResponse) => ({ ...run, design: { ...run.design, depvar_label: "国内增加值出口占比" } });
+    const dvaDefault = onY(response(DEFAULT, { teaching_tariff_exposure: 0.33, teaching_tariff_exposure_lag1: 0.2203, [ER]: -0.0052, ...macroValues }, {}, "DVAex_share"));
+    const dvaNoRate = onY(response(NO_RATE, { teaching_tariff_exposure: 0.4608, teaching_tariff_exposure_lag1: 0.244, ...macroValues }, {}, "DVAex_share"));
+    const run = spyOn(api, "runRegression").mockImplementation(((_outcome: string, _signal: AbortSignal, _baseline: string, spec: ModelSpec | null) =>
+      Promise.resolve(spec ? dvaNoRate : dvaDefault)) as never);
+    const saved: Partial<WorkbenchStepState>[] = [];
+    const views: Partial<WorkbenchStepState>[] = [];
+    render(<Harness baselines={BASELINES} onSave={(patch) => saved.push(patch)} onView={(patch) => views.push(patch)} />);
+    const select = await screen.findByRole("combobox", { name: "因变量" });
+    expect([...select.querySelectorAll("option")].map((option) => option.textContent)).toEqual(["外国增加值项占比（本步的 Y）", "国内增加值出口占比"]);
+    expect(run).not.toHaveBeenCalled();
+    await act(async () => { fireEvent.change(select, { target: { value: "DVAex_share" } }); });
+    // The chosen Y's default model is fetched (the server has it cached from the overview) and heads the table.
+    await waitFor(() => expect(run).toHaveBeenCalledWith("trade", expect.anything(), "DVAex_share", null));
+    await screen.findByText("回归结果表（因变量：国内增加值出口占比）");
+    expect(views.at(-1)).toEqual({ custom_draft: { baseline: "DVAex_share" } });
+    await waitFor(() => expect(document.querySelector(".reg-custom-design-row")?.textContent).toContain("0.55 个百分点；估计偏差 +0%"));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^去掉汇率变动/ })); });
+    await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "本次：去掉汇率变动"]));
+    expect(run).toHaveBeenLastCalledWith("trade", expect.anything(), "DVAex_share", expect.objectContaining({ controls: NO_RATE.controls }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /放入报告/ })); });
+    expect(saved.at(-1)?.experiment).toMatchObject({ baseline: "DVAex_share", spec: NO_RATE });
+    expect(document.querySelector(".reg-custom-report-chip")?.textContent).toContain("Y：国内增加值出口占比");
+    // Back on the step's Y: the experiment on the other Y is named, not shown as a column (two Ys share no table).
+    await act(async () => { fireEvent.change(select, { target: { value: "FVA_share" } }); });
+    await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型"]));
+    expect(document.querySelector(".reg-custom-report-chip")?.textContent).toContain("Y：国内增加值出口占比");
+    expect(views.at(-1)?.custom_draft?.baseline).toBeUndefined();
+    expect(views.at(-1)?.custom_draft?.spec).toEqual(NO_RATE);
+  });
+
+  test("an experiment on another Y counts as changed when the report printed it on the step's Y", () => {
+    const mine = { ...experimentOf(NO_RATE, NO_RATE_RUN), baseline: "DVAex_share" };
+    const printed = [{ step: 11, name: "x", outcome: "trade", baseline: "FVA_share", spec: NO_RATE }];
+    expect(experimentReportChanged(11, mine, printed, options, "FVA_share")).toBe(true);
+    expect(experimentReportChanged(11, mine, [{ ...printed[0], baseline: "DVAex_share" }], options, "FVA_share")).toBe(false);
+  });
+
   test("a preset runs its model at once and the result joins the table next to the default", async () => {
     spyOn(api, "regressionOptions").mockResolvedValue(options);
     const run = spyOn(api, "runRegression").mockResolvedValue(NO_RATE_RUN as never);

@@ -33,6 +33,8 @@ from gvcsim.regression.teaching import OUTCOMES, VERSION, selectable_baselines
 # A snapshot holds one result table (about 2 KB); the bound keeps a tampered session from storing anything larger.
 MAX_SNAPSHOT_BYTES = 16_000
 EXPERIMENT_KEYS = frozenset({"spec", "saved_at", "snapshot"})
+# The Y the experiment was run on, when it is not the step's default (a selectable Y of the step's family).
+EXPERIMENT_OPTIONAL_KEYS = frozenset({"baseline"})
 
 X_LAG_DESCRIPTIONS = {
     0: "当期：今年的 X",
@@ -223,15 +225,35 @@ def _spec_problem(value: Any) -> tuple[ModelSpec | None, str | None]:
     return spec, None
 
 
-def experiment_problem(value: Any) -> str | None:
-    """Why a step's model experiment (the one put into the report) cannot be stored, or None. ``None`` (nothing put
-    into the report) is fine. Checked on every session save."""
+def _baseline_problem(value: Any, outcome: str | None) -> str | None:
+    """Why the experiment's Y cannot be stored: not a selectable Y of the step's family (``outcome``; any name when
+    the step is not known)."""
     if value is None:
         return None
-    if not isinstance(value, dict) or set(value) != EXPERIMENT_KEYS:
+    if not isinstance(value, str) or not 1 <= len(value) <= 60:
+        return "放入报告的模型的因变量无效"
+    if outcome is not None and value not in {item.key for item in selectable_baselines(outcome)}:
+        return "放入报告的模型的因变量不是本步可选的指标"
+    return None
+
+
+def experiment_problem(value: Any, outcome: str | None = None) -> str | None:
+    """Why a step's model experiment (the one put into the report) cannot be stored, or None. ``None`` (nothing put
+    into the report) is fine. Checked on every session save; ``outcome`` is the step's family, which bounds the
+    experiment's optional ``baseline`` (its Y; left out = the step's default Y)."""
+    if value is None:
+        return None
+    if (
+        not isinstance(value, dict)
+        or not EXPERIMENT_KEYS <= set(value)
+        or not set(value) <= EXPERIMENT_KEYS | EXPERIMENT_OPTIONAL_KEYS
+    ):
         return "放入报告的模型的字段不完整"
     spec, problem = _spec_problem(value["spec"])
     if spec is None:
+        return problem
+    problem = _baseline_problem(value.get("baseline"), outcome)
+    if problem is not None:
         return problem
     # The page offers neither (its first column is the default model).
     if spec == DEFAULT_SPEC:
@@ -245,8 +267,12 @@ def experiment_problem(value: Any) -> str | None:
 
 
 def reported_experiment(value: Any) -> dict[str, Any] | None:
-    """What a report prints and depends on of a step's experiment: its ``spec``; None without a valid one. Changing
-    the snapshot, or the half-filled form (``custom_draft``), changes nothing here."""
+    """What a report prints and depends on of a step's experiment: its ``spec`` and, when it is not the step's
+    default Y, its ``baseline``; None without a valid one. Changing the snapshot, or the half-filled form
+    (``custom_draft``), changes nothing here."""
     if experiment_problem(value) is not None or value is None:
         return None
-    return {"spec": value["spec"]}
+    reported: dict[str, Any] = {"spec": value["spec"]}
+    if value.get("baseline"):
+        reported["baseline"] = value["baseline"]
+    return reported
