@@ -34,7 +34,7 @@ export function LengthViz({ rows, highlight = new Set<string>() }: { rows: Row[]
       ) : (
         <>
           <div style={{ position: "relative" }}>
-            <div style={{ position: "absolute", inset: 0, left: 56, right: 56, pointerEvents: "none" }}>
+            <div style={{ position: "absolute", inset: 0, left: 56, right: 90, pointerEvents: "none" }}>
               {ticks.map((t) => (
                 <div key={t} style={{
                   position: "absolute", top: 0, bottom: 0, left: `${(t / maxLen) * 100}%`,
@@ -50,12 +50,12 @@ export function LengthViz({ rows, highlight = new Set<string>() }: { rows: Row[]
                     style={{ display: "flex", alignItems: "center", gap: 12, fontWeight: selected ? 700 : 500 }}
                     onMouseEnter={(e) => show(e, tipLines(r))}
                     onMouseMove={(e) => show(e, tipLines(r))} onMouseLeave={hide}>
-                    <div style={{ width: 44, fontSize: 12, textAlign: "right", color: selected ? RANK_HIGHLIGHT_TEXT : undefined }}>{String(r.country)}</div>
+                    <div style={{ width: 44, flexShrink: 0, fontSize: 12, textAlign: "right", color: selected ? RANK_HIGHLIGHT_TEXT : undefined }}>{String(r.country)}</div>
                     <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-                      <div style={{ width: `${(num(r.PLv) / maxLen) * 100}%`, height: 8, background: selected ? CAT[5] : CAT[0], borderRadius: "0 4px 4px 0" }} />
-                      <div style={{ width: `${(num(r.PLy) / maxLen) * 100}%`, height: 8, background: selected ? "#8d3f8f" : CAT[1], borderRadius: "0 4px 4px 0" }} />
+                      <div style={{ width: `${(num(r.PLv) / maxLen) * 100}%`, height: 8, background: CAT[0], borderRadius: "0 4px 4px 0" }} />
+                      <div style={{ width: `${(num(r.PLy) / maxLen) * 100}%`, height: 8, background: CAT[1], borderRadius: "0 4px 4px 0" }} />
                     </div>
-                    <div style={{ width: 78, fontSize: 12.5, fontWeight: 600, color: selected ? RANK_HIGHLIGHT_TEXT : "#3a4050", fontVariantNumeric: "tabular-nums" }}
+                    <div style={{ width: 78, flexShrink: 0, fontSize: 12.5, fontWeight: 600, color: selected ? RANK_HIGHLIGHT_TEXT : "#3a4050", fontVariantNumeric: "tabular-nums" }}
                       title="GVC 位置指数 = PLv_GVC / PLy_GVC">
                       GVCPs {formatMetric(num(r.GVCPs), "number")}
                     </div>
@@ -63,7 +63,7 @@ export function LengthViz({ rows, highlight = new Set<string>() }: { rows: Row[]
                 );
               })}
             </div>
-            <div style={{ position: "relative", height: 18, marginTop: 6, marginLeft: 56, marginRight: 56 }}>
+            <div style={{ position: "relative", height: 18, marginTop: 6, marginLeft: 56, marginRight: 90 }}>
               {ticks.map((t) => (
                 <span key={t} style={{
                   position: "absolute", left: `${(t / maxLen) * 100}%`, transform: "translateX(-50%)",

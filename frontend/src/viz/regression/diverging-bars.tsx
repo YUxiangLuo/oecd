@@ -320,8 +320,8 @@ export function DivergingBarChart({
   const tabRow = Math.max(0, rows.findIndex((row) => row.selected));
   // A saved Y can change without a click on the chart (a retry or 恢复默认 button); an open tooltip would still
   // describe the old state until the pointer moves.
-  const savedKey = rows.find((row) => row.selected)?.key ?? null;
-  useEffect(() => { hide(); }, [savedKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // useTip's hide is not memoized; depending on it would also dismiss a newly focused row on its own render.
+  useEffect(() => { hide(); }, [rows, highlight]); // eslint-disable-line react-hooks/exhaustive-deps
   const spoken = (row: DivergingBarRow) => spokenBar(row, highlight);
   const summary = `${title ? `${title}；` : ""}${unitTitle}。${rows.map(spoken).join("；")}`;
   const move = (index: number) => rowRefs.current[(index + rows.length) % rows.length]?.focus();

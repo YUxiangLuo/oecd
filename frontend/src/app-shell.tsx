@@ -261,7 +261,7 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
           <div className="progress-track" role="img" aria-label={`已完成 ${doneCount} 步，共 ${totalSteps} 步`}>
             <div
               className="progress-bar done"
-              style={{ width: `${Math.max(2, (doneCount / totalSteps) * 100)}%` }}
+              style={{ width: `${totalSteps > 0 ? (doneCount / totalSteps) * 100 : 0}%` }}
             />
           </div>
         ) : <div className="progress-track" />}

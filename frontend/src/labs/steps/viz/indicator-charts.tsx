@@ -425,12 +425,17 @@ export function IndicatorTrendChart({
   const referenceFlat = band.length >= 2 && lo === 0
     && Math.max(...band.map((item) => item.p75)) < 0.02 * extent
     && values.some((value) => value >= 0.5 * extent);
-  const bandPath = band.length >= 2
-    ? `M${band.map((item) => `${x(item.year)},${y(item.p75)}`).join(" L")} L${[...band].reverse().map((item) => `${x(item.year)},${y(item.p25)}`).join(" L")} Z`
-    : "";
+  // Split by the requested year slots, exactly like the country series: absent references are gaps.
+  const bandRuns: typeof band[] = [];
+  years.forEach((year, index) => {
+    const item = band.find((entry) => entry.year === year);
+    if (!item) return;
+    if (index === 0 || !band.some((entry) => entry.year === years[index - 1])) bandRuns.push([]);
+    bandRuns.at(-1)!.push(item);
+  });
   // The legend is HTML so five economies plus the reference wrap instead of running off the svg.
   const legend: { key: string; label: string; draw: React.ReactNode; country?: string }[] = [
-    ...(band.length >= 2 ? [
+    ...(band.length > 0 ? [
       { key: "band", label: "中间 50% 经济体", draw: <svg width={24} height={12} aria-hidden="true"><rect x={0} y={0} width={24} height={12} fill={REFERENCE_FILL} fillOpacity={0.3} /></svg> },
       { key: "median", label: `${sameIndustry ? "同行业全球中位数" : "全球中位数"}（${band.at(-1)!.n} 个经济体）`, draw: <svg width={24} height={12} aria-hidden="true"><line x1={0} x2={24} y1={6} y2={6} stroke={REFERENCE_LINE} strokeWidth={1.5} strokeDasharray="4 3" /></svg> },
     ] : []),
@@ -520,7 +525,7 @@ export function IndicatorTrendChart({
       <svg
         viewBox="0 30 780 265"
         role="img"
-        aria-label={`${label}历年变化${band.length >= 2 ? "，含全部经济体的中位数与中间 50% 范围" : ""}；缺少的数据留空，详细读数见下方`}
+        aria-label={`${label}历年变化${band.length > 0 ? "，含全部经济体的中位数与中间 50% 范围" : ""}；缺少的数据留空，详细读数见下方`}
         // Capped so the 780-unit viewBox is not blown up on wide screens: past ~880px its 12-unit tick text
         // rendered larger than the page text (about 23px at 1066px wide).
         style={{ width: "100%", maxWidth: 880, display: "block" }}
@@ -533,17 +538,22 @@ export function IndicatorTrendChart({
             </text>
           </g>
         ))}
-        {bandPath && <path d={bandPath} fill={REFERENCE_FILL} fillOpacity={0.22} stroke="none" />}
-        {band.length >= 2 && (
+        {bandRuns.map((run) => run.length === 1 ? (
+          <g key={run[0].year} data-reference-year={run[0].year}>
+            <line x1={x(run[0].year)} x2={x(run[0].year)} y1={y(run[0].p25)} y2={y(run[0].p75)} stroke={REFERENCE_FILL} strokeWidth={8} strokeOpacity={0.22} />
+            <circle cx={x(run[0].year)} cy={y(run[0].median)} r={3} fill={REFERENCE_LINE} />
+          </g>
+        ) : <g key={run[0].year}>
+          <path data-reference-band d={`M${run.map((item) => `${x(item.year)},${y(item.p75)}`).join(" L")} L${[...run].reverse().map((item) => `${x(item.year)},${y(item.p25)}`).join(" L")} Z`} fill={REFERENCE_FILL} fillOpacity={0.22} stroke="none" />
           <polyline
             data-series="global-median"
-            points={band.map((item) => `${x(item.year)},${y(item.median)}`).join(" ")}
+            points={run.map((item) => `${x(item.year)},${y(item.median)}`).join(" ")}
             fill="none"
             stroke={REFERENCE_LINE}
             strokeWidth={1.5}
             strokeDasharray="4 3"
           />
-        )}
+        </g>)}
         {(metric === "GVCPs" || metric === "Pos_TPL") && (
           <g>
             <line x1={110} x2={730} y1={y(1)} y2={y(1)} stroke="#966500" strokeDasharray="6 4">

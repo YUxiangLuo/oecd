@@ -579,11 +579,21 @@ function MiniBackwardBar({ row }: { row: Row }) {
         <span>{fmt(model.total, "number")}</span>
       </div>
       <div style={{ position: "relative", height: 12, background: "#eceef4", borderRadius: 5, overflow: "hidden" }}>
+        {domain.negative > 0 && <span aria-hidden="true" style={{ position: "absolute", zIndex: 3, left: `${layout.zeroPct}%`, top: 0, bottom: 0, borderLeft: "2px solid #4b5263" }} />}
         {PLY_DECOMP.parts.map((part, index) => (
           <span key={part.key} title={`${part.label}：${fmt(model.values![index], "number")}`}
             style={{ position: "absolute", top: 0, bottom: 0, left: `${layout.segments[index].leftPct}%`, width: `${layout.segments[index].widthPct}%`, background: layout.segments[index].negative ? negativeFill(part.color) : part.color }} />
         ))}
       </div>
+      <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>
+        {PLY_DECOMP.parts.map((part, index) => (
+          <span key={part.key} style={{ marginRight: 10 }}>
+            <span className="dt-swatch" aria-hidden="true" style={{ background: model.values![index] < 0 ? negativeFill(part.color) : part.color }} />
+            {part.label}：{fmt(model.values![index], "number")}
+          </span>
+        ))}
+      </div>
+      {domain.negative > 0 && <p className="decomp-table-note">负贡献为抵减项，用斜纹表示并位于零轴左侧；正贡献位于右侧，各段按带符号数值相加得到 PLy，不是都为正的份额。</p>}
       <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>
         {/* Name what the sum is checked against: the PLy computed directly, shown at the right of the heading. */}
         各段（最终产品中的份额 × 段长度）之和 = {fmt(model.sum, "number")}；{model.error < 1e-6

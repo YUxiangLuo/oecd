@@ -14,6 +14,16 @@ const stepsData: StepsResponse = {
   })),
 };
 
+test("sidebar progress has no painted completion at zero and scales nonzero counts", () => {
+  for (const count of [0, 3]) {
+    const view = render(<CourseSidebar stepsData={stepsData} current={1}
+      completion={{ steps: [], completed: [], completed_count: count, total: 15 }}
+      materialGate={null} onNavigate={() => {}} />);
+    expect(view.container.querySelector<HTMLElement>(".progress-bar")!.style.width).toBe(`${count / 15 * 100}%`);
+    cleanup();
+  }
+});
+
 test("navigation reveals the active outline row but saving progress does not undo manual scrolling or steal focus", () => {
   const view = (current: number, completed: number[] = []) => <>
     <button>下一步测试</button>

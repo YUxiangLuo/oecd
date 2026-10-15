@@ -9,6 +9,22 @@ import { NEGATIVE, POSITIVE, UNCERTAIN, ZERO_LINE } from "./palette";
 
 afterEach(cleanup);
 
+test("clearing unselected rows dismisses the old readout", () => {
+  const rows = [{ key: "a", label: "old reading", value: 1, valueLabel: "1", low: 0.5, high: 1.5, uncertain: false }];
+  const view = render(<DivergingBarChart rows={rows} unitTitle="unit" />);
+  fireEvent.mouseMove(view.container.querySelector("[data-bar]")!, { clientX: 100, clientY: 100 });
+  const tip = view.container.firstElementChild!.lastElementChild as HTMLElement;
+  expect(tip.textContent).toContain("old reading");
+  expect(tip.style.opacity).toBe("1");
+  view.rerender(<DivergingBarChart rows={[{ ...rows[0], valueLabel: "updated reading" }]} unitTitle="unit" />);
+  expect(tip.style.opacity).toBe("0");
+  fireEvent.mouseMove(view.container.querySelector("[data-bar]")!, { clientX: 100, clientY: 100 });
+  expect(tip.textContent).toContain("updated reading");
+  expect(tip.style.opacity).toBe("1");
+  view.rerender(<DivergingBarChart rows={[]} unitTitle="unit" />);
+  expect(tip.style.opacity).toBe("0");
+});
+
 // Release b973ea5c's teaching overview (coef per unit of X); the depvar_std values are of the right size.
 const estimate = (coef: number, low: number, high: number, std = 0.1): BarEstimate => ({ coef, ci_low: low, ci_high: high, depvar_std: std, suppressed: false });
 const rowsOf = (items: [string, DepvarKind, BarEstimate][], selected?: string): DivergingBarRow[] => {

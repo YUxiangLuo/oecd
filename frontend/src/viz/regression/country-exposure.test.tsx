@@ -20,6 +20,19 @@ const countriesFixture: TeachingCountriesResponse = {
   ],
 };
 
+test("clearing countries dismisses the old readout", () => {
+  const view = render(<CountryExposureChart data={countriesFixture} />);
+  fireEvent.mouseMove(view.container.querySelector("[data-country]")!, { clientX: 100, clientY: 100 });
+  expect(view.container.querySelector('[role="status"]')?.textContent).toContain("加拿大");
+  view.rerender(<CountryExposureChart data={{ ...countriesFixture, year: 2021 }} />);
+  expect(view.container.querySelector('[role="status"]')?.textContent).toBe("");
+  fireEvent.mouseMove(view.container.querySelector("[data-country]")!, { clientX: 100, clientY: 100 });
+  expect(view.container.querySelector('[role="status"]')?.textContent).toContain("2021");
+  view.rerender(<CountryExposureChart data={{ ...countriesFixture, countries: [] }} />);
+  expect(view.container.querySelector('[role="status"]')?.textContent).toBe("");
+  cleanup();
+});
+
 test("the industry note counts taxed industries and says when some have X = 0", () => {
   expect(countryIndustryNote(row("CAN", 0.143))).toBe("44/44 个行业被加税");
   expect(countryIndustryNote(row("CRI", 0.0782, true, 42, 43))).toBe("43/43 个行业被加税（1 个货物行业对美无出口：w = 0）");

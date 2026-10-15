@@ -15,6 +15,10 @@ test("partner diagram describes directional stroke widths in both its visible ke
     const strokes = diagram.querySelector('[data-partner="USA"]')!.querySelectorAll("line");
     expect(Number(strokes[0].getAttribute("stroke-width"))).toBe(10);
     expect(Number(strokes[1].getAttribute("stroke-width"))).toBeCloseTo(4.6);
+    const oneWay = diagram.querySelector('[data-partner="JPN"]')!;
+    expect(oneWay.querySelectorAll("line[marker-end]")).toHaveLength(1);
+    expect(oneWay.querySelector("line")?.getAttribute("marker-end")).toBe("url(#ego-out-CHN)");
+    expect(oneWay.getAttribute("aria-label")).toContain("流入 0");
   } finally {
     cleanup();
     api.network = original;

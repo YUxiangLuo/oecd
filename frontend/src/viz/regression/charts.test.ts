@@ -64,6 +64,37 @@ describe("group chart markers", () => {
 });
 
 describe("group chart readings", () => {
+  test("long end names are shortened but retain their full title and table heading", () => {
+    const label = "第一批被加税国家非常长的完整组名";
+    const markup = renderToStaticMarkup(createElement(GroupChangeChart, {
+      years, markers, lines: [{ ...lines(1, 0, 0)[0], label }], unit: "无量纲", title: "long",
+    }));
+    const dom = new DOMParser().parseFromString(markup, "text/html");
+    const end = dom.querySelector('[data-line="first"] > text')!;
+    expect(end.firstChild?.textContent).toEndWith("…");
+    expect(end.querySelector("title")?.textContent).toBe(label);
+    expect(dom.querySelector("thead")?.textContent).toContain(label);
+  });
+
+  test("tiny changes retain nonzero ticks and readings", () => {
+    const markup = renderToStaticMarkup(createElement(GroupChangeChart, {
+      years, markers, lines: lines(1e-12, -1e-12, 0), unit: "无量纲", title: "tiny",
+    }));
+    const dom = new DOMParser().parseFromString(markup, "text/html");
+    expect([...dom.querySelectorAll("tbody td")].some((cell) => Number(cell.textContent) > 0)).toBe(true);
+    expect([...dom.querySelectorAll("svg text")].some((cell) => Number(cell.textContent) > 0 && Number(cell.textContent) < 1)).toBe(true);
+  });
+
+  test("empty and single-year markerless charts have no invented baseline", () => {
+    for (const sample of [[], [2020]]) {
+      const markup = renderToStaticMarkup(createElement(GroupChangeChart, {
+        years: sample, markers: [], lines: [], unit: "无量纲", title: "empty",
+      }));
+      expect(markup).not.toContain("NaN");
+      expect(markup).toContain("基期未指定");
+    }
+  });
+
   test("a small negative change that rounds to zero reads 0.0, never -0.0 (table and tooltips)", () => {
     const markup = renderToStaticMarkup(createElement(GroupChangeChart, {
       years: [2016, 2017, 2018], markers: [{ year: 2018, label: "2018 年起加税" }], scale: 100, unit: "个百分点", title: "t",

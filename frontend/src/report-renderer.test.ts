@@ -16,6 +16,42 @@ describe("report chart numeric boundaries through Markdown", () => {
     return element;
   };
   const line = (labels: string[][]) => chartDom({ type: "line", series: labels.map((points, i) => ({ label: `Series ${i}`, points: points.map((label, value) => ({ label, value })) })) });
+  test.each(["coefficient", "binscatter", "line"])("%s preserves tiny nonzero readings", (type) => {
+    const element = chartDom(type === "coefficient" ? { type, items: [{ label: "Y", value: 1e-7, ci_low: 0.5e-7, ci_high: 1.5e-7 }] }
+      : type === "binscatter" ? { type, slope: 1, points: [{ x: 1e-7, y: 1e-7, n: 1 }, { x: 2e-7, y: 2e-7, n: 1 }] }
+      : { type, series: [{ label: "A", points: [{ label: "2020", value: 1e-7 }, { label: "2021", value: 2e-7 }] }] });
+    const ticks = [...element.querySelectorAll('text[fill="#5f6677"]')].map((node) => node.textContent!);
+    expect(ticks.some((tick) => Number(tick) !== 0 && Number.isFinite(Number(tick)))).toBe(true);
+    if (type === "coefficient") expect(element.querySelector("[data-coef-label]")?.textContent).toContain("e-7");
+  });
+  test.each(["bar", "coefficient", "line", "event-study"])("%s wraps legal 120-character labels inside the canvas", (type) => {
+    const label = "长".repeat(120);
+    const element = chartDom(type === "line" ? { type, series: [{ label, points: [{ label, value: 1e12 }] }] }
+      : type === "event-study" ? { type, points: [{ label, value: 1e12, se: 1e10 }] }
+      : { type, items: [{ label, value: 1e12 }] });
+    const svg = element.querySelector("svg")!;
+    const [, , width, height] = svg.getAttribute("viewBox")!.split(" ").map(Number);
+    for (const node of svg.querySelectorAll("text")) {
+      const box = textBox(node);
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(width);
+      expect(box.bottom).toBeLessThanOrEqual(height);
+    }
+    expect(svg.textContent).toContain(label);
+  });
+  test.each(["bar", "coefficient", "binscatter", "line"])("%s keeps large readings in bounds and exposes the unrounded value", (type) => {
+    const value = 1.234567891234e12;
+    const element = chartDom(type === "binscatter" ? { type, slope: 1, points: [{ x: -value, y: -value, n: 1 }, { x: value, y: value, n: 2 }] }
+      : type === "line" ? { type, series: [{ label: "A", points: [{ label: "2020", value }, { label: "2021", value: -value }] }] }
+      : { type, items: [{ label: "A", value }, { label: "B", value: -value }] });
+    const svg = element.querySelector("svg")!;
+    expect(svg.getAttribute("aria-label")).toContain(String(value));
+    expect(svg.getAttribute("aria-label")).toContain(String(-value));
+    for (const node of svg.querySelectorAll("text")) {
+      expect(textBox(node).left).toBeGreaterThanOrEqual(0);
+      expect(textBox(node).right).toBeLessThanOrEqual(720);
+    }
+  });
   test.each([
     ["2018", "2019", "2020"],
     ["2020", "2019", "2018"],

@@ -13,6 +13,17 @@ const trendRows: Row[] = [2018, 2019, 2020].flatMap((year) =>
 );
 
 describe("trend chart hover layer", () => {
+  test("reference ranges break at missing years and retain isolated reference readings", () => {
+    const distribution = countryDistribution(trendRows, "FVA_share", [2018, 2020]);
+    const view = render(<IndicatorTrendChart rows={trendRows} countries={["CHN"]} years={[2018, 2019, 2020]} metric="FVA_share" label="测试" unit="%" distribution={distribution} mode="context" />);
+    expect(view.container.querySelectorAll('polyline[data-series="global-median"]')).toHaveLength(0);
+    expect(view.container.querySelectorAll('[data-reference-year]')).toHaveLength(2);
+    expect(view.container.querySelector('path[data-reference-band]')).toBeNull();
+    view.rerender(<IndicatorTrendChart rows={trendRows} countries={["CHN"]} years={[2018]} metric="FVA_share" label="测试" unit="%" distribution={distribution} mode="context" />);
+    expect(view.container.querySelectorAll('[data-reference-year]')).toHaveLength(1);
+    expect(view.container.textContent).toContain("全球中位数（4 个经济体）");
+  });
+
   const renderTrend = () =>
     render(
       <IndicatorTrendChart

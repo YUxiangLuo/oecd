@@ -112,8 +112,8 @@ function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: stri
               onFocus={(event) => { setActiveIndex(index); showFor(event.currentTarget, linesFor(partner)); }}
               onBlur={hide}
               style={{ cursor: "pointer" }}>
-              <line x1={sx + nx} y1={sy + ny} x2={ex + nx} y2={ey + ny} stroke={CAT[0]} strokeWidth={width(partner.outflow)} strokeOpacity={0.8} markerEnd={`url(#ego-out-${country})`} />
-              <line x1={ex - nx} y1={ey - ny} x2={sx - nx} y2={sy - ny} stroke={CAT[1]} strokeWidth={width(partner.inflow)} strokeOpacity={0.8} markerEnd={`url(#ego-in-${country})`} />
+              {partner.outflow > 0 && <line x1={sx + nx} y1={sy + ny} x2={ex + nx} y2={ey + ny} stroke={CAT[0]} strokeWidth={width(partner.outflow)} strokeOpacity={0.8} markerEnd={`url(#ego-out-${country})`} />}
+              {partner.inflow > 0 && <line x1={ex - nx} y1={ey - ny} x2={sx - nx} y2={sy - ny} stroke={CAT[1]} strokeWidth={width(partner.inflow)} strokeOpacity={0.8} markerEnd={`url(#ego-in-${country})`} />}
               <circle cx={x} cy={y} r={17} fill="#fff" stroke={REGION_COLORS[REGION_OF[partner.c] ?? 5]} strokeWidth={2} />
               <text x={x} y={y + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#1b1f2b">{partner.c}</text>
             </g>

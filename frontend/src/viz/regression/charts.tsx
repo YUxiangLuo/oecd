@@ -63,12 +63,15 @@ export function GroupChangeChart({
 }) {
   const width = 640, height = 250, padL = 64, padR = 140, padT = 30, padB = 34;
   const values = lines.flatMap((line) => line.points.map((point) => point.change * scale));
-  const maxAbs = Math.max(...values.map(Math.abs), 1e-9) * 1.1;
+  const maxAbs = (Math.max(0, ...values.map(Math.abs)) || 1) * 1.1;
   const ticks = niceSymmetricTicks(maxAbs);
   const extent = ticks.at(-1)!;
   const decimals = Math.max(0, Math.min(4, 1 - Math.floor(Math.log10(extent / 2))));
+  const small = extent < 1e-4;
   // A per-year reading; a small change that rounds to zero reads "0.00", never "-0.00".
-  const reading = (change: number) => stripNegativeZero((change * scale).toFixed(decimals + 1));
+  const reading = (change: number) => small
+    ? String(Number((change * scale).toPrecision(4)))
+    : stripNegativeZero((change * scale).toFixed(decimals + 1));
   // A dimensionless Y (the position index) has its unit named once, in the axis title; its readings are bare numbers.
   const withUnit = (text: string) => (unit === "无量纲" ? text : `${text} ${unit}`);
   const x = (year: number) => padL + ((year - years[0]) / Math.max(1, years.at(-1)! - years[0])) * (width - padL - padR);
@@ -77,6 +80,9 @@ export function GroupChangeChart({
     .map((point, index) => `${index ? "L" : "M"}${x(point.year)},${y(point.change * scale)}`).join(" ");
   const markerX = (year: number) => (x(year - 1) + x(year)) / 2;
   const firstPolicy = markers[0]?.year ?? years[1];
+  const baseline = years.length && firstPolicy != null
+    ? `相对 ${years[0]}–${firstPolicy - 1} 年平均水平的变化`
+    : "相对基期平均水平的变化（基期未指定）";
   // The group names sit at their line ends, pushed apart only from each other when lines end close together.
   const slots = spreadLabels(
     lines.filter((line) => line.points.length).map((line) => ({ key: line.key, at: y(line.points.at(-1)!.change * scale), size: 14 })),
@@ -87,14 +93,14 @@ export function GroupChangeChart({
     <div className="group-change-chart" style={{ ...cardStyle, flex: "1 1 320px", minWidth: 280 }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3a4050" }}>{title}</div>
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
-        纵轴：相对 {years[0]}–{firstPolicy - 1} 年平均水平的变化（{unit}）
+        纵轴：{baseline}（{unit}）
       </div>
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={description} style={{ display: "block", width: "100%", maxWidth: 760, height: "auto" }}>
         <title>{description}</title>
         {ticks.map((value) => (
           <g key={value}>
             <line x1={padL} x2={width - padR} y1={y(value)} y2={y(value)} stroke={value === 0 ? "#9aa0ad" : "#eef0f4"} strokeWidth={1} />
-            <text x={padL - 8} y={y(value)} dominantBaseline="middle" textAnchor="end" fontSize={11} fill="#5f6677">{value === 0 ? "0" : stripNegativeZero(value.toFixed(decimals))}</text>
+            <text x={padL - 8} y={y(value)} dominantBaseline="middle" textAnchor="end" fontSize={11} fill="#5f6677">{value === 0 ? "0" : small ? String(Number(value.toPrecision(3))) : stripNegativeZero(value.toFixed(decimals))}</text>
           </g>
         ))}
         {years.map((year) => <text key={year} x={x(year)} y={height - 12} textAnchor="middle" fontSize={11} fill="#5f6677">{year}</text>)}
@@ -114,7 +120,7 @@ export function GroupChangeChart({
               </circle>
             ))}
             {line.points.length > 0 && (
-              <text x={x(line.points.at(-1)!.year) + 8} y={slots[line.key]} dominantBaseline="middle" fontSize={11.5} fontWeight={700} fill={line.color}>{line.label}</text>
+              <text x={x(line.points.at(-1)!.year) + 8} y={slots[line.key]} dominantBaseline="middle" fontSize={11.5} fontWeight={700} fill={line.color}>{svgTextWidth(line.label, 11.5) > padR - 12 ? `${[...line.label].slice(0, 10).join("")}…` : line.label}<title>{line.label}</title></text>
             )}
           </g>
         ))}
@@ -123,7 +129,7 @@ export function GroupChangeChart({
       <details className="chart-data-disclosure group-change-table">
         <summary>各组逐年读数</summary>
         <table className="data-table">
-          <caption className="sr-only">{title}：相对 {years[0]}–{firstPolicy - 1} 年平均水平的变化（{unit}）</caption>
+          <caption className="sr-only">{title}：{baseline}（{unit}）</caption>
           <thead><tr><th scope="col">年份</th>{lines.map((line) => <th key={line.key} scope="col">{line.label}（{unit}）</th>)}</tr></thead>
           <tbody>{years.map((year) => {
             const marker = markers.find((item) => item.year === year);

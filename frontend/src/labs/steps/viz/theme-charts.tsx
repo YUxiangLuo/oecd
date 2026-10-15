@@ -93,7 +93,21 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
   };
   // Band paths: for each segment, the area between the running sums before and after it, per sign.
   const areas = (facet: typeof facetData[number]) => {
-    const runs = facet.points.map((point) => {
+    // Every band must bend at every part's crossing, not only its own:
+    // interpolating already-stacked endpoints would leave wedges or overlaps.
+    const points = facet.points.flatMap((point, at) => {
+      const previous = facet.points[at - 1];
+      if (!previous?.shares || !point.shares) return [point];
+      const before = previous.shares, after = point.shares;
+      const crossings = before.map((share, i) => share * after[i] < 0 ? share / (share - after[i]) : null);
+      const fractions = [...new Set(crossings.filter((fraction): fraction is number => fraction !== null))].sort((a, b) => a - b);
+      return [...fractions.map((fraction) => ({
+        year: previous.year + fraction * (point.year - previous.year),
+        shares: before.map((share, i) => crossings[i] === fraction ? 0 : share + fraction * (after[i] - share)),
+        total: null,
+      })), point];
+    });
+    const runs = points.map((point) => {
       if (!point.shares) return null;
       let up = 0, down = 0;
       return point.shares.map((share) => {
@@ -103,24 +117,43 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
     });
     return segments.map((segment, index) => {
       // Split at missing years so a gap is never bridged.
-      const paths: string[] = [];
+      const paths: { d: string; negative: boolean; isolated: boolean }[] = [];
       let segmentPoints: { year: number; from: number; to: number }[] = [];
+      let negative = false;
       const flush = () => {
         if (segmentPoints.length >= 1) {
           const upper = segmentPoints.map((point) => `${x(point.year)},${y(point.to)}`).join(" L");
           const lower = [...segmentPoints].reverse().map((point) => `${x(point.year)},${y(point.from)}`).join(" L");
-          paths.push(`M${upper} L${lower} Z`);
+          paths.push({ d: `M${upper} L${lower} Z`, negative, isolated: segmentPoints.length === 1 });
         }
         segmentPoints = [];
       };
-      facet.points.forEach((point, at) => {
+      points.forEach((point, at) => {
         const run = runs[at]?.[index];
         if (!run) { flush(); return; }
+        const nextNegative = point.shares![index] < 0;
+        const previous = points[at - 1];
+        if (segmentPoints.length && nextNegative !== negative) {
+          // Interpolate shares, not the signed stack endpoints: the positive and
+          // negative stacks can have different baselines at the zero crossing.
+          const before = previous.shares![index];
+          const fraction = before / (before - point.shares![index]);
+          const year = previous.year + fraction * (point.year - previous.year);
+          const baseline = (below: boolean) => segments.slice(0, index).reduce((sum, _, i) => {
+            const share = previous.shares![i] + fraction * (point.shares![i] - previous.shares![i]);
+            return sum + (below ? Math.min(0, share) : Math.max(0, share));
+          }, 0);
+          const end = baseline(negative);
+          segmentPoints.push({ year, from: end, to: end });
+          flush();
+          const start = baseline(nextNegative);
+          segmentPoints.push({ year, from: start, to: start });
+        }
+        negative = nextNegative;
         segmentPoints.push({ year: point.year, ...run });
       });
       flush();
-      const negative = facet.points.some((point, at) => runs[at]?.[index] && point.shares![index] < 0);
-      return { segment, paths, negative };
+      return { segment, paths };
     });
   };
   return (
@@ -152,8 +185,8 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
                     <text x={left - 6} y={y(tick) + 4} textAnchor="end" fontSize={11} fill="#596173">{indicatorTick(tick, "%")}</text>
                   </g>
                 ))}
-                {areas(facet).map(({ segment, paths, negative }) => paths.map((d, at) => (
-                  <path key={`${segment.key}-${at}`} d={d} fill={negative ? NEGATIVE : segment.color} fillOpacity={0.85} stroke="#fff" strokeWidth={0.8} data-area={segment.key} />
+                {areas(facet).map(({ segment, paths }) => paths.map(({ d, negative, isolated }, at) => (
+                  <path key={`${segment.key}-${at}`} d={d} fill={negative ? NEGATIVE : segment.color} fillOpacity={0.85} stroke={isolated ? (negative ? NEGATIVE : segment.color) : "#fff"} strokeWidth={isolated ? 6 : 0.8} data-area={segment.key} />
                 )))}
                 {years.map((year) => (
                   <text key={year} x={x(year)} y={H - 10} textAnchor="middle" fontSize={11} fill="#374151">{year}</text>

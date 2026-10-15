@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { ScrollableRegion } from "../../a11y";
 import { percentagePoints } from "../../format";
 import type { TeachingCountriesResponse } from "../../types";
@@ -122,6 +122,7 @@ export function CountryExposureChart({ data, limit }: {
   limit?: number;
 }) {
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
+  useEffect(() => { hide(); }, [data, limit, hide]);
   const [activeIndex, setActiveIndex] = useState(0);
   // The focused item draws its own ring (an SVG group shows no outline in every browser).
   const [focused, setFocused] = useState<number | null>(null);

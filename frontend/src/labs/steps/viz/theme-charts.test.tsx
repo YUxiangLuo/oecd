@@ -13,6 +13,61 @@ const segments = [
 ];
 
 describe("stacked area facets", () => {
+  test("adjacent bands share the same boundary through every other part's zero crossing", () => {
+    const view = render(<StackedAreaFacets facets={[{ key: "X", label: "X", rows: [0.6, -0.2, 0.7].map((a, i) => ({ year: 2018 + i, total: 1, a, b: [0.4, 1.2, 0.3][i] })) }]}
+      years={[2018, 2019, 2020]} segments={[{ key: "a", name: "a", color: "blue" }, { key: "b", name: "b", color: "orange" }]} total="total" totalLabel="总值" />);
+    const coords = (path: Element) => path.getAttribute("d")!.match(/[-\d.]+,[-\d.]+/g)!.map((pair) => pair.split(",").map(Number));
+    const orange = coords(view.container.querySelector('[data-area="b"]')!);
+    const lower = orange.slice(orange.length / 2).reverse();
+    // The unchanging-sign upper band must include BOTH crossings of the lower band.
+    expect(lower).toHaveLength(5);
+    [56, 56 + 175 * 0.75, 231, 56 + 175 * (1 + 2 / 9), 406].forEach((x, i) => expect(lower[i][0]).toBeCloseTo(x, 8));
+    const blue = [...view.container.querySelectorAll('[data-area="a"][fill="blue"]')].map(coords);
+    const upper = blue.map((polygon) => polygon.slice(0, polygon.length / 2));
+    // Equal endpoints imply equal straight boundaries over the whole interval:
+    // neither a positive-area white wedge nor overlapping coloured bands.
+    for (const boundary of upper) {
+      for (const [x, y] of boundary) {
+        const matching = lower.find(([otherX]) => Math.abs(otherX - x) < 1e-8)!;
+        expect(matching).toBeDefined();
+        expect(matching[1]).toBeCloseTo(y, 10);
+      }
+    }
+    expect(lower[1][1]).toBeCloseTo(lower[2][1], 10);
+    expect(lower[3][1]).toBeCloseTo(lower[2][1], 10);
+  });
+
+  test("sign changes retain positive colour and split at interpolated zero crossings", () => {
+    const view = render(<StackedAreaFacets facets={[{ key: "X", label: "X", rows: [0.6, -0.2, 0.7].map((value, i) => ({ year: 2018 + i, total: 1, part: value })) }]}
+      years={[2018, 2019, 2020]} segments={[{ key: "part", name: "part", color: "#216cc0" }]} total="total" totalLabel="总值" />);
+    const paths = [...view.container.querySelectorAll('[data-area="part"]')];
+    expect(paths.filter((p) => p.getAttribute("fill") === "#216cc0")).toHaveLength(2);
+    expect(paths.filter((p) => p.getAttribute("fill") === "#e34948")).toHaveLength(1);
+    const negative = paths.find((p) => p.getAttribute("fill") === "#e34948")!;
+    const xs = negative.getAttribute("d")!.match(/[-\d.]+,[-\d.]+/g)!.map((p) => Number(p.split(",")[0]));
+    // The negative lobe starts at 2018.75 and ends at 2019 + 2/9,
+    // not at an arbitrary midpoint or at a neighbouring positive sample.
+    expect(Math.min(...xs)).toBeCloseTo(56 + 175 * 0.75);
+    expect(Math.max(...xs)).toBeCloseTo(56 + 175 * (1 + 2 / 9));
+  });
+
+  test("isolated valid years show a visible true-height stack without inventing a time interval", () => {
+    const view = render(<StackedAreaFacets facets={[{ key: "X", label: "X", rows: [{ year: 2019, total: 1, a: 0.6, b: -0.2 }] }]}
+      years={[2018, 2019, 2020]} segments={[{ key: "a", name: "a", color: "blue" }, { key: "b", name: "b", color: "green" }]} total="total" totalLabel="总值" />);
+    const paths = [...view.container.querySelectorAll('[data-area]')];
+    expect(paths).toHaveLength(2);
+    for (const path of paths) {
+      expect(Number(path.getAttribute("stroke-width"))).toBeGreaterThanOrEqual(4);
+      const coords = path.getAttribute("d")!.match(/[-\d.]+,[-\d.]+/g)!.map((p) => p.split(",").map(Number));
+      expect(new Set(coords.map(([x]) => x)).size).toBe(1);
+      expect(coords[0][1]).not.toBe(coords[1][1]);
+    }
+    fireEvent.keyDown(screen.getByRole("group"), { key: "ArrowRight" });
+    fireEvent.keyDown(screen.getByRole("group"), { key: "ArrowRight" });
+    expect(screen.getByRole("status").textContent).toContain("60.000%");
+    expect(screen.getByRole("status").textContent).toContain("-20.000%");
+  });
+
   const rows = (country: string): Row[] => [2018, 2019, 2020].map((year) => ({
     country, year, gross_exports: 100, DVAex: 70 + (year - 2018), FVA: 25, taxsub: year === 2019 ? -3 : 2,
   }));

@@ -267,6 +267,9 @@ describe("step 4: the sum line says ≈ when the shown lengths do not add up to 
       );
       await waitFor(() => expect(view.container.textContent).toContain("后向总生产长度 PLy（从最终产品端回溯）"));
       const text = view.container.textContent ?? "";
+      expect(text).toContain("纯国内段：0.655");
+      expect(text).toContain("传统贸易段：0.375");
+      expect(text).toContain("GVC 段：0.525");
       expect(text).toContain("各段（最终产品中的份额 × 段长度）之和 = 1.555；等于直接算出的后向总生产长度 PLy（1.555），即 PLy 是三段长度按最终产品份额的加权平均。");
       expect(text).not.toContain("与总量一致");
     } finally {
@@ -275,6 +278,21 @@ describe("step 4: the sum line says ≈ when the shown lengths do not add up to 
       cleanup();
     }
   });
+});
+
+test("backward signed contributions have visible values, a zero axis and a signed explanation", async () => {
+  const row = { country: "JPN", year: 2017, SVA: 1, PLv: 2, "1_VA_D": 0.6, "2_VA_RT": 0.1, "3_VA_GVC": 0.3, PLv_D: 2, PLv_RT: 2, PLv_GVC: 2,
+    FGY: 1, PLy: 1, "1_FGY_D": 0.5, "2_FGY_RT": 0.25, "3_FGY_GVC": 0.25, PLy_D: 2, PLy_RT: -2, PLy_GVC: 2, GVCPs: 1 };
+  const country = spyOn(api, "countryIndicatorsForCountry").mockResolvedValue([{ ...row, industry: null }]);
+  const industry = spyOn(api, "industryIndicatorsAll").mockResolvedValue({ total: 1, page: 1, page_size: 200, rows: [row] });
+  try {
+    const view = render(<DecompositionDemo step={6} meta={{ years: [2017], countries: ["JPN"], sectors: ["A"], dataset: null }} primaryYear={2017} primaryCountry="JPN" />);
+    await waitFor(() => expect(view.container.textContent).toContain("传统贸易段：-0.500"));
+    expect(view.container.textContent).toContain("负贡献为抵减项");
+    const heading = [...view.container.querySelectorAll("b")].find(el => el.textContent?.startsWith("后向总生产长度"))!;
+    const box = heading.parentElement!.parentElement!;
+    expect(box.querySelector('[aria-hidden="true"][style*="border-left"]')).not.toBeNull();
+  } finally { country.mockRestore(); industry.mockRestore(); }
 });
 
 describe("step 3 points to where the backward split is charted in step 7 (round 21)", () => {
