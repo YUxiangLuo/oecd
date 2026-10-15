@@ -654,6 +654,20 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
   }
   ticks.sort((a, b) => a - b);
 
+  // Mandatory endpoints and zero can still collide. Stagger their labels without moving the axis.
+  const tickRows: number[] = [];
+  ticks.forEach((tick, index) => {
+    const box = tickBounds(tick);
+    let row = 0;
+    while (ticks.slice(0, index).some((other, otherIndex) => {
+      const otherBox = tickBounds(other);
+      return tickRows[otherIndex] === row && box.left < otherBox.right + 16 && otherBox.left < box.right + 16;
+    })) row++;
+    tickRows.push(row);
+  });
+  const tickRowHeight = AXIS_FONT + 7;
+  const extraHeight = Math.max(0, ...tickRows) * tickRowHeight;
+
   const summary = rows.map((row) => `${row.item.label}${row.item.sub ? `（${row.item.sub}）` : ""}：${row.label.replace(" · ", "，")}${row.item.saved ? `，${SAVED_TAG}` : ""}`).join("；");
   // The page's legend: only the colours the chart uses.
   const present = new Set(chart.items.map(divergingFill));
@@ -671,12 +685,12 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
         </span>
       </div>
       {chart.note && <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>{chart.note}</div>}
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${chart.title ?? "回归结果条形图"}。${summary}`} style={CHART_SVG_STYLE}>
-        {ticks.map((tick) => (
+      <svg viewBox={`0 0 ${W} ${H + extraHeight}`} role="img" aria-label={`${chart.title ?? "回归结果条形图"}。${summary}`} style={CHART_SVG_STYLE}>
+        {ticks.map((tick, index) => (
           <g key={tick}>
             {tick !== 0 && <line x1={x(tick)} x2={x(tick)} y1={m.t} y2={H - m.b} stroke="#eef0f4" />}
             {/* The axis range can end at the plot's right edge: that tick is right-aligned there, as on the page. */}
-            <text x={x(tick)} y={H - m.b + 19} textAnchor={x(tick) > plotRight - 20 ? "end" : "middle"} fontSize={AXIS_FONT} fill="#5f6677">{tickText(tick)}</text>
+            <text x={x(tick)} y={H - m.b + 19 + tickRows[index] * tickRowHeight} textAnchor={x(tick) > plotRight - 20 ? "end" : "middle"} fontSize={AXIS_FONT} fill="#5f6677">{tickText(tick)}</text>
           </g>
         ))}
         {/* The baseline spans the ticks only: the room beyond them holds the end labels, not more axis. */}
@@ -739,7 +753,7 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
           );
         })}
         <line x1={zero} x2={zero} y1={m.t} y2={H - m.b} stroke={ZERO_LINE} strokeWidth={1.5} />
-        {chart.x_label && <text x={plotLeft + plotW / 2} y={H - 10} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{chart.x_label}</text>}
+        {chart.x_label && <text x={plotLeft + plotW / 2} y={H + extraHeight - 10} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{chart.x_label}</text>}
       </svg>
     </ReportFigure>
   );

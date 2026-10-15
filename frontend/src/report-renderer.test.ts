@@ -32,6 +32,22 @@ describe("report chart numeric boundaries through Markdown", () => {
     expect([...element.querySelectorAll('text[fill="#596173"]')].map((e) => e.textContent)).toEqual(["乙", "甲", "丙"]);
   });
   const diverging = (value: number) => chartDom({ type: "diverging-bar", items: [{ label: "合法边界 fixture", value, ci_low: -Math.abs(value), ci_high: Math.abs(value) * 1.5, text: String(value), saved: true }] });
+  test.each([1, -1])("asymmetric tiny endpoints and zero have separate label boxes (direction %s)", (direction) => {
+    const element = chartDom({ type: "diverging-bar", x_label: "效应", items: [
+      { label: "负向结果名称用于刻度边界例", value: -2.5e-8 * direction, text: "-2.5e-8（-0.1 个标准差）" },
+      { label: "正向结果名称用于刻度边界例", value: 1.25e-7 * direction, text: "1.25e-7（+0.5 个标准差）" },
+    ] });
+    const labels = [...element.querySelectorAll('svg > g > text[fill="#5f6677"]')];
+    expect(labels.map((node) => Number(node.textContent))).toContain(0);
+    expect(labels.map((node) => Number(node.textContent))).toContain(-2.5e-8 * direction);
+    expect(labels.map((node) => Number(node.textContent))).toContain(1.25e-7 * direction);
+    const boxes = labels.map(textBox);
+    for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i], b = boxes[j];
+      expect(a.right < b.left || b.right < a.left || a.bottom < b.top || b.bottom < a.top).toBe(true);
+    }
+  });
+
   test("tiny diverging ticks remain distinct and nonzero", () => {
     const element = diverging(1e-7);
     const ticks = [...element.querySelectorAll('svg > g > text[fill="#5f6677"]')].map((e) => e.textContent!);

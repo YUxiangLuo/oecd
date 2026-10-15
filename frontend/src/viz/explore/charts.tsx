@@ -312,6 +312,10 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
   const avg = (arr: number[]) => arr.reduce((s, v) => s + v, 0) / (arr.length || 1);
   const tx = (x: number) => (log ? Math.log10(x) : x);
   const xAxis = log ? logDomain(xs) : niceDomain(...spreadDomain(xs)), yAxis = niceDomain(...spreadDomain(ys));
+  // Reserve the rotated title and a gap as well as the full formatted y-tick width.
+  m.l = Math.max(m.l, 36 + Math.ceil(Math.max(...yAxis.ticks.map((tick) =>
+    [...fmtAxis(tick, yFormat)].reduce((width, char) => width + (/[\u3000-\u9fff]/.test(char) ? 10.5 : 6.2), 0),
+  ))));
   const [x0, x1] = [xAxis.lo, xAxis.hi], [y0, y1] = [yAxis.lo, yAxis.hi];
   const px = (x: number) => m.l + ((tx(x) - x0) / (x1 - x0 || 1)) * (W - m.l - m.r);
   const py = (y: number) => H - m.b - ((y - y0) / (y1 - y0 || 1)) * (H - m.t - m.b);

@@ -47,6 +47,20 @@ describe("Steps 6-9 chart semantic data equivalents", () => {
     });
   }
 
+  test("tiny percentage y ticks fit left of the plot without covering the axis title", () => {
+    const root = document.createElement("div");
+    root.innerHTML = renderToStaticMarkup(<QuadrantScatter
+      rows={[{ country: "A", x: 1, y: -1e-8 }, { country: "B", x: 2, y: 1e-8 }]}
+      xKey="x" yKey="y" xLabel="横轴" yLabel="纵轴" yFormat="pct"
+    />);
+    const ticks = [...root.querySelectorAll("svg > g > text")];
+    expect(ticks.length).toBeGreaterThan(1);
+    for (const tick of ticks) {
+      const left = Number(tick.getAttribute("x")) - tick.textContent!.length * 6.2;
+      expect(left).toBeGreaterThan(25); // Rotated title at x=14, plus its half-height and a gap.
+    }
+  });
+
   test("composition preserves year order and uses the authoritative denominator", () => {
     const html = renderToStaticMarkup(<CompositionBar
       rows={[{ country: "2019", a: 20, total: 100 }, { country: "2020", a: 60, total: 200 }]}
