@@ -6,6 +6,7 @@ from copy import deepcopy
 from typing import Any
 
 from gvcsim.indicator_schema import PRODUCTION_LENGTH_OPERATIONAL_DEFINITION
+from gvcsim.request_validation import validate_text
 
 QUIZ_VERSION = "course-quiz-v8"
 # Regression defaults check basic concepts without requiring optional model experiments.
@@ -516,7 +517,7 @@ def validate_questions(step: int, raw: Any) -> list[dict[str, Any]]:
             return ""
         if not isinstance(value, str) or len(value) > limit or (not optional and not value.strip()):
             raise ValueError("字段为空或超过长度限制")
-        return value.strip()
+        return validate_text(value).strip()
 
     normalized = []
     ids: set[str] = set()

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { LabeledControl } from "../a11y";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
@@ -31,7 +31,11 @@ export function SemestersTab() {
   const [refresh, setRefresh] = useState(0);
   const [editor, setEditor] = useState<Editor>(null);
   const [batchClassId, setBatchClassId] = useState<number | null>(null);
-  const { data, error, retry } = useAsync(() => api.classroom.semesters(), [refresh], { keepPreviousData: true });
+  const { data: loaded, error, status, retry } = useAsync(() => api.classroom.semesters(), [refresh], { keepPreviousData: true });
+  // A refresh failure must retain class choices and the completed import's downloadable receipt.
+  const lastLoaded = useRef(loaded);
+  if (loaded) lastLoaded.current = loaded;
+  const data = loaded ?? lastLoaded.current;
   const semesters = data?.semesters ?? [];
   const { active, archived } = splitSemesters(semesters);
   const mutate = async (operation: Promise<unknown>) => {
@@ -51,7 +55,11 @@ export function SemestersTab() {
     (history && !history.open ? history.querySelector<HTMLElement>("summary") : card?.querySelector<HTMLElement>(".semester-card-head .semester-archive-action button"))?.focus();
   }, [semesters]);
 
-  if (error) return <LoadFailure what="学期与班级" error={error} onRetry={retry} />;
+  const refreshNotice = error ? <>
+    <LoadFailure what="学期与班级" error={error} onRetry={retry} />
+    {data && <p className="muted">列表暂未更新，仍显示上次加载的数据。当前填写的内容和账号清单会保留。</p>}
+  </> : null;
+  if (error && !data && !editor && batchClassId === null) return <div>{refreshNotice}</div>;
   const card = (semester: AcademicSemester) => (
     <section className={`semester-card${semester.is_active ? "" : " archived"}`} key={semester.id} data-semester-id={semester.id}>
       <header className="semester-card-head">
@@ -108,12 +116,14 @@ export function SemestersTab() {
   );
   return (
     <div ref={rootRef}>
+      {!editor && batchClassId === null && refreshNotice}
       <Toolbar>
         <p className="teacher-help">学期和班级只用来给学生分组，不会清空或复制学生的实验记录。</p>
         <div className="toolbar-actions">
           <button className="primary" onClick={() => setEditor({ kind: "semester" })}>+ 新建学期</button>
         </div>
       </Toolbar>
+      <p className="muted list-refreshing" role="status">{data && status === "loading" ? "正在刷新列表…" : ""}</p>
       {active.length > 0 && <div className="semester-grid">{active.map(card)}</div>}
       {/* Archived semesters stay out of the way; open when there is nothing else to show. */}
       {archived.length > 0 && (
@@ -126,9 +136,10 @@ export function SemestersTab() {
         <EmptyState icon="🗓️" title="还没有学期" hint="先新建学期，再新建班级，然后给学生分班。" />
       )}
       {batchClassId !== null && <StudentBatchModal semesters={semesters} initialClassId={batchClassId}
-        onClose={() => setBatchClassId(null)} onCreated={() => setRefresh((value) => value + 1)} />}
+        refreshNotice={refreshNotice} onClose={() => setBatchClassId(null)} onCreated={() => setRefresh((value) => value + 1)} />}
       {editor && (
         <NameModal
+          refreshNotice={refreshNotice}
           title={editor.kind === "semester" ? "新建学期"
             : editor.kind === "class" ? `在“${editor.semester.name}”新建班级`
               : editor.kind === "rename-semester" ? "重命名学期" : "重命名班级"}
@@ -202,10 +213,11 @@ function ArchiveAction({ active, kind, name, target, confirm, onChange }: {
   );
 }
 
-export function NameModal({ title, label, initial, onClose, onSubmit }: {
+export function NameModal({ title, label, initial, refreshNotice, onClose, onSubmit }: {
   title: string;
   label: string;
   initial: string;
+  refreshNotice?: ReactNode;
   onClose: () => void;
   onSubmit: (name: string) => Promise<void>;
 }) {
@@ -242,6 +254,7 @@ export function NameModal({ title, label, initial, onClose, onSubmit }: {
   return (
     <Modal title={title} onClose={() => { if (!saving) onClose(); }}>
       <form className="modal-form" noValidate onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+        {refreshNotice}
         <LabeledControl label={label}>{(id) => (
           <input ref={inputRef} id={id} disabled={saving} value={name} onChange={(event) => setName(event.target.value)}
             aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined} />

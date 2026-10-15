@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LabeledControl, ScrollableRegion } from "../a11y";
 import { api, ApiError } from "../api";
 import type { AcademicSemester } from "../types";
@@ -159,8 +159,8 @@ function conflictList(existing: readonly string[]) {
 
 export const BATCH_DISCARD_CONFIRM = "粘贴的名单还没有创建账号，关闭后不会保留。确定关闭？";
 
-export function StudentBatchModal({ semesters, initialClassId, onClose, onCreated }: {
-  semesters: AcademicSemester[]; initialClassId: number | null; onClose: () => void; onCreated: () => void;
+export function StudentBatchModal({ semesters, initialClassId, refreshNotice, onClose, onCreated }: {
+  semesters: AcademicSemester[]; initialClassId: number | null; refreshNotice?: ReactNode; onClose: () => void; onCreated: () => void;
 }) {
   const [classId, setClassId] = useState(initialClassId ?? "");
   const [text, setText] = useState("");
@@ -262,6 +262,7 @@ export function StudentBatchModal({ semesters, initialClassId, onClose, onCreate
   // With the class already chosen (opened from a class row or a class filter), start where the roster is pasted.
   return <Modal title="批量导入学生" width={620} onClose={close} initialFocusRef={initialClassId ? textRef : undefined}>
     <div className="modal-form batch-form">
+      {refreshNotice}
       <LabeledControl label="所属班级">{(id) => <select id={id} disabled={busy || !!accounts} value={classId} onChange={(e) => setClassId(Number(e.target.value) || "")}>
         <option value="">请选择班级</option>
         {classOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}

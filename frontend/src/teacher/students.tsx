@@ -60,14 +60,16 @@ export function studentFieldError(
   value: string,
   { label, password = false, required = true, maxLength }: { label: string; password?: boolean; required?: boolean; maxLength?: number },
 ) {
-  if (password && value.length < 12) return "密码至少 12 个字符";
-  if (password && value.length > PASSWORD_MAX_LENGTH) return `密码不能超过 ${PASSWORD_MAX_LENGTH} 个字符`;
+  // The API counts Unicode code points, not JavaScript's UTF-16 code units.
+  const passwordLength = password ? [...value].length : 0;
+  if (password && passwordLength < 12) return "密码至少 12 个字符";
+  if (password && passwordLength > PASSWORD_MAX_LENGTH) return `密码不能超过 ${PASSWORD_MAX_LENGTH} 个字符`;
   if (password && !value.trim()) return "密码不能全是空格";
   // Names and 学号 are checked in the form the server stores them (zero-width characters, full-width
   // letters and repeated spaces normalized), so a name of only invisible characters is blank here too.
   const normalized = password ? value : normalizeLabel(value);
   if (!password && required && !normalized) return `${label}不能为空`;
-  if (!password && maxLength != null && normalized.length > maxLength) return `${label}不能超过 ${maxLength} 个字符`;
+  if (!password && maxLength != null && [...normalized].length > maxLength) return `${label}不能超过 ${maxLength} 个字符`;
   return null;
 }
 
@@ -338,10 +340,18 @@ export function StudentsTab({ onOpenReport, onGoToSemesters, onRefresh }: {
   const [sort, setSort] = useState<StudentSort>(null);
   const [modal, setModal] = useState<ModalState>(null);
   // Keep the table while it reloads after an edit: clearing it flashed "暂无学生" and lost the scroll position.
-  const { data, error, status, retry } = useAsync<{ students: StudentRow[] }>(() => api.classroom.students(), [refresh], { keepPreviousData: true });
+  const { data: loaded, error, status, retry } = useAsync<{ students: StudentRow[] }>(() => api.classroom.students(), [refresh], { keepPreviousData: true });
   // Progress changes during class: refresh when the teacher comes back to this tab (not while a dialog is open).
   useRefetchOnVisible(() => setRefresh((value) => value + 1), modal == null);
-  const { data: academic, error: academicError, retry: retryAcademic } = useAsync(() => api.classroom.semesters(), [refresh], { keepPreviousData: true });
+  const { data: loadedAcademic, error: academicError, status: academicStatus, retry: retryAcademic } = useAsync(() => api.classroom.semesters(), [refresh], { keepPreviousData: true });
+  // Refresh errors must not remove the table, class choices or an open form's state.
+  // These unfiltered lists share one scope for the lifetime of this tab.
+  const lastLoaded = useRef(loaded);
+  const lastAcademic = useRef(loadedAcademic);
+  if (loaded) lastLoaded.current = loaded;
+  if (loadedAcademic) lastAcademic.current = loadedAcademic;
+  const data = loaded ?? lastLoaded.current;
+  const academic = loadedAcademic ?? lastAcademic.current;
   const tableRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const update = () => markHiddenColumns(tableRef.current?.querySelector<HTMLElement>(".student-table-scroll"));
@@ -355,12 +365,15 @@ export function StudentsTab({ onOpenReport, onGoToSemesters, onRefresh }: {
     setRefresh((value) => value + 1);
   };
 
-  if (error || academicError) {
-    return <LoadFailure what={error ? "学生列表" : "学期列表"} error={(error ?? academicError)!} onRetry={() => {
+  const refreshNotice = error || academicError ? <>
+    <LoadFailure what={error ? "学生列表" : "学期列表"} error={(error ?? academicError)!} onRetry={() => {
       if (error) retry();
       if (academicError) retryAcademic();
-    }} />;
-  }
+    }} />
+    {data && academic && <p className="muted">列表暂未更新，仍显示上次加载的数据。当前填写的内容和账号清单会保留。</p>}
+  </> : null;
+  // A cold failure has no usable list; do not present it as an empty successful response.
+  if (refreshNotice && (!data || !academic) && !modal) return <div>{refreshNotice}</div>;
   const all = data?.students ?? [];
   const semesters = academic?.semesters ?? [];
   // Compared with full-width punctuation folded too (names stored before it was kept as typed have ASCII).
@@ -377,6 +390,7 @@ export function StudentsTab({ onOpenReport, onGoToSemesters, onRefresh }: {
 
   return (
     <div>
+      {!modal && refreshNotice}
       {/* First visit: the table lists everyone as 未分班; say what to do first and where. */}
       {academic && semesters.length === 0 && <div className="tipbox teacher-first-step" role="note">
         <span>{FIRST_STEP_HINT}</span>
@@ -399,7 +413,7 @@ export function StudentsTab({ onOpenReport, onGoToSemesters, onRefresh }: {
       </Toolbar>
       {data && <StudentSummaryBar summary={summarizeStudents(students)} />}
       {/* The previous rows stay while a refresh loads; say so, since they may be a moment out of date. */}
-      <p className="muted list-refreshing" role="status">{data && status === "loading" ? "正在刷新列表…" : ""}</p>
+      <p className="muted list-refreshing" role="status">{(data && status === "loading") || (academic && academicStatus === "loading") ? "正在刷新列表…" : ""}</p>
       <p id={activityHintId} className="sr-only">最近操作：{VALID_ACTIVITY_HINT}</p>
       <div ref={tableRef}>
         <ScrollableRegion className="table-wrap student-table-scroll" label="学生进度表，可横向及纵向滚动"
@@ -442,13 +456,14 @@ export function StudentsTab({ onOpenReport, onGoToSemesters, onRefresh }: {
         </ScrollableRegion>
       </div>
 
-      {modal?.type === "student" && <StudentModal semesters={semesters} onClose={() => setModal(null)} onSubmit={(body) => run(api.classroom.createStudent(body))} />}
+      {modal?.type === "student" && <StudentModal semesters={semesters} refreshNotice={refreshNotice} onClose={() => setModal(null)} onSubmit={(body) => run(api.classroom.createStudent(body))} />}
       {modal?.type === "batch" && <StudentBatchModal semesters={semesters} initialClassId={batchClassId}
-        onClose={() => setModal(null)} onCreated={() => setRefresh((value) => value + 1)} />}
+        refreshNotice={refreshNotice} onClose={() => setModal(null)} onCreated={() => setRefresh((value) => value + 1)} />}
       {modal?.type === "enrollment" && (
         <EnrollmentModal
           student={modal.student}
           semesters={semesters}
+          refreshNotice={refreshNotice}
           onClose={() => setModal(null)}
           onSubmit={async (termId, nextClassId) => {
             await run(api.classroom.setEnrollment(modal.student.id, termId, nextClassId));
@@ -458,6 +473,7 @@ export function StudentsTab({ onOpenReport, onGoToSemesters, onRefresh }: {
       )}
       {modal && (modal.type === "name" || modal.type === "student_no" || modal.type === "password") && (
         <FieldModal
+          refreshNotice={refreshNotice}
           title={modal.type === "name" ? `修改 ${modal.student.display_name} 的姓名`
             : modal.type === "student_no" ? `修改 ${modal.student.display_name} 的学号` : `重置 ${modal.student.display_name} 的密码`}
           label={modal.type === "name" ? "姓名" : modal.type === "student_no" ? "学号" : "新密码（至少 12 个字符）"}
@@ -493,7 +509,7 @@ function HintedField({ label, hint, children }: { label: string; hint: string; c
 
 export const STUDENT_DISCARD_CONFIRM = "填写的内容还没有保存，关闭后不会保留。确定关闭？";
 
-export function StudentModal({ semesters = [], onClose, onSubmit }: { semesters?: AcademicSemester[]; onClose: () => void; onSubmit: (body: { username: string; display_name: string; password: string; student_no: string; class_id?: number }) => Promise<void> }) {
+export function StudentModal({ semesters = [], refreshNotice, onClose, onSubmit }: { semesters?: AcademicSemester[]; refreshNotice?: ReactNode; onClose: () => void; onSubmit: (body: { username: string; display_name: string; password: string; student_no: string; class_id?: number }) => Promise<void> }) {
   const [form, setForm] = useState<{ username: string; display_name: string; password: string; student_no: string; class_id?: number }>({ username: "", display_name: "", password: "", student_no: "" });
   const [error, setError] = useState<string | null>(null);
   const [errorField, setErrorField] = useState<NewStudentField | null>(null);
@@ -534,6 +550,7 @@ export function StudentModal({ semesters = [], onClose, onSubmit }: { semesters?
   };
   return (
     <Modal title="添加学生账号" onClose={close}><form className="modal-form" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+      {refreshNotice}
       <HintedField label="用户名（登录用）" hint="2–40 位英文字母、数字或 _ . -；建议填学号（批量导入时学号就是用户名）">{(id, hintId) =>
         <input id={id} name="student-username" disabled={saving} value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })}
           {...fieldProps("username")} aria-describedby={errorField === "username" ? `${hintId} ${errorId}` : hintId} />}</HintedField>
@@ -550,9 +567,10 @@ export function StudentModal({ semesters = [], onClose, onSubmit }: { semesters?
   );
 }
 
-export function EnrollmentModal({ student, semesters, onClose, onSubmit }: {
+export function EnrollmentModal({ student, semesters, refreshNotice, onClose, onSubmit }: {
   student: StudentRow;
   semesters: AcademicSemester[];
+  refreshNotice?: ReactNode;
   onClose: () => void;
   onSubmit: (termId: number, classId: number | null) => Promise<void>;
 }) {
@@ -583,6 +601,7 @@ export function EnrollmentModal({ student, semesters, onClose, onSubmit }: {
   return (
     <Modal title={`调整 ${student.display_name} 的班级`} onClose={() => { if (!saving) onClose(); }}>
       <form className="modal-form" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+        {refreshNotice}
         <LabeledControl label="学期">{(id) => <select id={id} disabled={saving} value={termId ?? ""} onChange={(event) => {
           const nextTerm = event.target.value ? Number(event.target.value) : null;
           setTermId(nextTerm);
@@ -605,7 +624,7 @@ export function EnrollmentModal({ student, semesters, onClose, onSubmit }: {
   );
 }
 
-export function FieldModal({ title, label, note, initial, password = false, required = true, maxLength, onClose, onSubmit }: { title: string; label: string; note?: string; initial: string; password?: boolean; required?: boolean; maxLength?: number; onClose: () => void; onSubmit: (value: string) => Promise<void> }) {
+export function FieldModal({ title, label, note, initial, password = false, required = true, maxLength, refreshNotice, onClose, onSubmit }: { title: string; label: string; note?: string; initial: string; password?: boolean; required?: boolean; maxLength?: number; refreshNotice?: ReactNode; onClose: () => void; onSubmit: (value: string) => Promise<void> }) {
   const [value, setValue] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -634,6 +653,7 @@ export function FieldModal({ title, label, note, initial, password = false, requ
   const describedBy = [note ? noteId : null, error ? errorId : null].filter(Boolean).join(" ") || undefined;
   return (
     <Modal title={title} onClose={close}><form className="modal-form" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+      {refreshNotice}
       <LabeledControl label={label}>{(id) => <input ref={inputRef} id={id} name="student-field" disabled={saving} type={password ? "password" : "text"} autoComplete={password ? "new-password" : undefined} value={value} onChange={(event) => setValue(event.target.value)}
         aria-invalid={error ? true : undefined} aria-describedby={describedBy} />}</LabeledControl>
       {note && <p id={noteId} className="field-hint">{note}</p>}

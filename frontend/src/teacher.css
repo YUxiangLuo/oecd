@@ -110,14 +110,18 @@
   position: fixed; inset: 0; z-index: 40; background: rgba(24,26,40,0.42);
   display: flex; align-items: center; justify-content: center; min-width: var(--desktop-min-width); padding: 20px;
 }
-.modal-card { background: #fff; border-radius: 16px; box-shadow: 0 20px 60px rgba(20,20,60,0.25); }
-.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #eef0f5; }
+.modal-card {
+  background: #fff; border-radius: 16px; box-shadow: 0 20px 60px rgba(20,20,60,0.25);
+  display: flex; flex-direction: column; max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px); overflow: hidden;
+}
+.modal-head { display: flex; flex: none; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #eef0f5; }
 .modal-head { gap: 12px; }
 /* Long names (e.g. a semester name without spaces) wrap inside the dialog instead of pushing × outside it. */
 .modal-head b { font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
 /* More specific than the teacher button baseline (12.5px), and a 28px target rather than the bare glyph. */
 .modal-card .modal-x { flex: none; border: none !important; background: none !important; font-size: 20px; line-height: 1; color: var(--text-muted); padding: 0 !important; min-width: 28px; min-height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; }
-.modal-body { padding: 18px 20px 20px; }
+/* Error notices and long forms scroll inside the viewport; the title and close button stay reachable. */
+.modal-body { padding: 18px 20px 20px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .modal-msg { margin: 0 0 4px; font-size: 13px; line-height: 1.7; color: #3a4050; }
 .modal-form { display: flex; flex-direction: column; }
 .modal-form label { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }

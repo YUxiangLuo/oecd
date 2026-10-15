@@ -528,8 +528,8 @@ class StudentCreateRequest(TextRequest):
     student_no: str = Field(default="", max_length=STUDENT_NO_MAX_LENGTH)
     class_id: int | None = Field(default=None, gt=0)
 
-    # Uniqueness of 学号 and login both compare exact text, so surrounding spaces must not survive. Usernames
-    # keep the plain edge strip (internal spaces stay an error); 学号 and 姓名 are normalized like labels.
+    # 学号 and logins share an ASCII case-insensitive identity namespace. Trim their edges; keep
+    # internal username spaces invalid and normalize 学号 and 姓名 like labels without rewriting display case.
     _strip_username = field_validator("username", mode="before")(_strip_text)
     _normalize_labels = field_validator("display_name", "student_no", mode="before")(normalize_label)
     # Reject a blank password as a field error (422) up front, also in the batch preview.

@@ -152,3 +152,53 @@ def test_teacher_roster_regrades_current_bank_and_reads_it_once(teaching_db, mon
     session["steps"]["1"] = make_record({"quiz": quizzes.correct_quiz(1, changed)})
     db.save_session("student", session)
     assert 1 in next(r for r in db.list_students("teacher") if r["username"] == "student")["verified_completed_steps"]
+
+
+@pytest.mark.parametrize("field", ["id", "prompt", "correct", "option-id", "option-label", "hint", "explanation"])
+@pytest.mark.parametrize("invalid", ["\x00", "\ud800", "\udfff"], ids=["NUL", "high-surrogate", "low-surrogate"])
+def test_invalid_nested_quiz_text_returns_422_without_changing_bank(teaching_db, field, invalid):
+    import json
+    import os
+
+    from fastapi.testclient import TestClient
+
+    from gvcsim.api import app
+
+    client = TestClient(app, raise_server_exceptions=False)
+    login = client.post(
+        "/api/auth/login", json={"username": "teacher", "password": os.environ["GVCSIM_BOOTSTRAP_PASSWORD"]}
+    )
+    assert login.status_code == 200
+    client.headers["Authorization"] = "Bearer " + login.json()["token"]
+    before = quiz_config.load_bank()
+    entry = deepcopy(before["steps"]["1"])
+    question = entry["questions"][0]
+    value = "pasted " + invalid
+    if field == "option-id":
+        question["options"][0]["id"] = value
+        question["correct"] = value
+    elif field == "option-label":
+        question["options"][0]["label"] = value
+    elif field == "correct":
+        question["correct"] = value
+        question["options"][0]["id"] = value
+    else:
+        question[field] = value
+    response = client.put(
+        "/api/classroom/quizzes/1",
+        content=json.dumps({"version": entry["version"], "questions": entry["questions"]}),
+        headers={"Content-Type": "application/json"},
+    )
+    assert response.status_code == 422, response.text
+    assert quiz_config.load_bank() == before
+
+
+def test_quiz_validation_preserves_multilingual_text_and_line_breaks(teaching_db):
+    bank = quiz_config.load_bank()
+    entry = deepcopy(bank["steps"]["1"])
+    text = "中文 / 日本語 / e\u0301 / 👩🏽‍💻\n下一行\t内容"
+    entry["questions"][0]["prompt"] = text
+    entry["questions"][0]["hint"] = text
+    result = quiz_config.save_step(1, entry["questions"], entry["version"], "teacher")
+    assert result["steps"]["1"]["questions"][0]["prompt"] == text
+    assert quiz_config.load_bank()["steps"]["1"]["questions"][0]["hint"] == text

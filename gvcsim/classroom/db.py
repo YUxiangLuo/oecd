@@ -56,6 +56,17 @@ def _required(row: dict[str, Any] | None, operation: str) -> dict[str, Any]:
     return row
 
 
+def _lock_account_identities(c: psycopg.Connection[dict[str, Any]]) -> None:
+    """Serialize all username/学号 checks and writes until commit or rollback.
+
+    A single database-wide transaction lock also orders overlapping batches and
+    cross-field claims, without a schema migration or lock-order deadlocks.
+    Every account identity writer, including CLI provisioning and demo sync,
+    must acquire this before checking ownership.
+    """
+    c.execute("SELECT pg_advisory_xact_lock(%s)", (736_861_017,))
+
+
 _schema_ready = False
 _startup_sealed = False
 _pool: ConnectionPool[psycopg.Connection[dict[str, Any]]] | None = None
@@ -218,6 +229,9 @@ def _sync_demo_accounts(c: psycopg.Connection[dict[str, Any]]) -> dict[str, int]
     if not config.DEMO_MODE or not config.BOOTSTRAP_PASSWORD:
         return {"created": 0, "updated": 0}
 
+    from gvcsim.classroom.management import _ensure_student_no_free, _ensure_username_not_student_no
+
+    _lock_account_identities(c)
     records = [("teacher", "老师", "teacher", "", config.BOOTSTRAP_PASSWORD)]
     records.extend(
         (student.username, student.display_name, "student", student.student_no, student.password)
@@ -227,10 +241,12 @@ def _sync_demo_accounts(c: psycopg.Connection[dict[str, Any]]) -> dict[str, int]
     updated = 0
     for username, display_name, role, student_no, password in records:
         existing = c.execute(
-            "SELECT role,display_name,student_no,pw_salt,pw_hash FROM accounts WHERE username=%s",
+            "SELECT id,role,display_name,student_no,pw_salt,pw_hash FROM accounts WHERE username=%s",
             (username,),
         ).fetchone()
         if existing is None:
+            _ensure_username_not_student_no(c, username)
+            _ensure_student_no_free(c, student_no)
             salt = secrets.token_hex(16)
             c.execute(
                 "INSERT INTO accounts(username,display_name,role,student_no,pw_salt,pw_hash)"
@@ -249,6 +265,8 @@ def _sync_demo_accounts(c: psycopg.Connection[dict[str, Any]]) -> dict[str, int]
         profile_matches = existing["display_name"] == display_name and existing["student_no"] == student_no
         if password_matches and profile_matches:
             continue
+        if existing["student_no"] != student_no:
+            _ensure_student_no_free(c, student_no, existing["id"])
         if password_matches:
             c.execute(
                 "UPDATE accounts SET display_name=%s,student_no=%s WHERE username=%s",
@@ -321,15 +339,20 @@ def touch_login(username: str) -> None:
 
 
 def provision_teacher(username: str, display_name: str, password: str) -> dict[str, Any]:
+    from gvcsim.classroom.management import _ensure_username_not_student_no
+
     username = username_key(username)
     _validate_managed_password(password)
     salt = secrets.token_hex(16)
+    password_hash = hash_password(password, salt)
     with conn() as c:
+        _lock_account_identities(c)
+        _ensure_username_not_student_no(c, username)
         return _required(
             c.execute(
                 "INSERT INTO accounts(username,display_name,role,pw_salt,pw_hash) VALUES (%s,%s,'teacher',%s,%s)"
                 " RETURNING id,username,display_name,role",
-                (username, display_name, salt, hash_password(password, salt)),
+                (username, display_name, salt, password_hash),
             ).fetchone(),
             "provision teacher",
         )

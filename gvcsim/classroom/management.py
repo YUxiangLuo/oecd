@@ -20,6 +20,9 @@ class _DatabaseProxy:
 
 
 database = _DatabaseProxy()
+_ASCII_CASE_TABLE = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
+_USERNAME_KEY_SQL = "translate(username,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')"
+_STUDENT_NO_KEY_SQL = "translate(btrim(student_no),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')"
 _STUDENT_COLS = "a.id,a.username,a.display_name,a.student_no,a.last_login_at,a.created_at"
 _ENROLLMENTS_SQL = (
     "SELECT ce.term_id,t.name AS term_name,ce.class_id,cg.name AS class_name "
@@ -174,24 +177,37 @@ class StudentNumberTaken(ValueError):
 
 
 def _ensure_student_no_free(c: Any, student_no: str, exclude_id: int | None = None) -> None:
-    if not student_no.strip():
+    key = student_no.strip().translate(_ASCII_CASE_TABLE)
+    if not key:
         return
     owner = c.execute(
         # btrim: a 学号 saved with surrounding spaces before inputs were trimmed still counts as the same.
         "SELECT username,display_name FROM accounts"
-        " WHERE role='student' AND btrim(student_no)=%s AND id IS DISTINCT FROM %s LIMIT 1",
-        (student_no, exclude_id),
+        f" WHERE role='student' AND {_STUDENT_NO_KEY_SQL}=%s AND id IS DISTINCT FROM %s LIMIT 1",
+        (key, exclude_id),
     ).fetchone()
     if owner is not None:
         raise StudentNumberTaken(f"学号 {student_no} 已被 {owner['display_name']}（{owner['username']}）使用")
     # Same rule as the batch import (学号 doubles as the login name there): a 学号 may not be another account's
     # username. A student's own username may equal its 学号.
     account = c.execute(
-        "SELECT username FROM accounts WHERE username=%s AND id IS DISTINCT FROM %s LIMIT 1",
-        (student_no, exclude_id),
+        f"SELECT username FROM accounts WHERE {_USERNAME_KEY_SQL}=%s AND id IS DISTINCT FROM %s LIMIT 1",
+        (key, exclude_id),
     ).fetchone()
     if account is not None:
         raise StudentNumberTaken(f"学号 {student_no} 和已有账号 {account['username']} 的用户名重复，请换一个学号")
+
+
+def _ensure_username_not_student_no(c: Any, username: str, exclude_id: int | None = None) -> None:
+    owner = c.execute(
+        "SELECT username,display_name FROM accounts"
+        f" WHERE role='student' AND {_STUDENT_NO_KEY_SQL}=%s AND id IS DISTINCT FROM %s LIMIT 1",
+        (username_key(username), exclude_id),
+    ).fetchone()
+    if owner is not None:
+        raise StudentNumberTaken(
+            f"用户名 {username} 已是 {owner['display_name']}（{owner['username']}）的学号，请换一个用户名"
+        )
 
 
 def create_student(
@@ -205,25 +221,20 @@ def create_student(
     username = username_key(username)
     database._validate_managed_password(password)
     salt = secrets.token_hex(16)
+    password_hash = database.hash_password(password, salt)
     with database.conn() as c:
         if teacher_username and not _teacher_exists(c, teacher_username):
             raise PermissionError("教师账号无效")
+        database._lock_account_identities(c)
         _ensure_student_no_free(c, student_no)
         # Same rule as the batch import: a username must not be another student's 学号 either.
-        owner = c.execute(
-            "SELECT username,display_name FROM accounts WHERE role='student' AND btrim(student_no)=%s LIMIT 1",
-            (username,),
-        ).fetchone()
-        if owner is not None:
-            raise StudentNumberTaken(
-                f"用户名 {username} 已是 {owner['display_name']}（{owner['username']}）的学号，请换一个用户名"
-            )
+        _ensure_username_not_student_no(c, username)
         row = database._required(
             c.execute(
                 "INSERT INTO accounts(username,display_name,role,student_no,pw_salt,pw_hash)"
                 " VALUES (%s,%s,'student',%s,%s,%s)"
                 " RETURNING id,username,display_name,student_no,last_login_at,created_at",
-                (username, display_name, student_no, salt, database.hash_password(password, salt)),
+                (username, display_name, student_no, salt, password_hash),
             ).fetchone(),
             "create student",
         )
@@ -252,9 +263,16 @@ def create_student_batch(
     students = [{**student, "username": username_key(student["username"])} for student in students]
     if len({student["username"] for student in students}) != len(students):
         raise ValueError("用户名不能重复")
+    # Password derivation is deliberately outside the identity lock, even for a full 200-row class.
+    if not preview:
+        for student in students:
+            database._validate_managed_password(student["password"])
+            student["pw_salt"] = secrets.token_hex(16)
+            student["pw_hash"] = database.hash_password(student["password"], student["pw_salt"])
     with database.conn() as c:
         if not _teacher_exists(c, teacher_username):
             raise PermissionError("教师账号无效")
+        database._lock_account_identities(c)
         group = c.execute(
             "SELECT cg.term_id,cg.is_active,t.is_active AS term_is_active "
             "FROM class_groups cg JOIN academic_terms t ON t.id=cg.term_id WHERE cg.id=%s FOR SHARE OF cg,t",
@@ -266,8 +284,8 @@ def create_student_batch(
         # existing username or with another student's 学号.
         names = [student["username"] for student in students]
         existing = c.execute(
-            "SELECT username,btrim(student_no) AS student_no FROM accounts"
-            " WHERE username=ANY(%s) OR (role='student' AND btrim(student_no)=ANY(%s))",
+            f"SELECT {_USERNAME_KEY_SQL} AS username,{_STUDENT_NO_KEY_SQL} AS student_no FROM accounts"
+            f" WHERE {_USERNAME_KEY_SQL}=ANY(%s) OR (role='student' AND {_STUDENT_NO_KEY_SQL}=ANY(%s))",
             (names, names),
         ).fetchall()
         taken = {row["username"] for row in existing} | {row["student_no"] for row in existing}
@@ -277,8 +295,6 @@ def create_student_batch(
         if conflicts:
             raise ValueError("部分学号已有账号，本次没有创建任何学生")
         for student in sorted(students, key=lambda row: row["username"]):
-            database._validate_managed_password(student["password"])
-            salt = secrets.token_hex(16)
             row = database._required(
                 c.execute(
                     "INSERT INTO accounts(username,display_name,role,student_no,pw_salt,pw_hash) "
@@ -287,8 +303,8 @@ def create_student_batch(
                         student["username"],
                         student["display_name"],
                         student["username"],
-                        salt,
-                        database.hash_password(student["password"], salt),
+                        student["pw_salt"],
+                        student["pw_hash"],
                     ),
                 ).fetchone(),
                 "batch student",
@@ -319,6 +335,8 @@ def update_student(
     with database.conn() as c:
         if teacher_username and not _teacher_exists(c, teacher_username):
             return None
+        if "student_no" in fields:
+            database._lock_account_identities(c)
         target = c.execute(
             "SELECT username FROM accounts WHERE id=%s AND role='student'",
             (account_id,),

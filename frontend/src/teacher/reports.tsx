@@ -268,12 +268,19 @@ function ReportView({ accountId, queue, grader, semesters, backLabel = BACK_TO_L
   const [refresh, setRefresh] = useState(0);
   // What the teacher had typed when a 409 asked for the latest report: carried into the reloaded view.
   const [draft, setDraft] = useState<GradeDraft | null>(null);
+  const reviewGuard = useTeacherReviewGuard();
+  // This view retains the draft while GradeView is absent during a reload or its failure.
+  // Keep its protection until this report closes; the next GradeView publishes its current state.
+  useEffect(() => reviewGuard.clear, [reviewGuard]);
   const { data, error, retry } = useAsync<TeacherReport>(() => api.classroom.reportDetail(accountId), [accountId, refresh]);
   const position = reviewPosition(queue, accountId);
   if (error) {
     return (
       <div>
-        <div className="review-topbar"><button className="back-btn" onClick={() => onBack(false)}>{backLabel}</button></div>
+        <div className="review-topbar"><button className="back-btn" onClick={() => reviewGuard.attempt(() => {
+          reviewGuard.clear();
+          onBack(false);
+        })}>{backLabel}</button></div>
         <LoadFailure what="报告" error={error} onRetry={retry} />
       </div>
     );
@@ -290,6 +297,7 @@ function ReportView({ accountId, queue, grader, semesters, backLabel = BACK_TO_L
     onPrevious={position?.previous != null ? () => onMove(position.previous!, false) : undefined}
     onNext={position?.next != null ? (changed) => onMove(position.next!, changed) : undefined}
     initialDraft={draft ?? undefined}
+    guardOwnedByParent
     onReload={(current) => {
       setDraft(current);
       setRefresh((value) => value + 1);
@@ -297,7 +305,7 @@ function ReportView({ accountId, queue, grader, semesters, backLabel = BACK_TO_L
   />;
 }
 
-export function GradeView({ data, grader, semesters = [], backLabel = BACK_TO_LIST, onBack, onReload, initialDraft, position, onPrevious, onNext }: {
+export function GradeView({ data, grader, semesters = [], backLabel = BACK_TO_LIST, onBack, onReload, initialDraft, position, onPrevious, onNext, guardOwnedByParent = false }: {
   data: TeacherReport;
   grader: string;
   /** The back button names where it goes: the list, or 学生与进度 for a report opened from there. */
@@ -308,6 +316,8 @@ export function GradeView({ data, grader, semesters = [], backLabel = BACK_TO_LI
   onReload: (draft: GradeDraft) => void;
   /** Score and feedback typed before reloading a newer version of this report. */
   initialDraft?: GradeDraft;
+  /** A parent retaining this draft during reloads clears its guard only when the report closes. */
+  guardOwnedByParent?: boolean;
   /** Where this report sits in the list it was opened from (第 k / n 份). */
   position?: { index: number; total: number };
   onPrevious?: () => void;
@@ -349,8 +359,8 @@ export function GradeView({ data, grader, semesters = [], backLabel = BACK_TO_LI
   }, [reloaded]);
   useEffect(() => {
     reviewGuard.publish({ dirty, saving });
-    return reviewGuard.clear;
-  }, [dirty, saving, reviewGuard]);
+    return guardOwnedByParent ? undefined : reviewGuard.clear;
+  }, [dirty, saving, reviewGuard, guardOwnedByParent]);
   const attemptLocalLeave = (leave: () => void) => {
     if (saving) return;
     if (dirty && !window.confirm(LEAVE_MESSAGE)) return;
