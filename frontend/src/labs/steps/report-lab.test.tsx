@@ -884,7 +884,7 @@ test("the writing area shows the autosave state and says formatting marks stay a
     const target = screen.getByRole("link", { name: label }).getAttribute("href")!;
     expect(document.querySelector(target)?.getAttribute("tabindex")).toBe("-1");
   }
-  expect(screen.getByText(/比较四步默认 Y 的默认模型两年累计结果；记入报告的选做模型或其他 Y 见附录/)).toBeTruthy();
+  expect(screen.getByText(/Y 以报告各节“结果指标 Y”为准（旧记录可能使用非默认 Y）；显式记入报告的选做模型见附录/)).toBeTruthy();
   expect(screen.getByText(/“#”“\*\*”等符号不会变成标题或粗体/)).toBeTruthy();
   rerender(<ReportLab {...finishProps} sessionSyncing />);
   expect(screen.getByText("保存中…")).toBeTruthy();

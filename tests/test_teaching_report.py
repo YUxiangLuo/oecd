@@ -2444,6 +2444,8 @@ def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(
 
     markdown = build(session, "同学").markdown
     assert "| 结果指标 Y | GVC 位置指数 |" in markdown
+    assert "旧记录可能使用非默认 Y" in markdown
+    assert "正文主结果固定为各步默认 Y" not in markdown
     assert "位置指数单位" not in markdown
     assert "GVC 位置指数两年累计平均越低（X 每高 1 个百分点，两年累计约低 0.0040）" in markdown
     charts = [

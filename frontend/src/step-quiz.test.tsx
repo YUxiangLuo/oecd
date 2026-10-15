@@ -294,7 +294,7 @@ test("stale quiz rejection offers metadata reload instead of reloading the stude
   const student = { ...state, complete: true, save: () => { writes++; }, syncNow: () => { writes++; } };
   const next = { n: 3, title: "下一题步" };
   const drafts: QuizDraftStore = new Map();
-  const view = (current: Step) => <QuizPanel step={current} state={student} draftStore={drafts} next={next} onNavigate={() => {}}
+  const view = (current: Step, key = "quiz") => <QuizPanel key={key} step={current} state={student} draftStore={drafts} next={next} onNavigate={() => {}}
     onRefresh={async () => {
       refreshAttempts++;
       if (refreshAttempts === 1) throw new Error("离线");
@@ -323,6 +323,13 @@ test("stale quiz rejection offers metadata reload instead of reloading the stude
     expect((screen.getByRole("button", { name: "提交答案" }) as HTMLButtonElement).disabled).toBe(true);
     expect(writes).toBe(previousWrites);
     expect(drafts.get(step.n)?.answers).toEqual({ q1: "a" });
+    // Leaving and returning must retain the known invalid version even while metadata is unavailable.
+    rerender(view(step, "returned"));
+    expect(screen.getByText(/题目已过期/)).toBeTruthy();
+    expect(container.querySelector(".quiz-box")?.getAttribute("aria-busy")).toBe("false");
+    expect(container.querySelector("fieldset")?.disabled).toBe(true);
+    expect(screen.queryByText(/理解题已完成/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /下一步：/ })).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: "载入最新题目" }));
     await waitFor(() => expect(refreshed).toBe(true));
     expect((screen.getByLabelText("通过后") as HTMLInputElement).checked).toBe(true);
