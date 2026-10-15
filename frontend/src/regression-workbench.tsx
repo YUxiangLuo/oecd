@@ -417,6 +417,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
     setAnnouncement(`已把“${name}”从报告移除。`);
   };
   const activePreset = options.presets.find((item) => sameSpec(item.spec, spec, options))?.key ?? null;
+  const noDesignValue = options.design_values?.[outcome]?.[yKey] === null;
 
   return (
     <div className="reg-custom">
@@ -447,7 +448,9 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
                   <li key={item.key}>
                     <button type="button" className="reg-preset" aria-pressed={activePreset === item.key} aria-disabled={!defaultForY || running || undefined}
                       onClick={() => { if (defaultForY && !running) runPreset(item.spec); }}>
-                      <b>{item.label}</b><small>{item.question}</small>
+                      <b>{item.label}</b><small>{noDesignValue && (item.key === "no_exchange_rate" || item.key === "separate_effects")
+                        ? "与同一 Y 的默认模型相比，X 各项合计和区间怎样变化？"
+                        : item.question}</small>
                     </button>
                   </li>
                 ))}
@@ -455,7 +458,9 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
             </div>
           );
         })}
-        {options.design_value_note && <p className="muted reg-design-note">{options.design_value_note}</p>}
+        {noDesignValue
+          ? <p className="muted reg-design-note">当前 Y 是比值指标，没有单一的线性设定值，不能计算相对设定值的偏差。请与同一 Y 的默认模型比较 X 各项合计及区间；模型之间的差异不等于偏离某个固定真值。</p>
+          : options.design_value_note && <p className="muted reg-design-note">{options.design_value_note}</p>}
       </div>
       <details className="reg-custom-details reg-custom-form-details" open={customOpen} onToggle={(event) => setCustomOpen(event.currentTarget.open)}>
         <summary>自定义设定（X 的滞后、8 个控制变量、固定效应）</summary>

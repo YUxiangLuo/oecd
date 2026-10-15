@@ -693,6 +693,9 @@ test("the USA as A with a valid recorded example: one note, and the recorded exa
   expect(notes[0].textContent).toBe(
     "美国是加征关税的一方，按设计不在回归样本中，X 记为 0 只是定义（w 是“对美出口份额”，美国不会向自己出口），不是数据缺失，不能作为例子。请换一个国家。下面仍显示已记录的例子 CAN 加拿大 · C29 汽车及零部件（对比 MEX 墨西哥）。",
   );
+  expect(materialHow()).toContain("当前选择暂不能记录");
+  expect(materialHow()).not.toContain("按钮");
+  expect(materialCard().querySelector(".material-card-action")).toBeNull();
   expect(document.body.textContent).not.toContain("见上面的说明");
   // The recorded example's own lines replace the selection's: CAN · C29 against MEX.
   expect(summaryLines()).toEqual([

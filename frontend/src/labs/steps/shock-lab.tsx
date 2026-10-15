@@ -474,7 +474,11 @@ export function ShockLab({ meta, step: _step, state }: {
         cardRef={(node) => { recordStripRef.current = node; }}
         state={recordedExample ? "recorded" : "missing"}
         summary={recordedExample ? (state.data?.material_label as string | undefined) ?? recordedExample : "尚未记录：关税数据加载后自动记录当前例子。"}
-        how={recordedExample ? (savedExample ? "当前例子就是已记录的材料；换国家或行业后自动更新。" : "已记录的是另一个例子；换回或点下面的按钮即改为当前例子。") : AUTO_RECORD_HOW}
+        how={!recordedExample ? AUTO_RECORD_HOW
+          : savedExample ? "当前例子就是已记录的材料；换国家或行业后自动更新。"
+          : !complete ? "已记录的例子保持不变；当前选择暂不能记录，请查看下方提示。"
+          : state.materialLocked ? "已记录的是另一个例子；换回或点下面的按钮即改为当前例子。"
+          : AUTO_RECORD_HOW}
         locked={state.materialLocked}
         rechosen={rechosen}
         action={state.materialLocked && panel && complete && !savedExample
