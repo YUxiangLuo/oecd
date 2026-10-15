@@ -1186,3 +1186,36 @@ test("step 15 makes no country-list request for an old example without a materia
     expect(countries).not.toHaveBeenCalled();
   } finally { countries.mockRestore(); }
 });
+
+test("step 15 corrects submitted industry-ranking scopes without changing material or report state", () => {
+  const materials = Object.fromEntries([6, 7, 8].map((step) => [step, {
+    compared: ["CHN", "USA"],
+    indicator_selection: { view: "industry", industry: step === 6 ? "" : "C26" },
+    browse_selection: { view: "comparison", industry: "C29" },
+    material_label: `行业排名 · 指标 ${step} · CHN 中国 对 USA 美国 · ${step === 6 ? "国家整体" : "C26 计算机电子光学"} · 2020（4 条读数）`,
+    observations: [{ country: "CHN", industry: "C26", value: 0.1 }, { country: "USA", industry: "C29", value: 0.2 }],
+  }]));
+  const submitted = report("pending");
+  submitted.markdown = "# 已提交报告\n\n原图表与数值保留。";
+  const before = JSON.stringify({ materials, submitted });
+  const generate = spyOn(api.classroom, "generateReport");
+  const submit = spyOn(api.classroom, "submitReport");
+  const save = spyOn(finishProps.state, "save");
+  const changed = spyOn(finishProps, "onReportChanged");
+  try {
+    render(<ReportLab {...finishProps} report={submitted} reportCurrent
+      steps={[6, 7, 8].map((n) => ({ n, title: `可视化 ${n}`, lab: "viz" })) as never}
+      getStep={(n) => materials[n] as never} />);
+    const labels = [...document.querySelectorAll(".report-materials tbody tr td:last-child")].map((cell) => cell.textContent);
+    expect(labels).toEqual([6, 7, 8].map((step) => `行业排名 · 指标 ${step} · CHN 中国 对 USA 美国 · 所选国家各行业 · 2020（4 条读数）`));
+    expect(screen.queryByText("报告需更新后重新提交")).toBeNull();
+    expect((screen.getByRole("button", { name: "导出 PDF" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(generate).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(changed).not.toHaveBeenCalled();
+    expect(JSON.stringify({ materials, submitted })).toBe(before);
+  } finally {
+    generate.mockRestore(); submit.mockRestore(); save.mockRestore(); changed.mockRestore();
+  }
+});

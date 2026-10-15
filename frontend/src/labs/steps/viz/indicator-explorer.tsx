@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { NO_READINGS_NOTE, NOT_RECORDED_HINT, RECORD_CHART_ACTION, RECORDED_CHART_LABEL, REPLACE_MATERIAL_ACTION } from "../../../step-task-card";
 import { MaterialCard } from "../../../material-card";
-import { vizMaterialLabel } from "../../../material-label";
+import { recordedVizMaterialLabel, vizMaterialLabel } from "../../../material-label";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { Meta, Step, StepStateApi } from "../../../types";
@@ -497,6 +497,7 @@ export function IndicatorExplorer({
     metric: composition ? "各分项与总量" : indicatorName,
     countries: selected,
     industry: industry || undefined,
+    allIndustries: view === "industry",
     years: timeView ? chartYears : [year],
     readings: pending.length,
   });
@@ -1300,7 +1301,7 @@ export function IndicatorExplorer({
       <MaterialCard
         state={saved.length ? "recorded" : !validYears || !canSave ? "blocked" : "missing"}
         summary={saved.length
-          ? (state.data?.material_label as string | undefined) ?? `${joinCountries([...new Set(saved.map((item) => item.country))])} · ${savedYearSpan(saved.map((item) => item.year))} · ${[...new Set(saved.map((item) => item.industry ?? ""))].map((industry) => industry ? sectorLabel(industry) : "国家整体").join("、")}（${saved.length} 条读数）`
+          ? recordedVizMaterialLabel(state.data) ?? `${joinCountries([...new Set(saved.map((item) => item.country))])} · ${savedYearSpan(saved.map((item) => item.year))} · ${[...new Set(saved.map((item) => item.industry ?? ""))].map((industry) => industry ? sectorLabel(industry) : "国家整体").join("、")}（${saved.length} 条读数）`
           : !validYears ? "请先修正年份范围，当前图表才能被记录。"
           : !canSave ? `${view === "positioning" || view === "structure" ? "" : "当前图表暂不能记录："}${blockedReason}`
           : NOT_RECORDED_HINT}

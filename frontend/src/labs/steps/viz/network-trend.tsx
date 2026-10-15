@@ -4,6 +4,7 @@ import { MaterialCard } from "../../../material-card";
 import { networkMaterialLabel } from "../../../material-label";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
+import { userFacingRequestError } from "../../../user-facing-error";
 import type { IndicatorSchema, Meta } from "../../../types";
 import { countryLabel, joinCountries, sectorLabel } from "../../../viz";
 import { HEAT_EVIDENCE_METRIC, PATH_UNDEFINED_LABEL, pathMetricUndefined } from "../../../viz/views/network-heat";
@@ -152,6 +153,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     [rankingReferenceKey],
     { requestKey: rankingReferenceKey, enabled: Boolean(release && view === "ranking" && first) },
   );
+  const activeReference = view === "trend" ? trendReference : rankingReference;
   // Exploration views: one economy's industries at the ranking year.
   const industriesOf = (country: string) => (query.data ?? []).filter((row) => row.country === country && row.year === year && row.industry != null);
   const industryReference = new Map(
@@ -303,6 +305,15 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         { label: "材料", value: "这张图没有可记录的读数条目" },
       ]}
     />
+    {recordable && query.status === "success" && activeReference.status !== "success" && <div role="region" aria-label="全球参照加载状态">
+      <AsyncStateMessage
+        status={activeReference.status}
+        error={activeReference.error ? userFacingRequestError(activeReference.error, "全球参照加载失败") : null}
+        loadingLabel="正在加载全球参照…"
+        onRetry={activeReference.retry}
+      />
+      <p className="muted">全球中位数{view === "trend" ? "、区间" : ""}和排名暂未显示；当前国家的有效读数仍可查看{canRecord ? "和记录" : ""}。</p>
+    </div>}
     {!recordable && view !== "topology" && view !== "flows" ? renderExtra?.(view, selected, year, setYear) : query.status !== "success" ? <AsyncStateMessage status={query.status} error={query.error} loadingLabel="正在加载历年行业指标…" onRetry={query.retry} /> : view === "topology" ? (
       // One scatter per row: in two columns the 660-wide chart shrank its axis text to about 7px.
       <Fragment key={chartKey}>

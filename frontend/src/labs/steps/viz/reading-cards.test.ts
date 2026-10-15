@@ -102,6 +102,51 @@ describe("amounts below 10 in reading texts keep three decimals (round 12)", () 
   });
 });
 
+describe("gap readings distinguish exact equality from differences below display precision", () => {
+  const units = [
+    { unit: "%", scale: 100, suffix: " 个百分点" },
+    { unit: "百万美元", scale: 1, suffix: " 百万美元" },
+    { unit: "长度单位", scale: 1, suffix: " 长度单位" },
+    { unit: "无量纲", scale: 1, suffix: "" },
+  ];
+
+  for (const { unit, scale, suffix } of units) {
+    test(`${unit}: equal values retain exact equality`, () => {
+      expect(gapReading(0.1, 0.1, unit)).toBe("与它持平");
+      expect(gapReading(-0, 0, unit)).toBe("与它持平");
+    });
+
+    test(`${unit}: tiny positive and negative differences read as approximately equal`, () => {
+      for (const gap of [0.0001, 0.000499999999]) {
+        expect(gapReading(gap / scale, 0, unit)).toBe("与它基本持平");
+        expect(gapReading(0, gap / scale, unit)).toBe("与它基本持平");
+      }
+    });
+
+    test(`${unit}: differences at and above the rounding threshold retain direction and unit`, () => {
+      for (const gap of [0.0005, 0.000500000001]) {
+        expect(gapReading(gap / scale, 0, unit)).toBe(`比它高 0.001${suffix}`);
+        expect(gapReading(0, gap / scale, unit)).toBe(`比它低 0.001${suffix}`);
+      }
+    });
+  }
+
+  test("2016 ESP and SWE foreign value-added shares read as approximately equal in both directions", () => {
+    const rows = [
+      { country: "ESP", year: 2016, industry: "", foreign_share: 0.16518858471062853 },
+      { country: "SWE", year: 2016, industry: "", foreign_share: 0.16518435541563237 },
+    ];
+    for (const countries of [["ESP", "SWE"], ["SWE", "ESP"]]) {
+      const cards = comparisonCards({
+        rows, countries, metric: "foreign_share", label: "外国增加值项占比", unit: "%", year: 2016, industry: "",
+      });
+      expect(String(cards[1].big)).toEndWith("与它基本持平");
+      expect(String(cards[1].big)).not.toContain("0.000");
+    }
+    expect(rows.map((row) => row.foreign_share)).toEqual([0.16518858471062853, 0.16518435541563237]);
+  });
+});
+
 const cards = (points: [string, number, number][], countries = ["CHN"]) => positioningCards({
   reference: points.map(([country, x, y]) => ({ country, x, y })),
   countries, xKey: "x", yKey: "y", xLabel: "横轴指标", yLabel: "纵轴指标", xFormat: "number", yFormat: "number",

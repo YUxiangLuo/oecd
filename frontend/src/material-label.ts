@@ -13,10 +13,27 @@ export function countriesPhrase(codes: readonly string[]): string {
 }
 
 /** Steps 6–8: "历年变化 · 外国增加值项占比 · CHN 中国 对 USA 美国 · 国家整体 · 2016–2020（10 条读数）". */
-export function vizMaterialLabel(parts: { view: string; metric: string; countries: readonly string[]; industry?: string; years: readonly number[]; readings: number }): string {
+export function vizMaterialLabel(parts: { view: string; metric: string; countries: readonly string[]; industry?: string; allIndustries?: boolean; years: readonly number[]; readings: number }): string {
   const years = [...new Set(parts.years)].sort((a, b) => a - b);
   const span = years.length > 1 ? `${years[0]}–${years.at(-1)}` : String(years[0] ?? "");
-  return `${parts.view} · ${parts.metric} · ${countriesPhrase(parts.countries)} · ${parts.industry ? sectorLabel(parts.industry) : "国家整体"} · ${span}（${parts.readings} 条读数）`;
+  const scope = parts.allIndustries ? "所选国家各行业" : parts.industry ? sectorLabel(parts.industry) : "国家整体";
+  return `${parts.view} · ${parts.metric} · ${countriesPhrase(parts.countries)} · ${scope} · ${span}（${parts.readings} 条读数）`;
+}
+
+/** Older industry-ranking labels used the hidden single-industry selection as their scope.
+ * Correct only that field in the saved label's known format, using the recorded (not browsed) view.
+ * This is presentation only: existing observations, report fingerprints and submitted material stay intact. */
+export function recordedVizMaterialLabel(data: Record<string, unknown> | undefined): string | null {
+  if (typeof data?.material_label !== "string") return null;
+  const selection = data.indicator_selection;
+  if (!selection || typeof selection !== "object" || !("view" in selection) || selection.view !== "industry") return data.material_label;
+  const parts = data.material_label.split(" · ");
+  if (parts.length !== 5 || parts[0] !== "行业排名" || !/^\d{4}(?:–\d{4})?（\d+ 条读数）$/.test(parts[4])) return data.material_label;
+  const oldScope = "industry" in selection && typeof selection.industry === "string" && selection.industry
+    ? sectorLabel(selection.industry) : "国家整体";
+  if (!parts[1] || !parts[2] || ![oldScope, "所选国家各行业"].includes(parts[3])) return data.material_label;
+  parts[3] = "所选国家各行业";
+  return parts.join(" · ");
 }
 
 /** Step 9: "行业排名 · 介数 · 2020 年 · CHN 中国 对 USA 美国（前 10 个行业，20 条读数）". */

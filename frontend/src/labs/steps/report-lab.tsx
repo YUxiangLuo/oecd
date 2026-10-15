@@ -10,7 +10,7 @@ import { ConfirmModal } from "../../teacher/ui";
 import type { ClassroomReport, ReportGateItem, ReportMutationResponse, Step, StepStateApi, TeachingCountriesResponse } from "../../types";
 import type { SessionStatus } from "../../use-session";
 import { userFacingRequestError } from "../../user-facing-error";
-import { recordedShockMaterialLabel } from "../../material-label";
+import { recordedShockMaterialLabel, recordedVizMaterialLabel } from "../../material-label";
 import { useAsync } from "../shared";
 
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
@@ -272,7 +272,9 @@ export function RecordedMaterials({ steps, getStep, blocked, onNavigateStep }: {
     const data = getStep?.(step.n) as (Record<string, unknown> | undefined);
     // The material reasons only: the quiz is the step's other condition and has its own place in the gate card.
     const missing = blocked.filter((item) => item.step === step.n && !item.quiz_only).flatMap((item) => item.missing).filter((text) => !text.includes("理解题"));
-    const label = step.n === 10 ? recordedShockMaterialLabel(data, overview) : typeof data?.material_label === "string" ? data.material_label : null;
+    const label = step.n === 10 ? recordedShockMaterialLabel(data, overview)
+      : step.n >= 6 && step.n <= 8 ? recordedVizMaterialLabel(data)
+      : typeof data?.material_label === "string" ? data.material_label : null;
     const recorded = missing.length === 0 && Boolean(data && Object.keys(data).some((key) => ["observation", "observations", "teaching_observation", "run"].includes(key)));
     return { step, label, missing, recorded };
   });

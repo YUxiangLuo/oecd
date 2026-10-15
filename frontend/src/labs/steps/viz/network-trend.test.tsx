@@ -157,6 +157,7 @@ test("ranking records the selected metric and displayed industries when asked, t
 
 
 test("recording takes a click, never a browse; the card says whether the chart on screen is the recorded one; sync failures are exposed", async () => {
+  mockReference();
   spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => ({
     ...page([]), rows: [{ ...row(country, year, country === "CHN" ? 7 : 3), "weighted degree": country === "CHN" ? 80 : 15 }],
   }));

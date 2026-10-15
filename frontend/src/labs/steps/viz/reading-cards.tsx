@@ -39,7 +39,8 @@ export function gapReading(first: number, other: number, unit: string): string {
   // Amounts read whole from 10 up; below 10 three decimals, as in the cards ("比它高 3.832 百万美元", not "4").
   const digits = unit === "百万美元" && magnitude >= 10 ? 0 : 3;
   const text = magnitude.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  if (text === "0") return "与它基本持平";
+  // Use the displayed precision: a nonzero difference rounded to 0.000 has no visible direction.
+  if (/^0(?:\.0+)?$/.test(text)) return "与它基本持平";
   const suffix = unit === "%" ? " 个百分点" : unit === "无量纲" ? "" : ` ${unit}`;
   return `比它${difference > 0 ? "高" : "低"} ${text}${suffix}`;
 }
