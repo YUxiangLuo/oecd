@@ -670,11 +670,16 @@ export function ReleaseIntegrityStatus({ meta }: { meta: Meta | null }) {
 }
 
 /** The step's material sentence, saved with the cell so step 15 repeats the same words. */
-function withDbLabel<T extends { observation?: { table?: string; row: string; column: string; value: number } | null }>(patch: T, fallbackTable: DbTableKind): T & { material_label?: string } {
+function dbMaterialSentence(observation: NonNullable<DbStepState["observation"]>, fallbackTable: DbTableKind): string {
+  const kind = (observation.table as DbTableKind | undefined) ?? fallbackTable;
+  const source = observationSourceLabel(observation);
+  return `${dbObservationSentence(kind, observation.row, observation.column)} = ${fmtDb(observation.value)} 百万美元${source ? `（${source}）` : ""}${observation.value === 0 ? `。${zeroCellNote(kind)}` : ""}`;
+}
+
+function withDbLabel<T extends { observation?: DbStepState["observation"] | null }>(patch: T, fallbackTable: DbTableKind): T & { material_label?: string } {
   const observation = patch.observation;
   if (!observation) return patch;
-  const kind = (observation.table as DbTableKind | undefined) ?? fallbackTable;
-  return { ...patch, material_label: `${dbObservationSentence(kind, observation.row, observation.column)} = ${fmtDb(observation.value)} 百万美元` };
+  return { ...patch, material_label: dbMaterialSentence(observation, fallbackTable) };
 }
 
 export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>; releaseMeta: Meta | null }) {
@@ -818,7 +823,6 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
   const colOptions = table === "y" ? meta.final_demand_categories : meta.sectors;
   const activeTable = DB_TABLES.find((t) => t.key === table)!;
   const selectedObservation = state.data?.observation;
-  const observationSource = selectedObservation ? observationSourceLabel(selectedObservation) : null;
 
   if (!meta.years.length) {
     return (
@@ -968,7 +972,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
       <MaterialCard
         state={selectedObservation ? "recorded" : "missing"}
         summary={selectedObservation
-          ? <>{dbObservationSentence((selectedObservation.table as DbTableKind | undefined) ?? table, selectedObservation.row, selectedObservation.column)} = {fmtDb(selectedObservation.value)} 百万美元{observationSource ? `（${observationSource}）` : ""}{selectedObservation.value === 0 ? `。${zeroCellNote((selectedObservation.table as DbTableKind | undefined) ?? table)}` : ""}</>
+          ? dbMaterialSentence(selectedObservation, table)
           : "尚未记录：点表中任一数值即记录这个单元格。"}
         how={state.materialLocked ? "点击单元格只会选中，要换成报告材料请点下面的按钮。" : selectedObservation?.auto ? "系统先记录了本页数值最大的一格；点表中其他数值即改为记录那一格。" : "点表中其他数值即改为记录那一格。"}
         locked={state.materialLocked}

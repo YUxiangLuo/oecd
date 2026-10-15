@@ -1,10 +1,48 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api } from "../../api";
 import type { DbMeta, DbSlice, Meta } from "../../types";
-import { DatabaseGuide, DbLab } from "./db-lab";
+import { DatabaseGuide, DbLab, type DbStepState } from "./db-lab";
 
 afterEach(cleanup);
+
+test("R24-04 saves the card sentence for each year/table and zero cell without migrating old material", async () => {
+  spyOn(api, "dbMeta").mockResolvedValue({ ...DB_META, years: [2019, 2020] });
+  spyOn(api, "dbSlice").mockImplementation(async ({ year, table }) => {
+    const column = table === "accounts" ? "VA" : table === "y" ? "USA_HFCE" : "USA_D01T02";
+    return { ...SLICE, year, table, columns: [column], rows: [{ row: "CHN_D01T02", [column]: 0 }] };
+  });
+  const oldObservation = { row: "CHN_D01T02", column: "USA_D01T02", value: 12, year: 2020, table: "z" };
+  const saved: Partial<DbStepState>[] = [];
+  function Harness() {
+    const [data, setData] = useState<DbStepState>({ observation: oldObservation });
+    return <DbLab releaseMeta={null} state={{ data, save: (patch) => {
+      saved.push(patch);
+      setData((previous) => ({ ...previous, ...patch }));
+    }, complete: false, syncing: false, syncError: null, syncNow: () => {} }} />;
+  }
+  render(<Harness />);
+  await screen.findByRole("button", { name: /值 0 百万美元/ });
+  const summary = () => document.querySelector(".material-card-summary")!.textContent;
+  expect(summary()).toContain("12 百万美元（2020 · 中间投入 Z）");
+  expect(saved).toHaveLength(0);
+  for (const [year, tableName] of [[2019, "最终需求 Y"], [2020, "账户项"], [2019, "中间投入 Z"]] as const) {
+    fireEvent.change(screen.getByLabelText("年份"), { target: { value: String(year) } });
+    fireEvent.click(screen.getByRole("button", { name: tableName }));
+    const cell = await screen.findByRole("button", { name: /值 0 百万美元/ });
+    fireEvent.click(cell);
+    await waitFor(() => {
+      const patch = saved.filter((item) => item.observation).at(-1)!;
+      expect(patch.observation?.year).toBe(year);
+      expect(patch.material_label).toBe(summary());
+      expect(patch.material_label).toContain(`（${year} · ${tableName}）`);
+      expect(patch.material_label).toContain("所选单元格为 0");
+    });
+    const exit = screen.queryByRole("button", { name: /^退出.*全屏工作区$/ });
+    if (exit) fireEvent.click(exit);
+  }
+});
 
 const DB_META: DbMeta = {
   years: [2020],
@@ -201,7 +239,7 @@ describe("step 1 after the report is submitted", () => {
     const replaced = saved.find((patch) => (patch as { observation?: unknown }).observation) as { observation: { column: string; value: number }; material_label?: string };
     expect(replaced.observation.column).toBe("CHN_D01T02");
     expect(replaced.observation.value).toBe(10);
-    expect(replaced.material_label).toMatch(/→ CHN 中国·D01T02[^（]*（列·使用方） = 10 百万美元$/);
+    expect(replaced.material_label).toMatch(/→ CHN 中国·D01T02[^（]*（列·使用方） = 10 百万美元（2020 · 中间投入 Z）$/);
     // The card confirms the switch and says what to do next, as step 13 does; the button is gone.
     expect(card.querySelector(".material-card-how")!.textContent).toContain("请到步骤 15 更新报告并重新提交给老师。");
     expect(card.querySelector(".material-card-action")).toBeNull();

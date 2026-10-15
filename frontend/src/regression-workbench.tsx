@@ -258,16 +258,21 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const depvarLabel = displayBaselineLabel(defaultForY?.design.depvar_label ?? yLabel(yKey));
   const experimentY = experiment?.baseline ?? stepBaseline;
   useEffect(() => {
-    if (yKey === stepBaseline || defaultRuns[yKey]) return;
+    setYError(null);
+    if (yKey === stepBaseline || defaultRuns[yKey]) {
+      setLoadingY(false);
+      return;
+    }
     const request = new AbortController();
     setLoadingY(true);
-    setYError(null);
     api.runRegression(outcome, request.signal, yKey, null)
-      .then((response) => setDefaultRuns((current) => ({ ...current, [yKey]: response })))
-      .catch((cause) => {
-        if (!(cause instanceof DOMException && cause.name === "AbortError")) setYError(userFacingRequestError(cause, "这个 Y 的默认模型没有算出结果"));
+      .then((response) => {
+        if (!request.signal.aborted) setDefaultRuns((current) => ({ ...current, [yKey]: response }));
       })
-      .finally(() => setLoadingY(false));
+      .catch((cause) => {
+        if (!request.signal.aborted && !(cause instanceof DOMException && cause.name === "AbortError")) setYError(userFacingRequestError(cause, "这个 Y 的默认模型没有算出结果"));
+      })
+      .finally(() => { if (!request.signal.aborted) setLoadingY(false); });
     return () => request.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- defaultRuns is read, not watched: a fetched Y stays.
   }, [yKey, stepBaseline, outcome]);
@@ -338,7 +343,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       : "设定已更改，下面保留最近计算的结果；点“计算这个模型”查看新结果。"
     : "";
   const run = async (model: ModelSpec) => {
-    if (running || model.x_lags.length === 0) return;
+    if (!defaultForY || running || model.x_lags.length === 0) return;
     controller.current?.abort();
     const request = new AbortController();
     controller.current = request;
@@ -380,11 +385,11 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const latestIsReported = Boolean(latest && experiment && experimentY === yKey && sameSpec(experiment.spec, latest.design.spec!, options));
   // Table columns: the chosen Y's default model, the model just computed, and the one in the report when it is
   // another model on this Y (on another Y it is only named below: two Ys cannot share a table).
-  const columns: TableColumn[] = [
-    { name: DEFAULT_COLUMN, spec: options.default_spec, snapshot: snapshotOf(defaultForY ?? defaultResponse) },
+  const columns: TableColumn[] = defaultForY ? [
+    { name: DEFAULT_COLUMN, spec: options.default_spec, snapshot: snapshotOf(defaultForY) },
     ...(latest ? [{ name: `${latestIsReported ? "已记入报告" : "本次"}：${label(latest.design.spec!)}`, spec: latest.design.spec!, snapshot: snapshotOf(latest) }] : []),
     ...(experiment && experimentY === yKey && !latestIsReported ? [{ name: `已记入报告：${label(experiment.spec)}`, spec: experiment.spec, snapshot: experiment.snapshot }] : []),
-  ];
+  ] : [];
   const highlighted = latest ? 1 : isDefault ? 0 : -1;
   const coefficients = coefficientRows(columns, options);
   const pointRow = perPointRow(columns, outcome);
@@ -419,13 +424,13 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         <label>因变量：
           {yOptions.length > 1
             ? (
-              <select aria-label="因变量" value={yKey} disabled={running || loadingY} onChange={(event) => changeY(event.target.value)}>
+              <select aria-label="因变量" value={yKey} disabled={running} onChange={(event) => changeY(event.target.value)}>
                 {yOptions.map((item) => <option key={item.key} value={item.key}>{displayBaselineLabel(item.label)}{item.key === stepBaseline ? "（本步的 Y）" : ""}</option>)}
               </select>
             )
             : <b>{depvarLabel}</b>}
         </label>
-        {yOptions.length > 1 && yKey === stepBaseline ? "" : yKey === stepBaseline ? "（本步的 Y）" : "（本步家族的另一个指标：表中第一列是它的默认模型；放入报告时一起记录）"}
+        {yOptions.length > 1 && yKey === stepBaseline ? "" : yKey === stepBaseline ? "（本步的 Y）" : "（本步家族的另一个指标：表中第一列是它的默认模型；记入报告时一起记录）"}
         。每次只改一处设定，算出后和表中第一列的默认模型比较；只改一项也可能改变样本。
       </p>
       {loadingY && <p className="reg-request-state muted" role="status" aria-busy="true">正在取“{depvarLabel}”的默认模型…</p>}
@@ -440,8 +445,8 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
               <ul>
                 {items.map((item) => (
                   <li key={item.key}>
-                    <button type="button" className="reg-preset" aria-pressed={activePreset === item.key} aria-disabled={running || undefined}
-                      onClick={() => { if (!running) runPreset(item.spec); }}>
+                    <button type="button" className="reg-preset" aria-pressed={activePreset === item.key} aria-disabled={!defaultForY || running || undefined}
+                      onClick={() => { if (defaultForY && !running) runPreset(item.spec); }}>
                       <b>{item.label}</b><small>{item.question}</small>
                     </button>
                   </li>
@@ -457,7 +462,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         <ModelForm options={options} spec={spec} onChange={changeSpec} />
         <p className="reg-custom-equation" aria-live="polite">{noX ? "至少选一项关税暴露 X。" : equationPreview(spec, options)}</p>
         <div className="reg-custom-actions">
-          <button type="button" className="run-btn" aria-disabled={running || noX || undefined} onClick={() => void run(spec)}>
+          <button type="button" className="run-btn" aria-disabled={!defaultForY || running || noX || undefined} onClick={() => void run(spec)}>
             {running ? "正在计算…" : "计算这个模型"}
           </button>
           <button type="button" className="secondary" onClick={() => changeSpec(options.default_spec)}>恢复默认设定</button>
@@ -472,6 +477,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       {staleMessage && <p className="reg-stale-note" role="note">{staleMessage}</p>}
       {isDefault && <p className="muted reg-custom-default-note">这就是本步的默认模型（表中第一列）。</p>}
 
+      {defaultForY && <>
       <ModelComparisonChart columns={columns} outcome={outcome} />
 
       <div className="reg-custom-compare">
@@ -530,6 +536,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         </ul>
         {samplesDiffer(columns) && <p className="reg-boundary" role="note">{options.sample_differs_note}</p>}
       </div>
+      </>}
 
       {/* One model a step goes into the report: the one just computed replaces the one there. */}
       <div className="reg-custom-report">
@@ -553,7 +560,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         {reportChanged && <p className="reg-rerun-warning reg-replaced-notice" role="status">记入报告的模型与已提交报告里的不同；请到步骤 15 更新报告并重新提交给老师。</p>}
       </div>
 
-      <details className="reg-custom-details" aria-label="单模型详细数字" open={detailsOpen} onToggle={(event) => setDetailsOpen(event.currentTarget.open)}>
+      {defaultForY && <details className="reg-custom-details" aria-label="单模型详细数字" open={detailsOpen} onToggle={(event) => setDetailsOpen(event.currentTarget.open)}>
         <summary>单模型详细数字（系数、标准误、t 值、p 值、显著性、区间）与导出 CSV{staleMessage ? " · 当前设定待重算" : ""}</summary>
         <label className="reg-custom-detail-pick">查看
           <select value={shownDetail} onChange={(event) => setDetailColumn(Number(event.target.value))}>
@@ -569,7 +576,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         <button type="button" className="secondary" onClick={() => download(comparisonCsv(columns, options, depvarLabel, pointRow, designRow), `步骤${stepNumber}-回归对比.csv`)}>
           导出 CSV（上面的回归结果表）
         </button>
-      </details>
+      </details>}
 
       <p className="muted reg-custom-footnote">{options.footnote}{options.hints[1] ? ` ${options.hints[1]}` : ""}</p>
     </div>

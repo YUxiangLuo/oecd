@@ -17,8 +17,8 @@ import {
 } from "./regression-verdict";
 import { api } from "./api";
 import { useAsync } from "./labs";
-import { experimentLabel, omittedSummary, perPointDigits, perPointReading, snapshotOf, specSummary, xSpanLabel, xSum } from "./regression-workbench-table";
-import type { Experiment, FirstWaveDecomposition, RegressionOutcome, RegressionResponse, WorkbenchOptions } from "./types";
+import { experimentLabel, omittedSummary, perPointDigits, perPointReading, snapshotOf, specSummary, xSpanLabel, xSum, type PerPointSource } from "./regression-workbench-table";
+import type { Experiment, FirstWaveDecomposition, RegressionOutcome, RegressionResponse, TeachingOverviewResponse, WorkbenchOptions } from "./types";
 import { DivergingBarChart, type DivergingBarRow } from "./viz/regression/diverging-bars";
 
 interface SavedRegression {
@@ -172,24 +172,34 @@ export function ReportedExperiments({ getStep, onNavigateStep }: {
   });
   const optionsQuery = useAsync<WorkbenchOptions>(() => api.regressionOptions(), ["regression-options"], { enabled: rows.length > 0 });
   const options = optionsQuery.status === "success" ? optionsQuery.data ?? null : null;
+  // Legacy experiments without a baseline still refer to their step's saved Y.
+  const otherY = rows.some(({ experiment, run }) => !!experiment.baseline && experiment.baseline !== run?.design?.baseline);
+  const overviewQuery = useAsync<TeachingOverviewResponse>(() => api.teachingOverview(), ["teaching-overview"], { enabled: otherY });
+  const overview = overviewQuery.status === "success" ? overviewQuery.data : null;
   return (
     <section className="reg-reported-models" aria-labelledby="reg-reported-models-title">
       <span className="reg-section-step">改模型、对比</span>
       <h3 id="reg-reported-models-title">你的模型实验</h3>
       {rows.length === 0
-        ? <p className="muted">还没有放入报告的模型实验（选做）：在步骤 11–14 的“改模型、对比”里算出一个模型并点“放入报告”，报告附录会把它和默认模型并列。</p>
+        ? <p className="muted">还没有记入报告的模型实验（选做）：在步骤 11–14 的“改模型、对比”里算出一个模型并点“也记入报告”，报告附录会把它和同一 Y 的默认模型并列。</p>
         : (
-          <div className="table-wrap" role="region" aria-label="放入报告的模型实验，可横向滚动" tabIndex={0}>
+          <div className="table-wrap" role="region" aria-label="记入报告的模型实验，可横向滚动" tabIndex={0}>
             <table className="data-table reg-reported-table">
-              <thead><tr><th>步骤</th><th>改动</th><th>设定</th><th>X 各项合计（X 每高 1 个百分点）</th><th>默认模型（两年累计）</th></tr></thead>
+              <thead><tr><th>步骤</th><th>改动</th><th>设定</th><th>X 各项合计（X 每高 1 个百分点）</th><th>同一 Y 的默认模型（两年累计）</th></tr></thead>
               <tbody>
                 {rows.map(({ step, family, outcome, experiment, run }) => {
                   const sum = xSum(experiment.snapshot, experiment.spec);
-                  // The step's default run, on the same Y as every experiment.
-                  const stepDefault = run?.design && run.result ? snapshotOf({ design: run.design, result: run.result }) : null;
-                  const defaultSum = stepDefault?.result.cumulative;
+                  const sameY = !experiment.baseline || experiment.baseline === run?.design?.baseline;
+                  const stepDefault = sameY && run?.design && run.result ? snapshotOf({ design: run.design, result: run.result }) : null;
+                  const estimate = !sameY ? overview?.outcomes[outcome]?.find((item) => item.key === experiment.baseline) : null;
+                  const defaultSource: PerPointSource | null = stepDefault ?? (estimate ? {
+                    depvar_kind: estimate.kind,
+                    result: { suppressed: estimate.suppress_inference || !(estimate.status === "ok" || estimate.status === "warning") },
+                  } : null);
+                  const defaultSum = stepDefault?.result.cumulative ?? (estimate?.coef != null
+                    ? { coef: estimate.coef, ci_low: estimate.ci_low, ci_high: estimate.ci_high } : null);
                   // Both numbers at the default's decimals, so the two read alike.
-                  const digits = defaultSum && stepDefault ? perPointDigits(outcome, defaultSum, stepDefault) : undefined;
+                  const digits = defaultSum && defaultSource ? perPointDigits(outcome, defaultSum, defaultSource) : undefined;
                   return (
                     <tr key={step}>
                       <th scope="row">
@@ -203,7 +213,7 @@ export function ReportedExperiments({ getStep, onNavigateStep }: {
                         {omittedSummary(experiment.snapshot, options).map((text) => <p className="muted" key={text}>{text}</p>)}
                       </> : "…"}</td>
                       <td>{sum ? `${perPointReading(outcome, sum, experiment.snapshot, digits)}（${xSpanLabel(experiment.spec)}）` : "—"}</td>
-                      <td>{defaultSum && stepDefault ? perPointReading(outcome, defaultSum, stepDefault, digits) : "—"}</td>
+                      <td>{defaultSum && defaultSource ? perPointReading(outcome, defaultSum, defaultSource, digits) : !sameY && overviewQuery.status === "loading" ? "…" : "—"}</td>
                     </tr>
                   );
                 })}

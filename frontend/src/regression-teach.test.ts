@@ -13,7 +13,7 @@ import {
 import { api } from "./api";
 import { snapshotOf } from "./regression-workbench-table";
 import optionsFixture from "./regression-workbench-options.fixture.json";
-import type { CoefStat, RegressionOutcome, RegressionResponse, WorkbenchOptions } from "./types";
+import type { CoefStat, RegressionOutcome, RegressionResponse, TeachingOverviewResponse, WorkbenchOptions } from "./types";
 
 const coefficient = (coef: number, low: number, high: number): CoefStat => ({
   name: "teaching_tariff_exposure", coef, se: 0.01, t: 1, p: 0.2, stars: "", ci_low: low, ci_high: high,
@@ -197,14 +197,46 @@ describe("ReportedExperiments", () => {
   };
   const noRateSpec = { x_lags: [0, 1], controls: [{ name: "teaching_log_gdp", lag: 0 }, { name: "teaching_trade_openness", lag: 0 }], fixed_effects: ["country_industry", "year"] };
 
-  test("lists each step's experiment, named after its preset, with its sum next to the step's default model", async () => {
+  for (const fails of [false, true]) {
+    test(`another Y never borrows the step default while overview is loading or ${fails ? "failed" : "resolved"}`, async () => {
+      const run = withSum(-0.55, -0.57, -0.53);
+      const experimentRun = withSum(1.73, 1.6, 1.9);
+      let resolve!: (value: TeachingOverviewResponse) => void;
+      let reject!: (error: Error) => void;
+      const pending = new Promise<TeachingOverviewResponse>((yes, no) => { resolve = yes; reject = no; });
+      const overview = spyOn(api, "teachingOverview").mockReturnValue(pending);
+      const options = spyOn(api, "regressionOptions").mockResolvedValue(optionsFixture as WorkbenchOptions);
+      try {
+        const view = render(createElement(ReportedExperiments, {
+          getStep: (step: number) => step === 11 ? { run, experiment: {
+            baseline: "DVAex_share", spec: noRateSpec, saved_at: "2026-10-14", snapshot: snapshotOf(experimentRun),
+          } } : undefined,
+        }));
+        const defaultCell = () => view.container.querySelectorAll("tbody tr td")[3]?.textContent;
+        expect(defaultCell()).toBe("…");
+        expect(view.container.textContent).not.toContain("-0.55");
+        if (fails) reject(new Error("offline"));
+        else resolve({ version: "test", disclaimer: "", outcomes: { trade: [
+          { key: "FVA_share", label: "wrong Y", kind: "share", default: true, coef: -99, ci_low: -100, ci_high: -98, p: 0.01, status: "ok", suppress_inference: false, depvar_std: 1, depvar_mean: 1, n_obs: 10 },
+          { key: "DVAex_share", label: "selected Y", kind: "share", default: false, coef: 2.37, ci_low: 2.1, ci_high: 2.6, p: 0.01, status: "ok", suppress_inference: false, depvar_std: 1, depvar_mean: 1, n_obs: 10 },
+        ], production: [], length: [], network: [] } });
+        await waitFor(() => expect(defaultCell()).toBe(fails ? "—" : "+2.37 个百分点"));
+        expect(view.container.querySelectorAll("tbody tr td")[2]?.textContent).toBe("+1.73 个百分点（两年累计）");
+        expect(view.container.textContent).toContain("同一 Y 的默认模型");
+      } finally { cleanup(); options.mockRestore(); overview.mockRestore(); }
+    });
+  }
+
+  for (const baseline of [undefined, "FVA_share"]) {
+  test(`lists the experiment next to the step default (baseline: ${baseline ?? "legacy"})`, async () => {
     const defaultRun = withSum(-0.55, -0.57, -0.53);
     const noRate = withSum(-0.70, -0.75, -0.65);
     const options = spyOn(api, "regressionOptions").mockResolvedValue(optionsFixture as WorkbenchOptions);
+    const overview = spyOn(api, "teachingOverview");
     try {
       const view = render(createElement(ReportedExperiments, {
         getStep: (step: number) => step === 11
-          ? { run: { design: defaultRun.design, result: defaultRun.result }, experiment: { spec: noRateSpec, saved_at: "2026-10-14", snapshot: snapshotOf(noRate) } }
+          ? { run: { design: defaultRun.design, result: defaultRun.result }, experiment: { baseline, spec: noRateSpec, saved_at: "2026-10-14", snapshot: snapshotOf(noRate) } }
           : step === 12 ? { run: { design: defaultRun.design, result: defaultRun.result }, experiment: null } : undefined,
       }));
       await waitFor(() => expect(view.container.querySelector("tbody tr td b")?.textContent).toBe("去掉汇率变动"));
@@ -215,8 +247,10 @@ describe("ReportedExperiments", () => {
       // The model's sum says which years it covers; both read at the default's decimals.
       expect(rows[0][3]).toBe("-0.70 个百分点（两年累计）");
       expect(rows[0][4]).toBe("-0.55 个百分点");
-    } finally { cleanup(); options.mockRestore(); }
+      expect(overview).not.toHaveBeenCalled();
+    } finally { cleanup(); options.mockRestore(); overview.mockRestore(); }
   });
+  }
 
   test("discloses selected controls omitted from the actual saved estimate", async () => {
     const run = withSum(-0.55, -0.57, -0.53);
@@ -239,7 +273,9 @@ describe("ReportedExperiments", () => {
 
   test("says how to add one when none is marked", () => {
     const html = renderToStaticMarkup(createElement(ReportedExperiments, { getStep: () => undefined }));
-    expect(html).toContain("还没有放入报告的模型实验（选做）");
+    expect(html).toContain("还没有记入报告的模型实验（选做）");
+    expect(html).toContain("也记入报告");
+    expect(html).not.toContain("放入报告");
     expect(html).not.toContain("<table");
   });
 });

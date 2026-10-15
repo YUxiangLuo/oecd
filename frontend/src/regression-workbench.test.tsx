@@ -295,6 +295,58 @@ const checkbox = (label: RegExp) => screen.getByRole("checkbox", { name: label }
 const tableHeaders = () => [...document.querySelectorAll(".reg-custom-compare-table thead th")].map((cell) => cell.textContent);
 
 describe("the workbench", () => {
+  test("an uncached Y never relabels or exports old numbers while delayed or failed, and recovers on switching", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    let reject!: (cause: Error) => void;
+    let resolve!: (value: RegressionResponse) => void;
+    const pending = () => new Promise<RegressionResponse>((yes, no) => { resolve = yes; reject = no; });
+    const run = spyOn(api, "runRegression").mockImplementation(pending as never);
+    const blobs: Blob[] = [];
+    spyOn(URL, "createObjectURL").mockImplementation((blob) => { blobs.push(blob as Blob); return "blob:test"; });
+    spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    render(<Harness baselines={BASELINES} />);
+    const select = await screen.findByRole("combobox", { name: "因变量" });
+    const choose = async (value: string) => { await act(async () => { fireEvent.change(select, { target: { value } }); }); };
+    const unavailable = () => {
+      expect(screen.queryByRole("button", { name: /^导出 CSV/ })).toBeNull();
+      expect(document.querySelector(".reg-custom-compare-table")).toBeNull();
+      expect(screen.queryByRole("group", { name: "单模型详细数字" })).toBeNull();
+      expect(screen.queryByRole("img")).toBeNull();
+      expect(blobs).toHaveLength(0);
+    };
+    await choose("DVAex_share");
+    expect(screen.getByText(/正在取/)).toBeTruthy();
+    unavailable();
+    await act(async () => { reject(new TypeError("network failure")); });
+    expect(screen.getByRole("alert")).toBeTruthy();
+    unavailable();
+    await choose("FVA_share");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(tableHeaders()).toEqual(["变量", "默认模型"]);
+    await choose("DVAex_share");
+    const oldReject = reject;
+    await choose("FVA_share");
+    await choose("DVAex_share");
+    await act(async () => { oldReject(new Error("obsolete failure")); });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByText(/正在取/)).toBeTruthy();
+    unavailable();
+    const next = response(DEFAULT, { teaching_tariff_exposure: 0.33, teaching_tariff_exposure_lag1: 0.22 }, {}, "DVAex_share");
+    next.design.depvar_label = "国内增加值出口占比";
+    await act(async () => { resolve(next); });
+    expect(screen.queryByText(/正在取/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^导出 CSV/ }));
+    const csv = await blobs[0].text();
+    expect(csv).toContain("因变量：国内增加值出口占比");
+    expect(csv).toContain("X,0.3300");
+    expect(csv).not.toContain("-0.3298");
+    run.mockImplementation(() => Promise.reject(new Error("should use cached Y")));
+    await choose("FVA_share");
+    await choose("DVAex_share");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(document.querySelector(".reg-custom-point-row")?.textContent).toContain("0.55");
+  });
+
   test("another Y of the family: its default model is the first column, the design value is its β, the report records the Y", async () => {
     spyOn(api, "regressionOptions").mockResolvedValue(options);
     const onY = (run: RegressionResponse) => ({ ...run, design: { ...run.design, depvar_label: "国内增加值出口占比" } });

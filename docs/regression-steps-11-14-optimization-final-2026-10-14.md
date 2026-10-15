@@ -340,7 +340,7 @@ PYTHONPATH=. uv run python scripts/check_model_space.py distinct --out dogfood-o
 <!-- v13-verify-start -->
 每个数字可按第 7 节的命令复算（release `8565f226719d4179967f6372dbc7c49e`）。
 
-**200 种子基准**（`benchmarks/teaching_design_v13.json`，`scripts/benchmark_teaching_design.py`，配对噪声、release 种子 20260913 不变）：17 个 Y 的默认模型两年累计 95% 区间覆盖率 91.5%–95.5%（均值 93.3%），每个 Y 的平均偏差在 β 的 0.15% 以内，非零 β 的显著率 200/200，零效应 Y 的假阳性率 8.0%、区间覆盖 92%。v13 改了混杂强度与校准下限，但默认模型仍无偏地恢复设定值。
+**200 种子基准**（`benchmarks/teaching_design_v13.json`，`scripts/benchmark_teaching_design.py`，配对噪声、release 种子 20260913 不变）：共估计 17 个 Y，其中 16 个有预设 β 的 Y 的默认模型两年累计 95% 区间覆盖率为 91.5%–95.5%（均值 93.3%）；GVC 位置指数没有单一预设 β，不计入覆盖率。非零 β 的 Y 的平均偏差在 β 的 0.15% 以内，显著率 200/200，零效应 Y 的假阳性率 8.0%、区间覆盖 92%。v13 改了混杂强度与校准下限，但默认模型仍无偏地恢复设定值。
 
 **全模型空间核查**（`benchmarks/model_space_v13.json`，`docs/regression-model-space-check-2026-10-14.md`；1,183 种设定 × 17 个 Y = 20,111 次估计，分 4 份并行约 1 小时）：
 
