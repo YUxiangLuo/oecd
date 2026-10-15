@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { countriesPhrase, networkMaterialLabel, regressionMaterialLabel, shockMaterialLabel, vizMaterialLabel } from "./material-label";
+import { countriesPhrase, networkMaterialLabel, recordedShockMaterialLabel, regressionMaterialLabel, shockMaterialLabel, vizMaterialLabel } from "./material-label";
+import type { TeachingCountriesResponse } from "./types";
 
 test("every step's material reads as one sentence of the same shape", () => {
   expect(countriesPhrase(["CHN"])).toBe("CHN 中国");
@@ -15,4 +16,24 @@ test("every step's material reads as one sentence of the same shape", () => {
   expect(shockMaterialLabel({ first: "CAN", industry: "C29", firstTaxed: true })).toBe("例子：CAN 加拿大（被加税） · C29 汽车及零部件");
   expect(regressionMaterialLabel({ depvar: "外国增加值项占比", reading: "-0.55 个百分点", interval: "-0.57 个百分点 至 -0.54 个百分点" })).toBe("默认模型：外国增加值项占比两年累计 -0.55 个百分点（95% 区间 -0.57 个百分点 至 -0.54 个百分点）");
   expect(regressionMaterialLabel({ depvar: "加权总度", reading: null })).toBe("默认模型：加权总度（已计算，无法可靠推断）");
+});
+
+test("saved service labels use country policy, not their zero industry tariff, and do not mutate history", () => {
+  const saved = {
+    compared: ["CHN", "AUS"], teaching_industry: "D",
+    material_label: "例子：CHN 中国（未被加税） 对 AUS 澳大利亚（未被加税） · D 电力燃气",
+    teaching_observation: { country: "CHN", teaching_tariff_rate_tau: 0, teaching_tariff_exposure: 0 },
+  };
+  const before = JSON.stringify(saved);
+  const overview = {
+    countries: [{ country: "CHN", taxed: true }, { country: "AUS", taxed: false }],
+    taxed_rule: { scope: "goods industries (ICIO sectors A-C)" },
+  } as TeachingCountriesResponse;
+  expect(recordedShockMaterialLabel(saved, overview)).toBe("例子：CHN 中国（被加税） 对 AUS 澳大利亚（未被加税） · D 电力燃气（服务业不加税）");
+  expect(recordedShockMaterialLabel(saved)).toBe("例子：CHN 中国 对 AUS 澳大利亚 · D 电力燃气");
+  expect(recordedShockMaterialLabel({ ...saved, teaching_industry: "C29" }, overview)).not.toContain("服务业不加税");
+  expect(recordedShockMaterialLabel(saved, { ...overview, taxed_rule: undefined })).not.toContain("服务业不加税");
+  expect(recordedShockMaterialLabel({ ...saved, material_label: undefined }, overview)).toBeNull();
+  expect(recordedShockMaterialLabel(undefined, overview)).toBeNull();
+  expect(JSON.stringify(saved)).toBe(before);
 });

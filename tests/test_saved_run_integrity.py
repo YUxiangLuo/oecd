@@ -111,6 +111,28 @@ def test_rejects_inconsistent_inference(key, value):
     assert _parse_saved_run(run, "trade") is None
 
 
+@pytest.mark.parametrize("key", ["coef", "se", "t", "p", "ci_low", "ci_high"])
+@pytest.mark.parametrize("section", ["coefs", "cumulative"])
+def test_rejects_legacy_estimates_outside_finite_float_range(key, section):
+    run = saved_run()
+    estimate = run["result"]["coefs"][0] if section == "coefs" else run["result"]["cumulative"]
+    estimate[key] = 10**400
+    assert _parse_saved_run(run, "trade") is None
+
+
+def test_rejects_legacy_cluster_counts_outside_finite_float_range():
+    run = saved_run()
+    run["result"].update(n_obs=10**402, n_entities=10**401, n_times=10, n_clusters=10**400)
+    assert _parse_saved_run(run, "trade") is None
+
+
+def test_large_finite_cluster_count_is_checked_without_numpy_object_conversion():
+    run = saved_run()
+    run["result"].update(n_obs=10**32, n_entities=10**31, n_times=10, n_clusters=10**30)
+    # The saved intervals use two clusters, so this count is inconsistent even though it is finite.
+    assert _parse_saved_run(run, "trade") is None
+
+
 @pytest.mark.parametrize("status", ["insufficient", "invalid_design"])
 def test_complete_stopped_diagnosis_remains_reportable(status):
     run = saved_run()

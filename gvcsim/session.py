@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
-import math
 from copy import deepcopy
 from typing import Any
+
+from gvcsim.numeric import finite_number
 
 SESSION_VERSION = "experiment-session-simple-v4"
 MAX_SESSION_BYTES = 300_000
@@ -28,8 +29,8 @@ def make_record(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _json_value(value: Any, path: str = "session") -> Any:
-    if isinstance(value, float) and not math.isfinite(value):
-        raise SessionError(f"{path} 包含非有限数值")
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and not finite_number(value):
+        raise SessionError(f"{path} 包含非有限或超出浮点范围的数值")
     if isinstance(value, str):
         if "\x00" in value:
             raise SessionError("会话不能包含空字符 U+0000")

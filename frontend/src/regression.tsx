@@ -335,6 +335,9 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
               ? <RegressionRequestError label="条形图" error={overviewQuery.error} onRetry={overviewQuery.retry} />
               : overviewQuery.status === "loading" && <div className="reg-request-state muted" role="status" aria-busy="true">正在绘制本类各 Y 的条形图…</div>}
             <RegressionResultCard outcome={outcome} response={result} examples={examples} exampleSaved={exampleSaved} exampleChosen={exampleChosen} exampleYear={lastYear} />
+            {exampleQuery.status === "error" && exampleQuery.error
+              ? <RegressionRequestError label="步骤 10 例子换算" error={exampleQuery.error} onRetry={exampleQuery.retry} />
+              : exampleQuery.status === "loading" && <div className="reg-request-state muted" role="status" aria-busy="true">正在读取步骤 10 例子，准备换算…</div>}
           </div>
         </div>
       )}

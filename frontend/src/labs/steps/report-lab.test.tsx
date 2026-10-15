@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ToastHost } from "../../toast";
 import { MaterialCard } from "../../material-card";
 import { ReportOutro } from "../../report-outro";
-import type { ClassroomReport, ReportMutationResponse } from "../../types";
+import type { ClassroomReport, ReportMutationResponse, TeachingCountriesResponse } from "../../types";
 import {
   GateCard,
   REPORT_REFLECTION_INCOMPLETE_SELECTOR,
@@ -1121,4 +1121,68 @@ test("你记录的材料 lists every step 1–14 in the words its material card 
   ]);
   fireEvent.click(screen.getByRole("button", { name: "步骤 6 · 步骤名6" }));
   expect(navigated).toEqual([6]);
+});
+
+test("step 15 corrects a submitted service example's old label after country-list retry without rewriting the report or its fingerprint", async () => {
+  const saved = {
+    compared: ["CHN", "AUS"], teaching_industry: "D",
+    material_label: "例子：CHN 中国（未被加税） 对 AUS 澳大利亚（未被加税） · D 电力燃气",
+    teaching_observation: { country: "CHN", industry: "D", year: 2020, teaching_tariff_rate_tau: 0, teaching_tariff_exposure: 0 },
+  };
+  const submitted = report("pending");
+  submitted.markdown = "# 已提交报告\n\n原报告与数值保留。";
+  const before = JSON.stringify({ saved, submitted });
+  let rejectCountries!: (error: Error) => void;
+  let resolveCountries!: (overview: TeachingCountriesResponse) => void;
+  const countries = spyOn(api, "teachingCountries")
+    .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectCountries = reject; }))
+    .mockImplementationOnce(() => new Promise((resolve) => { resolveCountries = resolve; }));
+  const generate = spyOn(api.classroom, "generateReport");
+  const submit = spyOn(api.classroom, "submitReport");
+  const save = spyOn(finishProps.state, "save");
+  const changed = spyOn(finishProps, "onReportChanged");
+  try {
+    render(<ReportLab {...finishProps} report={submitted} reportCurrent
+      steps={[{ n: 10, title: "政策冲击", lab: "shock" }] as never}
+      getStep={(n) => n === 10 ? saved as never : undefined} />);
+    const label = () => document.querySelector(".report-materials tbody tr td:last-child")!.textContent;
+    expect(label()).toBe("例子：CHN 中国 对 AUS 澳大利亚 · D 电力燃气");
+    expect(screen.getByText("正在核对步骤 10 例子的国家税况…")).toBeTruthy();
+    await act(async () => { rejectCountries(new Error("network unavailable")); });
+    expect(screen.getByRole("alert").textContent).toContain("材料已保留，暂不显示国家税况");
+    expect(label()).not.toContain("未被加税");
+    fireEvent.click(screen.getByRole("button", { name: "重试国家税况" }));
+    expect(screen.getByText("正在核对步骤 10 例子的国家税况…")).toBeTruthy();
+    await act(async () => { resolveCountries({
+      countries: [{ country: "CHN", taxed: true }, { country: "AUS", taxed: false }],
+      taxed_rule: { scope: "goods industries (ICIO sectors A-C)" },
+    } as TeachingCountriesResponse); });
+    await waitFor(() => expect(label()).toBe("例子：CHN 中国（被加税） 对 AUS 澳大利亚（未被加税） · D 电力燃气（服务业不加税）"));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("报告需更新后重新提交")).toBeNull();
+    expect((screen.getByRole("button", { name: "导出 PDF" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(countries).toHaveBeenCalledTimes(2);
+    expect(generate).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(changed).not.toHaveBeenCalled();
+    expect(JSON.stringify({ saved, submitted })).toBe(before);
+  } finally {
+    countries.mockRestore();
+    generate.mockRestore();
+    submit.mockRestore();
+    save.mockRestore();
+    changed.mockRestore();
+  }
+});
+
+test("step 15 makes no country-list request for an old example without a material label", () => {
+  const countries = spyOn(api, "teachingCountries");
+  try {
+    render(<RecordedMaterials steps={[{ n: 10, title: "政策冲击", lab: "shock" }]}
+      getStep={() => ({ compared: ["CHN"], teaching_industry: "D", teaching_observation: {} }) as never}
+      blocked={[]} onNavigateStep={() => {}} />);
+    expect(screen.getByText("已记录（旧记录，到本步查看）")).toBeTruthy();
+    expect(countries).not.toHaveBeenCalled();
+  } finally { countries.mockRestore(); }
 });

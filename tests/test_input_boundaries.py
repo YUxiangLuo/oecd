@@ -1,6 +1,7 @@
 """HTTP regressions from fresh-deployment dogfood, including database non-mutation."""
 
 import json
+from copy import deepcopy
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,6 +18,8 @@ from gvcsim.classroom.routes import (
     normalize_label,
 )
 from gvcsim.session import empty_session
+from test_saved_run_integrity import saved_run
+from test_teaching_report import _complete
 
 
 def client_for(username):
@@ -97,6 +100,68 @@ def test_session_accepts_unicode_and_finite_numeric_boundaries(teaching_db):
     # PostgreSQL JSONB expands exponent notation; JavaScript reads both as the same number.
     restored["steps"]["15"]["data"]["values"][2] = float(restored["steps"]["15"]["data"]["values"][2])
     assert restored == session
+
+
+def _regression_session():
+    session = empty_session()
+    session["steps"]["10"] = _complete()["steps"]["10"]
+    session["steps"]["11"] = {"data": {"run": saved_run()}}
+    return json.loads(json.dumps(session))
+
+
+def _poison_regression_number(session, step, value):
+    data = session["steps"][str(step)]["data"]
+    if step == 10:
+        data["teaching_observation"]["teaching_export_share_w"] = value
+    else:
+        data["run"]["result"]["coefs"][0]["coef"] = value
+
+
+@pytest.mark.parametrize("method,status", [("PUT", 422), ("PATCH", 405)])
+@pytest.mark.parametrize("step", [10, 11])
+@pytest.mark.parametrize("value", [10**400, -(10**400)])
+def test_out_of_range_regression_save_preserves_previous_session(teaching_db, method, status, step, value):
+    client = client_for("student")
+    valid = _regression_session()
+    initial = client.put("/api/classroom/session", json={"session": valid, "base_updated_at": None})
+    assert initial.status_code == 200, initial.text
+    stored = db.get_session("student")
+    bad = deepcopy(valid)
+    _poison_regression_number(bad, step, value)
+
+    # PATCH is unsupported; it must not become an alternate write path around PUT's validation.
+    response = client.request(
+        method,
+        "/api/classroom/session",
+        json={"session": bad, "base_updated_at": initial.json()["updated_at"]},
+    )
+
+    assert response.status_code == status, response.text
+    assert db.get_session("student") == stored
+    restored = client.get("/api/classroom/session")
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["session"] == valid
+    assert restored.json()["updated_at"] == initial.json()["updated_at"]
+
+
+@pytest.mark.parametrize("step", [10, 11])
+def test_legacy_out_of_range_regression_session_is_readable_and_recoverable(teaching_db, step):
+    client = client_for("student")
+    valid = _regression_session()
+    legacy = deepcopy(valid)
+    _poison_regression_number(legacy, step, 10**400)
+    db.save_session("student", legacy)
+
+    restored = client.get("/api/classroom/session")
+
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["session"] == legacy
+    assert step in {item["step"] for item in restored.json()["material_gate"]}
+    recovered = client.put(
+        "/api/classroom/session", json={"session": valid, "base_updated_at": restored.json()["updated_at"]}
+    )
+    assert recovered.status_code == 200, recovered.text
+    assert client.get("/api/classroom/session").json()["session"] == valid
 
 
 @pytest.mark.parametrize("username,password", [("a\x00b", "password"), ("unknown", "\ud800"), ("\ud800", "password")])

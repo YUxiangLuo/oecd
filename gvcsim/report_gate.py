@@ -5,6 +5,7 @@ import unicodedata
 from typing import Any, cast
 
 from gvcsim import evidence
+from gvcsim.numeric import finite_number
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 from gvcsim.report_common import (
     GATE_STEPS,
@@ -52,7 +53,7 @@ def _valid_indicator_observations(data: dict[str, Any]) -> list[dict[str, Any]]:
         if isinstance(raw.get("year"), bool) or not isinstance(raw.get("year"), int):
             continue
         value = raw.get("value")
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        if not finite_number(value):
             continue
         if raw.get("scope") not in {"country", "country-industry"}:
             continue
@@ -160,9 +161,7 @@ def _table_comparison_complete(data: dict[str, Any], *, allow_auto: bool = False
     if any(
         isinstance(item.get("year"), bool)
         or not isinstance(item.get("year"), int)
-        or isinstance(item.get("value"), bool)
-        or not isinstance(item.get("value"), (int, float))
-        or not math.isfinite(float(item["value"]))
+        or not finite_number(item.get("value"))
         or str(item.get("entity")) != str(item.get("country"))
         or item.get("scope") != "country"
         or item.get("source") not in sources
@@ -191,9 +190,7 @@ def _network_material_complete(data: dict[str, Any]) -> bool:
     if any(
         isinstance(item.get("year"), bool)
         or not isinstance(item.get("year"), int)
-        or isinstance(item.get("value"), bool)
-        or not isinstance(item.get("value"), (int, float))
-        or not math.isfinite(float(item["value"]))
+        or not finite_number(item.get("value"))
         or item.get("scope") != "country-industry"
         for item in observations
     ):
@@ -230,9 +227,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
     has_observation = (
         isinstance(observation, dict)
         and all(observation.get(key) not in (None, "") for key in ("row", "column", "value", "year", "table"))
-        and isinstance(observation.get("value"), (int, float))
-        and not isinstance(observation.get("value"), bool)
-        and math.isfinite(float(observation["value"]))
+        and finite_number(observation.get("value"))
     )
     if not has_observation:
         blocked.append(
@@ -305,10 +300,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
             teaching_observation.get("teaching_tariff_rate_tau"),
             teaching_observation.get("teaching_tariff_exposure"),
         ]
-        numeric_valid = all(
-            isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value))
-            for value in numeric
-        )
+        numeric_valid = all(finite_number(value) for value in numeric)
         values = [float(cast(int | float, value)) for value in numeric] if numeric_valid else []
         panel_valid = panel_valid and numeric_valid and all(value >= 0 for value in values)
         panel_valid = panel_valid and teaching_observation.get("country") == shock_data.get("teaching_country")

@@ -1,4 +1,5 @@
 import json
+import sys
 
 import pytest
 from scipy import stats
@@ -16,6 +17,25 @@ def test_minimal_session_contract():
     payload = empty_session()
     payload["steps"]["1"] = make_record({"quiz": {"answers": {"q": "a"}}})
     payload["shared"]["regression_settings"] = {"trade": {"method": "did"}}
+    assert validate_session(payload) == payload
+
+
+@pytest.mark.parametrize("value", [10**400, -(10**400), float("inf"), -float("inf"), float("nan")])
+@pytest.mark.parametrize("section", ["steps", "shared"])
+def test_session_rejects_numbers_outside_finite_float_range(value, section):
+    payload = empty_session()
+    if section == "steps":
+        payload["steps"]["10"] = make_record({"nested": [{"value": value}]})
+    else:
+        payload["shared"]["regression_settings"] = {"nested": [{"value": value}]}
+    with pytest.raises(SessionError, match="数值"):
+        validate_session(payload)
+
+
+def test_session_preserves_finite_float_and_integer_boundaries():
+    payload = empty_session()
+    maximum = sys.float_info.max
+    payload["steps"]["10"] = make_record({"values": [maximum, -maximum, int(maximum), -int(maximum), True]})
     assert validate_session(payload) == payload
 
 

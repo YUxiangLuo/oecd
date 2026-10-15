@@ -826,7 +826,8 @@ test("goods only: a taxed country's service industry reads as not taxed, with a 
   const groups = tenGroups();
   // CAN is on the taxed list, but O (public administration) is a service: τ stays 0, as for untaxed AUT.
   const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.5, false)));
-  render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["CAN", "AUT"], teaching_industry: "O" })} />);
+  const save = mock(() => {});
+  render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["CAN", "AUT"], teaching_industry: "O" }, save)} />);
   await waitFor(() => expect(document.querySelectorAll(".teaching-example-summary li")).toHaveLength(2));
   const items = [...document.querySelectorAll(".teaching-example-summary li")].map((item) => item.textContent);
   expect(items[0]).toContain("被加税国家，但服务业不加税：2020 年 X = w × τ = 50.00% × 0% = 0 个百分点");
@@ -835,9 +836,93 @@ test("goods only: a taxed country's service industry reads as not taxed, with a 
     "服务业不在加税范围内（美国只对货物行业 A–C 加税），所以任何国家这个行业的 X 都是 0；换一个货物行业（如 C29 汽车及零部件）才能看到加税带来的暴露。",
   );
   expect(document.body.textContent).toContain("服务业不加税：两国这个行业的 X 都为 0，没有差距");
+  await waitFor(() => expect(save).toHaveBeenCalled());
+  expect((save.mock.calls.at(-1) as unknown[])[0]).toMatchObject({
+    material_label: "例子：CAN 加拿大（被加税） 对 AUT 奥地利（未被加税） · O 公共管理与国防（服务业不加税）",
+    teaching_observation: { teaching_tariff_rate_tau: 0, teaching_tariff_exposure: 0 },
+  });
   groups.mockRestore();
   series.mockRestore();
   cleanup();
+});
+
+for (const locked of [false, true]) test(`service labels already saved ${locked ? "in a submitted report" : "before submission"} recover after overview failure without changing material`, async () => {
+  const meta: Meta = { years: tenYears, countries: ["AUT", "CAN", "USA"], sectors: ["C29", "O"] };
+  const groups = tenGroups();
+  const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.5, false)));
+  countriesSpy.mockRejectedValueOnce(new Error("network unavailable"));
+  const saved = {
+    compared: ["CAN", "AUT"], teaching_industry: "O", teaching_example_chosen: true,
+    material_label: "例子：CAN 加拿大（未被加税） 对 AUT 奥地利（未被加税） · O 公共管理与国防",
+    teaching_observation: { country: "CAN", industry: "O", year: 2020, teaching_export_share_w: 0.5, teaching_tariff_rate_tau: 0, teaching_tariff_exposure: 0, version: "step10-tariff-teaching-v5" },
+  };
+  const before = JSON.stringify(saved);
+  const save = mock(() => {});
+  try {
+    render(<ShockLab meta={meta} step={step} state={tenState(saved, save, locked)} />);
+    await screen.findByRole("alert");
+    await waitFor(() => expect(document.querySelector(".teaching-example-summary")).not.toBeNull());
+    expect(materialSummary()).toBe("例子：CAN 加拿大 对 AUT 奥地利 · O 公共管理与国防");
+    expect(materialChip()).toBe("已记录");
+    expect(summaryLines()[0]).toContain("该行业未加税（国家税况暂不可用）");
+    expect(document.querySelector(".teaching-example-hint")?.textContent).toContain("也可能因为该行业免税");
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    await waitFor(() => expect(materialSummary()).toBe("例子：CAN 加拿大（被加税） 对 AUT 奥地利（未被加税） · O 公共管理与国防（服务业不加税）"));
+    expect(series).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
+    expect(JSON.stringify(saved)).toBe(before);
+  } finally {
+    groups.mockRestore();
+    series.mockRestore();
+    cleanup();
+  }
+});
+
+test("the recorded example fallback reports loading and failure, then retries only its own request", async () => {
+  const meta: Meta = { years: tenYears, countries: ["CAN", "MEX", "USA"], sectors: ["C29"] };
+  const groups = tenGroups();
+  let rejectRecorded!: (error: Error) => void;
+  let resolveRecorded!: (value: never) => void;
+  let recordedCalls = 0;
+  const series = spyOn(api, "teachingSeries").mockImplementation((countries, industry) => {
+    if (countries.includes("USA")) return Promise.resolve({
+      version: "step10-tariff-teaching-v5", disclaimer: "", total: 5, years: tenYears,
+      rows: tenRows("MEX", industry, 0.4, false),
+    } as never);
+    recordedCalls += 1;
+    return recordedCalls === 1
+      ? new Promise<never>((_resolve, reject) => { rejectRecorded = reject; })
+      : new Promise<never>((resolve) => { resolveRecorded = resolve; });
+  });
+  const saved = { ...RECORDED_CAN, browse_selection: { first: "USA", second: "MEX", industry: "C29" } };
+  const before = JSON.stringify(saved);
+  const save = mock(() => {});
+  try {
+    render(<ShockLab meta={meta} step={step} state={tenState(saved, save, true)} />);
+    await screen.findByText("正在读取已记录例子的关税数据；报告材料保持不变…");
+    expect(materialChip()).toBe("已记录");
+    await act(async () => { rejectRecorded(new Error("network unavailable")); });
+    expect(screen.getByRole("alert").textContent).toContain("已记录例子的关税数据读取失败");
+    expect(screen.getByRole("alert").textContent).toContain("报告材料保持不变");
+    fireEvent.click(screen.getByRole("button", { name: "重试已记录例子" }));
+    await screen.findByText("正在读取已记录例子的关税数据；报告材料保持不变…");
+    await act(async () => { resolveRecorded({
+      version: "step10-tariff-teaching-v5", disclaimer: "", total: 10, years: tenYears,
+      rows: [...tenRows("CAN", "C29", 0.93, true), ...tenRows("MEX", "C29", 0.4, false)],
+    } as never); });
+    await screen.findByText("已记录的例子 · 五年趋势 · 两国使用同一刻度");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(series.mock.calls.filter(([countries]) => countries.includes("USA"))).toHaveLength(1);
+    expect(series.mock.calls.filter(([countries]) => countries.includes("CAN"))).toHaveLength(2);
+    expect(countriesSpy).toHaveBeenCalledTimes(1);
+    expect(groups).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
+    expect(JSON.stringify(saved)).toBe(before);
+  } finally {
+    groups.mockRestore();
+    series.mockRestore();
+    cleanup();
+  }
 });
 
 test("two taxed countries: the comparison country's jump sits beside the first one's, not hidden under it", async () => {

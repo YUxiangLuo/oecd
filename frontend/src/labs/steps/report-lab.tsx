@@ -7,9 +7,11 @@ import { ReportOutro } from "../../report-outro";
 import { clearToasts, showToast } from "../../toast";
 import { STEP_MATERIAL_ACTION_ID, stepTaskTitleId } from "../../step-task-card";
 import { ConfirmModal } from "../../teacher/ui";
-import type { ClassroomReport, ReportGateItem, ReportMutationResponse, Step, StepStateApi } from "../../types";
+import type { ClassroomReport, ReportGateItem, ReportMutationResponse, Step, StepStateApi, TeachingCountriesResponse } from "../../types";
 import type { SessionStatus } from "../../use-session";
 import { userFacingRequestError } from "../../user-facing-error";
+import { recordedShockMaterialLabel } from "../../material-label";
+import { useAsync } from "../shared";
 
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
 
@@ -262,11 +264,15 @@ export function RecordedMaterials({ steps, getStep, blocked, onNavigateStep }: {
   blocked: ReportGateItem[];
   onNavigateStep: (step: number) => void;
 }) {
+  const shockData = steps?.some((step) => step.n === 10) ? getStep?.(10) as Record<string, unknown> | undefined : undefined;
+  const needsCountryLabels = recordedShockMaterialLabel(shockData) !== null;
+  const countries = useAsync<TeachingCountriesResponse>(() => api.teachingCountries(), ["report-material-countries"], { enabled: needsCountryLabels });
+  const overview = countries.status === "success" ? countries.data ?? undefined : undefined;
   const rows = (steps ?? []).filter((step) => step.n >= 1 && step.n <= 14).map((step) => {
     const data = getStep?.(step.n) as (Record<string, unknown> | undefined);
     // The material reasons only: the quiz is the step's other condition and has its own place in the gate card.
     const missing = blocked.filter((item) => item.step === step.n && !item.quiz_only).flatMap((item) => item.missing).filter((text) => !text.includes("理解题"));
-    const label = typeof data?.material_label === "string" ? data.material_label : null;
+    const label = step.n === 10 ? recordedShockMaterialLabel(data, overview) : typeof data?.material_label === "string" ? data.material_label : null;
     const recorded = missing.length === 0 && Boolean(data && Object.keys(data).some((key) => ["observation", "observations", "teaching_observation", "run"].includes(key)));
     return { step, label, missing, recorded };
   });
@@ -275,6 +281,8 @@ export function RecordedMaterials({ steps, getStep, blocked, onNavigateStep }: {
     <section className="report-materials" aria-labelledby="report-materials-title">
       <h3 id="report-materials-title">你记录的材料</h3>
       <p className="muted">每步一条，和各步“本步报告材料”卡上写的一样；缺的点步骤名回去补。</p>
+      {countries.status === "loading" && <p className="muted" role="status">正在核对步骤 10 例子的国家税况…</p>}
+      {countries.status === "error" && <div className="error-box" role="alert">{userFacingRequestError(countries.error, "步骤 10 例子的国家税况读取失败")} 材料已保留，暂不显示国家税况。<button className="secondary" onClick={countries.retry}>重试国家税况</button></div>}
       <table>
         <tbody>
           {rows.map(({ step, label, missing, recorded }) => (

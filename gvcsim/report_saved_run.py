@@ -13,6 +13,7 @@ from typing import Any, cast
 
 from scipy import stats
 
+from gvcsim.numeric import finite_number
 from gvcsim.regression.design import RegressionDesign
 from gvcsim.regression.teaching import Y_COLUMNS, model_snapshot, selectable_baselines, variable_catalog
 from gvcsim.steps import STEPS
@@ -108,26 +109,24 @@ def _result_is_qualified(result: dict[str, Any], design: dict[str, Any] | None =
     )
 
 
-def _finite_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value))
-
-
 def _estimate_is_consistent(coefficient: Any, n_clusters: int, inferential: bool) -> bool:
     """coef/se/t are finite with t = coef/se; with inference, p and the 95% interval follow from t(G − 1)."""
-    if not isinstance(coefficient, dict) or not all(_finite_number(coefficient.get(f)) for f in ("coef", "se", "t")):
+    if not isinstance(coefficient, dict) or not all(finite_number(coefficient.get(f)) for f in ("coef", "se", "t")):
         return False
     beta, se = float(coefficient["coef"]), float(coefficient["se"])
     if se <= 0 or not math.isclose(float(coefficient["t"]), beta / se, rel_tol=1e-8, abs_tol=1e-10):
         return False
     if not inferential:
         return all(coefficient.get(key) is None for key in ("p", "ci_low", "ci_high"))
-    if not all(_finite_number(coefficient.get(f)) for f in ("p", "ci_low", "ci_high")):
+    if not all(finite_number(coefficient.get(f)) for f in ("p", "ci_low", "ci_high")):
         return False
     if not (0 <= coefficient["p"] <= 1 and coefficient["ci_low"] <= beta <= coefficient["ci_high"]):
         return False
-    critical = float(stats.t.ppf(0.975, n_clusters - 1))
+    # SciPy needs a numeric dtype; finite JSON integers above int64 otherwise become object arrays.
+    degrees_of_freedom = float(n_clusters - 1)
+    critical = float(stats.t.ppf(0.975, degrees_of_freedom))
     expected = {
-        "p": float(2 * stats.t.sf(abs(beta / se), n_clusters - 1)),
+        "p": float(2 * stats.t.sf(abs(beta / se), degrees_of_freedom)),
         "ci_low": beta - critical * se,
         "ci_high": beta + critical * se,
     }
@@ -158,7 +157,7 @@ def _result_is_reportable(result: dict[str, Any], design: dict[str, Any]) -> boo
     if diagnostics.get("study_contract") != "economics-v2":
         return False
     counts = [result.get(key) for key in ("n_obs", "n_entities", "n_times", "n_clusters")]
-    if any(type(value) is not int or value <= 0 for value in counts):
+    if any(type(value) is not int or value <= 0 or not finite_number(value) for value in counts):
         return False
     n_obs, n_entities, n_times, n_clusters = cast(list[int], counts)
     if not (2 <= n_clusters <= n_entities <= n_obs and 2 <= n_times <= n_obs <= n_entities * n_times):

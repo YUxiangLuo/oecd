@@ -2,6 +2,7 @@
  * key on the server) and shown again on step 15, so the student reads the same words on the step and on the
  * checklist. Each step builds its own sentence; the shapes below keep them alike. */
 import { countryLabel, sectorLabel } from "./viz";
+import type { TeachingCountriesResponse } from "./types";
 
 /** "CHN 中国 对 USA 美国" / "CHN 中国、USA 美国 与 DEU 德国". */
 export function countriesPhrase(codes: readonly string[]): string {
@@ -27,10 +28,27 @@ export function networkMaterialLabel(parts: { view: "trend" | "ranking"; metric:
 }
 
 /** Step 10: "例子：CAN 加拿大（被加税）对 AUS 澳大利亚（未被加税）· C29 汽车及零部件". */
-export function shockMaterialLabel(parts: { first: string; second?: string; industry: string; firstTaxed: boolean; secondTaxed?: boolean }): string {
-  const tag = (taxed: boolean) => (taxed ? "被加税" : "未被加税");
-  const second = parts.second ? ` 对 ${countryLabel(parts.second)}（${tag(Boolean(parts.secondTaxed))}）` : "";
-  return `例子：${countryLabel(parts.first)}（${tag(parts.firstTaxed)}）${second} · ${sectorLabel(parts.industry)}`;
+export function shockMaterialLabel(parts: { first: string; second?: string; industry: string; firstTaxed?: boolean; secondTaxed?: boolean; serviceExempt?: boolean }): string {
+  // A zero industry tariff cannot classify the country: services are exempt even in taxed countries.
+  // While the country list is unavailable, leave the classification out instead of guessing.
+  const tag = (taxed: boolean | undefined) => taxed == null ? "" : `（${taxed ? "被加税" : "未被加税"}）`;
+  const second = parts.second ? ` 对 ${countryLabel(parts.second)}${tag(parts.secondTaxed)}` : "";
+  return `例子：${countryLabel(parts.first)}${tag(parts.firstTaxed)}${second} · ${sectorLabel(parts.industry)}${parts.serviceExempt ? "（服务业不加税）" : ""}`;
+}
+
+/** Rebuild the step 10 label for display from its recorded selection and authoritative country list.
+ * Older saved labels inferred a country's status from its industry's tariff and mislabelled services.
+ * Correct their presentation without changing recorded numbers, report fingerprints or submitted reports. */
+export function recordedShockMaterialLabel(data: Record<string, unknown> | undefined, overview?: TeachingCountriesResponse): string | null {
+  if (typeof data?.material_label !== "string") return null;
+  const countries = Array.isArray(data.compared) ? data.compared.filter((code): code is string => typeof code === "string" && Boolean(code)) : [];
+  if (!countries.length || typeof data.teaching_industry !== "string" || !data.teaching_industry) return null;
+  return shockMaterialLabel({
+    first: countries[0], second: countries[1], industry: data.teaching_industry,
+    firstTaxed: overview?.countries.find((row) => row.country === countries[0])?.taxed,
+    secondTaxed: overview?.countries.find((row) => row.country === countries[1])?.taxed,
+    serviceExempt: Boolean(overview?.taxed_rule?.scope) && !/^[ABC]/.test(data.teaching_industry),
+  });
 }
 
 /** Steps 11–14: "默认模型：外国增加值项占比两年累计 −0.55 个百分点（95% 区间 −0.57 至 −0.54）". */

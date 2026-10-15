@@ -1458,6 +1458,20 @@ def test_material_gate_rejects_an_unverifiable_teaching_exposure():
     assert any(item["step"] == 10 for item in blocked)
 
 
+@pytest.mark.parametrize("step", range(1, 11))
+def test_material_gate_blocks_legacy_readings_outside_finite_float_range(step):
+    session = _complete()
+    data = session["steps"][str(step)]["data"]
+    if step == 1:
+        data["observation"]["value"] = 10**400
+    elif step == 10:
+        data["teaching_observation"]["teaching_export_share_w"] = 10**400
+    else:
+        data["observations"][0]["value"] = 10**400
+
+    assert [item["step"] for item in check_material_gate(session)] == [step]
+
+
 def test_report_prints_automatically_saved_teaching_row(tmp_path, monkeypatch):
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)

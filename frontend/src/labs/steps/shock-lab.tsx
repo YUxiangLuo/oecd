@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sameJsonValue } from "../../session-store";
 import { MaterialCard, AUTO_RECORD_HOW } from "../../material-card";
-import { shockMaterialLabel } from "../../material-label";
+import { recordedShockMaterialLabel, shockMaterialLabel } from "../../material-label";
 
 import { api } from "../../api";
 import { ScrollableRegion } from "../../a11y";
@@ -225,8 +225,9 @@ export function ShockLab({ meta, step: _step, state }: {
       teaching_example_chosen: chosen,
       material_label: shockMaterialLabel({
         first, second: second || undefined, industry,
-        firstTaxed: Boolean(panel.rows.some((row) => row.country === first && row.teaching_tariff_rate_tau > 0)),
-        secondTaxed: second ? Boolean(panel.rows.some((row) => row.country === second && row.teaching_tariff_rate_tau > 0)) : undefined,
+        firstTaxed: overview?.countries.find((row) => row.country === first)?.taxed,
+        secondTaxed: overview?.countries.find((row) => row.country === second)?.taxed,
+        serviceExempt: Boolean(overview?.taxed_rule?.scope) && !/^[ABC]/.test(industry),
       }),
       teaching_observation: representative
         ? {
@@ -473,7 +474,7 @@ export function ShockLab({ meta, step: _step, state }: {
       <MaterialCard
         cardRef={(node) => { recordStripRef.current = node; }}
         state={recordedExample ? "recorded" : "missing"}
-        summary={recordedExample ? (state.data?.material_label as string | undefined) ?? recordedExample : "尚未记录：关税数据加载后自动记录当前例子。"}
+        summary={recordedExample ? recordedShockMaterialLabel(state.data, overview) ?? recordedExample : "尚未记录：关税数据加载后自动记录当前例子。"}
         how={!recordedExample ? AUTO_RECORD_HOW
           : savedExample ? "当前例子就是已记录的材料；换国家或行业后自动更新。"
           : !complete ? "已记录的例子保持不变；当前选择暂不能记录，请查看下方提示。"
@@ -491,6 +492,9 @@ export function ShockLab({ meta, step: _step, state }: {
       {boundaryNote && <p className="reg-boundary" role="status">{boundaryNote}</p>}
       {query.status === "loading" && <div className="shock-panel-state shock-workbench-loading" role="status">正在读取关税数据…</div>}
       {query.status === "error" && <div className="error-box" role="alert">{userFacingRequestError(query.error, "关税数据读取失败")} <button className="secondary" onClick={query.retry}>重试</button></div>}
+      {showRecorded && recordedQuery.status === "loading" && <div className="shock-panel-state" role="status">正在读取已记录例子的关税数据；报告材料保持不变…</div>}
+      {showRecorded && recordedQuery.status === "error" && <div className="error-box" role="alert">{userFacingRequestError(recordedQuery.error, "已记录例子的关税数据读取失败")} 报告材料保持不变。<button className="secondary" onClick={recordedQuery.retry}>重试已记录例子</button></div>}
+      {showRecorded && recordedQuery.status === "success" && !recordedUsable && <p className="reg-boundary" role="status">已记录例子的逐年数据不完整，暂时无法显示趋势；报告材料保持不变。</p>}
       {shownExample && <div className="teaching-example-body">
         <span className="reg-section-step">{shownExample.recorded ? "已记录的例子 · " : ""}五年趋势{shownCountries.length === 2 ? " · 两国使用同一刻度" : ""}</span>
         <ul className="teaching-example-summary" aria-label="所选例子的关税暴露">
@@ -499,7 +503,7 @@ export function ShockLab({ meta, step: _step, state }: {
             return <li key={row.country}>
               <b>{countryLabel(row.country)} · {sectorLabel(shownIndustry)}</b>
               {/* The example's own X = w × τ, at digits that check by hand (see workedNumbers). */}
-              {isImposer(row.country) ? "加征关税的一方（不在回归样本中）" : taxed ? `被加税${waveText(row.country)}` : countryTaxed(row.country) && isService(shownIndustry) ? `被加税国家${waveText(row.country)}，但服务业不加税` : "未被加税"}：{years.at(-1)} 年 X = w × τ = {worked(row).w}% × {rate(row.teaching_tariff_rate_tau)} = {worked(row).x} 个百分点{taxed && row.teaching_tariff_exposure === 0 ? "（不向美国出口：w = 0，所以 X = 0）" : ""}
+              {isImposer(row.country) ? "加征关税的一方（不在回归样本中）" : taxed ? `被加税${waveText(row.country)}` : !overview ? "该行业未加税（国家税况暂不可用）" : countryTaxed(row.country) && isService(shownIndustry) ? `被加税国家${waveText(row.country)}，但服务业不加税` : "未被加税"}：{years.at(-1)} 年 X = w × τ = {worked(row).w}% × {rate(row.teaching_tariff_rate_tau)} = {worked(row).x} 个百分点{taxed && row.teaching_tariff_exposure === 0 ? "（不向美国出口：w = 0，所以 X = 0）" : ""}
             </li>;
           })}
         </ul>
@@ -514,6 +518,8 @@ export function ShockLab({ meta, step: _step, state }: {
             ? (lastRows.length === 1
               ? "若要观察加税带来的 X，请换成被加税的国家（如加拿大），或再选一个被加税的对照国家。"
               : "若要观察被加税与未被加税国家的差别，请把美国换成别的国家（被加税的如加拿大，未被加税的如哥斯达黎加）。")
+            : !overview && taxed.some((value) => !value)
+            ? "国家税况暂不可用：行业税率为 0 可能因为国家未被加税，也可能因为该行业免税；请先重试上方的全部国家数据。"
             : isService(shownIndustry)
             ? "服务业不在加税范围内（美国只对货物行业 A–C 加税），所以任何国家这个行业的 X 都是 0；换一个货物行业（如 C29 汽车及零部件）才能看到加税带来的暴露。"
             : unexposed.length && exposed.length
@@ -542,7 +548,9 @@ export function ShockLab({ meta, step: _step, state }: {
             unit="个百分点"
             markYear={exampleMarks}
             stepped
-            gapNote={lastRows.length === 2 && isService(shownIndustry) && !lastRows.some((row) => isImposer(row.country))
+            gapNote={!overview && lastRows.length === 2 && lastRows.some((row) => row.teaching_tariff_rate_tau === 0) && !lastRows.some((row) => isImposer(row.country))
+              ? "图中比较两国所选行业的 X；国家税况暂不可用，不能据此区分国家未被加税与行业免税"
+              : lastRows.length === 2 && isService(shownIndustry) && !lastRows.some((row) => isImposer(row.country))
               ? "服务业不加税：两国这个行业的 X 都为 0，没有差距"
               : stepTenGapNote(
                 lastRows.map((row) => row.teaching_tariff_rate_tau > 0),
