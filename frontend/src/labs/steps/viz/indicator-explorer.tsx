@@ -1199,8 +1199,8 @@ export function IndicatorExplorer({
             {topic.key !== "production" && selected.length > 1 && <p className="muted">每个国家的散点按本国行业取坐标范围：点的位置只在同一国家内比较，跨国比较请看数值。</p>}
             {topic.key === "production" && <p className="muted">条形右侧的数字是{label(structureSortKey)}（{unit(structureSortKey) === "%" ? "%" : unit(structureSortKey)}），行业按它从高到低排列。</p>}
             {/* The length scatter is 660 wide: two columns shrank its text to ~7px, so it stacks. */}
-            {/* Three or more composition facets leave no room for the value column; they stack too. */}
-            <div className={`comparison-facets${topic.key !== "production" || selected.length > 2 ? " comparison-facets--stacked" : ""}`}>
+            {/* Composition facets need room for labels, bars and values; narrow pairs and 3+ countries stack. */}
+            <div className={`comparison-facets${topic.key !== "production" || selected.length > 2 ? " comparison-facets--stacked" : " comparison-facets--roomy"}`}>
               {selected.map((country) => (
                 <section key={country} className="comparison-facet">
                   <h4>{countryLabel(country)} · {year} · 行业结构</h4>
