@@ -96,6 +96,18 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
   const [overviewWanted, setOverviewWanted] = useState(false);
   // The optional workbench is folded until opened; its options and tables load only then.
   const [workbenchOpen, setWorkbenchOpen] = useState(false);
+  const workbenchSummaryRef = useRef<HTMLElement>(null);
+  const revealWorkbench = useRef(false);
+  useEffect(() => {
+    if (!workbenchOpen || !revealWorkbench.current) return;
+    const frame = window.requestAnimationFrame(() => {
+      revealWorkbench.current = false;
+      const summary = workbenchSummaryRef.current;
+      summary?.focus({ preventScroll: true });
+      scrollIntoCourseContent(summary, "auto");
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [workbenchOpen]);
   const verdictAnchorRef = useRef<HTMLDivElement>(null);
   const { result, setResult, error, running, runningRef, interrupted, retryWait, run, scrollToVerdictAfterRun } = useRegressionRun({
     outcome,
@@ -209,7 +221,16 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
     <div className="reg-workbench">
       {result && <nav className="reg-page-links" aria-label="回归页快捷入口">
         <a href="#regression-results">查看结果</a>
-        <a href="#regression-model">改模型、对比（选做）</a>
+        <a href="#regression-model" onClick={(event) => {
+          event.preventDefault();
+          if (workbenchOpen) {
+            workbenchSummaryRef.current?.focus({ preventScroll: true });
+            scrollIntoCourseContent(workbenchSummaryRef.current, "auto");
+          } else {
+            revealWorkbench.current = true;
+            setWorkbenchOpen(true);
+          }
+        }}>改模型、对比（选做）</a>
       </nav>}
       {/* 1 · The data first: the question and the three groups before and after the tariffs. */}
       <section className="reg-run-card">
@@ -338,7 +359,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
       {result && (
         <details className="reg-run-card reg-custom-section" id="regression-model" open={workbenchOpen}
           onToggle={(event) => setWorkbenchOpen(event.currentTarget.open)}>
-          <summary>
+          <summary ref={workbenchSummaryRef}>
             <span className="reg-section-step">改模型、对比（选做）</span>
             <span className="reg-custom-title">换一种模型试试：每次改一处，和默认模型比较</span>
           </summary>
@@ -358,4 +379,3 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
     </div>
   );
 }
-

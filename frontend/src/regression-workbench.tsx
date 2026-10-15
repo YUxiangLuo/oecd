@@ -442,7 +442,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
           if (!items.length) return null;
           return (
             <div key={tier} className={`reg-preset-tier reg-preset-tier-${tier}`}>
-              <h5 className="reg-preset-tier-title">{items[0].tier_label ?? (tier === "core" ? "必看" : "进阶")}</h5>
+              <h4 className="reg-preset-tier-title">{items[0].tier_label ?? (tier === "core" ? "必看" : "进阶")}</h4>
               <ul>
                 {items.map((item) => (
                   <li key={item.key}>

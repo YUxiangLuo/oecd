@@ -19,10 +19,15 @@ test("two cards stay in view; the rest open and close with 更多读数", () => 
   expect(grid.classList.contains("folded")).toBe(true);
   expect(grid.children).toHaveLength(4);
   const toggle = screen.getByRole("button", { name: "更多读数（2）" });
+  expect(toggle.classList.contains("secondary")).toBe(true);
   expect(toggle.getAttribute("aria-expanded")).toBe("false");
   fireEvent.click(toggle);
   expect(grid.classList.contains("folded")).toBe(false);
   expect(screen.getByRole("button", { name: "收起读数" }).getAttribute("aria-expanded")).toBe("true");
+  fireEvent.click(toggle);
+  expect(grid.classList.contains("folded")).toBe(true);
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  expect(toggle.textContent).toBe("更多读数（2）");
   view.unmount();
   // Two cards or fewer: no button, nothing folded.
   render(<CardGrid label="趋势读数"><div>a</div><div>b</div></CardGrid>);

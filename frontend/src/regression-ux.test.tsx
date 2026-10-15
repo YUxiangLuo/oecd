@@ -260,9 +260,21 @@ describe("simple regression workbench", () => {
     expect(screen.queryByRole("button", { name: "计算这个模型" })).toBeNull();
     expect(screen.getByRole("link", { name: "查看结果" }).getAttribute("href")).toBe("#regression-results");
     expect(screen.getByRole("link", { name: "改模型、对比（选做）" }).getAttribute("href")).toBe("#regression-model");
-    workbench.open = true;
-    fireEvent(workbench, new Event("toggle"));
+    const summary = workbench.querySelector("summary")!;
+    const scroll = spyOn(summary, "scrollIntoView").mockImplementation(() => {});
+    const shortcut = screen.getByRole("link", { name: "改模型、对比（选做）" });
+    fireEvent.click(shortcut);
     expect(await screen.findByRole("button", { name: "计算这个模型" })).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(summary));
+    expect(workbench.open).toBe(true);
+    expect(scroll).toHaveBeenCalledWith({ behavior: "auto", block: "start" });
+    shortcut.focus();
+    fireEvent.click(shortcut);
+    expect(document.activeElement).toBe(summary);
+    expect(workbench.open).toBe(true);
+    expect(scroll).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("heading", { level: 4, name: "必看" }).className).toBe("reg-preset-tier-title");
+    expect(screen.getByRole("heading", { level: 4, name: "进阶" }).className).toBe("reg-preset-tier-title");
     // The single-model table (the Stata/Excel-like one the course asked for) is open from the start.
     expect(screen.getByRole("group", { name: "单模型详细数字" }).hasAttribute("open")).toBe(true);
     expect([...document.querySelectorAll(".reg-custom-compare-table thead th")].map((cell) => cell.textContent)).toEqual(["变量", "默认模型"]);

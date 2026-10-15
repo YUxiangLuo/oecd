@@ -14,11 +14,10 @@ export function CardGrid({ label, children, className = "comparison-summary" }: 
     <>
       <div className={`${className}${hidden && !all ? " folded" : ""}`} role="group" aria-label={label}>{cards}</div>
       {hidden > 0 && (
-        <button type="button" className="link-button comparison-summary-toggle" aria-expanded={all} onClick={() => setAll((value) => !value)}>
+        <button type="button" className="secondary comparison-summary-toggle" aria-expanded={all} onClick={() => setAll((value) => !value)}>
           {all ? "收起读数" : `更多读数（${hidden}）`}
         </button>
       )}
     </>
   );
 }
-

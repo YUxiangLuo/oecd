@@ -245,9 +245,12 @@ export function StudentWorkspace({
   const presentationCompletion = session.completion;
   const presentationCompletedSteps = completedSteps;
   const mainContentId = stepMainContentId(step.n);
+  const materialChanged = session.hasMaterialChanges(step.n);
+  const materialSaving = materialChanged && (session.unsynced || session.syncing);
+  const materialSaveFailed = materialChanged && Boolean(session.syncError);
   const materialStatus = step.lab === "rep"
-    ? reportMaterialStatus(session.reportGate, session.unsynced || session.syncing, Boolean(session.syncError))
-    : materialStatusForStep(step.n, session.materialGate, session.unsynced || session.syncing, Boolean(session.syncError));
+    ? reportMaterialStatus(session.reportGate, materialSaving, materialSaveFailed)
+    : materialStatusForStep(step.n, session.materialGate, materialSaving, materialSaveFailed);
   const quiz = (
     <QuizPanel
       key={`quiz:${step.n}`}

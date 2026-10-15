@@ -38,6 +38,19 @@ export function sameSessionContent(first: ExperimentSession, second: ExperimentS
   return sameJsonValue(first, second);
 }
 
+/** Material sync excludes browsing settings and quiz answers, which have their own status.
+ * Unlike report freshness, a changed material label is still a material edit that needs saving. */
+export function sameMaterialContent(first: Record<string, unknown> = {}, second: Record<string, unknown> = {}): boolean {
+  const viewKeys = new Set([
+    "slice", "year", "country", "chart", "drill", "heat_sort", "heat_coverage",
+    "browse_selection", "network_browse", "custom_draft", "quiz",
+  ]);
+  const material = (data: Record<string, unknown>) => Object.fromEntries(
+    Object.entries(data).filter(([key]) => !viewKeys.has(key)),
+  );
+  return sameJsonValue(material(first), material(second));
+}
+
 export function readStep<T>(session: ExperimentSession, step: number): T | undefined {
   return session.steps[String(step)]?.data as T | undefined;
 }

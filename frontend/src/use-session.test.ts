@@ -55,6 +55,31 @@ test("acknowledging an older save confirms it without replacing newer optimistic
   expect(sessionStorage.getItem(KEPT_EDITS_KEY)).toBeNull();
 });
 
+test("material status ignores browsing saves but stays pending when an in-flight material edit is reverted", async () => {
+  spyOn(api.classroom, "session").mockResolvedValue(response());
+  const first = deferred<SessionSaveResponse>();
+  const second = deferred<SessionSaveResponse>();
+  spyOn(api.classroom, "saveSession").mockImplementationOnce(() => first.promise)
+    .mockImplementationOnce(() => second.promise);
+  const { result } = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  act(() => result.current.patchStep(7, { browse_selection: { first: "JPN" } }));
+  expect(result.current.unsynced).toBe(true);
+  expect(result.current.hasMaterialChanges(7)).toBe(false);
+  let saving!: Promise<void>;
+  act(() => {
+    result.current.patchStep(7, { observations: [{ country: "JPN", value: 17 }] });
+    saving = result.current.syncNow();
+    result.current.patchStep(7, { observations: undefined });
+  });
+  expect(result.current.hasMaterialChanges(7)).toBe(true);
+  expect(result.current.hasMaterialChanges(6)).toBe(false);
+  await act(async () => { first.resolve(response(undefined, NEWER)); });
+  expect(result.current.hasMaterialChanges(7)).toBe(true);
+  await act(async () => { second.resolve(response(undefined, NEWER)); await saving; });
+  expect(result.current.hasMaterialChanges(7)).toBe(false);
+});
+
 test("409 stops saves without fetching or merging; cancel preserves the draft, confirm clears and reloads", async () => {
   const get = spyOn(api.classroom, "session").mockResolvedValue(response());
   const save = spyOn(api.classroom, "saveSession").mockRejectedValue(new ApiError(409, null, "conflict"));

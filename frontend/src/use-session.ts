@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, isApiErrorStatus, RequestTimeoutError } from "./api";
-import { emptySession, isValidSession, patchStep as patchStoredStep, readStep, sameSessionContent } from "./session-store";
+import { emptySession, isValidSession, patchStep as patchStoredStep, readStep, sameMaterialContent, sameSessionContent } from "./session-store";
 import type { ClassroomReport, CompletionSummary, ExperimentSession, QuizLearningState, ReportGateItem, ReportMutationResponse, SessionSaveResponse } from "./types";
 import { isNetworkFailure, userFacingRequestError } from "./user-facing-error";
 
@@ -81,6 +81,7 @@ export interface SessionApi extends QuizLearningState {
   restoredEdits?: number;
   getStep: <T>(step: number) => T | undefined;
   getConfirmedStep: <T>(step: number) => T | undefined;
+  hasMaterialChanges: (step: number) => boolean;
   patchStep: <T extends object>(step: number, patch: Partial<T>) => void;
   syncNow: () => Promise<void>;
   retryLoad: () => void;
@@ -430,6 +431,13 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     syncConflict: saveState.blocked, autoRetry: retryAt !== null,
     getStep: useCallback(<T,>(step: number) => readStep<T>(session, step), [session]),
     getConfirmedStep: useCallback(<T,>(step: number) => readStep<T>(confirmed, step), [confirmed]),
+    hasMaterialChanges: (step) => {
+      const saved = readStep<Record<string, unknown>>(confirmed, step);
+      const sent = queue.current?.getSentSession();
+      // Reverting a material edit while its request is in flight still needs a confirming save.
+      return !sameMaterialContent(readStep(session, step), saved)
+        || Boolean(sent && !sameMaterialContent(readStep(sent, step), saved));
+    },
     patchStep, syncNow, keepUnsavedEdits, resolveSyncConflict,
     retryLoad: useCallback(() => setLoadAttempt((n) => n + 1), []), loadAttempts: loadAttempt,
     applyReportMutation: useCallback((response: ReportMutationResponse) => {
