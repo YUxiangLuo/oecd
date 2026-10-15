@@ -73,13 +73,13 @@ export function focusStepPrimaryAction(content: HTMLElement | null, targetId = S
  * says nothing about it: the material card of each step is the one place that does. */
 export const MATERIAL_LOCKED_NOTE = "报告已提交：浏览不再自动改动报告材料。";
 export const MATERIAL_LOCKED_ACTION = "改用当前图表作为报告材料（之后需在步骤 15 更新报告）";
-/** Steps 6–9 record on request: the button under every chart, its label once the chart is the material, the
+/** Steps 6–9 record on request: the button under recordable charts, its label once the chart is the material, the
  * replacement wording after submission, and the sentence for a chart that has no readings to record. */
 export const RECORD_CHART_ACTION = "把这张图记为本步报告材料";
 export const RECORDED_CHART_LABEL = "已记录为本步报告材料";
 export const REPLACE_MATERIAL_ACTION = "替换报告材料（之后需在步骤 15 更新报告）";
 export const NO_READINGS_NOTE = "这张图没有可记录的读数条目。";
-export const NOT_RECORDED_HINT = "尚未记录：在任一张图下点“把这张图记为本步报告材料”。";
+export const NOT_RECORDED_HINT = "尚未记录：请选择有可记录读数的图表，再点“把这张图记为本步报告材料”。";
 /** After the student re-uses a choice as material on a submitted report: what to do next (as step 13 says). */
 export const MATERIAL_RECHOSEN_NEXT = "请到步骤 15 更新报告并重新提交给老师。";
 
