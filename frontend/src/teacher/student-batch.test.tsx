@@ -50,7 +50,7 @@ test("existing accounts prevent creation and editing invalidates preview", async
   } finally { api.classroom.createStudentBatch = original; }
 });
 
-test("download precedes creation and response-loss retry preserves the same credentials", async () => {
+test.each([false, true])("response-loss retry preserves credentials and uncertainty when refused=%s", async (refusedRetry) => {
   const original = api.classroom.createStudentBatch;
   const originalUrl = URL.createObjectURL;
   const originalClick = HTMLAnchorElement.prototype.click;
@@ -62,6 +62,7 @@ test("download precedes creation and response-loss retry preserves the same cred
     if (body.preview) return { existing: [], created: 0 };
     submissions.push(body.students);
     if (submissions.length === 1) throw new Error("网络中断");
+    if (refusedRetry) throw new ApiError(409, "部分学号已有账号，本次没有创建任何学生", "409");
     return { existing: [], created: 1 };
   };
   try {
@@ -76,10 +77,21 @@ test("download precedes creation and response-loss retry preserves the same cred
     expect(screen.queryByText("返回修改")).toBeNull();
     expect(created).toBe(0);
     fireEvent.click(screen.getByText("创建 1 个账号"));
-    await waitFor(() => expect(created).toBe(1));
+    if (refusedRetry) {
+      await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("此前的创建可能已成功"));
+      expect(screen.getByRole("status").textContent).toContain("创建结果尚未确认");
+      expect(screen.getByText("待核对")).toBeTruthy();
+      expect(screen.getByText("下载账号清单")).toBeTruthy();
+      expect(screen.queryByText("返回修改")).toBeNull();
+      expect(screen.queryByText("未创建")).toBeNull();
+      expect(screen.getByRole("alert").textContent).not.toContain("已作废");
+      expect(created).toBe(0);
+    } else {
+      await waitFor(() => expect(created).toBe(1));
+      expect(screen.getByText("已创建")).toBeTruthy();
+    }
     expect(submissions).toHaveLength(2);
     expect(submissions[0]).toEqual(submissions[1]);
-    expect(screen.getByText("已创建")).toBeTruthy();
   } finally {
     api.classroom.createStudentBatch = original;
     URL.createObjectURL = originalUrl;

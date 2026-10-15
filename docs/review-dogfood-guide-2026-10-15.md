@@ -121,12 +121,16 @@
 
 ### 5.2 自动化先跑
 
+先执行 `mkdir -p dogfood-output` 创建本地结果目录。
+
 | 项 | 命令 | 期望 |
 | --- | --- | --- |
 | 本地 CI | `bash scripts/local_ci.sh` | 全绿：后端 1,237、前端 955、课程 journey 15 步、教师 journey |
-| 模型空间 | `uv run python scripts/check_model_space.py` | 与 `benchmarks/model_space_v13.json` 一致（20,111 次，12 个已知的加权出度偏离） |
-| 单项改动表 | `uv run python scripts/teaching_variants.py --variant v13` | 与最终方案第 5 节表一致 |
+| 模型空间 | `uv run python scripts/check_model_space.py run --out dogfood-output/review-model-space`，随后 `uv run python scripts/check_model_space.py report --out dogfood-output/review-model-space --markdown dogfood-output/review-model-space/report.md --summary dogfood-output/review-model-space/summary.json` | 与 `benchmarks/model_space_v13.json` 一致（20,111 次，12 个已知的加权出度偏离） |
+| 单项改动表 | `uv run python scripts/teaching_variants.py table --variant v13 --json dogfood-output/review-variants-v13.json` | 与最终方案第 5 节表一致 |
 | 报告快照 | `uv run python scripts/dogfood_report_snapshots.py` | 通过（只改展示不改已保存回归） |
+
+以上命令将本轮结果写入 `dogfood-output/`，不覆盖历史基准。`teaching_design_v13.json` 的 `implementation_sha256.generator` 与当前已提交源码不一致，不能据此认定基准数值错误；复算时应另存结果并记录实际源码哈希，不直接改写历史哈希。
 
 ### 5.3 学生端逐步清单（空白账号）
 
@@ -158,7 +162,7 @@
 
 ### 5.5 数值抽查
 
-- 11–14 每步取默认模型与 3 个预设，把页面系数、区间、Prob > F、Root MSE 与 `GET /api/regression/...` 的响应对照，再与 `check_model_space.py --variant v13` 的记录对照（相对差应 < 1e-9）。
+- 11–14 每步取默认模型与 3 个预设，把页面系数、区间、Prob > F、Root MSE 与回归接口响应按显示精度对照，再把接口原始数值与第 5.2 节生成的 v13 模型空间记录对照（相对差应 < 1e-9；页面舍入值不适用此容差）。
 - 拆分句：各分项之和等于走势图上第一批 2020 年的变化。
 - 步骤 2–5 与 6–9 任取 10 组读数，与接口响应逐值对照。
 
@@ -172,3 +176,21 @@
 ## 6. 发现的记录方式
 
 沿用 `docs/review-dogfood-2026-10-11.md` 的格式：P1（数据丢失／错误数值）、P2（功能错误、可访问性 serious）、P3（外观文案）、需要决定。每条写操作路径、账号、截图路径、复现次数；数值问题附接口响应。本轮之后的修复放在新分支，PR body 引用本文件的条目编号。
+
+## 7. 「测试与修复」分支的首轮修复
+
+以下为二次确认后实施的修复，供后续在本分支继续工作时核对：
+
+| 编号 | 确认问题 | 修复范围 |
+| --- | --- | --- |
+| R24-01 | 步骤 15 的其他 Y 实验错误引用本步 Y 的默认数值 | 默认列取同一 Y；未加载／失败不回退其他 Y。加权入度例子的默认读数为 −20.06，而不是加权总度 −40.56。 |
+| R24-02 | 工作台换 Y 请求失败时，旧数字被新标签展示并导出 CSV | 同 Y 默认未就绪时不显示结果图表、详细数字或导出入口；禁用依赖它的计算，允许切回；忽略过期请求。 |
+| R24-03 | 材料表跳转切步成功，但未聚焦目标材料卡 | 等待目标卡挂载后聚焦并保持可见；学生再次导航或操作时取消等待。 |
+| R24-04 | 步骤 1 保存标签与卡片不同，遗漏年份、表类型 | 卡片和新保存标签共用完整句子；旧记录不自动迁移，已提交材料不自动改写。 |
+| R24-05 | 旧按钮名称与“每步最后一次计算”指引不符合现行规则 | 明确默认 Y／默认模型正文、显式记入报告的模型实验附录，统一“记入报告”。 |
+| R24-06 | 第 5.2 节命令缺子命令 | 补全模型空间 run/report 和 variants table 命令，结果另存。 |
+| R24-07 | 覆盖率均值误称 17 个 Y | 两份数值说明改为 16 个有预设 β 的 Y；保留历史基准哈希并披露源码溯源差异。 |
+
+未纳入本轮产品修复：两处读数折叠分别服务当前图表和已保存材料，不是缺陷；异常 API 空快照与独立 `dogfood_report_snapshots.py` 的导入／断言问题为既有问题。该独立脚本不能按原样运行通过，临时适配后的历史通过记录不等于原脚本通过。
+
+验证：四项功能回归测试先在旧实现失败、修复后通过；最终 `scripts/local_ci.sh`（20261015T004031Z）通过，前端 962 项、后端 1,237 项、覆盖率 92%，包含完整 15 步与教师浏览器旅程。首次修复验收发现一条仍断言旧写作提示的测试，已更新为默认模型／实验附录规则后全量重跑。真实 release 浏览器在 1440×1000、1000×1000 复验同 Y 对比、请求延迟／失败／恢复及 CSV、材料导航聚焦和摘要，截图已逐一视觉检查；旧材料未自动改写。源码数值算法未改，本轮未重复全模型空间扫描。日志与截图留在忽略目录 `.amp/in/artifacts/review-24h/fix/`，全量旅程证据在 `dogfood-output/local-ci/20261015T004031Z-1785864/`。

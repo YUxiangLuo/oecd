@@ -516,6 +516,8 @@ describe("indicator explorer with report material recorded on request", () => {
     expect(view.getAllByRole("note").filter((note) => note.textContent?.includes("CHN 中国没有轨迹"))).toHaveLength(1);
     // No trend chart under the trajectory any more: the note below the chart is the one place that says why.
     await waitFor(() => expect(view.container.textContent).toContain("后向 GVC 段长度无法计算"));
+    expect(view.container.textContent).not.toContain("原因见下方趋势图");
+    expect(view.container.textContent).toContain("原因见下方说明");
     // The blocked-record notice under the chart repeats the reason by design; the chart area itself says it once.
     const material = materialCard(view).textContent ?? "";
     expect(material).toContain("当前图表暂不能记录：");

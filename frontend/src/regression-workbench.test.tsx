@@ -295,6 +295,91 @@ const checkbox = (label: RegExp) => screen.getByRole("checkbox", { name: label }
 const tableHeaders = () => [...document.querySelectorAll(".reg-custom-compare-table thead th")].map((cell) => cell.textContent);
 
 describe("the workbench", () => {
+  test("a ratio Y explains its missing target and compares presets with its own default, then restores target guidance", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    const forward = response(DEFAULT, { teaching_tariff_exposure: -1.1, teaching_tariff_exposure_lag1: -0.7 }, {}, "PLv_GVC");
+    forward.design = { ...forward.design, outcome: "length", depvar_kind: "length", depvar_label: "前向 GVC 段长度" };
+    const ratio = response(DEFAULT, { teaching_tariff_exposure: -0.1, teaching_tariff_exposure_lag1: -0.08 }, {}, "GVCPs");
+    ratio.design = { ...ratio.design, outcome: "length", depvar_kind: "position", depvar_label: "GVC 位置指数" };
+    spyOn(api, "runRegression").mockResolvedValue(ratio as never);
+    const state: StepStateApi<WorkbenchStepState> = {
+      data: {}, save: () => {}, saveView: () => {}, complete: false,
+      syncing: false, syncError: null, syncNow: () => {}, materialLocked: false,
+    };
+    render(<RegressionModelWorkbench stepNumber={13} outcome="length" defaultResponse={forward} state={state} baselines={[
+      { ...BASELINES[0], key: "PLv_GVC", label: "前向 GVC 段长度", kind: "length" },
+      { ...BASELINES[1], key: "GVCPs", label: "GVC 位置指数", kind: "position" },
+    ]} />);
+    const presets = await screen.findByRole("group", { name: "预设实验" });
+    expect(presets.textContent).toContain(options.design_value_note);
+    const select = screen.getByRole("combobox", { name: "因变量" });
+    await act(async () => { fireEvent.change(select, { target: { value: "GVCPs" } }); });
+    await screen.findByText("回归结果表（因变量：GVC 位置指数）");
+    expect(presets.textContent).toContain("没有单一的线性设定值");
+    expect(presets.textContent).not.toContain("每个 Y 的两年累计关联有一个设定值");
+    for (const name of [/^去掉汇率变动/, /^固定效应改为国家/]) {
+      const question = screen.getByRole("button", { name }).textContent ?? "";
+      expect(question).toContain("同一 Y 的默认模型");
+      expect(question).not.toContain("设定值");
+    }
+    expect(document.querySelector(".reg-custom-design-row")?.textContent).toContain("无单一设定值（比值 Y）");
+    await act(async () => { fireEvent.change(select, { target: { value: "PLv_GVC" } }); });
+    expect(presets.textContent).toContain(options.design_value_note);
+    expect(screen.getByRole("button", { name: /^去掉汇率变动/ }).textContent).toContain("离课程设定值");
+  });
+
+  test("an uncached Y never relabels or exports old numbers while delayed or failed, and recovers on switching", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    let reject!: (cause: Error) => void;
+    let resolve!: (value: RegressionResponse) => void;
+    const pending = () => new Promise<RegressionResponse>((yes, no) => { resolve = yes; reject = no; });
+    const run = spyOn(api, "runRegression").mockImplementation(pending as never);
+    const blobs: Blob[] = [];
+    spyOn(URL, "createObjectURL").mockImplementation((blob) => { blobs.push(blob as Blob); return "blob:test"; });
+    spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    render(<Harness baselines={BASELINES} />);
+    const select = await screen.findByRole("combobox", { name: "因变量" });
+    const choose = async (value: string) => { await act(async () => { fireEvent.change(select, { target: { value } }); }); };
+    const unavailable = () => {
+      expect(screen.queryByRole("button", { name: /^导出 CSV/ })).toBeNull();
+      expect(document.querySelector(".reg-custom-compare-table")).toBeNull();
+      expect(screen.queryByRole("group", { name: "单模型详细数字" })).toBeNull();
+      expect(screen.queryByRole("img")).toBeNull();
+      expect(blobs).toHaveLength(0);
+    };
+    await choose("DVAex_share");
+    expect(screen.getByText(/正在取/)).toBeTruthy();
+    unavailable();
+    await act(async () => { reject(new TypeError("network failure")); });
+    expect(screen.getByRole("alert")).toBeTruthy();
+    unavailable();
+    await choose("FVA_share");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(tableHeaders()).toEqual(["变量", "默认模型"]);
+    await choose("DVAex_share");
+    const oldReject = reject;
+    await choose("FVA_share");
+    await choose("DVAex_share");
+    await act(async () => { oldReject(new Error("obsolete failure")); });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByText(/正在取/)).toBeTruthy();
+    unavailable();
+    const next = response(DEFAULT, { teaching_tariff_exposure: 0.33, teaching_tariff_exposure_lag1: 0.22 }, {}, "DVAex_share");
+    next.design.depvar_label = "国内增加值出口占比";
+    await act(async () => { resolve(next); });
+    expect(screen.queryByText(/正在取/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^导出 CSV/ }));
+    const csv = await blobs[0].text();
+    expect(csv).toContain("因变量：国内增加值出口占比");
+    expect(csv).toContain("X,0.3300");
+    expect(csv).not.toContain("-0.3298");
+    run.mockImplementation(() => Promise.reject(new Error("should use cached Y")));
+    await choose("FVA_share");
+    await choose("DVAex_share");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(document.querySelector(".reg-custom-point-row")?.textContent).toContain("0.55");
+  });
+
   test("another Y of the family: its default model is the first column, the design value is its β, the report records the Y", async () => {
     spyOn(api, "regressionOptions").mockResolvedValue(options);
     const onY = (run: RegressionResponse) => ({ ...run, design: { ...run.design, depvar_label: "国内增加值出口占比" } });

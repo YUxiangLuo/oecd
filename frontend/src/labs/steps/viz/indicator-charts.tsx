@@ -1016,7 +1016,7 @@ export function LengthPositionTrajectory({
       {/* A legend entry with no line needs a reason (ISL B09: every backward length is undefined). */}
       {series.some((points) => !points.length) && (
         <p className="muted" role="note">
-          {joinCountries(countries.filter((_, index) => !series[index].length))}没有轨迹：轨迹需要同一年的前向和后向 GVC 段长度都有读数，原因见下方趋势图。
+          {joinCountries(countries.filter((_, index) => !series[index].length))}没有轨迹：轨迹需要同一年的前向和后向 GVC 段长度都有读数，原因见下方说明。
         </p>
       )}
       <div ref={wrapRef} className="hover-wrap" onMouseLeave={() => { setActive(null); hide(); }}>

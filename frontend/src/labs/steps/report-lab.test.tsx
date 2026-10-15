@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { api, ApiError } from "../../api";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ToastHost } from "../../toast";
+import { MaterialCard } from "../../material-card";
 import { ReportOutro } from "../../report-outro";
 import type { ClassroomReport, ReportMutationResponse } from "../../types";
 import {
@@ -31,6 +32,35 @@ import {
 import { useState } from "react";
 
 afterEach(cleanup);
+
+for (const cancel of [false, true]) test(`material-table lazy navigation ${cancel ? "does not steal focus after cancellation" : "focuses and reveals the material card"}`, async () => {
+  const revealed: HTMLElement[] = [];
+  const scroll = spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (this: HTMLElement) { revealed.push(this); });
+  function Harness() {
+    const [step, setStep] = useState(15);
+    const [loaded, setLoaded] = useState(false);
+    return <>
+      {step === 15 ? <RecordedMaterials steps={[{ n: 6, title: "图表", lab: "viz" }]} blocked={[]} onNavigateStep={setStep} />
+        : <><h3 id="step-task-title-6" tabIndex={-1}>任务</h3><button onClick={() => setLoaded(true)}>加载完成</button>{loaded && <MaterialCard state="missing" summary="等待记录" />}</>}
+    </>;
+  }
+  try {
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "步骤 6 · 图表" }));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 40)); });
+    if (cancel) fireEvent.keyDown(window, { key: "Escape" });
+    // A data/lazy-render completion is not a new student navigation.
+    act(() => { screen.getByRole("button", { name: "加载完成" }).click(); });
+    if (cancel) {
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 60)); });
+      expect(document.activeElement?.id).not.toBe("step-material-action");
+      expect(revealed).toHaveLength(0);
+    } else {
+      await waitFor(() => expect(document.activeElement?.id).toBe("step-material-action"));
+      expect(revealed.at(-1)).toBe(document.activeElement as HTMLElement);
+    }
+  } finally { scroll.mockRestore(); }
+});
 
 function report(state: ClassroomReport["state"]): ClassroomReport {
   return {
@@ -854,7 +884,7 @@ test("the writing area shows the autosave state and says formatting marks stay a
     const target = screen.getByRole("link", { name: label }).getAttribute("href")!;
     expect(document.querySelector(target)?.getAttribute("tabindex")).toBe("-1");
   }
-  expect(screen.getByText(/比较四步当前保存的 Y 在默认模型设定下/)).toBeTruthy();
+  expect(screen.getByText(/Y 以报告各节“结果指标 Y”为准（旧记录可能使用非默认 Y）；显式记入报告的选做模型见附录/)).toBeTruthy();
   expect(screen.getByText(/“#”“\*\*”等符号不会变成标题或粗体/)).toBeTruthy();
   rerender(<ReportLab {...finishProps} sessionSyncing />);
   expect(screen.getByText("保存中…")).toBeTruthy();

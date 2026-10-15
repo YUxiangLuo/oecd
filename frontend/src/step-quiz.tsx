@@ -4,7 +4,7 @@ import { MATERIAL_STATUS_LABELS, STEP_MATERIAL_ACTION_ID, type StepMaterialStatu
 import type { QuizCompletionState, Step, StepStateApi } from "./types";
 import { userFacingRequestError } from "./user-facing-error";
 
-export type QuizDraftStore = Map<number, { version: string; answers: Record<string, string> }>;
+export type QuizDraftStore = Map<number, { version: string; answers: Record<string, string>; stale?: boolean }>;
 
 interface QuizFeedback {
   question_id: string;
@@ -45,14 +45,16 @@ function QuizPanelBody({
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<QuizFeedback[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [stale, setStale] = useState(false);
+  // The workspace-owned draft survives step navigation, but never crosses accounts.
+  const knownStale = draftStore?.get(step.n)?.version === quiz.version && draftStore?.get(step.n)?.stale === true;
+  const [stale, setStale] = useState(knownStale);
   const currentVersion = useRef(quiz.version);
   currentVersion.current = quiz.version;
   useEffect(() => {
     setFeedback([]);
     setError(null);
-    setStale(false);
-  }, [quiz.version]);
+    setStale(draftStore?.get(step.n)?.version === quiz.version && draftStore?.get(step.n)?.stale === true);
+  }, [quiz.version, step.n, draftStore]);
   const savedAnswers = useMemo(() => {
     if (!quiz || data?.quiz?.version !== quiz.version) return {};
     return data.quiz.answers ?? {};
@@ -66,10 +68,11 @@ function QuizPanelBody({
   }, [step.n, quiz.version, savedAnswers, draftStore]);
 
   const answeredAll = quiz.questions.every((question) => Boolean(draftAnswers[question.id]));
-  const locallyPassed = data?.quiz?.version === quiz.version;
+  // A 409 invalidates this panel's old verdict, not the student's saved workspace.
+  const locallyPassed = !stale && data?.quiz?.version === quiz.version;
   const complete = state.complete && locallyPassed;
   const awaitingSave = locallyPassed && !state.complete && state.syncing;
-  const choicesLocked = submitting || awaitingSave;
+  const choicesLocked = stale || submitting || awaitingSave;
   const draftChanged = quiz.questions.some((question) => draftAnswers[question.id] !== savedAnswers[question.id]);
   const choose = (questionId: string, optionId: string) => {
     if (choicesLocked) return;
@@ -113,7 +116,18 @@ function QuizPanelBody({
     } catch (cause) {
       if (currentVersion.current !== quiz.version) return;
       setError(userFacingRequestError(cause, "答案提交失败，选择已保留，可重试"));
-      if (isApiErrorStatus(cause, 409)) setStale(true);
+      if (isApiErrorStatus(cause, 409)) {
+        const draft = draftStore?.get(step.n);
+        if (!draft || draft.version === quiz.version) {
+          draftStore?.set(step.n, { version: quiz.version, answers: draft?.answers ?? draftAnswers, stale: true });
+        }
+        setStale(true);
+        setFeedback([]);
+        // Refresh shared completion and quiz metadata without replacing local experiment edits.
+        // If unavailable, keep the stale warning and the explicit reload action.
+        try { await onRefresh?.(); }
+        catch { /* The original conflict and the retry action remain visible. */ }
+      }
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -148,9 +162,10 @@ function QuizPanelBody({
   if (complete) completionMessage = draftChanged
     ? "✓ 理解题已完成；新的选择只用于自查，不影响完成状态（可点“重新检查答案”看反馈）"
     : "✓ 理解题已完成";
+  if (stale) completionMessage = "题目已过期，请载入最新题目后重新作答。实验记录和已提交报告不会被删除。";
 
   return (
-    <section className={`quiz-box${complete ? " done" : ""}`} aria-labelledby={`quiz-title-${step.n}`} aria-busy={choicesLocked}>
+    <section className={`quiz-box${complete ? " done" : ""}`} aria-labelledby={`quiz-title-${step.n}`} aria-busy={submitting || awaitingSave}>
       <div className="quiz-head">
         <div>
           <span className="kicker">理解题</span>
