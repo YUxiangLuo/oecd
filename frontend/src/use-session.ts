@@ -208,12 +208,16 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   // The queue outlives individual renders, but uses the current account's draft writer.
   const persistRef = useRef(persistDraft);
   persistRef.current = persistDraft;
-  const applyLearningState = (response: Pick<SessionSaveResponse, "completion" | "report_current" | "report_gate" | "material_gate" | "quiz_revision" | "quizzes">) => {
+  const applyQuizState = (response: QuizLearningState) => {
     // A delayed save response must not revive a quiz version already replaced by the teacher.
-    if (response.quiz_revision !== undefined && response.quiz_revision < quizRevision.current) return;
+    if (response.quiz_revision !== undefined && response.quiz_revision < quizRevision.current) return false;
     if (response.quiz_revision !== undefined) quizRevision.current = response.quiz_revision;
     currentQuizzes.current = response.quizzes;
     setQuizState({ quiz_revision: response.quiz_revision, quizzes: response.quizzes });
+    return true;
+  };
+  const applyLearningState = (response: Pick<SessionSaveResponse, "completion" | "report_current" | "report_gate" | "material_gate" | "quiz_revision" | "quizzes">) => {
+    if (!applyQuizState(response)) return;
     setCompletion(response.completion);
     setReportCurrent(response.report_current ?? null);
     setReportGate(response.report_gate);
@@ -342,7 +346,11 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     if (!mounted.current || queue.current !== ownedQueue || reportMutation.current !== reportVersion) return;
     // Refresh only metadata for the acknowledged snapshot, never overwrite local edits or
     // allow a read overtaken by a save to restore outdated completion/report gates.
-    if ((response.updated_at ?? null) !== ownedQueue?.getBaseUpdatedAt()) return;
+    if ((response.updated_at ?? null) !== ownedQueue?.getBaseUpdatedAt()) {
+      // The teacher's question bank is independent of the student's saved snapshot.
+      applyQuizState(response);
+      return;
+    }
     applyLearningState(response);
   }, [enabled, status, username]);
 

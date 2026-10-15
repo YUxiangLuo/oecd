@@ -23,8 +23,14 @@ test("a step that records on request shows one button; locked and re-recorded st
   expect(screen.getByRole("region", { name: "本步报告材料" }).querySelector(".material-chip")?.textContent).toBe("尚未记录");
   fireEvent.click(screen.getByRole("button", { name: "把这张图记为本步报告材料" }));
   expect(clicks).toBe(1);
+  expect(document.activeElement).toBe(document.body);
+  screen.getByRole("button", { name: "把这张图记为本步报告材料" }).focus();
+  fireEvent.click(screen.getByRole("button", { name: "把这张图记为本步报告材料" }));
+  expect(clicks).toBe(2);
+  expect(document.activeElement).toBe(screen.getByRole("region", { name: "本步报告材料" }));
   expect(screen.getByText("核对已记录的读数 · 2 条").tagName).toBe("SUMMARY");
   view.rerender(<MaterialCard state="recorded" summary="已记" locked rechosen action={{ label: "已记录为本步报告材料", disabled: true }} />);
+  expect(document.activeElement).toBe(screen.getByRole("region", { name: "本步报告材料" }));
   const how = document.querySelector(".material-card-how")?.textContent ?? "";
   expect(how).toContain(MATERIAL_LOCKED_NOTE);
   expect(how).toContain(MATERIAL_RECHOSEN_NEXT);

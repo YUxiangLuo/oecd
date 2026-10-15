@@ -46,7 +46,8 @@ function QuizPanelBody({
   const [feedback, setFeedback] = useState<QuizFeedback[]>([]);
   const [error, setError] = useState<string | null>(null);
   // The workspace-owned draft survives step navigation, but never crosses accounts.
-  const knownStale = draftStore?.get(step.n)?.version === quiz.version && draftStore?.get(step.n)?.stale === true;
+  const storedDraft = draftStore?.get(step.n);
+  const knownStale = storedDraft?.version === quiz.version && storedDraft?.stale === true;
   const [stale, setStale] = useState(knownStale);
   const currentVersion = useRef(quiz.version);
   currentVersion.current = quiz.version;
@@ -176,7 +177,7 @@ function QuizPanelBody({
           不限重试 · 全部答对即完成
         </span>
       </div>
-      {data?.quiz && data.quiz.version !== quiz.version && <p role="status" className="muted">老师已更新本步题目，请重新作答。实验记录和已提交报告不会被删除。</p>}
+      {((data?.quiz && data.quiz.version !== quiz.version) || (storedDraft && storedDraft.version !== quiz.version)) && <p role="status" className="muted">老师已更新本步题目，请重新作答。实验记录和已提交报告不会被删除。</p>}
       <div className="quiz-questions">
         {quiz.questions.map((question, index) => {
           const result = feedbackByQuestion.get(question.id);

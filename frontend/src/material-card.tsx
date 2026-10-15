@@ -47,7 +47,12 @@ export function MaterialCard({ state, summary, how, action, check, extra, locked
         </p>
       )}
       {action && (
-        <button type="button" className="secondary material-card-action" disabled={action.disabled} aria-disabled={action.disabled || undefined} onClick={action.onClick}>
+        <button type="button" className="secondary material-card-action" disabled={action.disabled} aria-disabled={action.disabled || undefined} onClick={(event) => {
+          const ownsFocus = document.activeElement === event.currentTarget;
+          const card = event.currentTarget.closest<HTMLElement>(".material-card");
+          action.onClick?.();
+          if (ownsFocus) card?.focus({ preventScroll: true });
+        }}>
           {action.label}
         </button>
       )}

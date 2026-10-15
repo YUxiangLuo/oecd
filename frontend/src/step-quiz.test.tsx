@@ -227,8 +227,12 @@ test("keeps unsubmitted choices across step remounts without marking completion 
   expect(screen.queryByText("✓ 理解题已完成")).toBeNull();
   second.rerender(<QuizPanel step={{ ...step, quiz: { ...step.quiz!, version: "v2" } }} state={empty} draftStore={drafts} />);
   expect((screen.getByLabelText("始终") as HTMLInputElement).checked).toBe(false);
+  expect(screen.getByText(/老师已更新本步题目/)).toBeTruthy();
+  expect(screen.queryByText("✓ 理解题已完成")).toBeNull();
+  expect(writes).toBe(0);
   second.rerender(<QuizPanel step={step} state={empty} draftStore={new Map()} />);
   expect((screen.getByLabelText("始终") as HTMLInputElement).checked).toBe(false);
+  expect(screen.queryByText(/老师已更新本步题目/)).toBeNull();
 });
 
 test("after a correct answer, focus returns to the submit button once completion has saved", async () => {

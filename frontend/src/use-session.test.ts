@@ -204,6 +204,29 @@ test("refreshing teacher questions preserves unsaved experiment edits and reject
   expect(result.current.getConfirmedStep<{ research_question: string }>(15)).toEqual({ research_question: "尚未保存的研究问题" });
 });
 
+test("a peer save does not prevent question refresh or advance the local save base", async () => {
+  const initial = { ...response(), quiz_revision: 0, quizzes: {}, report_current: false };
+  const get = spyOn(api.classroom, "session").mockResolvedValue(initial);
+  const save = spyOn(api.classroom, "saveSession").mockRejectedValue(new ApiError(409, null, "conflict"));
+  const { result } = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  act(() => result.current.patchStep(15, { research_question: "local draft" }));
+  const quiz = { version: "v2", questions: [] };
+  get.mockResolvedValue({ ...response(patchStep(emptySession(), 15, { research_question: "peer draft" }), NEWER),
+    quiz_revision: 1, quizzes: { "3": quiz }, report_current: true,
+    completion: { completed: [15], completed_count: 1, total: 15, steps: [] } });
+  await act(async () => { await result.current.refreshLearning!(); });
+  expect(result.current.quizzes?.["3"]).toEqual(quiz);
+  expect(result.current.getStep<{ research_question: string }>(15)).toEqual({ research_question: "local draft" });
+  expect(result.current.getConfirmedStep(15)).toBeUndefined();
+  expect(result.current.completion?.completed).toEqual([]);
+  expect(result.current.reportCurrent).toBe(false);
+  await act(async () => { await result.current.syncNow().catch(() => {}); });
+  expect(save.mock.calls[0][0].base_updated_at).toBe(STAMP);
+  expect(result.current.syncConflict).toBe(true);
+  expect(result.current.getStep<{ research_question: string }>(15)).toEqual({ research_question: "local draft" });
+});
+
 test("a metadata refresh overtaken by a save cannot roll back completion", async () => {
   const get = spyOn(api.classroom, "session").mockResolvedValue(response());
   spyOn(api.classroom, "saveSession").mockResolvedValue({ ...response(undefined, NEWER), completion: { completed: [1], completed_count: 1, total: 15, steps: [] } });
