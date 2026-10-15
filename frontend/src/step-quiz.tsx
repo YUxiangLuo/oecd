@@ -66,7 +66,8 @@ function QuizPanelBody({
   }, [step.n, quiz.version, savedAnswers, draftStore]);
 
   const answeredAll = quiz.questions.every((question) => Boolean(draftAnswers[question.id]));
-  const locallyPassed = data?.quiz?.version === quiz.version;
+  // A 409 invalidates this panel's old verdict, not the student's saved workspace.
+  const locallyPassed = !stale && data?.quiz?.version === quiz.version;
   const complete = state.complete && locallyPassed;
   const awaitingSave = locallyPassed && !state.complete && state.syncing;
   const choicesLocked = submitting || awaitingSave;
@@ -113,7 +114,14 @@ function QuizPanelBody({
     } catch (cause) {
       if (currentVersion.current !== quiz.version) return;
       setError(userFacingRequestError(cause, "答案提交失败，选择已保留，可重试"));
-      if (isApiErrorStatus(cause, 409)) setStale(true);
+      if (isApiErrorStatus(cause, 409)) {
+        setStale(true);
+        setFeedback([]);
+        // Refresh shared completion and quiz metadata without replacing local experiment edits.
+        // If unavailable, keep the stale warning and the explicit reload action.
+        try { await onRefresh?.(); }
+        catch { /* The original conflict and the retry action remain visible. */ }
+      }
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -148,6 +156,7 @@ function QuizPanelBody({
   if (complete) completionMessage = draftChanged
     ? "✓ 理解题已完成；新的选择只用于自查，不影响完成状态（可点“重新检查答案”看反馈）"
     : "✓ 理解题已完成";
+  if (stale) completionMessage = "题目已过期，请载入最新题目后重新作答。实验记录和已提交报告不会被删除。";
 
   return (
     <section className={`quiz-box${complete ? " done" : ""}`} aria-labelledby={`quiz-title-${step.n}`} aria-busy={choicesLocked}>

@@ -241,11 +241,13 @@ export function StudentBatchModal({ semesters, initialClassId, onClose, onCreate
     } catch (cause) {
       const message = userFacingRequestError(cause, "创建失败");
       const end = /[。！？.!?]$/.test(message) ? "" : "。";
-      if (refusedByServer(cause)) {
-        // The server answered: nothing was created, so the roster can be fixed and previewed again.
+      if (refusedByServer(cause) && !attempted) {
+        // Only a refusal on the first attempt proves that no accounts were created.
         setAttempted(false);
         setRefused(true);
         setError(`${message}${end}\n刚下载的清单已作废。请点“返回修改”，重新预览后再下载新清单。`);
+      } else if (refusedByServer(cause)) {
+        setError(`${message}${end}\n本次重试被拒绝，但此前的创建可能已成功。请保留已下载的账号清单和密码，关闭后到“学生与进度”核对；不要丢弃清单或重新生成密码。`);
       } else {
         setError(`${message}${end}无法确认是否已创建。可以再点一次“${createLabel}”（清单和密码不变），或关闭后到“学生与进度”查看这些学生是否已出现。`);
       }
@@ -254,6 +256,7 @@ export function StudentBatchModal({ semesters, initialClassId, onClose, onCreate
   };
   const rowStatus = (username: string) => done ? <StatusPill tone="ok">已创建</StatusPill>
     : refused ? <StatusPill tone="muted">未创建</StatusPill>
+      : attempted && !busy ? <StatusPill tone="warn">待核对</StatusPill>
       : existing.includes(username) ? <StatusPill tone="warn">学号已被使用</StatusPill>
         : <StatusPill tone="info">待创建</StatusPill>;
   // With the class already chosen (opened from a class row or a class filter), start where the roster is pasted.
@@ -270,6 +273,7 @@ export function StudentBatchModal({ semesters, initialClassId, onClose, onCreate
         <p ref={statusRef} role="status" tabIndex={-1}>{done
           ? `已添加 ${accounts.length} 名学生。请按最后一次下载的账号清单逐人发放账号，并提醒学生登录后修改密码。`
           : refused ? `共 ${accounts.length} 人，都没有创建；请返回修改。`
+          : attempted && !busy ? `共 ${accounts.length} 人，创建结果尚未确认；请保留账号清单并核对。`
           : existing.length ? `共 ${accounts.length} 人，其中 ${existing.length} 个学号已有账号${conflictList(existing)}，请返回修改名单。`
             : `共 ${accounts.length} 人，可以创建。`}</p>
         <ScrollableRegion label="学生名单预览" className="table-wrap batch-preview">

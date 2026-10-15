@@ -287,13 +287,56 @@ test("a teacher revision discards old selections and late grading, then allows a
 
 test("stale quiz rejection offers metadata reload instead of reloading the student's workspace", async () => {
   const original = api.classroom.submitQuiz;
-  api.classroom.submitQuiz = async () => { throw new ApiError(409, { message: "老师已更新题目" }, ""); };
+  api.classroom.submitQuiz = async () => passed;
   let refreshed = false;
+  let refreshAttempts = 0;
+  let writes = 0;
+  const student = { ...state, complete: true, save: () => { writes++; }, syncNow: () => { writes++; } };
+  const next = { n: 3, title: "下一题步" };
+  const drafts: QuizDraftStore = new Map();
+  const view = (current: Step) => <QuizPanel step={current} state={student} draftStore={drafts} next={next} onNavigate={() => {}}
+    onRefresh={async () => {
+      refreshAttempts++;
+      if (refreshAttempts === 1) throw new Error("离线");
+      refreshed = true;
+    }} />;
   try {
-    render(<QuizPanel step={step} state={state} onRefresh={async () => { refreshed = true; }} />);
-    fireEvent.click(screen.getByRole("button", { name: "重新提交答案" }));
+    const { container, rerender } = render(view(step));
+    fireEvent.click(screen.getByRole("button", { name: "重新检查答案" }));
+    await screen.findByText(/回答正确/);
+    expect(screen.getByText("✓ 理解题已完成")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /下一步：/ })).toBeTruthy();
+    const previousWrites = writes;
+    // Keep a newer self-check draft as well as the previously saved completion.
+    fireEvent.click(screen.getByLabelText("始终"));
+    fireEvent.click(screen.getByLabelText("通过后"));
+    api.classroom.submitQuiz = async () => { throw new ApiError(409, { message: "老师已更新题目" }, ""); };
+    fireEvent.click(screen.getByRole("button", { name: "重新检查答案" }));
+    await screen.findByText(/题目已过期/);
+    expect(refreshAttempts).toBe(1);
+    expect(refreshed).toBe(false);
+    expect(container.querySelector(".quiz-box.done, .quiz-question.correct, .quiz-complete")).toBeNull();
+    expect(screen.queryByText(/回答正确/)).toBeNull();
+    expect(screen.queryByText(/理解题已完成/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /下一步：/ })).toBeNull();
+    expect(container.querySelector(".sr-only")?.textContent).toBe("");
+    expect((screen.getByRole("button", { name: "提交答案" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(writes).toBe(previousWrites);
+    expect(drafts.get(step.n)?.answers).toEqual({ q1: "a" });
     fireEvent.click(await screen.findByRole("button", { name: "载入最新题目" }));
     await waitFor(() => expect(refreshed).toBe(true));
     expect((screen.getByLabelText("通过后") as HTMLInputElement).checked).toBe(true);
+    // Metadata without a new version must not resurrect the old verdict.
+    rerender(view({ ...step }));
+    expect(screen.getByText(/题目已过期/)).toBeTruthy();
+    rerender(view({ ...step, quiz: { ...step.quiz!, version: "v2" } }));
+    expect(screen.queryByText(/题目已过期/)).toBeNull();
+    expect((screen.getByLabelText("通过后") as HTMLInputElement).checked).toBe(false);
+    api.classroom.submitQuiz = async () => ({ ...passed, version: "v2", quiz: { ...passed.quiz!, version: "v2" } });
+    fireEvent.click(screen.getByLabelText("通过后"));
+    expect((screen.getByRole("button", { name: "提交答案" }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "提交答案" }));
+    await screen.findByText(/回答正确/);
+    expect(writes).toBe(previousWrites + 2);
   } finally { api.classroom.submitQuiz = original; }
 });
