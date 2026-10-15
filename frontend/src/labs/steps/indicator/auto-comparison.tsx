@@ -9,10 +9,9 @@ import { sameJsonValue } from "../../../session-store";
 import { MATERIAL_LOCKED_ACTION } from "../../../step-task-card";
 import { AUTO_RECORD_HOW, MaterialCard } from "../../../material-card";
 import type { IndicatorSchema, Meta, StepStateApi } from "../../../types";
-import { cjkSpace } from "../../../format";
+import { cjkSpace, formatMetric } from "../../../format";
 import { countryLabel } from "../../../viz";
-import { fieldLabel, fmtField, useAsync } from "../../shared";
-import { keepFocusNear } from "../../../a11y";
+import { AsyncStateMessage, fieldLabel, useAsync } from "../../shared";
 import { userFacingRequestError } from "../../../user-facing-error";
 import {
   COUNTRY_METRIC,
@@ -47,7 +46,7 @@ export function useAutoMaterial({ topic, meta, state, country, year, schema, bro
   state: StepStateApi<IndicatorStepState>;
   country: string;
   year: number;
-  schema: { status: string; data: IndicatorSchema | null | undefined };
+  schema: { status: string; data: IndicatorSchema | null | undefined; error?: string | null; retry?: () => void };
   /** The table's own country when it differs from the recorded one (step 5 “全部” is ""): saved as the view. */
   browseCountry?: string;
 }) {
@@ -78,11 +77,19 @@ export function useAutoMaterial({ topic, meta, state, country, year, schema, bro
 
   // Marked as the student's choice, so the report does not call it an automatic record.
   const record = patch && !current ? () => state.save({ ...patch, material_chosen: true, material_label: indicatorMaterialLabel(patch.observations ?? [], schema.status === "success" ? schema.data : null) }) : undefined;
+  const loadErrors = [
+    schema.status === "error" ? userFacingRequestError(schema.error, "指标说明加载失败") : null,
+    countryQuery.status === "error" ? userFacingRequestError(countryQuery.error, "国家整体数据加载失败") : null,
+  ].filter((error): error is string => error !== null);
   return {
     country: recorded, metric, current, record,
-    loadFailed: countryQuery.status === "error",
-    loadError: countryQuery.error,
-    onRetryLoad: countryQuery.retry,
+    loadFailed: loadErrors.length > 0,
+    loadPending: [schema.status, countryQuery.status].some((status) => status === "loading" || status === "idle"),
+    loadError: loadErrors.join(" ") || null,
+    onRetryLoad: () => {
+      if (schema.status === "error") schema.retry?.();
+      if (countryQuery.status === "error") countryQuery.retry();
+    },
   };
 }
 
@@ -94,10 +101,14 @@ export function countryScope(label: string): string {
 /** The sentence a reading is recorded as: "2020 年 外国增加值项占比：CHN 中国 11.730%". */
 export function indicatorMaterialLabel(observations: readonly IndicatorObservation[], schema: IndicatorSchema | null | undefined): string {
   if (!observations.length) return "";
-  return `${cjkSpace(`${observations[0].year} 年`, fieldLabel(observations[0].metric, schema))}：${observations.map((item) => `${countryLabel(item.country)} ${fmtField(item.value, item.metric, schema)}${item.unit === "百万美元" ? " 百万美元" : ""}`).join("；")}`;
+  return `${cjkSpace(`${observations[0].year} 年`, fieldLabel(observations[0].metric, schema))}：${observations.map((item) => {
+    // Saved readings remain interpretable when indicator metadata is temporarily unavailable.
+    const format = schema?.fields[item.metric]?.format ?? (item.unit === "%" ? "pct" : item.unit === "百万美元" ? "amount" : undefined);
+    return `${countryLabel(item.country)} ${formatMetric(item.value, format)}${item.unit === "百万美元" ? " 百万美元" : ""}`;
+  }).join("；")}`;
 }
 
-export function AutoMaterialStatus({ state, schema, metric, current, record: _record, loadFailed, loadError = null, onRetryLoad, where, lead, note }: {
+export function AutoMaterialStatus({ state, schema, metric, current, record: _record, loadFailed, loadPending = false, loadError = null, onRetryLoad, where, lead, note }: {
   state: StepStateApi<IndicatorStepState>;
   schema: IndicatorSchema | null | undefined;
   /** The step's country-level indicator, named in the explanation line. */
@@ -107,6 +118,7 @@ export function AutoMaterialStatus({ state, schema, metric, current, record: _re
   /** Records the current selection explicitly (offered once the material is locked). */
   record?: () => void;
   loadFailed: boolean;
+  loadPending?: boolean;
   loadError?: string | null;
   onRetryLoad?: () => void;
   /** Where the country is chosen, e.g. “上方所选国家”. */
@@ -117,19 +129,26 @@ export function AutoMaterialStatus({ state, schema, metric, current, record: _re
   /** Extra reading caveat for this step's indicator. */
   note?: string;
 }) {
-  // Locked material is shown as saved even when the student browses something else. A record saved by an
-  // earlier version may hold two countries; it is shown as recorded.
-  const recorded = current || state.materialLocked ? state.data?.observations ?? [] : [];
+  // Keep the last saved material visible while the current selection loads or fails. It must not be
+  // mistaken for the new selection, and a submitted report must not be rewritten by recovery.
+  const recorded = current || state.materialLocked || loadFailed || loadPending ? state.data?.observations ?? [] : [];
   const [rechosen, setRechosen] = useState(false);
   const scope = cjkSpace(lead ? "记录的是同一年的" : "同一年的", countryScope(metric ? fieldLabel(metric, schema) : "本步指标"));
-  return (
+  const savedLabel = typeof state.data?.material_label === "string" ? state.data.material_label : null;
+  return <>
+    {loadFailed && <AsyncStateMessage status="error"
+      error={loadError ?? userFacingRequestError(null, "报告材料数据加载失败")}
+      onRetry={onRetryLoad ?? (() => {})} />}
     <MaterialCard
       state={recorded.length ? "recorded" : loadFailed ? "blocked" : "missing"}
       summary={recorded.length
-        ? indicatorMaterialLabel(recorded, schema)
+        ? !schema && savedLabel ? savedLabel : indicatorMaterialLabel(recorded, schema)
         : loadFailed
-          ? <>{userFacingRequestError(loadError, "国家整体数据加载失败")}{onRetryLoad && <button type="button" className="secondary" onClick={(event) => { const button = event.currentTarget; onRetryLoad(); keepFocusNear(button); }}>重试</button>}</>
-          : "正在记录当前选择…"}
+          ? "当前选择尚未记录，请重试数据加载。"
+          : loadPending ? "正在加载当前选择的报告材料…" : "正在记录当前选择…"}
+      extra={recorded.length && (loadFailed || loadPending)
+        ? `${loadFailed ? "当前选择的数据加载失败" : "正在加载当前选择的数据"}；此处保留已记录材料。${state.materialLocked ? "" : "加载恢复后将自动更新为当前选择。"}`
+        : undefined}
       how={`${lead ?? `记录${where}`}${scope}，${AUTO_RECORD_HOW}${note ? ` ${note}` : ""}`}
       locked={state.materialLocked}
       rechosen={rechosen && current}
@@ -138,5 +157,5 @@ export function AutoMaterialStatus({ state, schema, metric, current, record: _re
       syncError={state.syncError}
       onRetrySync={state.syncNow}
     />
-  );
+  </>;
 }

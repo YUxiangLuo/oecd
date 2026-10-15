@@ -683,7 +683,7 @@ function withDbLabel<T extends { observation?: DbStepState["observation"] | null
 }
 
 export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>; releaseMeta: Meta | null }) {
-  const lastPages = useRef(1);
+  const lastPages = useRef({ scope: "", pages: 1 });
   const {
     data: meta,
     error: metaError,
@@ -742,6 +742,10 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
   const pickColSector = withPageReset(setColSector);
 
   const ready = Boolean(meta && year && rowCountry && (table === "accounts" || colCountry));
+  const pageScope = JSON.stringify([
+    ready, year, table, rowCountry, table === "accounts" ? "" : colCountry,
+    rowSector, table === "accounts" ? "" : colSector,
+  ]);
   const sliceKey = JSON.stringify([
     ready, year, table, rowCountry, colCountry, rowSector, colSector, page,
   ]);
@@ -816,10 +820,11 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
     );
   }
 
-  // While the next page loads there is no slice; keep the last page count so the pager does not collapse to
-  // "1 / 1" (which disabled the button that had focus).
-  const pages = slice ? Math.max(1, Math.ceil(slice.total / slice.page_size)) : lastPages.current;
-  lastPages.current = pages;
+  // Keep the pager mounted when turning pages in the same slice. A new filter has an unknown
+  // page count until it loads, so it cannot use the old slice's range to request an invalid page.
+  if (lastPages.current.scope !== pageScope) lastPages.current = { scope: pageScope, pages: 1 };
+  const pages = slice ? Math.max(1, Math.ceil(slice.total / slice.page_size)) : lastPages.current.pages;
+  lastPages.current.pages = pages;
   const colOptions = table === "y" ? meta.final_demand_categories : meta.sectors;
   const activeTable = DB_TABLES.find((t) => t.key === table)!;
   const selectedObservation = state.data?.observation;

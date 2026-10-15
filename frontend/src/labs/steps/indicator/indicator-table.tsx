@@ -14,7 +14,7 @@ import { userFacingRequestError } from "../../../user-facing-error";
 import { countryLabel, sectorLabel } from "../../../viz";
 import { PATH_UNDEFINED_LABEL, PATH_UNDEFINED_NOTE, pathMetricUndefined } from "../../../viz/views/network-heat";
 import type { DecompositionView } from "../../../demos";
-import { AsyncStateMessage, Pager, fieldLabel, fmtField, useAsync } from "../../shared";
+import { AsyncStateMessage, Pager, fieldLabel, fmtField, useAsync, type AsyncStatus } from "../../shared";
 
 const BASE_DESC: Record<string, string> = {
   country: "OECD 经济体代码",
@@ -442,10 +442,11 @@ export function IndicatorDataTable({
   );
 }
 
-export function IndicatorTable({ meta, groupKey, schema, state, year, country, page, interacted, countryNote, onYear, onCountry, onPage }: {
+export function IndicatorTable({ meta, groupKey, schema, schemaStatus = "success", state, year, country, page, interacted, countryNote, onYear, onCountry, onPage }: {
   meta: Meta;
   groupKey: IndicatorGroupKey;
   schema: IndicatorSchema | null | undefined;
+  schemaStatus?: AsyncStatus;
   state: StepStateApi<IndicatorStepState>;
   year: number;
   country: string;
@@ -482,9 +483,13 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
   const displayRows = groupKey === "network" && country && data
     ? sortNetworkRows(data.rows, networkSort)
     : (data?.rows ?? []);
-  const knownPages = useRef(1);
-  const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : knownPages.current;
-  knownPages.current = pages;
+  const pageScope = JSON.stringify([groupKey, year, country]);
+  const knownPages = useRef({ scope: pageScope, pages: 1 });
+  // Page changes keep their known range and focused controls; a different filter must load its
+  // own range. Reset immediately even while loading, including when returning to an earlier filter.
+  if (knownPages.current.scope !== pageScope) knownPages.current = { scope: pageScope, pages: 1 };
+  const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : knownPages.current.pages;
+  knownPages.current.pages = pages;
   const defaultMetricCount = indicatorMetricColumns(groupKey, group?.fields ?? [], data?.rows[0]).length;
   const allMetricCount = indicatorMetricColumns(groupKey, group?.fields ?? [], data?.rows[0], true).length;
   const toggleAllFields = () => {
@@ -549,7 +554,9 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
         </div>
       )}
 
-      <IndicatorRequestBoundary
+      {schemaStatus !== "success" ? (
+        <p className="muted" role="status">指标说明加载完成后显示中心性数据。</p>
+      ) : <IndicatorRequestBoundary
         status={mainQuery.status}
         error={mainQuery.error}
         loadingLabel={`加载 ${year} 年${country ? ` ${countryLabel(country)}` : "全球"}行业指标中…`}
@@ -581,9 +588,9 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
               totalPages={pages}
             />
           </ScrollableRegion>
-      </IndicatorRequestBoundary>
+      </IndicatorRequestBoundary>}
       {/* Outside the loading boundary: the pager stays mounted (and keeps focus) while the next page loads. */}
-      {(data || knownPages.current > 1) && <Pager page={page} pages={pages} total={data?.total} onChange={onPage} />}
+      {schemaStatus === "success" && (data || pages > 1) && <Pager page={page} pages={pages} total={data?.total} onChange={onPage} />}
     </FullscreenPanel>
   );
 }

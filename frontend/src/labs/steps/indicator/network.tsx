@@ -47,7 +47,7 @@ export function NetworkIndicatorStep({ meta, step: _step, state }: { meta: Meta;
         <h2>行业节点的中心性</h2>
         <p>选择一个国家，在该国全部行业中切换“按加权总度从高到低 / 按介数从高到低”：两种排序一致吗？国家选“全部”时只按默认顺序列出，不是全球排名。时间趋势与国家比较在步骤 9。</p>
         <IndicatorTable
-          meta={meta} groupKey="network" schema={schema.data} state={state}
+          meta={meta} groupKey="network" schema={schema.data} schemaStatus={schema.status} state={state}
           year={controls.year} country={controls.country} page={controls.page} interacted={controls.interacted}
           countryNote={controls.carriedNote}
           onYear={controls.setYear} onCountry={controls.setCountry} onPage={controls.setPage}
