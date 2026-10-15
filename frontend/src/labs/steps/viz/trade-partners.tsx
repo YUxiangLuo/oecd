@@ -82,9 +82,9 @@ function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: stri
   return (
     <div ref={wrapRef} className="hover-wrap">
       {/* The key is page text: as one SVG line it ran past the diagram's right edge. */}
-      <p className="ego-network-key">线宽 = 双向流量；蓝箭头 = {countryLabel(country)} 卖出，绿箭头 = {countryLabel(country)} 买入；伙伴按地理区域分组</p>
+      <p className="ego-network-key">线宽 = 各方向流量；蓝箭头 = {countryLabel(country)} 卖出，绿箭头 = {countryLabel(country)} 买入；伙伴按地理区域分组</p>
       {/* Capped so a stacked (full-width) panel does not blow the 11-unit node labels up to page-heading size. */}
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${countryLabel(country)}与前 ${top.length} 个贸易伙伴的关系图；线宽表示双向流量，箭头指向买方`} style={{ width: "100%", maxWidth: 560, margin: "0 auto", display: "block" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${countryLabel(country)}与前 ${top.length} 个贸易伙伴的关系图；线宽表示各方向流量，箭头指向买方`} style={{ width: "100%", maxWidth: 560, margin: "0 auto", display: "block" }}>
         <defs>
           <marker id={`ego-out-${country}`} markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" viewBox="0 0 10 8">
             <path d="M0,0 L10,4 L0,8 z" fill={CAT[0]} />

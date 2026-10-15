@@ -19,6 +19,34 @@ const rows = [
 ];
 
 describe("Steps 6-9 chart semantic data equivalents", () => {
+  test("rank zero has no bar while small positive and negative values remain visible", () => {
+    const root = document.createElement("div");
+    root.innerHTML = renderToStaticMarkup(<RankBarChart
+      rows={[{ country: "ZERO", value: 0 }, { country: "SMALL", value: 0.001 }, { country: "NEG", value: -0.002 }, { country: "BIG", value: 10 }]}
+      metricKey="value" label="排名"
+    />);
+    // The signed chart includes a zero-line marker before the actual bar.
+    const bar = (country: string) => root.querySelector(`[title="${country}"]`)!.nextElementSibling!.lastElementChild as HTMLElement;
+    expect(bar("ZERO").style.width).toBe("0%");
+    expect(parseFloat(bar("SMALL").style.width)).toBeGreaterThan(0);
+    expect(parseFloat(bar("NEG").style.width)).toBeGreaterThan(0);
+  });
+
+  for (const format of [undefined, "pct"]) {
+    test(`tiny scatter ticks remain distinct (${format ?? "number"})`, () => {
+      const root = document.createElement("div");
+      root.innerHTML = renderToStaticMarkup(<QuadrantScatter
+        rows={[{ country: "A", x: -1e-7, y: 1e-7 }, { country: "B", x: 2e-7, y: 2e-7 }]}
+        xKey="x" yKey="y" xLabel="横轴" yLabel="纵轴" xFormat={format} yFormat={format}
+      />);
+      const ticks = [...root.querySelectorAll("svg > text")].map((node) => node.textContent!);
+      expect(new Set(ticks).size).toBe(ticks.length);
+      const values = ticks.map((text) => Number(text.replace(/%$/, "")) / (format === "pct" ? 100 : 1));
+      expect(values.some((value) => value < 0)).toBe(true);
+      expect(values.some((value) => value >= 2e-7)).toBe(true);
+    });
+  }
+
   test("composition preserves year order and uses the authoritative denominator", () => {
     const html = renderToStaticMarkup(<CompositionBar
       rows={[{ country: "2019", a: 20, total: 100 }, { country: "2020", a: 60, total: 200 }]}

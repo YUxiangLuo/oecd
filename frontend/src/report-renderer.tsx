@@ -604,7 +604,6 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
   }, { left: scale * -range.lo, right: scale * range.hi });
   const extent = Math.max(...chart.items.flatMap((item) => [Math.abs(item.value), Math.abs(item.ci_low ?? 0), Math.abs(item.ci_high ?? 0)]));
   const fit = (layout: number) => {
-    if (!(extent > 0)) return need(0, layout).left + need(0, layout).right <= plotW ? 1 : 0;
     let lo = 0, hi = plotW / Math.max(extent, range.hi - range.lo);
     for (let iteration = 0; iteration < 40; iteration++) {
       const mid = (lo + hi) / 2;
@@ -617,7 +616,7 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
   const scales = [0, 1, 2].map(fit);
   const chosen = scales.findIndex((candidate) => candidate * Math.max(extent, 1e-12) >= plotW / 3);
   const layout = chosen >= 0 ? chosen : scales.indexOf(Math.max(...scales));
-  const scale = extent > 0 ? Math.max(scales[layout], 1e-9) : 1;
+  const scale = scales[layout];
   const room = need(scale, layout);
   const zero = plotLeft + room.left + Math.max(0, plotW - room.left - room.right) / 2;
   const x = (value: number) => zero + value * scale;
@@ -632,14 +631,26 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
   const candidates = visible.ticks.filter((tick) => x(tick) >= plotLeft - 0.5 && x(tick) <= plotRight + 0.5);
   const stepSize = visible.ticks.length > 1 ? visible.ticks[1] - visible.ticks[0] : 1;
   // As many decimals as the step has ("0.025" → 3), so a tick never prints rounded (-0.125, not -0.13).
-  const tickDigits = Math.min(6, (String(Number(stepSize.toPrecision(6))).split(".")[1] ?? "").length);
-  const tickText = (value: number) => (value === 0 ? "0" : String(Number(value.toFixed(tickDigits))));
+  const [mantissa, exponent = "0"] = String(Number(stepSize.toPrecision(6))).split("e");
+  const tickDigits = Math.max(0, (mantissa.split(".")[1] ?? "").length - Number(exponent));
+  const tickText = (value: number) => (value === 0 ? "0" : Math.abs(value) >= 1e9 ? Number(value.toPrecision(6)).toExponential() : String(Number(
+    tickDigits <= 100 ? value.toFixed(tickDigits) : value.toPrecision(6),
+  )));
   // A shared axis may require more ticks than fit its printed labels. Keep the range and zero, then admit
   // interior labels only with a readable gap; thinning labels must never change the data scale.
   const ticks = candidates.filter((tick, index) => tick === 0 || index === 0 || index === candidates.length - 1);
+  const tickBounds = (tick: number) => {
+    const width = textWidth(tickText(tick), AXIS_FONT);
+    const left = x(tick) - width * (x(tick) > plotRight - 20 ? 1 : 0.5);
+    return { left, right: left + width };
+  };
   for (const tick of candidates) {
     if (ticks.includes(tick)) continue;
-    if (ticks.every((other) => Math.abs(x(tick) - x(other)) >= (textWidth(tickText(tick), AXIS_FONT) + textWidth(tickText(other), AXIS_FONT)) / 2 + 16)) ticks.push(tick);
+    const box = tickBounds(tick);
+    if (ticks.every((other) => {
+      const otherBox = tickBounds(other);
+      return box.left >= otherBox.right + 16 || otherBox.left >= box.right + 16;
+    })) ticks.push(tick);
   }
   ticks.sort((a, b) => a - b);
 
@@ -776,6 +787,8 @@ function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> })
   const W = 720;
   const colors = [...GROUP_COLORS, "#c2417a", "#657000", "#3274a1"];
   const labels = [...new Set(chart.series.flatMap((series) => series.points.map((point) => point.label)))];
+  // Only year labels imply a time axis; arbitrary categories keep their first-seen order.
+  if (labels.every((label) => /^\d{4}$/.test(label))) labels.sort((a, b) => Number(a) - Number(b));
   const values = chart.series.flatMap((series) => series.points.map((point) => point.value));
   const rawMin = Math.min(...values);
   const rawMax = Math.max(...values);
@@ -813,7 +826,7 @@ function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> })
           return (
             <g key={series.label}>
               <polyline
-                points={series.points.map((point) => `${x(point.label)},${y(point.value)}`).join(" ")}
+                points={[...series.points].sort((a, b) => labels.indexOf(a.label) - labels.indexOf(b.label)).map((point) => `${x(point.label)},${y(point.value)}`).join(" ")}
                 fill="none"
                 stroke={color}
                 strokeWidth={reference ? 1.8 : 2.5}

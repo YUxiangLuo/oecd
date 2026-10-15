@@ -54,6 +54,10 @@ export function ChartDataDisclosure({ label, columns, rows }: {
 /** 轴刻度专用:大数用「万/亿」缩写,避免出现 4,857,813 这类挤满轴的原始值 */
 function fmtAxis(v: number, format?: string): string {
   // Ticks are round numbers: trim trailing zeros ("20%", "6", "1.5"), unlike readings, which keep fixed decimals.
+  const displayed = format === "pct" ? v * 100 : v;
+  if (displayed !== 0 && Math.abs(displayed) < (format === "pct" ? 0.01 : 0.001)) {
+    return `${Number(displayed.toPrecision(6))}${format === "pct" ? "%" : ""}`;
+  }
   if (format === "pct") return `${stripNegativeZero((v * 100).toLocaleString("zh-CN", { maximumFractionDigits: 2 }))}%`;
   // Amounts are in 百万美元: "5万" there meant 5 万个百万美元 and was read as 5 万美元, so they keep full digits.
   if (format === "amount" || Math.abs(v) < 1e4) return stripNegativeZero(v.toLocaleString("zh-CN", { maximumFractionDigits: 3 }));
@@ -108,8 +112,8 @@ export function RankBarChart({ rows, metricKey, label, format, highlight, highli
           const v = num(r[metricKey]);
           const layout = signedStack([v], domain, false);
           const segment = layout.segments[0];
-          // 极小值也保留 1% 可见宽度;负值向左扩,保持贴住零轴。
-          const widthPct = Math.max(1, segment.widthPct);
+          // 非零极小值保留 1% 可见宽度；精确零不画条，负值向左扩。
+          const widthPct = v === 0 ? 0 : Math.max(1, segment.widthPct);
           const leftPct = segment.negative ? layout.zeroPct - widthPct : segment.leftPct;
           const entity = rowName(r);
           const display = rowLabel(r);

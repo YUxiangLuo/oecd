@@ -1,5 +1,25 @@
 import { describe, expect, test } from "bun:test";
-import { partnerConcentration, partnerYears, regionMatrix } from "./trade-partners";
+import { partnerConcentration, partnerYears, regionMatrix, TradePartners } from "./trade-partners";
+import { createElement } from "react";
+import { cleanup, render, waitFor } from "@testing-library/react";
+import { api } from "../../../api";
+
+test("partner diagram describes directional stroke widths in both its visible key and accessible label", async () => {
+  const original = api.network;
+  api.network = async () => ({ nodes: [], edges });
+  try {
+    const view = render(createElement(TradePartners, { meta: { years: [2020], countries: ["CHN"], sectors: [] }, countries: ["CHN"], year: 2020, onYear: () => {} }));
+    await waitFor(() => expect(view.container.querySelector(".ego-network-key")?.textContent).toContain("线宽 = 各方向流量"));
+    const diagram = view.getByRole("img", { name: /贸易伙伴的关系图/ });
+    expect(diagram.getAttribute("aria-label")).toContain("线宽表示各方向流量");
+    const strokes = diagram.querySelector('[data-partner="USA"]')!.querySelectorAll("line");
+    expect(Number(strokes[0].getAttribute("stroke-width"))).toBe(10);
+    expect(Number(strokes[1].getAttribute("stroke-width"))).toBeCloseTo(4.6);
+  } finally {
+    cleanup();
+    api.network = original;
+  }
+});
 
 const edges = [
   { source: "CHN", target: "USA", flow: 100 },

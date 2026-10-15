@@ -6,6 +6,49 @@ import { closeBoldBeforeCjkPunctuation, parseReportChart, REPORT_CHART_MAX_WIDTH
 import { layoutDivergingBars, MIN_WIDTH } from "./viz/regression/diverging-bars";
 import { NEGATIVE, POSITIVE, UNCERTAIN, ZERO_LINE } from "./viz/regression/palette";
 
+describe("report chart numeric boundaries through Markdown", () => {
+  const chartDom = (chart: object) => {
+    const element = document.createElement("div");
+    element.innerHTML = renderToStaticMarkup(createElement(ReportMarkdown, {
+      markdown: `\`\`\`gvcsim-chart\n${JSON.stringify({ version: 1, ...chart })}\n\`\`\``,
+    }));
+    expect(element.querySelectorAll("svg")).toHaveLength(1);
+    return element;
+  };
+  const line = (labels: string[][]) => chartDom({ type: "line", series: labels.map((points, i) => ({ label: `Series ${i}`, points: points.map((label, value) => ({ label, value })) })) });
+  test.each([
+    ["2018", "2019", "2020"],
+    ["2020", "2019", "2018"],
+  ])("year union is chronological and every series follows the axis (%s, %s, %s)", (first, second, third) => {
+    const element = line([["2018", "2020"], [first, second, third]]);
+    expect([...element.querySelectorAll('text[fill="#596173"]')].map((e) => e.textContent)).toEqual(["2018", "2019", "2020"]);
+    for (const polyline of element.querySelectorAll("polyline")) {
+      const xs = polyline.getAttribute("points")!.split(" ").map((point) => Number(point.split(",")[0]));
+      expect(xs).toEqual([...xs].sort((a, b) => a - b));
+    }
+  });
+  test("non-time categories preserve their first-seen order", () => {
+    const element = line([["乙", "甲"], ["丙", "乙", "甲"]]);
+    expect([...element.querySelectorAll('text[fill="#596173"]')].map((e) => e.textContent)).toEqual(["乙", "甲", "丙"]);
+  });
+  const diverging = (value: number) => chartDom({ type: "diverging-bar", items: [{ label: "合法边界 fixture", value, ci_low: -Math.abs(value), ci_high: Math.abs(value) * 1.5, text: String(value), saved: true }] });
+  test("tiny diverging ticks remain distinct and nonzero", () => {
+    const element = diverging(1e-7);
+    const ticks = [...element.querySelectorAll('svg > g > text[fill="#5f6677"]')].map((e) => e.textContent!);
+    expect(ticks.length).toBeGreaterThan(1);
+    expect(new Set(ticks).size).toBe(ticks.length);
+    expect(ticks.some((tick) => Number(tick) !== 0)).toBe(true);
+  });
+  test.each([1e12, -1e12, 0, 0.125])("diverging bars and CI fit the canvas at %s", (value) => {
+    const element = diverging(value);
+    const coordinates = [...element.querySelectorAll("[data-bar]")].flatMap((e) => e.getAttribute("data-bar")!.split(" ").map(Number));
+    for (const line of element.querySelectorAll("[data-whisker] line")) coordinates.push(Number(line.getAttribute("x1")), Number(line.getAttribute("x2")));
+    for (const x of coordinates) { expect(x).toBeGreaterThanOrEqual(0); expect(x).toBeLessThanOrEqual(720); }
+    const ticks = [...element.querySelectorAll('svg > g > text[fill="#5f6677"]')].map(textBox);
+    for (let i = 1; i < ticks.length; i++) expect(ticks[i].left).toBeGreaterThan(ticks[i - 1].right);
+  });
+});
+
 describe("report tables", () => {
   test("the workbench appendix's significance stars and typed model names print literally", () => {
     // As gvcsim/report_workbench.py writes them: stars, "<" and a student's "*" escaped.

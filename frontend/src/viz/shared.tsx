@@ -6,7 +6,7 @@
  * 可见标签 + 表格视图补偿);细标记、段间 2px 留白、悬停 tooltip 不设门槛
  * (所有数值同时可在表格视图读取);文本一律用文字色,不穿系列色。
  */
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 // 固定顺序的类别槽位(经校验的默认调色板,前 6 位)
 export const CAT = ["#216cc0", "#1baf7a", "#eda100", "#008300", "#4a3aa7", "#e34948"];
@@ -152,6 +152,26 @@ export const rowLabel = (r: Row) => (r.industry != null ? sectorLabel(String(r.i
 export function useTip() {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const pointer = useRef<{ x: number; y: number; target: EventTarget } | null>(null);
+  const dismissed = useRef(false);
+  useEffect(() => {
+    const dismiss = () => {
+      if (boxRef.current?.style.opacity !== "1") return;
+      boxRef.current.style.opacity = "0";
+      dismissed.current = true;
+    };
+    const keydown = (event: KeyboardEvent) => { if (event.key === "Escape") dismiss(); };
+    const scroll = (event: Event) => {
+      const target = event.target;
+      if (target === document || target === window || (target instanceof Element && target.contains(wrapRef.current))) dismiss();
+    };
+    document.addEventListener("keydown", keydown);
+    window.addEventListener("scroll", scroll, true);
+    return () => {
+      document.removeEventListener("keydown", keydown);
+      window.removeEventListener("scroll", scroll, true);
+    };
+  }, []);
   /**
    * `anchor` (keyboard focus): the element's box; the tip goes just above it, or below it when there is no room
    * above, so it does not cover the text under the chart (a footnote, the axis title).
@@ -159,6 +179,10 @@ export function useTip() {
   const show = (e: React.MouseEvent, lines: [string, string][], anchor?: Pick<DOMRect, "top" | "bottom">) => {
     const box = boxRef.current, wrap = wrapRef.current;
     if (!box || !wrap) return;
+    const last = pointer.current;
+    if (!anchor && dismissed.current && last?.x === e.clientX && last.y === e.clientY && last.target === e.currentTarget) return;
+    pointer.current = { x: e.clientX, y: e.clientY, target: e.currentTarget };
+    dismissed.current = false;
     box.replaceChildren(
       ...lines.map(([label, value], i) => {
         const div = document.createElement("div");
@@ -191,7 +215,11 @@ export function useTip() {
     }
     box.style.left = `${x}px`; box.style.top = `${y}px`; box.style.opacity = "1";
   };
-  const hide = () => { if (boxRef.current) boxRef.current.style.opacity = "0"; };
+  const hide = () => {
+    if (boxRef.current) boxRef.current.style.opacity = "0";
+    dismissed.current = false;
+    pointer.current = null;
+  };
   const Tip = (
     <div ref={boxRef} style={{
       position: "absolute", pointerEvents: "none", opacity: 0, transition: "opacity .12s",
