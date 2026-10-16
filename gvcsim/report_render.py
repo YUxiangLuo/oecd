@@ -762,7 +762,7 @@ def _evidence_summary(
         if _depvar_kind(outcome, design) == "network":
             # Said here, next to the number, not only in the appendix: the unit is not step 5/9's 百万美元.
             lines.append(
-                "- **单位**：中心性原始单位。这一步的 Y 是课程按真实网络指标的排名校准生成的，"
+                "- **单位**：中心性原始单位。这一步的 Y 是课程生成的分数（高低顺序参照真实网络指标），"
                 "不是步骤 5、9 里以百万美元计的加权总度，不能和那两步的数值直接比较。"
             )
         reasons = [*_list_values(result.get("status_reasons")), *_list_values(support.get("reasons"))]

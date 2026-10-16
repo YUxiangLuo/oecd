@@ -310,7 +310,7 @@ describe("the sentence under the three-group chart (v13)", () => {
       ],
       remainder: -0.026,
     }, "外国增加值项占比", 100, "个百分点", 1);
-    expect(text).toContain("第一批被加税国家 2020 年的外国增加值项占比，比加税前（2016、2017 年平均）低 8.4 个百分点。按默认模型的估计，这个总变化等于下面各项之和：");
+    expect(text).toContain("第一批被加税国家 2020 年的外国增加值项占比，比加税前（2016、2017 年平均）低 8.4 个百分点。按默认模型（见下方）的估计，这个总变化等于下面各项之和：");
     // Every part carries its unit.
     expect(text).toContain("与关税 X 相关 −1.6 个百分点，与汇率变动同步 −4.1 个百分点，与 GDP 对数同步 −5.0 个百分点，与贸易开放度同步 +4.9 个百分点，其余（各年共同的变化与噪声） −2.6 个百分点");
     expect(decompositionSentence({ group: "first", wave_start: 2018, year: 2020, pre_years: [2016, 2017], observed: -0.32, terms: [], remainder: -0.32 }, "前向 GVC 段长度", 1, "长度单位", 3))

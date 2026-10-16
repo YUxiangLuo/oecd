@@ -69,7 +69,7 @@ export function exampleEffect(outcome: RegressionOutcome, perPoint: number, xPoi
 }
 
 /** Step 14's unit, worded as the report's line beside the step 14 numbers (gvcsim/report_render.py). */
-export const NETWORK_UNIT_NOTE = "中心性原始单位：本步的 Y 是课程按真实网络指标的排名校准生成的数值，不是步骤 5、9 的百万美元，不能和那两步的数值直接比较。";
+export const NETWORK_UNIT_NOTE = "中心性原始单位：本步的 Y 是课程生成的分数（高低顺序参照真实网络指标），不是步骤 5、9 的百万美元，不能和那两步的数值直接比较。";
 
 const BADGE_COLORS = { negative: NEGATIVE, positive: POSITIVE, insufficient: UNCERTAIN, suppressed: UNCERTAIN } as const;
 

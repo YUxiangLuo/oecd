@@ -277,7 +277,7 @@ export function decompositionParts(
   }));
   parts.push({ label: "其余（各年共同的变化与噪声）", value: signedAmount(decomposition.remainder), tariff: false });
   return {
-    lead: `第一批被加税国家 ${decomposition.year} 年的${metric}，比加税前（${decomposition.pre_years.join("、")} 年平均）${direction} ${amount(Math.abs(observed))}。按默认模型的估计，这个总变化等于下面各项之和：`,
+    lead: `第一批被加税国家 ${decomposition.year} 年的${metric}，比加税前（${decomposition.pre_years.join("、")} 年平均）${direction} ${amount(Math.abs(observed))}。按默认模型（见下方）的估计，这个总变化等于下面各项之和：`,
     parts,
     // One point a sentence: what the regression's result is of the split, and why the example's number differs.
     tail: "回归结论只对应第一项：它等于默认模型的系数 × 第一批国家 X 的平均变化。结果卡里的例子换算用的是例子自己的 X，数值可能大得多。",

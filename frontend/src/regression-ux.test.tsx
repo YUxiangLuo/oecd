@@ -429,7 +429,7 @@ describe("simple regression workbench", () => {
     expect(length.rows.map((row) => [row.sublabel, row.valueLabel])).toEqual([
       // Each bar in its own headline's digits.
       ["长度单位", "-0.0181（-0.045 个标准差）"],
-      ["无量纲", "-0.0008（-0.015 个标准差）"],
+      ["比值，无单位", "-0.0008（-0.015 个标准差）"],
     ]);
     const network = familyBarRows("network", [
       estimate("weighted_degree", "加权总度（入+出）", -4010.70, -4109.84, -3911.56, { kind: "network", default: true, depvar_within_std: 856 }),

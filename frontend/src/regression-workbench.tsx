@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ScrollableRegion } from "./a11y";
 import { groupedFixed } from "./format";
+import { POSITION_UNIT_WORDS } from "./regression-verdict";
 import { api, ApiError } from "./api";
 import { useAsync } from "./labs";
 import {
@@ -228,7 +229,7 @@ export function ModelComparisonChart({ columns, outcome }: { columns: TableColum
     const reading = perPointReading(outcome, stat, column.snapshot, digits);
     rows.push({
       key: String(index), label: column.chartName ?? column.name,
-      sublabel: `${xSpanLabel(column.spec)}${column.snapshot.depvar_kind === "position" ? " · 无量纲" : ""} · N=${result.n_obs.toLocaleString("zh-CN")} · ${result.years?.join("–") ?? "年份未提供"}`,
+      sublabel: `${xSpanLabel(column.spec)}${column.snapshot.depvar_kind === "position" ? ` · ${POSITION_UNIT_WORDS}` : ""} · N=${result.n_obs.toLocaleString("zh-CN")} · ${result.years?.join("–") ?? "年份未提供"}`,
       value: stat.coef * scale, low: stat.ci_low * scale, high: stat.ci_high * scale,
       uncertain: stat.ci_low <= 0 && stat.ci_high >= 0,
       valueLabel: reading,

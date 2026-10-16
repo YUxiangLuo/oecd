@@ -6,7 +6,7 @@ import type { RegressionOutcome } from "./types";
  */
 /** Shown at the top of every step 11–14 result card (the report's 关键证据摘要 opens with the same words). */
 export const GENERATED_Y_DISCLOSURE = "教学数据：Y 由课程按设定生成，与 X 的关联是有意设计的，多数 Y 设得很清晰（区间窄），精度高于真实数据通常能得到的结果。结果用于练习读回归，不是真实关税影响的证据。";
-export const GENERATED_DATA_NOTE = "关税情景、GDP、人口增长率、贸易开放度、汇率、FDI 和步骤 11–14 的 Y 都由课程按设定生成，用来练习建模，不是真实政策效应或官方宏观统计；制造业增加值占比等少数可选控制变量按 ICIO 计算，页面上另有标注。";
+export const GENERATED_DATA_NOTE = "关税情景、控制变量和步骤 11–14 的 Y 都由课程生成，用来练习建模，不是真实政策效应或官方统计；少数按 ICIO 计算的控制变量另有标注。";
 
 export type ReadingDirection = "negative" | "positive" | "insufficient" | "suppressed";
 

@@ -72,10 +72,12 @@ const DEFAULT_KINDS: Record<RegressionOutcome, DepvarKind> = { trade: "share", p
 /** The unit as named beside a chart, a column or a bar ("长度单位"); the position index is a ratio: "无量纲", as on step 7. */
 const KIND_UNITS: Record<DepvarKind, string> = { share: "个百分点", length: "长度单位", position: "无量纲", network: "中心性原始单位" };
 
-/** The unit name under a bar's Y in 个标准差 charts ("长度单位", "无量纲"), as the report's chart. */
+/** The unit name under a bar's Y in 个标准差 charts ("长度单位"); the position index, a ratio, in plain words
+ *  ("比值，无单位": "无量纲" is not a word step 13's students know). */
 export function unitName(kind: DepvarKind): string {
-  return KIND_UNITS[kind].replace(/^个/, "");
+  return kind === "position" ? POSITION_UNIT_WORDS : KIND_UNITS[kind].replace(/^个/, "");
 }
+export const POSITION_UNIT_WORDS = "比值，无单位";
 
 /**
  * The unit as a counted quantity ("个百分点", "个长度单位"), used wherever an amount of it is stated; the position

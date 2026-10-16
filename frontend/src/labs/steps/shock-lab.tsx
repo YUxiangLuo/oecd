@@ -483,7 +483,7 @@ export function ShockLab({ meta, step: _step, state }: {
       <dl className="teaching-definitions" aria-label="步骤 11–14 的模型用到的关税暴露">
         <div><dt>w</dt><dd>这个国家×行业 {years[0] ?? "首年"} 年（加税前）的出口中卖到美国的比例，之后固定不变<span className="source-tag">ICIO 数据</span></dd></div>
         <div><dt>τ</dt><dd>美国加征的税率；加税前、未被加税的国家{goodsOnly ? "和非货物行业" : ""}都是 0<span className="source-tag">课程设定</span></dd></div>
-        <div><dt>L1.X</dt><dd>上一年的 X：加税当年 X 上升，L1.X 次年才上升。与 X 的关联可能分两年出现，所以回归同时放入 X 和 L1.X</dd></div>
+        <div><dt>L1.X</dt><dd>上一年的 X：加税当年 X 上升，L1.X 次年才上升。Y 与关税暴露的关联可能分两年出现，所以回归同时放入 X 和 L1.X</dd></div>
       </dl>
       <h4 className="teaching-subhead">举个例子</h4>
       <p className="teaching-example-lead">

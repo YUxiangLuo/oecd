@@ -116,10 +116,8 @@ MACRO_CONTROLS = {
 DISCLAIMER = "课程关税实验数据集：X、模拟宏观控制变量与各 Y 按课程数据契约生成，不是 OECD 发布结果。"
 # What students and readers see (step 10, the step 11–14 result card and the report); DISCLAIMER above is
 # the release contract value. The frontend keeps the same sentence in regression-lessons.ts.
-GENERATED_DATA_NOTE = (
-    "关税情景、GDP、人口增长率、贸易开放度、汇率、FDI 和步骤 11–14 的 Y 都由课程按设定生成，用来练习建模，不是真"
-    "实政策效应或官方宏观统计；制造业增加值占比等少数可选控制变量按 ICIO 计算，页面上另有标注。"
-)
+# Short: step 10 shows it before any control variable is introduced, so it names none of them.
+GENERATED_DATA_NOTE = "关税情景、控制变量和步骤 11–14 的 Y 都由课程生成，用来练习建模，不是真实政策效应或官方统计；少数按 ICIO 计算的控制变量另有标注。"
 # Display kinds: shares are shown in percentage points, the others in their own raw units.
 T = TypeVar("T")
 KIND_UNITS = {

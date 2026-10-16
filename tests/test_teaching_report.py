@@ -1619,7 +1619,7 @@ def test_report_renders_authoritative_result_fixture_without_calling_estimator(t
     # Step 14's unit is explained next to its number, not only in the appendix.
     body = report.markdown.split("## 关键证据摘要", 1)[1].split("## 技术附录", 1)[0]
     step_14 = body.split("### 步骤 14", 1)[1]
-    assert "- **单位**：中心性原始单位。这一步的 Y 是课程按真实网络指标的排名校准生成的" in step_14
+    assert "- **单位**：中心性原始单位。这一步的 Y 是课程生成的分数（高低顺序参照真实网络指标）" in step_14
     assert "不是步骤 5、9 里以百万美元计的加权总度" in step_14
     # The appendix note on coefficient units, in plain steps.
     assert "两次换算抵消" not in report.markdown

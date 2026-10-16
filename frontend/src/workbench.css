@@ -775,3 +775,5 @@ dl.teaching-definitions dd { margin: 0; }
 /* The model in the box was not saved (a conflict or a failed save): amber, as the material card's "未保存". */
 .reg-custom-report-chip.reg-custom-report-chip-unsaved { background: #fff4d8; border-color: #ecd28f; color: #7a5200; }
 .reg-custom-status:focus-visible { outline: 2px solid #4b47e0; outline-offset: 2px; }
+/* One model: the table's frame hugs the narrow table, not the whole row with an empty half. */
+.table-wrap:has(> .reg-custom-table-single) { width: fit-content; max-width: 100%; }

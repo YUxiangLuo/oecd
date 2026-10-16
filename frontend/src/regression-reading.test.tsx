@@ -48,7 +48,7 @@ describe("fixed teaching regression reading", () => {
     Object.assign(network.result.coefs[0], { coef: -4080, ci_low: -4180, ci_high: -3980 });
     network.result.depvar_within_std = 850;
     const dom = new DOMParser().parseFromString(renderToStaticMarkup(<RegressionResultCard outcome="network" response={network} />), "text/html");
-    expect(dom.querySelector(".reg-unit-note")?.textContent).toBe("中心性原始单位：本步的 Y 是课程按真实网络指标的排名校准生成的数值，不是步骤 5、9 的百万美元，不能和那两步的数值直接比较。");
+    expect(dom.querySelector(".reg-unit-note")?.textContent).toBe("中心性原始单位：本步的 Y 是课程生成的分数（高低顺序参照真实网络指标），不是步骤 5、9 的百万美元，不能和那两步的数值直接比较。");
     expect(renderToStaticMarkup(<RegressionResultCard outcome="trade" response={response()} />)).not.toContain("reg-unit-note");
   });
 
