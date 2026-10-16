@@ -403,26 +403,11 @@ def test_put_session_refuses_an_experiment_outside_the_regression_steps(monkeypa
         )
     assert refused.value.status_code == 422
     assert "步骤 5 没有“改模型、对比”" in refused.value.detail
-    # Nor do such entries count in the fingerprint (an older record may still hold them).
+    # Nor do such entries count in the fingerprint.
     base = empty_session()
     assert records.report_fingerprint(session) == records.report_fingerprint(
         base | {"steps": {**base["steps"], "5": make_record({})}}
     )
-
-
-def test_put_session_refuses_the_records_of_the_earlier_contract(monkeypatch):
-    """A second saved run (``qualified_run``) and the list of named models (``custom_results``) are not carried over."""
-    monkeypatch.setattr(classroom_routes.db, "save_session", lambda *args: {"updated_at": "saved-at"})
-    monkeypatch.setattr(classroom_routes.db, "latest_report", lambda _username: None)
-    for legacy in ("qualified_run", "custom_results"):
-        session = empty_session()
-        session["steps"]["12"] = make_record({legacy: []})
-        with pytest.raises(classroom_routes.HTTPException) as refused:
-            classroom_routes.put_session(
-                classroom_routes.SessionRequest(session=session, base_updated_at=None), {"sub": "student"}
-            )
-        assert refused.value.status_code == 422
-        assert f"步骤 12 的记录来自旧版本（{legacy}）" in refused.value.detail
 
 
 def test_put_session_answers_422_not_500_for_a_tampered_experiment(monkeypatch):

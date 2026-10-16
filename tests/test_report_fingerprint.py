@@ -40,15 +40,6 @@ def test_browsing_view_settings_does_not_outdate_a_report_but_changing_material_
     assert not records.report_matches_session(changed, report)
 
 
-def test_reports_saved_before_the_view_exclusion_keep_the_full_session_check():
-    session = _session()
-    legacy = {"provenance": {"session_fingerprint": records._session_fingerprint(session)}}
-    assert records.report_matches_session(session, legacy)
-    browsed = copy.deepcopy(session)
-    browsed["steps"]["2"]["data"]["year"] = 2017
-    assert not records.report_matches_session(browsed, legacy)
-
-
 def test_exploration_view_selections_do_not_outdate_a_report():
     """Steps 6–9 keep the countries and view of an exploration-only chart; that is browsing, not material."""
     session = _session()
@@ -93,16 +84,6 @@ def test_answering_a_quiz_again_does_not_outdate_a_report():
     assert records.report_matches_session(answered_again, report)
 
 
-def test_reports_saved_with_quiz_answers_in_the_fingerprint_keep_that_check():
-    session = _session()
-    session["steps"]["1"]["data"]["quiz"] = {"answers": {"s01-z-cell": "a"}, "version": "course-quiz-v8"}
-    legacy = {"provenance": {"report_fingerprint": records._report_fingerprint_with_quiz(session)}}
-    assert records.report_matches_session(session, legacy)
-    answered_again = copy.deepcopy(session)
-    answered_again["steps"]["1"]["data"]["quiz"]["version"] = "quiz-step-1-r1"
-    assert not records.report_matches_session(answered_again, legacy)
-
-
 def test_records_saved_by_viewing_pages_are_not_student_work():
     viewed = {
         "steps": {
@@ -132,7 +113,6 @@ def test_records_saved_by_viewing_pages_are_not_student_work():
     for step, data in [
         ("1", {"observation": {"row": "CHN_C27"}}),
         ("2", {"quiz": {"answers": {"s02-fva": "a"}}}),
-        ("2", {"observations": [{"value": 1, "source": "explicit-indicator-table-comparison"}]}),
         ("6", {"observations": [{"value": 1}], "material_chosen": True}),
         ("10", {"compared": ["MEX"], "teaching_example_chosen": True}),
         ("11", {"run": {"outcome": "trade"}}),

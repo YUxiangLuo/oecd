@@ -53,11 +53,11 @@ def _saved(panel, outcome: str, baseline: str | None = None) -> dict:
     }
 
 
-def _runs(panel, choices: dict[int, str | None]) -> list[dict]:
+def _runs(panel) -> list[dict]:
+    """Each step's saved run: the default model on the step's default Y."""
     session = empty_session()
     session["steps"] = {
-        str(step): {"data": {"run": json.loads(json.dumps(_saved(panel, STEPS[step], choices.get(step))))}}
-        for step in STEPS
+        str(step): {"data": {"run": json.loads(json.dumps(_saved(panel, STEPS[step])))}} for step in STEPS
     }
     runs = _saved_runs(session)
     assert [run["step"] for run in runs] == [11, 12, 13, 14]
@@ -69,12 +69,8 @@ def _step_sections(markdown: str) -> dict[int, str]:
     return {int(parts[i]): parts[i + 1] for i in range(1, len(parts), 2)}
 
 
-# Saved Ys other than the defaults, so "the saved bar" is not just the first one.
-CHOICES = {11: None, 12: "3b_FGY_GVC_C_share", 13: "GVCPs", 14: "betweenesscentrality"}
-
-
 def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview):
-    runs = _runs(panel, CHOICES)
+    runs = _runs(panel)
     markdown = "\n".join(_evidence_summary(runs, None, None, overview))
     sections = _step_sections(markdown)
     for run in runs:
@@ -176,7 +172,7 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
 
 
 def test_summary_chart_has_one_standardized_bar_per_saved_run(panel, overview):
-    runs = _runs(panel, CHOICES)
+    runs = _runs(panel)
     markdown = "\n".join(_evidence_summary(runs, None, None, overview))
     summary = markdown.split("### 四项回归结果汇总", 1)[1].split("### 步骤 11", 1)[0]
     (chart,) = [json.loads(block) for block in CHART.findall(summary)]
@@ -188,8 +184,7 @@ def test_summary_chart_has_one_standardized_bar_per_saved_run(panel, overview):
         "步骤 14 · 网络",
     ]
     assert not any(item.get("saved") for item in chart["items"])
-    # The position index (step 13's saved Y here) is a ratio: its amount is a bare number.
-    units = {"trade": " 个百分点", "production": " 个百分点", "length": "", "network": " 个中心性原始单位"}
+    units = {"trade": " 个百分点", "production": " 个百分点", "length": " 个长度单位", "network": " 个中心性原始单位"}
     for item, run in zip(chart["items"], runs):
         coefficient, std = run["result"]["cumulative"], run["result"]["depvar_within_std"]
         point = coefficient["coef"] * 0.01 / std

@@ -16,11 +16,6 @@ def download(years: list[int]) -> None:
     pymrio.download_oecd(storage_folder=RAW_DATA_DIR, years=years)
 
 
-def _source_csv(year: int) -> Path:
-    """Compatibility seam around the one shared unique-year resolver."""
-    return resolve_year_source(year, RAW_DATA_DIR)
-
-
 def _read_reported_output(path: Path, index: pd.MultiIndex) -> pd.Series:
     """从 OECD 原始宽表读取 ``OUT`` 账户行，并按 pymrio 的节点顺序对齐。
 
@@ -61,7 +56,7 @@ def load(year: int):
       reported_output(OECD 原始 OUT 账户)用于独立 QC。
     N = 国家数 × 行业数(ICIO2023: 77×45 = 3465)。
     """
-    source = _source_csv(year)
+    source = resolve_year_source(year, RAW_DATA_DIR)
     validate_raw_file(source, dimension_contract_for(RAW_DATA_DIR))
     io = pymrio.parse_oecd(path=RAW_DATA_DIR, year=year)
     # 必须在 calc_all 之外独立读取；这是对源表的观测值，不是派生的 x。

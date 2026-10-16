@@ -83,8 +83,7 @@ _WORKBENCH_STEPS = frozenset(str(item["n"]) for item in STEPS if item.get("regre
 
 def _report_data(step: str, data: dict[str, Any]) -> dict[str, Any]:
     """A step's data as the report reads it. The workbench's experiment counts only by what the report prints of it
-    (its model); without one, the key is left out, so a session that never used the workbench keeps the fingerprint
-    it had before."""
+    (its model); without one, the key is left out."""
     from gvcsim.regression.workbench import reported_experiment
 
     projected = {k: v for k, v in data.items() if k not in _VIEW_ONLY_KEYS and k != "experiment"}
@@ -94,15 +93,20 @@ def _report_data(step: str, data: dict[str, Any]) -> dict[str, Any]:
     return projected
 
 
-def _projected_fingerprint(session: dict[str, Any], *, with_quiz: bool) -> str:
+def report_fingerprint(session: dict[str, Any]) -> str:
+    """Fingerprint of the session parts a report is built from: view-only settings and quiz answers excluded.
+
+    Answering a quiz again (after a teacher edits it, or with the same answer) does not make a submitted report out
+    of date: the report keeps the answers it was generated with, and generating or submitting a draft still checks
+    the quiz bank's revision on its own.
+    """
     steps = session.get("steps")
     if not isinstance(steps, dict):
         return _session_fingerprint(session)
 
     def project(key: str, data: dict[str, Any]) -> dict[str, Any]:
         projected = _report_data(key, data)
-        if not with_quiz:
-            projected.pop("quiz", None)
+        projected.pop("quiz", None)
         return projected
 
     projected_steps = {
@@ -114,21 +118,6 @@ def _projected_fingerprint(session: dict[str, Any], *, with_quiz: bool) -> str:
         for key, value in steps.items()
     }
     return _session_fingerprint({**session, "steps": projected_steps})
-
-
-def report_fingerprint(session: dict[str, Any]) -> str:
-    """Fingerprint of the session parts a report is built from: view-only settings and quiz answers excluded.
-
-    Answering a quiz again (after a teacher edits it, or with the same answer) does not make a submitted report out
-    of date: the report keeps the answers it was generated with, and generating or submitting a draft still checks
-    the quiz bank's revision on its own.
-    """
-    return _projected_fingerprint(session, with_quiz=False)
-
-
-def _report_fingerprint_with_quiz(session: dict[str, Any]) -> str:
-    """The fingerprint reports stored as ``report_fingerprint`` before quiz answers were excluded."""
-    return _projected_fingerprint(session, with_quiz=True)
 
 
 # Viewing a page saves a default record without the student doing anything: step 1 records the slice's largest
@@ -190,22 +179,13 @@ def report_handed_in(report: dict[str, Any] | None) -> bool:
 
 
 def report_matches_session(session: dict[str, Any], report: dict[str, Any] | None) -> bool:
-    """Return whether a report was generated from this session's report inputs.
-
-    Reports saved before quiz answers were excluded carry ``report_fingerprint`` (quiz answers included); reports
-    saved before the view-only exclusion carry only the full-session fingerprint. Each is compared the way it was
-    made until it is generated again.
-    """
+    """Return whether a report was generated from this session's report inputs."""
     if report is None:
         return False
     provenance = report.get("provenance")
     if not isinstance(provenance, dict):
         return False
-    if "report_inputs_fingerprint" in provenance:
-        return provenance["report_inputs_fingerprint"] == report_fingerprint(session)
-    if "report_fingerprint" in provenance:
-        return provenance["report_fingerprint"] == _report_fingerprint_with_quiz(session)
-    return provenance.get("session_fingerprint") == _session_fingerprint(session)
+    return provenance.get("report_inputs_fingerprint") == report_fingerprint(session)
 
 
 def _student(c: psycopg.Connection[dict[str, Any]], username: str) -> dict[str, Any] | None:

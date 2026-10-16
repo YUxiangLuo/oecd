@@ -4,15 +4,21 @@ import type { TeachingCountriesResponse } from "../../types";
 import { countryIndustryLines, countryIndustryNote, CountryExposureChart, countryTipLines, goodsBalanceText, ruleYiUsd, ruleYiUsdRange, taxedRuleText, yiUsd } from "./country-exposure";
 import { TAXED, TAXED_LATER } from "./palette";
 
+/** Million USD: CAN a surplus of 248,900 (2,489 亿美元), AUT a deficit of 1,234 (12.3 亿美元). */
+const SURPLUS: Record<string, number> = { CAN: 248900, CRI: 1500, COL: 4321, PER: 2000, LUX: 1000, AUT: -1234, CHN: 950, MEX: 800 };
 const row = (country: string, mean: number, taxed = mean > 0, exposed = taxed ? 44 : 0, industries = 44) => ({
-  country, taxed, mean_exposure: mean, max_exposure: mean * 2, industries, exposed_industries: exposed,
+  country, taxed, mean_exposure: mean, max_exposure: mean * 2, industries, goods_industries: industries, exposed_industries: exposed,
+  market_goods_surplus: SURPLUS[country] ?? 0, wave: taxed ? 1 : 0, start_year: taxed ? 2018 : null,
 });
-const RULE = { basis: "first-year goods trade surplus with the market (ICIO sectors A-C)", min_million_usd: 1000, year: 2016 };
-/** Million USD: CAN a surplus of 248,900 (2,489 亿美元), AUT a deficit of 1,234 (12.3 亿美元); MEX has none sent. */
-const SURPLUS: Record<string, number> = { CAN: 248900, CRI: 1500, COL: 4321, PER: 2000, LUX: 1000, AUT: -1234, CHN: 950 };
+const RULE: TeachingCountriesResponse["taxed_rule"] = {
+  basis: "first-year goods trade surplus with the market (ICIO sectors A-C)", min_million_usd: 1000, year: 2016,
+  scope: "goods industries (ICIO sectors A-C)", rate: 0.25,
+  waves: [{ wave: 1, min_million_usd: 10000, start_year_offset: 2 }, { wave: 2, min_million_usd: 1000, start_year_offset: 3 }],
+};
 
 const countriesFixture: TeachingCountriesResponse = {
   version: "step10-tariff-teaching-v8", year: 2020, market: "USA", tariff_rate: 0.25, policy_year: 2018,
+  policy_years: [2018], waves: [{ wave: 1, start_year: 2018, min_million_usd: 1000, countries: 5 }], taxed_rule: RULE,
   taxed_countries: 5, untaxed_countries: 3, entities: 350,
   countries: [
     row("CAN", 0.143), row("CRI", 0.0782, true, 42, 43), row("COL", 0.0727), row("PER", 0.057), row("LUX", 0.0051, true, 40, 40),
@@ -36,7 +42,7 @@ test("clearing countries dismisses the old readout", () => {
 test("the industry note counts taxed industries and says when some have X = 0", () => {
   expect(countryIndustryNote(row("CAN", 0.143))).toBe("44/44 个行业被加税");
   expect(countryIndustryNote(row("CRI", 0.0782, true, 42, 43))).toBe("43/43 个行业被加税（1 个货物行业对美无出口：w = 0）");
-  // Goods only (v8): a taxed country's services are counted but not taxed.
+  // Goods only: a taxed country's services are counted but not taxed.
   expect(countryIndustryNote({ ...row("DEU", 0.08, true, 33, 44), goods_industries: 34 })).toBe("34/44 个行业被加税（10 个非货物行业不加税，1 个货物行业对美无出口：w = 0）");
   expect(countryIndustryLines({ ...row("DEU", 0.08, true, 33, 44), goods_industries: 34 })).toEqual([
     // "其中" right under the taxed industries it splits, the non-goods line after it.
@@ -72,7 +78,7 @@ test("taxed bars are sorted, orange and scaled; untaxed countries form one group
     ]);
     // The USA is the imposer: never a bar or a code (the policy line above the chart says so, not the chart).
     expect(document.querySelector('[data-country="USA"]')).toBeNull();
-    expect(document.querySelector(".country-exposure-note")!.textContent).toBe("悬停或用方向键查看每个国家的 X。");
+    expect(document.querySelector(".country-exposure-note")!.textContent).toBe("悬停或用方向键查看每个国家的 X 与对美货物顺差。");
     // All countries are listed in the collapsed table, which scrolls in its own box: a wave column wider than a
     // 1024px window must not push the whole step sideways.
     expect(document.querySelectorAll(".country-exposure-table tbody tr")).toHaveLength(8);
@@ -140,7 +146,7 @@ test("hover and keyboard focus show the country, X and the industry count; arrow
     fireEvent.keyDown(document.activeElement!, { key: "Home" });
     expect(document.activeElement?.getAttribute("data-country")).toBe("CAN");
     expect(document.activeElement?.getAttribute("aria-label")).toBe(
-      "CAN 加拿大：2020 年各货物行业平均 X = 14.30 个百分点，44/44 个行业被加税；方向键切换国家",
+      "CAN 加拿大：第一批，2018 年起加税，2020 年各货物行业平均 X = 14.30 个百分点，44/44 个行业被加税，2016 年对美货物顺差 2,489 亿美元；方向键切换国家",
     );
   } finally {
     cleanup();
@@ -161,25 +167,13 @@ test("amounts in million USD read in 亿美元, and the goods balance names a su
   expect(ruleYiUsd(1000)).toBe("10 亿美元");
   expect(goodsBalanceText({ market_goods_surplus: 248900 }, RULE)).toBe("2016 年对美货物顺差 2,489 亿美元");
   expect(goodsBalanceText({ market_goods_surplus: -1234 }, RULE)).toBe("2016 年对美货物逆差 12.3 亿美元");
-  // Missing from an older server: nothing to say.
-  expect(goodsBalanceText({ market_goods_surplus: null }, RULE)).toBeUndefined();
-  expect(goodsBalanceText({}, RULE)).toBeUndefined();
-  // No rule year: the first year, in words.
-  expect(goodsBalanceText({ market_goods_surplus: 1500 }, { min_million_usd: 1000 })).toBe("首年对美货物顺差 15.0 亿美元");
   expect(taxedRuleText(RULE)).toBe("2016 年对美货物贸易顺差 ≥ 10 亿美元");
   expect(taxedRuleText(RULE, "达到或超过 ")).toBe("2016 年对美货物贸易顺差达到或超过 10 亿美元");
-  expect(taxedRuleText(undefined)).toBeUndefined();
-  expect(taxedRuleText(null)).toBeUndefined();
 });
 
-test("with the taxed rule, every country's readout gives its goods balance with the US (the rule itself is stated above the chart)", () => {
-  const data: TeachingCountriesResponse = {
-    ...countriesFixture,
-    taxed_rule: RULE,
-    countries: countriesFixture.countries.map((item) => (item.country in SURPLUS ? { ...item, market_goods_surplus: SURPLUS[item.country] } : item)),
-  };
+test("every country's readout gives its goods balance with the US (the rule itself is stated above the chart)", () => {
   try {
-    render(<CountryExposureChart data={data} />);
+    render(<CountryExposureChart data={countriesFixture} />);
     // The rule line moved to the policy sentence on the page; the note says what the readout adds.
     expect(document.querySelector(".country-exposure-rule")).toBeNull();
     expect(document.querySelector(".country-exposure-note")!.textContent).toBe("悬停或用方向键查看每个国家的 X 与对美货物顺差。");
@@ -198,26 +192,11 @@ test("with the taxed rule, every country's readout gives its goods balance with 
     expect(aut.getAttribute("aria-label")).toBe("AUT 奥地利：2020 年各货物行业平均 X = 0 个百分点，0/44 个行业被加税，2016 年对美货物逆差 12.3 亿美元；方向键切换国家");
     // An untaxed surplus below the threshold.
     expect(document.querySelector('[data-country="CHN"]')!.getAttribute("aria-label")).toContain("2016 年对美货物顺差 9.5 亿美元");
-    // A country the server sent no balance for says nothing about it.
-    expect(document.querySelector('[data-country="MEX"]')!.getAttribute("aria-label")).not.toContain("对美货物");
     // The collapsed table lists the balance too (negative = deficit).
     expect(document.querySelector(".country-exposure-table thead")!.textContent).toContain("2016 年对美货物顺差（负数为逆差）");
     const cells = [...document.querySelectorAll(".country-exposure-table tbody tr")].map((tr) => [...tr.querySelectorAll("td")].map((td) => td.textContent));
-    expect(cells[0]).toEqual(["CAN 加拿大", "被加税", "14.30", "44/44", "2,489 亿美元"]);
+    expect(cells[0]).toEqual(["CAN 加拿大", "被加税（第一批，2018 年起）", "14.30", "44/44", "2,489 亿美元"]);
     expect(cells.find((cells) => cells[0] === "AUT 奥地利")).toEqual(["AUT 奥地利", "未被加税", "0", "0/44", "-12.3 亿美元"]);
-    expect(cells.find((cells) => cells[0] === "MEX 墨西哥")!.at(-1)).toBe("—");
-  } finally {
-    cleanup();
-  }
-});
-
-test("without the taxed rule (an older server) the chart adds no rule line or balance", () => {
-  try {
-    render(<CountryExposureChart data={countriesFixture} />);
-    expect(document.querySelector(".country-exposure-rule")).toBeNull();
-    expect(document.querySelector(".country-exposure-note")!.textContent).toBe("悬停或用方向键查看每个国家的 X。");
-    expect(document.body.textContent).not.toContain("对美货物");
-    expect(document.querySelector('[data-country="CAN"]')!.getAttribute("aria-label")).not.toContain("对美货物");
   } finally {
     cleanup();
   }
@@ -269,7 +248,7 @@ test("the readout fits its 260 px box: the industry count is split into short li
 test("keyboard focus in the lower half puts the readout above the item, clear of the note and the table summary", async () => {
   const box = (top: number, height: number) => ({ top, bottom: top + height, left: 0, right: 700, width: 700, height, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
   try {
-    const view = render(<CountryExposureChart data={{ ...countriesFixture, taxed_rule: RULE }} />);
+    const view = render(<CountryExposureChart data={countriesFixture} />);
     const wrap = view.container.querySelector(".country-exposure") as HTMLElement;
     wrap.getBoundingClientRect = () => box(100, 400);
     const aut = document.querySelector('[data-country="AUT"]') as HTMLElement;
@@ -292,17 +271,16 @@ test("keyboard focus in the lower half puts the readout above the item, clear of
   }
 });
 
-
-test("teaching data v10: a taxed country's readout says its wave and when its tariff starts", () => {
+test("a taxed country's readout says its wave and when its tariff starts", () => {
   const row = {
     country: "CAN", taxed: true, mean_exposure: 0.2, max_exposure: 0.4, industries: 44, goods_industries: 34,
     exposed_industries: 34, market_goods_surplus: 47400, wave: 1, start_year: 2018,
   };
-  expect(countryTipLines(row, 2020)).toContainEqual(["加税", "第一批，2018 年起"]);
-  expect(countryTipLines({ ...row, taxed: false, wave: 0, start_year: null }, 2020).some(([label]) => label === "加税")).toBe(false);
+  expect(countryTipLines(row, 2020, RULE)).toContainEqual(["加税", "第一批，2018 年起"]);
+  expect(countryTipLines({ ...row, taxed: false, wave: 0, start_year: null }, 2020, RULE).some(([label]) => label === "加税")).toBe(false);
 });
 
-test("teaching data v10: the two waves have their own colour and legend entry, and each bar's label names its wave", () => {
+test("the two waves have their own colour and legend entry, and each bar's label names its wave", () => {
   const waveOf: Record<string, [number, number]> = { CAN: [1, 2018], CRI: [2, 2019], COL: [2, 2019], PER: [2, 2019], LUX: [1, 2018] };
   const data = {
     ...countriesFixture,

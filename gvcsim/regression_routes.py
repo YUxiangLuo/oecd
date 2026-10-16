@@ -335,8 +335,6 @@ def regression_design(
     baseline: str | None = None,
 ):
     """返回指定 outcome 的方程与面板/个体/聚类等设计信息，不执行估计。"""
-    if "step" in request.query_params:
-        raise HTTPException(status_code=422, detail="旧 step 参数已删除，请使用 outcome")
     unsupported = sorted(set(request.query_params) - {"outcome", "baseline"})
     if unsupported:
         raise HTTPException(status_code=400, detail=f"不支持的回归设计参数：{'、'.join(unsupported)}")

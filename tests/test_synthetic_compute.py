@@ -10,7 +10,7 @@ import json
 import pandas as pd
 import pytest
 
-from gvcsim import artifacts, pipeline, publication, shocks
+from gvcsim import artifacts, pipeline, publication, shock_catalog, shocks
 from gvcsim.data import controls, output_quality, quality, raw_icio, regression_quality
 from gvcsim.data.citations import artifact_data_sources
 from gvcsim.data.quality import QcCheck
@@ -329,7 +329,7 @@ def test_run_builds_sentinel_switches_pointer_and_never_touches_database(tmp_pat
     assert metadata["course_release"] == config.COURSE_RELEASE
     assert set(metadata["qc"]) == {"years", "controls", "shocks"}
     assert metadata["qc_contract"] == quality.qc_contract_metadata()
-    assert metadata["shock_contract"] == shocks.shock_contract_metadata()
+    assert metadata["shock_contract"] == shock_catalog.shock_contract_metadata()
     assert metadata["artifact_contract_version"] == 17
     assert metadata["publication_policy"] == artifacts.publication_policy_metadata()
     assert metadata["integrity"]["status"] == "passed"

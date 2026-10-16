@@ -262,7 +262,7 @@ describe("indicator explorer with report material recorded on request", () => {
     schema.mockRestore();
   });
 
-  test("carries a legacy country pair without treating legacy observations as saved material", async () => {
+  test("restores a recorded chart's countries without recording it again", async () => {
     const rows = spyOn(api, "countryIndicators").mockImplementation(
       async (year) => countryRows(year),
     );
@@ -270,26 +270,6 @@ describe("indicator explorer with report material recorded on request", () => {
       groups: [],
       fields: {},
     });
-    const legacy = setup(TradeVizStep, {
-      compared: ["USA", "CHN"],
-      observations: [{ entity: "USA", country: "USA", year: 2020, value: 9 }],
-    });
-    await legacy.findByRole("button", { name: "出口构成" });
-    expect((legacy.getByLabelText("国家 A") as HTMLSelectElement).value).toBe(
-      "USA",
-    );
-    expect(
-      (legacy.getByLabelText("对比国家 B") as HTMLSelectElement).value,
-    ).toBe("CHN");
-    // Legacy observations (no source) are not this step's material: nothing is recorded yet.
-    await legacy.findByRole("button", { name: RECORD_CHART_ACTION });
-    expect(materialChip(legacy)).toBe(MATERIAL_STATE_LABELS.missing);
-    expect(legacy.saves).toHaveLength(0);
-    await record(legacy);
-    expect(legacy.saves).toHaveLength(1);
-    expect(legacy.saves[0].observations!.every((item) => item.source === "explicit-indicator-composition")).toBeTrue();
-    expect(legacy.saves[0].material_chosen).toBe(true);
-    cleanup();
     const selection = {
       first: "USA",
       second: "CHN",
@@ -303,6 +283,7 @@ describe("indicator explorer with report material recorded on request", () => {
     };
     const modern = setup(TradeVizStep, {
       indicator_selection: selection,
+      material_label: "历年变化 · 外国增加值项占比 · USA 美国 对 CHN 中国 · 国家整体 · 2020（1 条读数）",
       observations: [
         {
           entity: "USA",
@@ -319,7 +300,7 @@ describe("indicator explorer with report material recorded on request", () => {
     });
     await modern.findByText("核对已记录的读数 · 1 条");
     expect(materialChip(modern)).toBe(MATERIAL_STATE_LABELS.recorded);
-    expect(within(materialCard(modern)).getByRole("status").textContent).toBe("USA 美国 · 2020 年 · 国家整体（1 条读数）");
+    expect(within(materialCard(modern)).getByRole("status").textContent).toBe("历年变化 · 外国增加值项占比 · USA 美国 对 CHN 中国 · 国家整体 · 2020（1 条读数）");
     expect(modern.saves).toHaveLength(0);
     expect((modern.getByLabelText("国家 A") as HTMLSelectElement).value).toBe(
       "USA",

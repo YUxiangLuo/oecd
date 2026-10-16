@@ -12,7 +12,7 @@ const NEWER = "2026-09-10T00:01:00Z";
 const delays = [...SAVE_RETRY_DELAYS_MS];
 function response(session: ExperimentSession = emptySession(), updated_at = STAMP): SessionResponse & SessionSaveResponse {
   return { session, updated_at, release_id: RELEASE, report: null,
-    completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_gate: [], material_gate: [] };
+    completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_current: false, report_gate: [], material_gate: [] };
 }
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -304,7 +304,7 @@ test("a delayed learning read cannot undo report submission with the same sessio
   const report: ClassroomReport = {
     state: "pending", markdown: "submitted", score: null, feedback: "", graded_by: null,
     generated_at: NEWER, updated_at: NEWER, submitted_at: NEWER, graded_at: null,
-    provenance: { session_version: "test", generated_at: NEWER, years: [2020], session_fingerprint: "test", runs: [] },
+    provenance: { session_version: "test", generated_at: NEWER, years: [2020], session_fingerprint: "test", runs: [], custom_results: [] },
   };
   act(() => result.current.applyReportMutation({ ...initial, report, report_current: true, completion: { completed: [15], completed_count: 1, total: 15, steps: [] } }));
   await act(async () => { stale.resolve(initial); await refreshing; });

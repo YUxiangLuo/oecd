@@ -552,7 +552,7 @@ def _validate_release_regression_input_qc(root: Path, metadata: dict[str, Any]) 
 def validate_release(processed_dir: Path | None = None, *, verify_integrity: bool = True) -> dict[str, Any]:
     from gvcsim.config import COURSE_RELEASE, PROCESSED_DIR
     from gvcsim.data.citations import DataSourcesValidationError, validate_data_sources
-    from gvcsim.shocks import validate_shock_contract_metadata
+    from gvcsim.shock_catalog import validate_shock_contract_metadata
 
     root = (processed_dir or PROCESSED_DIR).resolve()
     metadata = dataset_metadata(root)

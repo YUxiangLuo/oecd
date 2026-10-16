@@ -5,7 +5,6 @@ import re
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from gvcsim.regression.estimation import two_way_note
 from gvcsim.regression.teaching import MARKET
 from gvcsim.regression.validity import CLUSTER_INTERVAL_NOTE
 from gvcsim.report_common import (
@@ -38,7 +37,12 @@ from gvcsim.report_common import (
     with_count_unit,
     y_display,
 )
-from gvcsim.report_gate import _indicator_material_complete, _step_data, _valid_indicator_observations
+from gvcsim.report_gate import (
+    _indicator_material_complete,
+    _step_data,
+    _table_comparison_complete,
+    _valid_indicator_observations,
+)
 from gvcsim.report_labels import DB_TABLE_NAMES, FINAL_DEMAND_NAMES, country_label, sector_label
 from gvcsim.report_observed import _viewed_shock_event_sources
 from gvcsim.report_regression_chart import family_chart, summary_chart
@@ -192,48 +196,29 @@ def _with_tax_status(country: str, scenario: dict[str, Any] | None) -> str:
 
 
 def _scenario_line(scenario: dict[str, Any] | None) -> str | None:
-    """Step 10's scenario and the rule that picks the taxed countries, as the page states it: "美国从 2018 年起对
-    2016 年对美货物贸易顺差达到或超过 10 亿美元的 N 国加征 25% 关税，其余 M 国未被加税"."""
+    """Step 10's scenario and the rule that picks the taxed countries, as the page states it: "美国分两批对 2016 年
+    对美货物贸易顺差达到或超过 10 亿美元的 N 国的货物……加征 25% 关税：……；其余 M 国未被加税"."""
     if not scenario:
         return None
-    taxed, untaxed = scenario.get("taxed_countries"), scenario.get("untaxed_countries")
-    rate, policy_year = scenario.get("tariff_rate"), scenario.get("policy_year")
-    if not isinstance(taxed, int) or not isinstance(untaxed, int) or not isinstance(rate, (int, float)):
-        return None
-    raw_rule = scenario.get("taxed_rule")
-    rule: dict[str, Any] = raw_rule if isinstance(raw_rule, dict) else {}
-    minimum, rule_year = rule.get("min_million_usd"), rule.get("year")
-    since = f"从 {policy_year} 年起" if isinstance(policy_year, int) else ""
-    who = (
-        f"{f'{rule_year} 年' if isinstance(rule_year, int) else '首年'}对美货物贸易顺差达到或超过 {_yi_usd(float(minimum))}的 {taxed} 国"
-        if isinstance(minimum, (int, float)) and math.isfinite(minimum)
-        else f"{taxed} 国"
+    rule = scenario["taxed_rule"]
+    minimum = _yi_usd(float(rule["min_million_usd"]))
+    who = f"{rule['year']} 年对美货物贸易顺差达到或超过 {minimum}的 {scenario['taxed_countries']} 国"
+    # Two waves, the first for the largest surpluses (the page says the same on step 10).
+    waves = [wave for wave in scenario["waves"] if wave["countries"]]
+    parts = "，".join(
+        (
+            f"对美货物顺差 ≥ {_yi_usd(float(wave['min_million_usd']))}的 {wave['countries']} 国"
+            if index == 0
+            else f"其余 {wave['countries']} 国"
+        )
+        + f" {wave['start_year']} 年起"
+        for index, wave in enumerate(waves)
     )
-    # A space between 对 and a number ("对 2016 年"), none before 首年.
-    space = " " if who[:1].isdigit() else ""
-    # Teaching data v10: two waves, the first for the largest surpluses (the page says the same on step 10).
-    waves = [wave for wave in scenario.get("waves") or [] if isinstance(wave, dict) and wave.get("countries")]
-    if rule.get("scope") and len(waves) > 1:
-        parts = "，".join(
-            (
-                f"对美货物顺差 ≥ {_yi_usd(float(wave['min_million_usd']))}的 {wave['countries']} 国"
-                if index == 0
-                else f"其余 {wave['countries']} 国"
-            )
-            + f" {wave['start_year']} 年起"
-            for index, wave in enumerate(waves)
-        )
-        return (
-            f"- 情景：美国分两批对{space}{who}的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 "
-            f"{_rate(float(rate) * 100)}% 关税：{parts}；非货物行业不加税；其余 {untaxed} 国未被加税。"
-        )
-    # Teaching data v8 taxes goods only (the rule carries a scope); an older release taxed every industry.
-    if rule.get("scope"):
-        return (
-            f"- 情景：美国{since}对{space}{who}的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 "
-            f"{_rate(float(rate) * 100)}% 关税，非货物行业不加税；其余 {untaxed} 国未被加税。"
-        )
-    return f"- 情景：美国{since}对{space}{who}加征 {_rate(float(rate) * 100)}% 关税，其余 {untaxed} 国未被加税。"
+    return (
+        f"- 情景：美国分两批对 {who}的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 "
+        f"{_rate(float(scenario['tariff_rate']) * 100)}% 关税：{parts}；非货物行业不加税；"
+        f"其余 {scenario['untaxed_countries']} 国未被加税。"
+    )
 
 
 def _is_service(industry: object) -> bool:
@@ -308,7 +293,10 @@ def _experiment_sections(session: dict[str, Any], scenario: dict[str, Any] | Non
         data = _step_data(session, step)
         compared = _list_values(data.get("compared"))
         observations = [item for item in _list_values(data.get("observations")) if isinstance(item, dict)]
-        if step in (6, 7, 8):
+        if step in (2, 3, 4, 5):
+            if not _table_comparison_complete(data):
+                continue
+        elif step in (6, 7, 8):
             observations = _valid_indicator_observations(data)
             if not _indicator_material_complete(data, step):
                 continue
@@ -320,97 +308,77 @@ def _experiment_sections(session: dict[str, Any], scenario: dict[str, Any] | Non
             ]
             if not observations:
                 continue
-        # A section needs recorded material; browsing state alone (year/country/chart/drill) is not printed.
-        if not (compared or observations):
-            continue
         captured = True
         lines.extend((f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}", ""))
-        # Set when the student recorded this material explicitly after submitting the report.
-        chosen = data.get("material_chosen") is True
-        # Steps 2–5 record one country's reading automatically; a record saved before that change may hold two
-        # countries and is listed as recorded.
-        automatic = bool(observations) and all(
-            item.get("source") == "auto-indicator-comparison" for item in observations
-        )
         if compared:
-            # One saved economy is read against the global reference; two or more are a comparison.
             if step in (2, 3, 4, 5):
-                # The student picks the country on the page and the reading is recorded for it: "系统自动记录的国家"
-                # read as if the system had chosen the country.
-                compared_label = "学生选定的国家" if chosen else "记录的国家"
-            elif len(compared) == 1:
-                compared_label = "学生选定的国家" if chosen else "所看国家"
+                # Recorded with the country on the page; set by hand only when the student re-recorded it after
+                # submitting ("系统自动记录的国家" would read as if the system had chosen the country).
+                compared_label = "学生选定的国家" if data.get("material_chosen") is True else "记录的国家"
             else:
-                compared_label = "学生选定的比较" if chosen else "比较对象"
+                # Steps 6–9 record a chart only when the student asks: one economy, or a comparison of several.
+                compared_label = "学生选定的国家" if len(compared) == 1 else "学生选定的比较"
             lines.append(f"- {compared_label}：{'、'.join(_safe(country_label(str(item))) for item in compared)}")
-        if observations:
-            has_amounts = any(item.get("unit") == "百万美元" for item in observations)
-            if step in (6, 7, 8, 9) and any(item.get("year") == 2020 for item in observations):
-                price_note = (
-                    "金额按当年价格计，变化可能包含价格因素。"
-                    if has_amounts
-                    else f"本节为{_unit_kinds(observations)}，不直接受价格水平影响，但仍受下述结构外推影响。"
-                )
-                lines.append(
-                    f"- **2020 年：现价与疫情期外推限制**。{price_note}"
-                    "OECD 2023 版中部分国家的投入产出结构由此前基准表外推，疫情对行业的冲击并不均匀；"
-                    "请区分价格、统计编制与实际数量或结构变化，不能仅凭该年转折判断生产调整。"
-                    "参见 [OECD TiVA 2023 指南第 42 页]"
-                    "(https://www.oecd.org/content/dam/oecd/en/topics/policy-sub-issues/trade-in-value-added/tiva-indicators-guide-2023.pdf#page=42)。"
-                )
-            # Steps 2-5 carry one step-level metric; step 9 records the metric on
-            # each observation, so fall back to it instead of printing “—”.
-            metric_label = data.get("metric") or next(
-                (item.get("metric") for item in observations if item.get("metric")), None
+        has_amounts = any(item.get("unit") == "百万美元" for item in observations)
+        if step in (6, 7, 8, 9) and any(item.get("year") == 2020 for item in observations):
+            price_note = (
+                "金额按当年价格计，变化可能包含价格因素。"
+                if has_amounts
+                else f"本节为{_unit_kinds(observations)}，不直接受价格水平影响，但仍受下述结构外推影响。"
             )
-            if step == 9 and observations[0].get("source") in {"explicit-network-trend", "explicit-network-ranking"}:
-                view_label = (
-                    "历年趋势"
-                    if observations[0]["source"] == "explicit-network-trend"
-                    else "行业排名（按国家 A 降序，记录展示范围）"
-                )
-                lines.append(f"- 记录方式：{view_label}；单位：{_safe(observations[0].get('unit', '未记录'))}")
+            lines.append(
+                f"- **2020 年：现价与疫情期外推限制**。{price_note}"
+                "OECD 2023 版中部分国家的投入产出结构由此前基准表外推，疫情对行业的冲击并不均匀；"
+                "请区分价格、统计编制与实际数量或结构变化，不能仅凭该年转折判断生产调整。"
+                "参见 [OECD TiVA 2023 指南第 42 页]"
+                "(https://www.oecd.org/content/dam/oecd/en/topics/policy-sub-issues/trade-in-value-added/tiva-indicators-guide-2023.pdf#page=42)。"
+            )
+        # Steps 2-5 carry one step-level metric; step 9 records the metric on
+        # each observation, so fall back to it instead of printing “—”.
+        metric_label = data.get("metric") or next(
+            (item.get("metric") for item in observations if item.get("metric")), None
+        )
+        if step == 9 and observations[0].get("source") in {"explicit-network-trend", "explicit-network-ranking"}:
+            view_label = (
+                "历年趋势"
+                if observations[0]["source"] == "explicit-network-trend"
+                else "行业排名（按国家 A 降序，记录展示范围）"
+            )
+            lines.append(f"- 记录方式：{view_label}；单位：{_safe(observations[0].get('unit', '未记录'))}")
+            lines.append(
+                "- 行业指标来自完整国家×行业中间品网络，不对应国家贸易概览的位置；加权流量为当年价格；"
+                "介数等只看连接、不看金额的指标，数值高不等于经济上更重要。"
+            )
+        if step in (6, 7, 8):
+            lines.append("- 记录的图表材料（学生选定的完整图表；指标与单位逐行列示）：")
+            # The data release id is listed under "报告溯源"; the body only says how to read the numbers.
+            lines.append(f"- {_unit_reading_note(observations)}")
+        elif step in (2, 3, 4, 5):
+            lines.append(f"- 记录的读数：{'；'.join(_country_reading(item) for item in observations)}")
+            if step in (2, 3, 4):
+                lines.append("- 数值为国家级代表指标：页面可按国家×行业浏览，报告材料统一按国家级记录。")
+            if step == 5 and metric_label == "weighted degree":
                 lines.append(
-                    "- 行业指标来自完整国家×行业中间品网络，不对应国家贸易概览的位置；加权流量为当年价格；"
-                    "介数等只看连接、不看金额的指标，数值高不等于经济上更重要。"
+                    "- 国家级加权总度：该国全部出口 + 进口，中间品和最终品都算在内（不含国内流量）；"
+                    "行业级数值只算中间品流量，两者不能直接比较。"
                 )
-            if step in (6, 7, 8):
-                lines.append(
-                    "- 记录的图表材料（学生选定的完整图表；指标与单位逐行列示）："
-                    if chosen
-                    else "- 记录的图表材料（系统按学生最后查看的完整图表自动记录；指标与单位逐行列示）："
-                )
-                # The data release id is listed under "报告溯源"; the body only says how to read the numbers.
-                lines.append(f"- {_unit_reading_note(observations)}")
-            elif step in (2, 3, 4, 5):
-                lines.append(f"- 记录的读数：{'；'.join(_country_reading(item) for item in observations)}")
-                if step in (2, 3, 4) and automatic:
-                    lines.append("- 数值为国家级代表指标：页面可按国家×行业浏览，报告材料统一按国家级记录。")
-                if step == 5 and metric_label == "weighted degree":
-                    lines.append(
-                        "- 国家级加权总度：该国全部出口 + 进口，中间品和最终品都算在内（不含国内流量）；"
-                        "行业级数值只算中间品流量，两者不能直接比较。"
-                    )
-            else:
-                lines.append(
-                    f"- 记录的代表指标：{_STUDENT_METRIC_LABELS.get(str(metric_label), _safe(metric_label or '—'))}"
-                )
-            entity_header = "国家×行业" if any(item.get("industry") for item in observations) else "国家"
-            lines.extend(("", f"| {entity_header} | 年份 | 指标 | 单位 | 数值 |", "|---|---:|---|---|---:|"))
-            for item in observations:
-                observation_value = item.get("value", "—")
-                if item.get("unit") == "%" and isinstance(observation_value, (int, float)):
-                    observation_value *= 100
-                lines.append(
-                    f"| {_safe(_entity_label(item))} | "
-                    f"{_safe(item.get('year', '—'))} | "
-                    f"{_STUDENT_METRIC_LABELS.get(str(item.get('metric')), _safe(item.get('metric', '—')))} | "
-                    f"{_safe(item.get('unit', '—'))} | "
-                    f"{reading_number(float(observation_value), str(item.get('unit') or '')) if isinstance(observation_value, (int, float)) and not isinstance(observation_value, bool) else _safe(observation_value)} |"
-                )
-        elif compared:
-            # Only steps 2–5 reach this: steps 6–9 skip a section without complete readings.
-            lines.append("- 本步只记录了国家，没有记录代表指标数值。")
+        else:
+            lines.append(
+                f"- 记录的代表指标：{_STUDENT_METRIC_LABELS.get(str(metric_label), _safe(metric_label or '—'))}"
+            )
+        entity_header = "国家×行业" if any(item.get("industry") for item in observations) else "国家"
+        lines.extend(("", f"| {entity_header} | 年份 | 指标 | 单位 | 数值 |", "|---|---:|---|---|---:|"))
+        for item in observations:
+            observation_value = item.get("value", "—")
+            if item.get("unit") == "%" and isinstance(observation_value, (int, float)):
+                observation_value *= 100
+            lines.append(
+                f"| {_safe(_entity_label(item))} | "
+                f"{_safe(item.get('year', '—'))} | "
+                f"{_STUDENT_METRIC_LABELS.get(str(item.get('metric')), _safe(item.get('metric', '—')))} | "
+                f"{_safe(item.get('unit', '—'))} | "
+                f"{reading_number(float(observation_value), str(item.get('unit') or '')) if isinstance(observation_value, (int, float)) and not isinstance(observation_value, bool) else _safe(observation_value)} |"
+            )
         lines.append("")
 
     shock = _step_data(session, 10)
@@ -958,9 +926,7 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
                 lines.append("- **这一项不显示 95% 区间**：数据不够，不能据此判断方向，也不能写成“没有关联”。")
             lines.extend(_technical_estimate_tables(design, result, suppressed=suppressed, outcome=run["outcome"]))
             notes = list(
-                dict.fromkeys(
-                    _safe(_cjk_punctuation(_plain_note(str(note)))) for note in _list_values(result.get("notes"))
-                )
+                dict.fromkeys(_safe(_cjk_punctuation(str(note))) for note in _list_values(result.get("notes")))
             )
             if notes:
                 lines.extend(("", "计算方法与限制："))
@@ -1008,18 +974,6 @@ def _qc_release_summary(qc: Any) -> dict[str, Any]:
         or summary["disclosure"]
     )
     return summary
-
-
-def _plain_note(note: str) -> str:
-    """Estimator notes saved with a run, in the course's words (older runs carry older wordings)."""
-    # "双向固定效应(entity_id + year),within 变换后 OLS" and "双向固定效应（国家–行业单元 + 年份），组内变换后 OLS".
-    two_way = re.match(r"^双向固定效应[（(](\S+) \+ (\S+)[)）][,，](?:within |组内)变换后 OLS$", note)
-    if two_way:
-        return two_way_note(two_way.group(1), two_way.group(2))
-    components = re.match(r"^实体—年份二部图有 (\d+) 个连通分量", note)
-    if components:
-        return f"样本分成 {components.group(1)} 组互不重叠的数据；估计值是这几组共同的斜率。"
-    return note
 
 
 def _qc_display_name(name: str) -> str:

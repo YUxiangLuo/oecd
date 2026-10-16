@@ -4,7 +4,7 @@ import { useState } from "react";
 import { api } from "../../../api";
 import type { IndicatorSchema, Meta, Step, StepStateApi } from "../../../types";
 import { IndicatorLab } from "../indicator-lab";
-import { AutoMaterialStatus, indicatorMaterialLabel } from "./auto-comparison";
+import { indicatorMaterialLabel } from "./auto-comparison";
 import { COUNTRY_METRIC, indicatorMaterialPatch, type IndicatorGroupKey, type IndicatorStepState } from "./indicator-table";
 
 const meta = {
@@ -211,18 +211,3 @@ describe("steps 2–5 recover missing indicator metadata", () => {
   });
 });
 
-test.each([
-  ["trade", "CHN 中国 20.000%"],
-  ["length", "CHN 中国 1"],
-  ["network", "CHN 中国 300 百万美元"],
-] as const)("legacy %s material without a saved label retains its unit while metadata is unavailable", (topic, expected) => {
-  const initial = oldMaterial(topic);
-  delete (initial as Partial<typeof initial>).material_label;
-  const observations = structuredClone(initial.observations);
-  const view = render(<AutoMaterialStatus state={{
-    data: initial, complete: false, syncing: false, syncError: null, syncNow: () => {}, save: () => {}, materialLocked: true,
-  }} schema={null} current={false} loadFailed={true} loadError="指标说明加载失败" onRetryLoad={() => {}} where="上方所选国家" />);
-  expect(view.container.querySelector(".material-card-summary")?.textContent).toContain(expected);
-  expect(initial.observations).toEqual(observations);
-  expect(view.getByRole("alert").textContent).toContain("指标说明加载失败");
-});

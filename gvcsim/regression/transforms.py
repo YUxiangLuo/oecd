@@ -80,23 +80,14 @@ def _freeze_baseline_gvc(
     return baseline_rows.groupby("__entity", sort=True)[BASE_GVC_COL].mean().rename(BASE_GVC_COL)
 
 
-def _attach_baseline_gvc(
-    data: pd.DataFrame,
-    entity: str,
-    time: str,
-    first_by_entity: pd.Series | None = None,
-    *,
-    frozen_baseline: pd.Series | None = None,
-) -> pd.DataFrame:
+def _attach_baseline_gvc(data: pd.DataFrame, entity: str, time: str, frozen_baseline: pd.Series) -> pd.DataFrame:
     """Attach a frozen moderator and center it equally over retained entities.
 
     ``frozen_baseline`` is constructed from the full structurally filtered panel
-    before outcome/control complete-case deletion. The legacy direct-call form
-    freezes from ``data`` itself, preserving the helper's standalone behavior.
+    before outcome/control complete-case deletion.
     """
     data = data.sort_values([entity, time]).reset_index(drop=True)
-    first = first_by_entity if first_by_entity is not None else pd.Series(dtype=float)
-    base = _freeze_baseline_gvc(data, entity, time, first) if frozen_baseline is None else frozen_baseline.copy()
+    base = frozen_baseline.copy()
     base.index = base.index.astype(str)
     retained = pd.Index(data[entity].astype(str).unique())
     available = retained.intersection(base.index, sort=False)

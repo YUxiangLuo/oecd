@@ -15,6 +15,7 @@ from gvcsim import (
     quizzes,
     report_observed,
     report_saved_run,
+    shock_catalog,
     shocks as shock_module,
     teaching_report,
 )
@@ -25,7 +26,7 @@ from gvcsim.regression import teaching
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 from gvcsim.regression.teaching import X_COLUMN, model_snapshot, variable_catalog
 from gvcsim.report_common import _number
-from gvcsim.report_render import _fixed4
+from gvcsim.report_render import _experiment_sections, _fixed4, _qc_release_summary
 
 from gvcsim.session import empty_session, make_record
 from gvcsim.teaching_report import (
@@ -510,7 +511,7 @@ def _artifacts(path: Path, *, disclosure: bool = False):
         "data_sources": artifact_data_sources(config.RAW_DATA_DIR),
         "raw_dimensions": raw_dimensions_metadata(REPORT_YEARS, config.RAW_DATA_DIR),
         "qc_contract": quality.qc_contract_metadata(),
-        "shock_contract": shock_module.shock_contract_metadata(),
+        "shock_contract": shock_catalog.shock_contract_metadata(),
         "qc": {
             "years": {
                 str(year): quality.summarize_serialized_checks(checks) for year, checks in annual_by_year.items()
@@ -648,9 +649,7 @@ def _ok_run(outcome: str, **design):
     return _sign_run({"design": payload, "result": result})
 
 
-def _steps_two_to_five_reading(
-    country: str, value: float, metric: str, unit: str, source: str = "auto-indicator-comparison"
-) -> dict[str, object]:
+def _steps_two_to_five_reading(country: str, value: float, metric: str, unit: str) -> dict[str, object]:
     return {
         "entity": country,
         "country": country,
@@ -661,7 +660,7 @@ def _steps_two_to_five_reading(
         "unit": unit,
         "release": "ICIO-2023",
         "scope": "country",
-        "source": source,
+        "source": "auto-indicator-comparison",
     }
 
 
@@ -896,7 +895,7 @@ def test_step_nine_accepts_one_to_five_economies(countries):
         for item in data["observations"][:1]
     ]
     assert not any(item["step"] == 9 for item in check_material_gate(session))
-    text = "\n".join(teaching_report._experiment_sections(session))
+    text = "\n".join(_experiment_sections(session))
     section = text.split("### 步骤 9", 1)[1]
     assert all(f"{country_label(country)} · C26 计算机电子光学" in section for country in countries)
 
@@ -919,11 +918,11 @@ def test_report_draws_one_series_per_saved_economy():
         "DEU 德国",
     ]
     assert "两国" not in section
-    assert "比较对象：CHN 中国、USA 美国、DEU 德国" in "\n".join(teaching_report._experiment_sections(session))
+    assert "学生选定的比较：CHN 中国、USA 美国、DEU 德国" in "\n".join(_experiment_sections(session))
     data["compared"] = ["CHN"]
     data["observations"] = _economy_readings(["CHN"], years=(2019, 2020), source="explicit-indicator-trend")
-    text = "\n".join(teaching_report._experiment_sections(session))
-    assert "所看国家：CHN 中国" in text
+    text = "\n".join(_experiment_sections(session))
+    assert "学生选定的国家：CHN 中国" in text
 
 
 def test_step_seven_accepts_the_backward_composition_set():
@@ -963,35 +962,13 @@ def test_steps_six_to_eight_require_explicit_complete_material():
         assert any(item["step"] == 6 for item in check_material_gate(session))
 
 
-@pytest.mark.parametrize(
-    "corrupt",
-    [
-        lambda observations: observations[1].update(year=2019),
-        lambda observations: observations[1].pop("unit"),
-        lambda observations: observations[1].update(value=float("nan")),
-        lambda observations: observations[1].update(source="legacy-two-click"),
-    ],
-)
-def test_steps_two_to_five_legacy_pair_must_stay_one_complete_same_year_pair(corrupt):
-    session = _complete()
-    data = session["steps"]["2"]["data"]
-    data["compared"] = ["CHN", "USA"]
-    data["observations"] = [
-        _steps_two_to_five_reading(country, value, "FVA_share", "%") for country, value in (("CHN", 0.2), ("USA", 0.1))
-    ]
-    assert check_material_gate(session) == []
-    corrupt(data["observations"])
-
-    assert any(item["step"] == 2 for item in check_material_gate(session))
-
-
 def test_indicator_report_formats_percentages_without_changing_saved_values():
     session = _complete()
     data = session["steps"]["6"]["data"]
     data.update(year=1999, chart="unrelated-browse", drill="DEU", metric="wrong-level-metric")
     for item in data["observations"]:
         item.update(metric="FVA_share", unit="%", value=0.237)
-    text = "\n".join(teaching_report._experiment_sections(session))
+    text = "\n".join(_experiment_sections(session))
     section = text.split("### 步骤 6", 1)[1].split("### 步骤 7", 1)[0]
     assert "| 外国增加值项占比 | % | 23.700 |" in section
     assert "| CHN 中国 | 2020 |" in section
@@ -1004,7 +981,7 @@ def test_indicator_report_formats_percentages_without_changing_saved_values():
 def test_table_comparison_report_formats_saved_ratio_as_a_percentage():
     session = _complete()
 
-    text = "\n".join(teaching_report._experiment_sections(session))
+    text = "\n".join(_experiment_sections(session))
     section = text.split("### 步骤 2", 1)[1].split("### 步骤 3", 1)[0]
 
     assert "| CHN 中国 | 2020 | 外国增加值项占比 | % | 20.000 |" in section
@@ -1055,7 +1032,7 @@ def test_composition_requires_all_trade_components_and_reports_each_reading():
         for metric, value in components.items()
     ]
     assert not any(item["step"] == 6 for item in check_material_gate(session))
-    text = "\n".join(teaching_report._experiment_sections(session))
+    text = "\n".join(_experiment_sections(session))
     assert "| 产品税减补贴 | 百万美元 | -2 |" in text
     chart = teaching_report._observed_chart(data, 6, data["observations"])
     # Global-median bars are added when country data is available; the saved countries' bars are fixed.
@@ -1191,8 +1168,6 @@ def test_material_gate_is_independent_of_unfinished_quizzes():
 
 def test_steps_two_to_five_record_one_country():
     """Steps 2–5 record the selected country's country-level reading automatically; no comparison country."""
-    from gvcsim.report_render import _experiment_sections
-
     session = _complete()
     assert check_material_gate(session) == []
 
@@ -1222,40 +1197,15 @@ def test_steps_two_to_five_record_one_country():
     assert "学生选定的国家：CHN 中国" in step_three and "系统自动记录" not in step_three
     step_six = next(part for part in sections if part.startswith("6 "))
     assert "记录的图表材料（学生选定的完整图表" in step_six and "自动记录" not in step_six
+    # Steps 6–9 record a chart only when asked: the report never calls it automatic.
     step_seven = next(part for part in sections if part.startswith("7 "))
-    assert "系统按学生最后查看的完整图表自动记录" in step_seven
+    assert "记录的图表材料（学生选定的完整图表" in step_seven and "自动记录" not in step_seven
 
     missing = _complete()
     missing["steps"]["2"]["data"]["observations"] = []
     message = "".join(next(item["missing"] for item in check_material_gate(missing) if item["step"] == 2))
     assert "动手拆解" in message and "所选国家" in message
     assert "两国" not in message and "保存两国同年比较" not in message
-
-
-@pytest.mark.parametrize("source", ["auto-indicator-comparison", "explicit-indicator-table-comparison"])
-def test_steps_two_to_five_keep_legacy_two_country_records(source):
-    """A two-country record saved before steps 2–5 became single-country stays complete and is listed as recorded."""
-    from gvcsim.report_render import _experiment_sections
-
-    session = _complete()
-    data = session["steps"]["3"]["data"]
-    data["compared"] = ["CHN", "USA"]
-    data["observations"] = [
-        _steps_two_to_five_reading(country, value, "3b_VA_GVC_C_share", "%", source)
-        for country, value in (("CHN", 0.2), ("USA", 0.1))
-    ]
-    assert check_material_gate(session) == []
-
-    step_three = next(
-        part for part in "\n".join(_experiment_sections(session)).split("### 步骤 ") if part.startswith("3 ")
-    )
-    assert "- 记录的国家：CHN 中国、USA 美国" in step_three
-    assert (
-        "记录的读数：2020 年 CHN 中国 复杂 GVC 生产份额 20.000%；2020 年 USA 美国 复杂 GVC 生产份额 10.000%"
-        in step_three
-    )
-    assert "| USA 美国 | 2020 | 复杂 GVC 生产份额 | % | 10.000 |" in step_three
-    assert "对比国家" not in step_three and "比较对象" not in step_three
 
 
 def _invalid_steps_two_to_five(case: str) -> dict:
@@ -1265,9 +1215,6 @@ def _invalid_steps_two_to_five(case: str) -> dict:
     if case == "row":
         data["compared"] = ["ROW"]
         reading.update(entity="ROW", country="ROW")
-    elif case == "row-in-legacy-pair":
-        data["compared"] = ["ROW", "CHN"]
-        data["observations"] = [{**reading, "entity": "ROW", "country": "ROW"}, reading]
     elif case == "empty":
         data["observations"] = []
     elif case == "no-compared":
@@ -1287,9 +1234,9 @@ def _invalid_steps_two_to_five(case: str) -> dict:
     elif case == "three-countries":
         data["compared"] = ["CHN", "USA", "DEU"]
         data["observations"] = [{**reading, "entity": code, "country": code} for code in ("CHN", "USA", "DEU")]
-    elif case == "legacy-mixed-years":
+    elif case == "two-countries":
         data["compared"] = ["CHN", "USA"]
-        data["observations"] = [reading, {**reading, "entity": "USA", "country": "USA", "year": 2019}]
+        data["observations"] = [reading, {**reading, "entity": "USA", "country": "USA"}]
     elif case == "duplicate-country":
         data["compared"] = ["CHN", "CHN"]
         data["observations"] = [reading, dict(reading)]
@@ -1300,7 +1247,6 @@ def _invalid_steps_two_to_five(case: str) -> dict:
     "case",
     [
         "row",
-        "row-in-legacy-pair",
         "empty",
         "no-compared",
         "industry-scope",
@@ -1309,8 +1255,8 @@ def _invalid_steps_two_to_five(case: str) -> dict:
         "other-country",
         "non-finite",
         "metric-mismatch",
+        "two-countries",
         "three-countries",
-        "legacy-mixed-years",
         "duplicate-country",
     ],
 )
@@ -1346,7 +1292,7 @@ def test_step_nine_rejects_old_material(source):
     for item in session["steps"]["9"]["data"]["observations"]:
         item["source"] = source
     assert any(item["step"] == 9 for item in check_material_gate(session))
-    assert "### 步骤 9" not in "\n".join(teaching_report._experiment_sections(session))
+    assert "### 步骤 9" not in "\n".join(_experiment_sections(session))
 
 
 def test_report_labels_step_nine_observation_without_a_step_level_metric(tmp_path, monkeypatch):
@@ -1777,7 +1723,7 @@ def test_report_discloses_output_economic_warnings_without_blocking_publication(
     _rewrite_metadata(tmp_path, metadata)
 
     assert output_summary["publishable"] is True
-    summary = teaching_report._qc_release_summary({"outputs": metadata["output_qc"]})
+    summary = _qc_release_summary({"outputs": metadata["output_qc"]})
     assert summary["requires_disclosure"] is True
     assert summary["warning"] == [warning["name"]]
     report = build(_complete(), "同学")
@@ -1789,7 +1735,7 @@ def test_report_discloses_output_economic_warnings_without_blocking_publication(
 
 
 def test_report_merges_singular_and_plural_warnings_once():
-    summary = teaching_report._qc_release_summary(
+    summary = _qc_release_summary(
         {
             "inputs": {"warning": ["shared", "input"]},
             "outputs": {"years": {"2020": {"warnings": ["shared", "output"]}}},
@@ -1797,7 +1743,7 @@ def test_report_merges_singular_and_plural_warnings_once():
     )
     assert summary["warning"] == ["shared", "input", "output"]
     assert summary["requires_disclosure"] is True
-    assert teaching_report._qc_release_summary({"warnings": []})["requires_disclosure"] is False
+    assert _qc_release_summary({"warnings": []})["requires_disclosure"] is False
 
 
 def test_report_rejects_missing_or_unsupported_qc_contract(tmp_path, monkeypatch):
@@ -1871,7 +1817,7 @@ def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, mo
     assert "×" not in report.markdown.split("记录的单元格")[1].split("\n")[0]
     assert "年份：2020" in report.markdown
     assert "表：中间投入 Z" in report.markdown
-    assert "比较对象：CHN 中国、USA 美国" in report.markdown
+    assert "学生选定的比较：CHN 中国、USA 美国" in report.markdown
     assert "| CHN 中国 | 2020 | 复杂 GVC 生产份额 | 比例 | 0.120 |" in report.markdown
     assert "仅用于探索定位，不限定下游回归样本" in report.markdown
     assert "按所选冲击类型汇总该类型全部已编码事件" in report.markdown
@@ -1975,7 +1921,6 @@ def test_report_observation_reading_states_supply_direction_per_table():
     z_obs = {"row": "CHN_D01T02", "column": "USA_C10T12", "value": 1.5, "table": "z"}
     y_obs = {"row": "CHN_D01T02", "column": "USA_HFCE", "value": 1.5, "table": "y"}
     accounts_obs = {"row": "CHN_D01T02", "column": "VA", "value": 1.5, "table": "accounts"}
-    legacy_obs = {"row": "CHN_D01T02", "column": "USA_C10T12", "value": 1.5}
     assert (
         teaching_report._observation_reading(z_obs)
         == "CHN 中国·D01T02（行·供给方） → USA 美国·C10T12 食品饮料烟草（列·使用方） = 1.5 百万美元"
@@ -1985,11 +1930,6 @@ def test_report_observation_reading_states_supply_direction_per_table():
         == "CHN 中国·D01T02（行·供给方） → USA 美国·居民最终消费支出（列·最终需求） = 1.5 百万美元"
     )
     assert teaching_report._observation_reading(accounts_obs) == "CHN 中国·D01T02 的 VA（增加值） = 1.5 百万美元"
-    # 旧会话里没有 table 字段时按中间投入 Z 的读法兜底。
-    assert (
-        teaching_report._observation_reading(legacy_obs)
-        == "CHN 中国·D01T02（行·供给方） → USA 美国·C10T12 食品饮料烟草（列·使用方） = 1.5 百万美元"
-    )
 
 
 def test_report_marks_suppressed_inference_and_reasons(tmp_path, monkeypatch):
@@ -2338,19 +2278,19 @@ def test_view_only_keys_never_change_the_experiment_sections():
     from gvcsim.classroom import records
 
     session = _complete()
-    before = teaching_report._experiment_sections(session)
+    before = _experiment_sections(session)
     browsed = copy.deepcopy(session)
     browsed["steps"]["1"]["data"]["slice"] = {"year": 2016, "table": "y", "row_country": "DEU", "col_country": "FRA"}
     browsed["steps"]["2"]["data"].update(year=2017, country="KOR")
     browsed["steps"]["6"]["data"].update(year=1999, chart="unrelated-browse")
     browsed["steps"]["9"]["data"].update(chart="network", drill="DEU", heat_sort="betweenness", heat_coverage="all")
     assert records.report_fingerprint(browsed) == records.report_fingerprint(session)
-    assert teaching_report._experiment_sections(browsed) == before
+    assert _experiment_sections(browsed) == before
     # A step 1 record without its capture context prints the cell but never the browsed slice.
     partial = copy.deepcopy(session)
     partial["steps"]["1"]["data"]["observation"] = {"row": "CHN_D01T02", "column": "USA_D01T02", "value": 228.0672}
     partial["steps"]["1"]["data"]["slice"] = {"year": 2016, "table": "y"}
-    text = "\n".join(teaching_report._experiment_sections(partial))
+    text = "\n".join(_experiment_sections(partial))
     assert "保存的切片" not in text
     assert "记录的单元格" in text
 
@@ -2433,58 +2373,25 @@ def test_report_draws_every_y_of_each_family_with_the_saved_one_marked(tmp_path,
     assert "其余 Y 的条形是课程用同一份数据、同一个模型算出的结果" in markdown
 
 
-def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(tmp_path, monkeypatch):
-    """A step that was run with another indicator of its family reports that indicator, not the default."""
+def test_a_saved_step_run_counts_only_on_the_step_default_y():
+    """A step's saved result is the default model on the step's default Y; another Y is not reportable."""
     from gvcsim.report_saved_run import _parse_saved_run, _saved_runs
 
-    _artifacts(tmp_path)
-    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
     run = session["steps"]["13"]["data"]["run"]
-    run["design"]["baseline"] = "GVCPs"
-    run["result"]["coefs"][0]["coef"] = -0.4
-    run["result"]["coefs"][0]["se"] = 0.01  # two clusters: a wide t(1) interval would otherwise cross 0
-    run["result"]["depvar_within_std"] = 0.17
-    _sign_run(run)
-    from gvcsim import report_build
-
-    monkeypatch.setattr(report_build, "_regression_overview", _course_overview)
-    assert run["design"]["depvar"] == "teaching_y_length_GVCPs"
-    assert run["model_snapshot"]["baseline"] == "GVCPs"
     assert _parse_saved_run(run, "length") is not None
-    assert [item["outcome"] for item in _saved_runs(session) if item["step"] == 13] == ["length"]
-
-    markdown = build(session, "同学").markdown
-    assert "| 结果指标 Y | GVC 位置指数 |" in markdown
-    assert "旧记录可能使用非默认 Y" in markdown
-    assert "正文主结果固定为各步默认 Y" not in markdown
-    assert "位置指数单位" not in markdown
-    assert "GVC 位置指数两年累计平均越低（X 每高 1 个百分点，两年累计约低 0.0040）" in markdown
-    charts = [
-        json.loads(block)
-        for block in re.findall("```gvcsim-chart" + chr(10) + "(.*?)" + chr(10) + "```", markdown, re.S)
-    ]
-    # Step 13's bars: both lengths and the position index in standard deviations, the saved GVC 位置指数 marked,
-    # its native value as the table prints it.
-    length = next(chart for chart in charts if chart["title"].startswith("步骤 13"))
-    assert [item["label"] for item in length["items"]] == ["前向 GVC 段长度", "后向 GVC 段长度", "GVC 位置指数"]
-    assert [item.get("saved", False) for item in length["items"]] == [False, False, True]
-    assert length["x_label"] == "X 每高 1 个百分点，Y 两年累计平均相差（个标准差）"
-    saved = length["items"][2]
-    assert saved["value"] == pytest.approx(-0.004 / 0.17, rel=1e-3)
-    assert saved["text"] == "-0.0040（-0.024 个标准差）"
-    assert "| 关税暴露 X 每高 1 个百分点，Y 两年累计平均相差 | **-0.0040（幅度约 0.024 个标准差）** |" in markdown
-    assert [item["sub"] for item in length["items"]] == ["长度单位", "长度单位", "无量纲"]
-    summary = next(chart for chart in charts if chart["title"] == "四步保存的结果（都换算成标准差）")
-    assert summary["items"][2]["text"] == "-0.0040（-0.024 个标准差）"
-
-    # A baseline from another family, or one the snapshot does not match, is not a reportable run.
+    stale = copy.deepcopy(run)
+    stale["model_snapshot"]["baseline"] = "GVCPs"
+    assert _parse_saved_run(stale, "length") is None
     forged = copy.deepcopy(run)
     forged["design"]["baseline"] = "FVA_share"
     assert _parse_saved_run(forged, "length") is None
-    stale = copy.deepcopy(run)
-    stale["model_snapshot"]["baseline"] = "PLv_GVC"
-    assert _parse_saved_run(stale, "length") is None
+    # A same-family Y, consistently signed, is still not the step's result.
+    run["design"]["baseline"] = "GVCPs"
+    _sign_run(run)
+    assert run["model_snapshot"]["baseline"] == "GVCPs"
+    assert _parse_saved_run(run, "length") is None
+    assert 13 not in {item["step"] for item in _saved_runs(session)}
 
 
 def test_technical_appendix_states_the_chosen_y_unit_not_the_family_unit():
@@ -2553,7 +2460,7 @@ def test_bold_markup_closes_before_chinese_punctuation():
     import re as _re
 
     session = _complete()
-    text = "\n".join(teaching_report._experiment_sections(session))
+    text = "\n".join(_experiment_sections(session))
     assert not _re.search(r"[。：；，]\*\*[^\s*|]", text)
 
 
@@ -2767,13 +2674,12 @@ def test_report_step_ten_states_the_scenario_and_who_is_taxed(tmp_path, monkeypa
         f"{_sector(industry)} · 全部可用年份"
     ) in step_ten
     rule_year = overview["taxed_rule"]["year"]
-    # (The small fixture panel may have no policy year; the course release has 2018.)
-    since = f"从 {overview['policy_year']} 年起" if overview["policy_year"] else ""
-    assert (
-        f"- 情景：美国{since}对 {rule_year} 年对美货物贸易顺差达到或超过 10 亿美元的 "
-        f"{overview['taxed_countries']} 国的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 25% 关税，非货物行业不加税；"
-        f"其余 {overview['untaxed_countries']} 国未被加税。"
-    ) in step_ten
+    (scenario_line,) = [line for line in step_ten.splitlines() if line.startswith("- 情景：")]
+    assert scenario_line.startswith(
+        f"- 情景：美国分两批对 {rule_year} 年对美货物贸易顺差达到或超过 10 亿美元的 "
+        f"{overview['taxed_countries']} 国的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 25% 关税："
+    )
+    assert scenario_line.endswith(f"非货物行业不加税；其余 {overview['untaxed_countries']} 国未被加税。")
     # The scenario comes before the example, as at the top of step 10.
     assert step_ten.index("- 情景：") < step_ten.index("- 两国趋势示例：")
 
@@ -2797,8 +2703,6 @@ def test_report_step_ten_states_the_scenario_and_who_is_taxed(tmp_path, monkeypa
 
 
 def test_report_step_ten_without_the_panel_keeps_the_recorded_example():
-    from gvcsim.report_render import _experiment_sections
-
     session = _complete()
     session["steps"]["10"]["data"].update({"compared": ["CHN", "USA"], "teaching_industry": "s1"})
     step_ten = "\n".join(_experiment_sections(session)).split("### 步骤 10 · 认识关税暴露 X", 1)[1].split("###", 1)[0]
@@ -2816,28 +2720,14 @@ def test_report_scenario_line_and_two_example_conversion_read_like_step_ten():
     assert _with_tax_status("USA", flags) == f"{country_label('USA')}（加征关税的一方）"
     assert _with_tax_status("PER", flags) == country_label("PER")
 
-    scenario = {
-        "taxed_countries": 44,
-        "untaxed_countries": 32,
-        "tariff_rate": 0.25,
-        "policy_year": 2018,
-        "taxed_rule": {"min_million_usd": 1000.0, "year": 2016},
-    }
-    assert _scenario_line(scenario) == (
-        "- 情景：美国从 2018 年起对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 44 国加征 25% 关税，其余 32 国未被加税。"
-    )
     assert _scenario_line(None) is None
-    # Goods only (v8): the rule carries its scope and the line says services are not taxed.
-    goods = {**scenario, "taxed_rule": {**scenario["taxed_rule"], "scope": "goods industries (ICIO sectors A-C)"}}
-    assert _scenario_line(goods) == (
-        "- 情景：美国从 2018 年起对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 44 国的货物（农业、采矿业和制造业，"
-        "ICIO 行业 A–C）加征 25% 关税，非货物行业不加税；其余 32 国未被加税。"
-    )
-    # Two waves (v10): the line names both, largest surpluses first, as step 10 does; each taxed country's start year.
+    # Two waves: the line names both, largest surpluses first, as step 10 does; each taxed country's start year.
     waves = {
-        **goods,
         "taxed_countries": 37,
         "untaxed_countries": 38,
+        "tariff_rate": 0.25,
+        "policy_year": 2018,
+        "taxed_rule": {"min_million_usd": 1000.0, "year": 2016, "scope": "goods industries (ICIO sectors A-C)"},
         "waves": [
             {"wave": 1, "start_year": 2018, "min_million_usd": 10000.0, "countries": 14},
             {"wave": 2, "start_year": 2019, "min_million_usd": 1000.0, "countries": 23},
@@ -2852,9 +2742,6 @@ def test_report_scenario_line_and_two_example_conversion_read_like_step_ten():
     )
     assert _with_tax_status("MEX", waves) == f"{country_label('MEX')}（被加税，2019 年起）"
     assert _with_tax_status("CRI", waves) == f"{country_label('CRI')}（未被加税）"
-    # One wave with countries (a small fixture) keeps the single-start sentence.
-    one = {**waves, "waves": [{**waves["waves"][0], "countries": 0}, waves["waves"][1]]}
-    assert _scenario_line(one) == _scenario_line(goods | {"taxed_countries": 37, "untaxed_countries": 38})
     service = {"country": "CAN", "industry": "O", X_COLUMN: 0.0, "teaching_tariff_rate_tau": 0.0}
     service_line = _example_conversion("trade", {}, {"coef": -0.55}, True, [service])
     assert service_line == (

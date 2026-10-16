@@ -35,7 +35,7 @@ function response(spec: ModelSpec, values: Record<string, number>, extra: Partia
     },
     result: {
       depvar: "teaching_y_trade", coefs, n_obs: 16000, n_entities: 3200, n_times: 5, n_clusters: 75, r2_within: 0.8774,
-      depvar_mean: 0.2, depvar_std: 0.1, diagnostics: {}, notes: [], status: "ok", status_reasons: [], support: null,
+      depvar_mean: 0.2, depvar_std: 0.1, diagnostics: {}, notes: [], status: "ok", status_reasons: [], support: null, root_mse: null,
       cumulative: coef("cumulative", xSum), constant: null, omitted: [], r2: 0.9975, r2_adj: 0.9968, f_stat: 2076.7, f_df: [3, 74], f_p: 0,
       sample_flow: { input_rows: 16000, row_excluded_rows: 0, complete_case_input_rows: 16000, estimation_rows: 16000, dropped_rows_total: 0,
         missing_by_field: {}, missing_by_field_counts_overlap: true, dropped_by_reason: [], years: [2016, 2020] },

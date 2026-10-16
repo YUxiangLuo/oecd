@@ -59,7 +59,7 @@ describe("indicator selection restoration", () => {
       unit: "比例",
       release: "release-1",
       scope: "country",
-      source: "explicit-indicator-table-comparison",
+      source: "auto-indicator-comparison",
     });
   });
 

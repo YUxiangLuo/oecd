@@ -10,7 +10,7 @@ import { ConfirmModal } from "../../teacher/ui";
 import type { ClassroomReport, ReportGateItem, ReportMutationResponse, Step, StepStateApi, TeachingCountriesResponse } from "../../types";
 import type { SessionStatus } from "../../use-session";
 import { userFacingRequestError } from "../../user-facing-error";
-import { recordedShockMaterialLabel, recordedVizMaterialLabel } from "../../material-label";
+import { recordedShockMaterialLabel } from "../../material-label";
 import { useAsync } from "../shared";
 
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
@@ -58,7 +58,7 @@ const REFLECTION_FIELDS: {
   min: number;
 }[] = [
   { key: "research_question", label: "研究问题", prompt: "我比较了哪些国家、行业和年份？我想了解哪项指标的变化？请区分步骤 1–9 的真实 ICIO 指标探索与步骤 10–14 的课程模拟关税回归；所选例子不是回归样本筛选。", starter: "句式参考：本实验用真实 ICIO 指标比较了……和……的……，想了解……；再用课程模拟回归看关税暴露 X 每高 1 个百分点，Y 在默认模型中两年累计平均高还是低。", min: 12 },
-  { key: "evidence_interpretation", label: "结果解释", prompt: "引用保存的数字，注明对象、年份、指标、方向和区间，并标明是真实指标还是模拟回归。比较四步已保存材料的默认模型两年累计结果，Y 以报告各节“结果指标 Y”为准（旧记录可能使用非默认 Y）；显式记入报告的选做模型见附录，注明指标名称。自定义模型按所选 X 滞后覆盖跨度（仅当期 X／两年累计／三年累计）解释，不能一律写两年累计。方向不确定或没算出估计值时写明原因，不要写成“没有关联”。改过模型时，写明改了什么、X 各项合计怎样变、样本是否相同及原因。", starter: "句式参考：真实 ICIO 指标探索的步骤……显示，……在……年的……为……；课程模拟的步骤 11 默认模型估计 X 每高 1 个百分点，Y 两年累计平均高（或低）……，95% 区间为……；自定义模型覆盖……，合计为……。", min: 40 },
+  { key: "evidence_interpretation", label: "结果解释", prompt: "引用保存的数字，注明对象、年份、指标、方向和区间，并标明是真实指标还是模拟回归。比较四步已保存材料的默认模型两年累计结果，Y 以报告各节“结果指标 Y”为准；显式记入报告的选做模型见附录，注明指标名称。自定义模型按所选 X 滞后覆盖跨度（仅当期 X／两年累计／三年累计）解释，不能一律写两年累计。方向不确定或没算出估计值时写明原因，不要写成“没有关联”。改过模型时，写明改了什么、X 各项合计怎样变、样本是否相同及原因。", starter: "句式参考：真实 ICIO 指标探索的步骤……显示，……在……年的……为……；课程模拟的步骤 11 默认模型估计 X 每高 1 个百分点，Y 两年累计平均高（或低）……，95% 区间为……；自定义模型覆盖……，合计为……。", min: 40 },
   { key: "limitations", label: "局限与反思", prompt: "真实指标比较和模拟回归各有哪些限制？模拟结果不能当作真实政策效应；选例子换算也不是对该国家行业单独估计。控制变量、固定效应、滞后期及样本变化会怎样影响结论？下一步需要什么真实数据或检验？", starter: "句式参考：课程模拟回归展示 X 与 Y 的关联，不能推出真实政策效应；换一种固定效应或去掉……后结论会……；真实指标比较只覆盖……；若要进一步验证，需要……。", min: 30 },
 ];
 
@@ -273,7 +273,6 @@ export function RecordedMaterials({ steps, getStep, blocked, onNavigateStep }: {
     // The material reasons only: the quiz is the step's other condition and has its own place in the gate card.
     const missing = blocked.filter((item) => item.step === step.n && !item.quiz_only).flatMap((item) => item.missing).filter((text) => !text.includes("理解题"));
     const label = step.n === 10 ? recordedShockMaterialLabel(data, overview)
-      : step.n >= 6 && step.n <= 8 ? recordedVizMaterialLabel(data)
       : typeof data?.material_label === "string" ? data.material_label : null;
     const recorded = missing.length === 0 && Boolean(data && Object.keys(data).some((key) => ["observation", "observations", "teaching_observation", "run"].includes(key)));
     // Steps 11–14: the model experiment the card lists on its second line, so the row says what the card says.
@@ -295,7 +294,7 @@ export function RecordedMaterials({ steps, getStep, blocked, onNavigateStep }: {
               <td><button type="button" className="gate-link" onClick={() => activateReportMaterialDestination(step.n, onNavigateStep)}>步骤 {step.n} · {step.title}</button></td>
               <td><span className={`material-chip material-chip--${recorded ? "recorded" : "missing"}`}>{recorded ? "已记录" : "未记录"}</span></td>
               <td>
-                {recorded ? (label ?? "已记录（旧记录，到本步查看）") : missing.length ? missing.join("；") : "尚未记录"}
+                {recorded ? label : missing.length ? missing.join("；") : "尚未记录"}
                 {experiment && <><br /><small className="muted">{experiment}</small></>}
               </td>
             </tr>

@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { exampleXText, RegressionResultCard, TEACHING_MODEL_VERSION } from "./regression";
+import { exampleXText, RegressionResultCard } from "./regression-step/result-card";
+import { TEACHING_MODEL_VERSION } from "./regression-step/saved-run";
 import { BASELINE_LESSONS, GENERATED_Y_DISCLOSURE, REGRESSION_LESSONS } from "./regression-lessons";
 import type { RegressionResponse } from "./types";
 
@@ -9,8 +10,8 @@ afterEach(cleanup);
 
 function response(): RegressionResponse {
   return {
-    design: { outcome: "trade", depvar: "y", depvar_label: "Y", granularity: "country_industry", shock_type: "tariff", shock_col: "teaching_tariff_exposure", treated_col: "", method: "twfe_intensity", control_mode: "none", interaction: false, price_mode: "nominal", scenario: "clean", weight_mode: "fixed_pretreatment", scenario_label: "教学", sample_filter: "排除 ROW", exclude_row: true, controls: [], control_labels: {}, equation: "Y = beta X + entity FE + year FE", equation_parts: [], panel_file: "teaching.csv", entity: "entity_id", cluster: "country" },
-    result: { depvar: "y", coefs: [{ name: "teaching_tariff_exposure", coef: 2, se: .5, t: 4, p: .001, stars: "***", ci_low: 1, ci_high: 3 }], n_obs: 100, n_entities: 20, n_times: 5, n_clusters: 10, r2_within: .2, depvar_mean: .3, depvar_std: .1, depvar_within_std: .1, diagnostics: {}, notes: [], status: "ok", status_reasons: [], support: { treated_clusters: 10, untreated_clusters: 0, treated_entities: 20, untreated_entities: 0, total_entities: 20, reversal_entities: [], reversal_share: 0, absorbing: true, status: "ok", reasons: [], min_treated_clusters: 5, max_reversal_share: 0, suppress_inference: false } },
+    design: { outcome: "trade", baseline: "FVA_share", depvar: "y", depvar_label: "Y", granularity: "country_industry", shock_type: "tariff", shock_col: "teaching_tariff_exposure", treated_col: "", method: "twfe_intensity", control_mode: "none", interaction: false, price_mode: "nominal", scenario: "clean", scenario_label: "教学", sample_filter: "排除 ROW", exclude_row: true, controls: [], control_labels: {}, equation: "Y = beta X + entity FE + year FE", equation_parts: [], panel_file: "teaching.csv", entity: "entity_id", cluster: "country", spec: null },
+    result: { depvar: "y", coefs: [{ name: "teaching_tariff_exposure", coef: 2, se: .5, t: 4, p: .001, stars: "***", ci_low: 1, ci_high: 3 }], n_obs: 100, n_entities: 20, n_times: 5, n_clusters: 10, r2_within: .2, depvar_mean: .3, depvar_std: .1, depvar_within_std: .1, diagnostics: {}, notes: [], status: "ok", status_reasons: [], support: { treated_clusters: 10, untreated_clusters: 0, treated_entities: 20, untreated_entities: 0, total_entities: 20, reversal_entities: [], reversal_share: 0, absorbing: true, status: "ok", reasons: [], min_treated_clusters: 5, max_reversal_share: 0, suppress_inference: false }, root_mse: null },
     benchmark: { backend: "test", policy_coefs: [], max_abs_coef_diff: 0, max_abs_se_diff: 0, coef_check_passed: true, se_check_mode: "test", notes: [] },
     model_snapshot: { version: TEACHING_MODEL_VERSION, x_columns: ["teaching_tariff_exposure"], y_column: "y", entity: "entity_id", time: "year", fixed_effects: ["entity", "year"], controls: [], interactions: [], seed: 1, beta: 2, tariff_path: [], disclaimer: "教学" },
     variable_catalog: [], disclaimer: "教学",
@@ -270,8 +271,5 @@ describe("the course's design value on the result card (v13)", () => {
     const spanHtml = renderToStaticMarkup(<RegressionResultCard outcome="trade" response={span} />);
     expect(spanHtml).toContain("跨度不同，不是同一个估计量，不与设定值比较");
     expect(spanHtml).not.toMatch(/幅度比设定值|与设定值几乎相同|方向与设定值相反/);
-    const legacy = response();
-    delete (legacy as { model_snapshot?: unknown }).model_snapshot;
-    expect(renderToStaticMarkup(<RegressionResultCard outcome="trade" response={legacy} />)).not.toContain("课程数据设定");
   });
 });

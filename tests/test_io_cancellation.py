@@ -176,7 +176,11 @@ def test_report_disconnect_during_preparation_never_saves(monkeypatch, phase):
         monkeypatch.setattr(target, name, held)
         monkeypatch.setattr(routes.db, "save_generated_report", lambda *args: saves.append(args))
         disconnected = asyncio.Event()
-        request = asyncio.create_task(routes.generate_report_http(student_request(disconnected), {"sub": "student"}))
+        request = asyncio.create_task(
+            routes.generate_report_http(
+                student_request(disconnected), routes.ReportGenerateRequest(), {"sub": "student"}
+            )
+        )
         try:
             await until(started.is_set)
             disconnected.set()
@@ -207,7 +211,11 @@ def test_report_disconnect_does_not_cancel_the_commit_phase(monkeypatch):
 
         monkeypatch.setattr(routes.db, "save_generated_report", save)
         disconnected = asyncio.Event()
-        request = asyncio.create_task(routes.generate_report_http(student_request(disconnected), {"sub": "student"}))
+        request = asyncio.create_task(
+            routes.generate_report_http(
+                student_request(disconnected), routes.ReportGenerateRequest(), {"sub": "student"}
+            )
+        )
         staying = None
         try:
             await until(started.is_set)
@@ -448,7 +456,9 @@ def test_report_disconnect_during_real_row_lock_preserves_transaction(teaching_d
         async def scenario():
             disconnected = asyncio.Event()
             request = asyncio.create_task(
-                routes.generate_report_http(student_request(disconnected), {"sub": "student"})
+                routes.generate_report_http(
+                    student_request(disconnected), routes.ReportGenerateRequest(), {"sub": "student"}
+                )
             )
             try:
                 await until(started.is_set)

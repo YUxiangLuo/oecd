@@ -131,7 +131,7 @@ export function snapshotOf(response: Pick<RegressionResponse, "design" | "result
       f_stat: result.f_stat ?? null,
       f_df: result.f_df ?? null,
       f_p: result.f_p ?? null,
-      root_mse: result.root_mse ?? null,
+      root_mse: result.root_mse,
       n_obs: result.n_obs,
       n_entities: result.n_entities,
       n_times: result.n_times,
@@ -340,7 +340,7 @@ export function coversDesignSpan(spec: Pick<ModelSpec, "x_lags">): boolean {
  * Null when the server sent no design value for this Y.
  */
 export function designValueRow(columns: TableColumn[], outcome: RegressionOutcome, baseline: string, options: WorkbenchOptions): SummaryRow | null {
-  const design = options.design_values?.[outcome]?.[baseline];
+  const design = options.design_values[outcome]?.[baseline];
   if (design === undefined) return null;
   const first = columns.find(({ snapshot, spec }) => xSum(snapshot, spec));
   if (!first) return null;
@@ -409,7 +409,7 @@ export function shownModelLabel(spec: ModelSpec, options: WorkbenchOptions): str
       ? `固定效应：${model.fixed_effects.map((key) => effectName(options, key)).join(" + ")} FE`
       : "无固定效应");
   }
-  if (!changes.length) return options.custom_label ?? "自定义设定";
+  if (!changes.length) return options.custom_label;
   // In brackets, so a column name reads "本次：自定义（去掉汇率变动；加 L2.X）", not one colon after another.
   // Every change is named, so two custom models on screen never share a name (the column headers wrap).
   return `自定义（${changes.join("；")}）`;
@@ -459,7 +459,7 @@ export function comparisonCsv(
     return `${specSummary(column.spec, options)}${omitted.length ? `；已省略（${omitted.join("；")}）` : ""}`;
   })]);
   if (samplesDiffer(columns)) lines.push([options.sample_differs_note]);
-  if (options.current_x_only_note && columns.some((column) => canonicalSpec(column.spec, options).x_lags.join(",") === "0")) {
+  if (columns.some((column) => canonicalSpec(column.spec, options).x_lags.join(",") === "0")) {
     lines.push([options.current_x_only_note]);
   }
   lines.push([options.footnote.replace("括号内为按国家聚类的标准误", "“标准误”一行为按国家聚类的标准误")]);

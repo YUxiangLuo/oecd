@@ -1,29 +1,7 @@
 import hashlib
 import json
 
-from gvcsim import shock_catalog, shocks
-
-
-def test_shocks_preserves_catalog_reexport_identity():
-    for name in (
-        "DEMO_FILE",
-        "EXPOSURE_PREFIX",
-        "TREATED_THRESHOLD",
-        "EXPOSURE_MODE_FIXED_PRETREATMENT",
-        "EXPOSURE_MODE_CONTEMPORANEOUS",
-        "EXPOSURE_MODES",
-        "SHOCK_TARIFF",
-        "SHOCK_SANCTIONS",
-        "SHOCK_EXPORT_CONTROL",
-        "SHOCK_SPECS",
-        "SHOCK_LABELS",
-        "EU27",
-        "TariffEvent",
-        "EntityListEvent",
-        "EVENTS",
-        "ENTITY_LIST_EVENTS",
-    ):
-        assert getattr(shocks, name) is getattr(shock_catalog, name)
+from gvcsim import shocks
 
 
 def test_event_metadata_contract_has_claim_scoped_source_statuses():

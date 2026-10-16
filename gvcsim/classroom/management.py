@@ -22,7 +22,7 @@ class _DatabaseProxy:
 database = _DatabaseProxy()
 _ASCII_CASE_TABLE = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 _USERNAME_KEY_SQL = "translate(username,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')"
-_STUDENT_NO_KEY_SQL = "translate(btrim(student_no),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')"
+_STUDENT_NO_KEY_SQL = "translate(student_no,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')"
 _STUDENT_COLS = "a.id,a.username,a.display_name,a.student_no,a.last_login_at,a.created_at"
 _ENROLLMENTS_SQL = (
     "SELECT ce.term_id,t.name AS term_name,ce.class_id,cg.name AS class_name "
@@ -181,7 +181,6 @@ def _ensure_student_no_free(c: Any, student_no: str, exclude_id: int | None = No
     if not key:
         return
     owner = c.execute(
-        # btrim: a 学号 saved with surrounding spaces before inputs were trimmed still counts as the same.
         "SELECT username,display_name FROM accounts"
         f" WHERE role='student' AND {_STUDENT_NO_KEY_SQL}=%s AND id IS DISTINCT FROM %s LIMIT 1",
         (key, exclude_id),

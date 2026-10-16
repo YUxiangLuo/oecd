@@ -141,6 +141,7 @@ describe("teacher student modal submission", () => {
       last_login_at: null,
       created_at: "2026-09-01T00:00:00Z",
       report_state: null,
+      report_outdated: false,
       score: null,
       submitted_at: null,
       verified_completed_count: 0,
@@ -173,7 +174,7 @@ describe("enrollment toast", () => {
   }];
   const base = {
     id: 5, username: "student05", display_name: "演示学生 05 李明", student_no: "2026005", demo_seed: false,
-    last_login_at: null, created_at: "2026-09-01T00:00:00Z", report_state: null, score: null, submitted_at: null,
+    last_login_at: null, created_at: "2026-09-01T00:00:00Z", report_state: null, report_outdated: false, score: null, submitted_at: null,
     verified_completed_count: 0, verified_total_steps: 15, verified_completed_steps: [], completion_missing: [],
     last_valid_activity: null,
   } satisfies Omit<StudentRow, "enrollments">;
@@ -202,6 +203,7 @@ describe("teacher student row menu accessible names", () => {
     last_login_at: null,
     created_at: "2026-09-01T00:00:00Z",
     report_state: "draft",
+    report_outdated: false,
     score: null,
     submitted_at: null,
     verified_completed_count: 3,
@@ -249,7 +251,7 @@ describe("teacher student row menu accessible names", () => {
 describe("student table sorting and summary", () => {
   const row = (id: number, overrides: Partial<StudentRow>): StudentRow => ({
     id, username: `s${id}`, display_name: `学生${id}`, student_no: "", demo_seed: false, last_login_at: null,
-    created_at: "2026-09-01T00:00:00Z", report_state: null, score: null, submitted_at: null,
+    created_at: "2026-09-01T00:00:00Z", report_state: null, report_outdated: false, score: null, submitted_at: null,
     verified_completed_count: 0, verified_total_steps: 15, verified_completed_steps: [], completion_missing: [],
     last_valid_activity: null, enrollments: [], ...overrides,
   });

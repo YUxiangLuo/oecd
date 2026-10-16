@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { NO_READINGS_NOTE, NOT_RECORDED_HINT, RECORD_CHART_ACTION, RECORDED_CHART_LABEL, REPLACE_MATERIAL_ACTION } from "../../../step-task-card";
 import { MaterialCard } from "../../../material-card";
-import { recordedVizMaterialLabel, vizMaterialLabel } from "../../../material-label";
+import { vizMaterialLabel } from "../../../material-label";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { Meta, Step, StepStateApi } from "../../../types";
@@ -76,13 +76,6 @@ export function browsedSelection(raw: unknown, countries: readonly string[]): In
  * draws them as shares, whichever of 占比 / 金额 the page shows.
  */
 export const COMPOSITION_MATERIAL_SCALE_NOTE = "记录的是各分项与总量的金额读数，报告中的构成图按占比作图；“占比 / 金额”只切换本页的显示方式，不改变记录的材料。";
-
-/** "2020" for a single-year material (composition / same-year), "2016–2020" for a range. */
-function savedYearSpan(years: number[]): string {
-  const first = Math.min(...years);
-  const last = Math.max(...years);
-  return first === last ? `${first} 年` : `${first}–${last}`;
-}
 
 export function IndicatorExplorer({
   meta,
@@ -198,8 +191,7 @@ export function IndicatorExplorer({
   const formatOf = (key: string): "pct" | "amount" | "number" =>
     unit(key) === "%" ? "pct" : unit(key) === "百万美元" ? "amount" : "number";
   const others = selection.others ?? [];
-  // “进一步探索” used to replace the main chart; it is now a modal, so an old saved view falls back.
-  const view: IndicatorView = selection.view === "explore" ? topic.defaultView ?? "trend" : selection.view;
+  const view: IndicatorView = selection.view;
   const selected = selectionEntities(selection);
   const range = years.filter((value) => value >= start && value <= end);
   const timeView =
@@ -1301,7 +1293,7 @@ export function IndicatorExplorer({
       <MaterialCard
         state={saved.length ? "recorded" : !validYears || !canSave ? "blocked" : "missing"}
         summary={saved.length
-          ? recordedVizMaterialLabel(state.data) ?? `${joinCountries([...new Set(saved.map((item) => item.country))])} · ${savedYearSpan(saved.map((item) => item.year))} · ${[...new Set(saved.map((item) => item.industry ?? ""))].map((industry) => industry ? sectorLabel(industry) : "国家整体").join("、")}（${saved.length} 条读数）`
+          ? state.data?.material_label
           : !validYears ? "请先修正年份范围，当前图表才能被记录。"
           : !canSave ? `${view === "positioning" || view === "structure" ? "" : "当前图表暂不能记录："}${blockedReason}`
           : NOT_RECORDED_HINT}

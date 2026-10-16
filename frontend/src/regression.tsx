@@ -36,25 +36,6 @@ import {
 import { INTERRUPTED_RUN_NOTE, useRegressionRun } from "./regression-step/use-regression-run";
 import { DecompositionList } from "./regression-teach";
 
-// The step's pieces, re-exported here: the page is what the course imports.
-export { equationSymbol, explanatoryText, sampleFilterLabel } from "./regression-step/model-equation";
-export {
-  exampleEffect, exampleXText, lagSplit, NETWORK_UNIT_NOTE, RegressionResultCard, type RegressionExample,
-} from "./regression-step/result-card";
-export {
-  regressionRunSnapshotIdentity, TEACHING_MODEL_VERSION, type RegressionStepState, type SavedRegressionRun,
-} from "./regression-step/saved-run";
-export {
-  barPreviewText, degreeIdentity, familyBarRows, familyBarsTitle, forwardShareIdentity, tradeShareIdentity, GROUP_CHART_CAPTION, groupLines,
-  NETWORK_DEGREE_IDENTITY, parallelTrendsNote, runEstimate, waveMarkers,
-} from "./regression-step/family-bars";
-export { INTERRUPTED_RUN_NOTE } from "./regression-step/use-regression-run";
-export { groupedFixed } from "./format";
-export { networkDigits } from "./regression-verdict";
-
-/** Reveal a freshly calculated verdict inside the course's scroll container (see content-scroll.ts). */
-export const scrollRegressionVerdict = scrollIntoCourseContent;
-
 export function RegressionRequestError({ label, error, onRetry }: {
   label: string;
   error: string;
@@ -155,8 +136,9 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
   const designQuery = useAsync<RegressionDesignInfo>(() => api.regressionDesign(outcome), [designKey], { requestKey: designKey });
   const modelDesign = result?.design ?? (designQuery.status === "success" ? designQuery.data ?? null : null);
   const groups = groupsQuery.status === "success" ? groupsQuery.data : null;
-  const baselineOptions = groups?.baselines?.[outcome] ?? [];
-  // The step's Y: its family's default, which the step title names. The result and the report use it only.
+  const baselineOptions = groups?.baselines[outcome] ?? [];
+  // The step's Y: its family's default, which the step title names (known before the groups arrive, or if they fail).
+  // The result and the report use it only.
   const defaultKey = baselineOptions.find((option) => option.default)?.key ?? DEFAULT_BASELINES[outcome];
   const defaultOption = baselineOptions.find((option) => option.key === defaultKey);
   const lesson = lessonFor(outcome, defaultKey, result?.design.baseline_label ?? defaultOption?.label);
@@ -168,7 +150,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
   const example = teachingExample(meta, stepTen);
   const exampleSaved = Boolean(stepTen?.teaching_observation);
   // As step 10 records it (exampleWasChosen): the default saved because the page was shown is not the student's pick.
-  const exampleChosen = exampleWasChosen(stepTen, teachingExample(meta, undefined));
+  const exampleChosen = exampleWasChosen(stepTen);
   const pendingExample = !state.materialLocked && exampleSaved ? pendingStepTenExample(stepTen, example) : null;
   const exampleCountries = [example.first, example.second].filter(Boolean);
   const exampleKey = `teaching-example:${exampleCountries.join(",")}:${example.industry}`;
@@ -194,15 +176,11 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
   // 会话异步到达：刷新或换设备后恢复本步上次算出的结果（也就是报告材料），而不是空白面板。
   const savedRun = state.data?.run;
   const savedRunIdentity = savedRun ? regressionRunSnapshotIdentity(savedRun) : null;
-  const savedVersionOk = savedRun?.model_snapshot?.version === TEACHING_MODEL_VERSION && Boolean(savedRun.variable_catalog);
-  // Only a run on the step's default Y is the step's result (a record from before the Y was fixed is not restored).
-  const groupsSettled = groupsQuery.status === "success" || groupsQuery.status === "error";
-  const savedUsable = savedVersionOk && groupsSettled && savedRun?.design?.baseline === defaultKey;
+  const savedUsable = savedRun?.model_snapshot?.version === TEACHING_MODEL_VERSION && Boolean(savedRun.variable_catalog);
   useEffect(() => {
     if (running || runningRef.current || result || !savedUsable) return;
     setResult(savedRegressionResponse(savedRun!));
   }, [result, running, savedRunIdentity, savedUsable]);
-  const staleSavedY = savedVersionOk && groupsSettled && !savedUsable && !result;
 
   const overviewQuery = useAsync<TeachingOverviewResponse>(
     () => api.teachingOverview(),
@@ -218,7 +196,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
     if (!result || !overviewSettled || !scrollToVerdictAfterRun.current) return;
     scrollToVerdictAfterRun.current = false;
     const frame = window.requestAnimationFrame(() => {
-      scrollRegressionVerdict(
+      scrollIntoCourseContent(
         verdictAnchorRef.current,
         window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
       );
@@ -258,9 +236,6 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
         <span className="reg-section-step">先看数据</span>
         <h3>{lessonQuestion(outcome, defaultKey)}</h3>
         {(!defaultKey || defaultKey === DEFAULT_BASELINES[outcome]) && <p className="reg-y-definition">{lesson.definition}</p>}
-        {staleSavedY && (
-          <p className="reg-boundary" role="status">上次保存的结果（{displayBaselineLabel(savedRun?.design?.baseline_label) || "—"}）不是本步的 Y，请重新计算。</p>
-        )}
         {groups && (() => {
           const series = groups.outcomes[outcome];
           if (!series) return null;
@@ -270,7 +245,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
           // for shares (percentage points) and ×1 for lengths and centrality.
           const levelScale = display.scale * 100;
           const lines = groupLines(series);
-          const markers = waveMarkers(groups.policy_years ?? [groups.policy_year]);
+          const markers = waveMarkers(groups.policy_years);
           return (
             <div className="reg-group-figure">
               <GroupChangeChart

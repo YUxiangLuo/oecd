@@ -174,7 +174,7 @@ export function ReportedExperiments({ getStep, onNavigateStep }: {
   });
   const optionsQuery = useAsync<WorkbenchOptions>(() => api.regressionOptions(), ["regression-options"], { enabled: rows.length > 0 });
   const options = optionsQuery.status === "success" ? optionsQuery.data ?? null : null;
-  // Legacy experiments without a baseline still refer to their step's saved Y.
+  // An experiment without a baseline was run on its step's saved (default) Y.
   const otherY = rows.some(({ experiment, run }) => !!experiment.baseline && experiment.baseline !== run?.design?.baseline);
   const overviewQuery = useAsync<TeachingOverviewResponse>(() => api.teachingOverview(), ["teaching-overview"], { enabled: otherY });
   const overview = overviewQuery.status === "success" ? overviewQuery.data : null;

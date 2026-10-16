@@ -47,9 +47,6 @@ describe("matching saved material to the current selection", () => {
     const usa = indicatorMaterialPatch(rows, "USA", 2020, "GVCPs", "无量纲", "rel-1");
     expect(materialMatches(patch, usa ?? undefined)).toBe(false);
     expect(materialMatches(null, reordered)).toBe(false);
-    // A two-country record saved by an earlier version is not the current one-country reading.
-    const legacy = { ...patch, compared: ["ARG", "PRT"], observations: [...patch!.observations!, { ...patch!.observations![0], entity: "PRT", country: "PRT", value: 0.992 }] };
-    expect(materialMatches(patch, legacy)).toBe(false);
   });
 });
 
@@ -88,18 +85,6 @@ describe("automatic material status line", () => {
     expect(stale).toContain('class="material-card material-card--missing"');
     expect(stale).toContain(">尚未记录</span>");
     expect(stale).toContain("正在记录当前选择…");
-  });
-
-  test("a locked two-country record from an earlier version is shown as recorded, with the way to replace it", async () => {
-    const render = await status([reading("CHN", 0.1173), reading("USA", 0.0551)], { materialLocked: true }, { record: () => {} });
-    const html = render(false);
-    expect(html).toContain('class="material-card material-card--recorded"');
-    expect(html).toContain(">已记录</span>");
-    expect(html).not.toContain("报告材料 · 已记录");
-    expect(html).toContain('<p class="material-card-summary" role="status">2020 年外国增加值项占比：CHN 中国 11.730%；USA 美国 5.510%</p>');
-    expect(html).toContain("随你的选择自动记录，无需另外保存。 报告已提交：浏览不再自动改动报告材料。");
-    expect(html).toContain('<button type="button" class="secondary material-card-action">改用当前选择作为报告材料（之后需在步骤 15 更新报告）</button>');
-    expect(html).not.toContain("正在记录当前选择");
   });
 });
 
@@ -165,39 +150,6 @@ describe("recording under the report lock", () => {
       expect(locked.saves[0].material_chosen).toBe(true);
       expect(locked.saves[0].compared).toEqual(["CHN"]);
       expect(locked.saves[0].material_label).toBe("2020 年 FVA_share：CHN 中国 11.730%");
-    } finally {
-      cleanup();
-      rows.mockRestore();
-    }
-  });
-
-  test("an unlocked two-country record from an earlier version is replaced by the one-country reading", async () => {
-    const rows = spyOn(api, "countryIndicators").mockResolvedValue([
-      { country: "CHN", FVA_share: 0.1173 },
-      { country: "USA", FVA_share: 0.0551 },
-    ] as never);
-    const metaWithRelease = { countries: ["CHN", "USA"], dataset: { release_id: "rel-1" } } as unknown as Meta;
-    const legacy = {
-      year: 2020, country: "CHN", compared: ["CHN", "USA"], metric: "FVA_share",
-      observations: [["CHN", 0.1173], ["USA", 0.0551]].map(([country, value]) => ({
-        entity: country, country, industry: "", year: 2020, value, metric: "FVA_share", unit: "%",
-        release: "rel-1", scope: "country", source: "auto-indicator-comparison",
-      })),
-    };
-    const saves: Record<string, unknown>[] = [];
-    const Probe = () => {
-      useAutoMaterial({
-        topic: "trade", meta: metaWithRelease, country: "CHN", year: 2020,
-        schema: { status: "success", data: { groups: [], fields: { FVA_share: { format: "pct" } } } as never },
-        state: { data: legacy, save: (patch: Record<string, unknown>) => { saves.push(patch); }, complete: false, syncing: false, syncError: null, syncNow: () => {} } as never,
-      });
-      return null;
-    };
-    try {
-      render(createElement(Probe));
-      await waitFor(() => expect(saves).toHaveLength(1));
-      expect(saves[0].compared).toEqual(["CHN"]);
-      expect((saves[0].observations as unknown[]).length).toBe(1);
     } finally {
       cleanup();
       rows.mockRestore();

@@ -4,6 +4,7 @@ import {
   REGRESSION_STATUS_LABELS,
   regressionStatusLabel, signed, standardizedEffect,
 } from "./regression-verdict";
+import { DEFAULT_BASELINES } from "./regression-lessons";
 import type { CoefStat, RegressionOutcome, RegressionResponse, TreatmentSupport } from "./types";
 
 const coefficient = (coef: number, low: number | null, high: number | null): CoefStat => ({
@@ -14,16 +15,16 @@ const coefficient = (coef: number, low: number | null, high: number | null): Coe
 function response(outcome: RegressionOutcome, coef: CoefStat, support: TreatmentSupport | null = null): RegressionResponse {
   return {
     design: {
-      outcome, depvar: "y", depvar_label: "Y", granularity: "country_industry", shock_type: "tariff",
+      outcome, baseline: DEFAULT_BASELINES[outcome], depvar: "y", depvar_label: "Y", granularity: "country_industry", shock_type: "tariff",
       shock_col: "teaching_tariff_exposure", treated_col: "teaching_treated", method: "twfe_intensity",
       control_mode: "none", interaction: false, price_mode: "nominal", scenario: "clean",
       scenario_label: "基准", sample_filter: "排除ROW", exclude_row: true, controls: [], control_labels: {},
-      equation: "y=x", equation_parts: [], panel_file: "panel_teaching.csv", entity: "entity_id", cluster: "country",
+      equation: "y=x", equation_parts: [], panel_file: "panel_teaching.csv", entity: "entity_id", cluster: "country", spec: null,
     },
     result: {
       depvar: "y", coefs: [coef], n_obs: 10, n_entities: 2, n_times: 5, n_clusters: 2,
       r2_within: 0.1, depvar_mean: 2, depvar_std: 2, depvar_within_std: 2, diagnostics: {}, notes: [],
-      status: support?.status ?? "ok", status_reasons: support?.reasons ?? [], support,
+      status: support?.status ?? "ok", status_reasons: support?.reasons ?? [], support, root_mse: null,
     },
     benchmark: {
       backend: "PanelOLS", policy_coefs: [], max_abs_coef_diff: 0, max_abs_se_diff: 0,
@@ -34,7 +35,7 @@ function response(outcome: RegressionOutcome, coef: CoefStat, support: Treatment
 }
 
 const blockedSupport = (status: "insufficient" | "invalid_design"): TreatmentSupport => ({
-  treated_clusters: 1, untreated_clusters: 2, treated_entities: 2, reversal_entities: [],
+  treated_clusters: 1, untreated_clusters: 2, treated_entities: 2, untreated_entities: 4, total_entities: 6, reversal_entities: [],
   reversal_share: 0, absorbing: false, status, reasons: ["处理支持度不足"],
   min_treated_clusters: 5, max_reversal_share: 0.05, suppress_inference: true,
 });

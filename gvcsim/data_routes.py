@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from gvcsim import concurrency, quizzes, shocks
+from gvcsim import concurrency, quizzes, shock_catalog, shocks
 from gvcsim.classroom import quiz_config
 from gvcsim.artifacts import (
     ArtifactContractError,
@@ -604,8 +604,8 @@ def _shock_type_metadata(shock_type: str) -> dict:
     _shock_view_columns(shock_type)
     return {
         "key": shock_type,
-        "label": shocks.SHOCK_LABELS[shock_type],
-        "definition": shocks.SHOCK_DEFINITIONS[shock_type],
+        "label": shock_catalog.SHOCK_LABELS[shock_type],
+        "definition": shock_catalog.SHOCK_DEFINITIONS[shock_type],
         "treated_definition": (
             f"权威处理标记来自 {shocks.SHOCK_SPECS[shock_type][1]}==1；"
             f"生成契约使用 shock_intensity>{shocks.TREATED_THRESHOLD:g}，即本面板所编码政策增量的正暴露；低强度不能当作零暴露。"
@@ -613,18 +613,6 @@ def _shock_type_metadata(shock_type: str) -> dict:
         "treated_threshold": shocks.TREATED_THRESHOLD,
         "treated_operator": ">",
     }
-
-
-def _resolve_shock_filter(filter_value: ShockFilter | None, only_hit: bool | None) -> ShockFilter:
-    if filter_value is not None and only_hit is not None:
-        raise HTTPException(status_code=400, detail="filter 与旧参数 only_hit 不能同时使用")
-    if filter_value is not None:
-        return filter_value
-    if only_hit is not None:
-        # Controlled compatibility adapter: old only_hit meant finite intensity > 0,
-        # never the authoritative treated flag.
-        return "nonzero" if only_hit else "all"
-    return "treated"
 
 
 def _resolve_shock_sort(sort: str) -> ShockSort:
@@ -721,14 +709,12 @@ def shock_panel(
     shock_type: str = SHOCK_TARIFF,
     country: str | None = None,
     sector: str | None = None,
-    filter: Annotated[ShockFilter | None, Query()] = None,
-    only_hit: Annotated[bool | None, Query(deprecated=True)] = None,
+    filter: Annotated[ShockFilter, Query()] = "treated",
     sort: Annotated[ShockSort, Query()] = "intensity_desc",
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=200)] = 25,
 ):
     """Filter/sort/count first, paginate, then enrich no more than one page."""
-    shock_filter = _resolve_shock_filter(filter, only_hit)
     shock_sort = _resolve_shock_sort(sort)
     shock_col, treated_col, announced_col, effective_col, note_col = _shock_view_columns(shock_type)
     df = _read_shocks()
@@ -740,9 +726,9 @@ def shock_panel(
         df = df[df["sector"] == sector]
     intensity = pd.to_numeric(df[shock_col], errors="coerce")
     finite = pd.Series(np.isfinite(intensity.to_numpy(dtype=float)), index=df.index)
-    if shock_filter == "treated":
+    if filter == "treated":
         df = df[df[treated_col] == 1]
-    elif shock_filter == "nonzero":
+    elif filter == "nonzero":
         df = df[finite & intensity.gt(0)]
     # Rebind the sort vector after filtering. Assigning the pre-filter Series to
     # an empty frame would align its old index back into a synthetic all-null row.
@@ -774,7 +760,7 @@ def shock_panel(
         rows = _with_tariff_exposure(rows, year)
     return {
         "type": _shock_type_metadata(shock_type),
-        "filter": shock_filter,
+        "filter": filter,
         "sort": shock_sort,
         "total": total,
         "page": page,

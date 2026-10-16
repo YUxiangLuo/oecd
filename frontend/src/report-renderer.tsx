@@ -12,7 +12,6 @@ type ChartItem = { label: string; value: number };
 /** A bar may name the series it belongs to (e.g. a country); bars of one group share a colour.
  *  A reference bar (e.g. the global median) is grey, like a reference line, so it never reads as a country. */
 type BarItem = ChartItem & { group?: string; reference?: boolean };
-type ChartPoint = ChartItem & { se?: number; ci_low?: number; ci_high?: number };
 type CoefficientItem = ChartItem & { ci_low?: number; ci_high?: number };
 /** One Y of a regression bar chart: `value` in the axis unit, `text` the end label as the result table prints it
  *  ("-0.55", "-40.11（-0.047 个标准差）"), `saved` the student's saved Y, `sub` a second label line ("步骤 11"). */
@@ -36,33 +35,6 @@ type ReportChart =
       x_label?: string;
       note?: string;
       items: DivergingItem[];
-    }
-  | {
-      // Legacy: reports generated before the bar-chart redesign (still stored and graded) carry the coefficient
-      // and binned-scatter charts; new reports draw "diverging-bar" instead.
-      version: 1;
-      type: "coefficient";
-      title?: string;
-      x_label?: string;
-      y_label?: string;
-      items: CoefficientItem[];
-    }
-  | {
-      version: 1;
-      type: "binscatter";
-      title?: string;
-      x_label?: string;
-      y_label?: string;
-      points: { x: number; y: number; n: number }[];
-      slope: number;
-    }
-  | {
-      version: 1;
-      type: "event-study";
-      title?: string;
-      x_label?: string;
-      y_label?: string;
-      points: ChartPoint[];
     }
   | {
       version: 1;
@@ -127,22 +99,6 @@ function isDivergingItem(value: unknown): value is DivergingItem {
     && (sub == null || isLabel(sub));
 }
 
-function isPoint(value: unknown): value is ChartPoint {
-  if (!value || typeof value !== "object") return false;
-  const point = value as Record<string, unknown>;
-  if (!hasOnlyKeys(point, ["label", "value", "se", "ci_low", "ci_high"])) return false;
-  if (!isLabel(point.label) || typeof point.value !== "number" || !Number.isFinite(point.value)) return false;
-  const hasCi = point.ci_low != null || point.ci_high != null;
-  if (hasCi) {
-    return typeof point.ci_low === "number" && Number.isFinite(point.ci_low)
-      && typeof point.ci_high === "number" && Number.isFinite(point.ci_high)
-      && point.ci_low <= point.value && point.value <= point.ci_high
-      && point.se == null;
-  }
-  // 仅用于渲染课程升级前已经持久化的 v1 报告；新报告始终发送后端 t(G−1) CI。
-  return typeof point.se === "number" && Number.isFinite(point.se) && point.se >= 0;
-}
-
 function isLineSeries(value: unknown): value is LineSeries {
   if (!value || typeof value !== "object") return false;
   const series = value as Record<string, unknown>;
@@ -184,28 +140,6 @@ export function parseReportChart(source: string): ReportChart | null {
     if (value.items.filter((item) => item.saved === true).length > 1) return null;
     return value as ReportChart;
   }
-  if (value.type === "coefficient") {
-    if (!hasOnlyKeys(value, ["version", "type", "title", "x_label", "y_label", "items"])) return null;
-    if (!Array.isArray(value.items) || value.items.length === 0 || value.items.length > 8) return null;
-    if (!value.items.every(isCoefficientItem)) return null;
-    return value as ReportChart;
-  }
-  if (value.type === "binscatter") {
-    if (!hasOnlyKeys(value, ["version", "type", "title", "x_label", "y_label", "points", "slope"])) return null;
-    if (typeof value.slope !== "number" || !Number.isFinite(value.slope)) return null;
-    if (!Array.isArray(value.points) || value.points.length < 2 || value.points.length > MAX_POINTS) return null;
-    const finite = (item: unknown): item is { x: number; y: number; n: number } =>
-      typeof item === "object" && item !== null && hasOnlyKeys(item as Record<string, unknown>, ["x", "y", "n"])
-      && ["x", "y", "n"].every((key) => typeof (item as Record<string, unknown>)[key] === "number" && Number.isFinite((item as Record<string, number>)[key]));
-    if (!value.points.every(finite)) return null;
-    return value as ReportChart;
-  }
-  if (value.type === "event-study") {
-    if (!hasOnlyKeys(value, ["version", "type", "title", "x_label", "y_label", "points"])) return null;
-    if (!Array.isArray(value.points) || value.points.length === 0 || value.points.length > MAX_POINTS) return null;
-    if (!value.points.every(isPoint)) return null;
-    return value as ReportChart;
-  }
   if (value.type === "line") {
     if (!hasOnlyKeys(value, ["version", "type", "title", "x_label", "y_label", "series"])) return null;
     if (!Array.isArray(value.series) || value.series.length < 1 || value.series.length > 8) return null;
@@ -216,13 +150,6 @@ export function parseReportChart(source: string): ReportChart | null {
   }
   return null;
 }
-
-const fmt = (value: number) => {
-  const abs = Math.abs(value);
-  if (abs >= 1000) return value.toLocaleString("zh-CN", { maximumFractionDigits: 1 });
-  if (abs < 0.01 && value !== 0) return String(Number(value.toPrecision(2)));
-  return value.toFixed(3).replace(/\.0+$|(?<=\.[0-9]*)0+$/, "");
-};
 
 /** The reading unit of a chart from its axis label, as the report builder writes it ("…（%）" for shares). */
 const chartUnit = (label?: string) => ((label ?? "").endsWith("（%）") ? "%" : label ?? "");
@@ -381,143 +308,6 @@ function BarChart({ chart }: { chart: Extract<ReportChart, { type: "bar" }> }) {
           );
         })}
         {(chart.y_label || chart.x_label) && <text x={m.l + plotW / 2} y={H - 8} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{chart.y_label ?? chart.x_label}</text>}
-      </svg>
-    </ReportFigure>
-  );
-}
-
-/** Symmetric "nice" ticks around 0, as on the step 11–14 coefficient plot. */
-function symmetricTicks(maxAbs: number): number[] {
-  const raw = maxAbs / 2;
-  const magnitude = 10 ** Math.floor(Math.log10(raw));
-  const step = [1, 2, 2.5, 5, 10].map((multiple) => multiple * magnitude).find((candidate) => candidate >= raw) ?? raw;
-  const count = Math.max(1, Math.ceil(maxAbs / step));
-  return Array.from({ length: 2 * count + 1 }, (_, index) => (index - count) * step);
-}
-
-/** Legacy (reports generated before the bar-chart redesign): bin means of the within-transformed Y against X and
- *  the fitted line. */
-function BinscatterChart({ chart }: { chart: Extract<ReportChart, { type: "binscatter" }> }) {
-  const W = 720, H = 330;
-  const xs = chart.points.map((point) => point.x), ys = chart.points.map((point) => point.y);
-  // Round axis bounds and ticks, as on the step pages, so the labels read as plain numbers.
-  const xAxis = niceDomain(Math.min(0, ...xs), Math.max(0, ...xs));
-  const fitted = [xAxis.lo * chart.slope, xAxis.hi * chart.slope];
-  const yAxis = niceDomain(Math.min(0, ...ys, ...fitted), Math.max(0, ...ys, ...fitted));
-  const digits = (lo: number, hi: number) => Math.max(0, Math.min(4, 2 - Math.floor(Math.log10(Math.max(hi - lo, 1e-9) / 4))));
-  // Ticks are round values: trailing zeros trimmed ("-0.1", not "-0.1000").
-  const trimmed = (value: number, places: number) => { if (needsScientific(value)) return scientific(value); const text = String(Number(value.toFixed(places))); return text === "-0" ? "0" : text; };
-  const fx = (value: number) => trimmed(value, digits(xAxis.lo, xAxis.hi)), fy = (value: number) => trimmed(value, digits(yAxis.lo, yAxis.hi));
-  const m = { l: yAxisLeft(yAxis.ticks.map(fy), 70), r: Math.max(24, textWidth(fx(xAxis.hi), AXIS_FONT) / 2 + 4), t: 18, b: 54 };
-  const x = (value: number) => m.l + ((value - xAxis.lo) / (xAxis.hi - xAxis.lo || 1)) * (W - m.l - m.r);
-  const y = (value: number) => H - m.b - ((value - yAxis.lo) / (yAxis.hi - yAxis.lo || 1)) * (H - m.t - m.b);
-  return (
-    <ReportFigure title={chart.title ?? "分箱散点图"}>
-      <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>把全部记录按 X 从小到大最多分成 {chart.points.length} 组，每个点是一组的平均值；很多记录的 X 相同时，几组的点会重合，看到的点会少一些。X 和 Y 都先扣掉了每个国家×行业自己的平均水平和每年的共同变化。直线的斜率就是估计值（X 每高 1 个百分点，Y 平均相差多少）。</div>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${chart.title ?? "分箱散点图"}。${chart.points.map((point) => `X: ${point.x}, Y: ${point.y}, n: ${point.n}`).join("；")}`} style={CHART_SVG_STYLE}>
-        {yAxis.ticks.map((tick) => <g key={`y${tick}`}><line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke="#eef0f4" /><text x={m.l - 8} y={y(tick) + 5} textAnchor="end" fontSize={AXIS_FONT} fill="#5f6677">{fy(tick)}</text></g>)}
-        {xAxis.ticks.map((tick) => <g key={`x${tick}`}><line x1={x(tick)} x2={x(tick)} y1={m.t} y2={H - m.b} stroke="#eef0f4" /><text x={x(tick)} y={H - m.b + 18} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{fx(tick)}</text></g>)}
-        <line x1={x(0)} x2={x(0)} y1={m.t} y2={H - m.b} stroke="#9aa3b5" strokeDasharray="4 3" />
-        <line x1={m.l} x2={W - m.r} y1={y(0)} y2={y(0)} stroke="#9aa3b5" strokeDasharray="4 3" />
-        {chart.x_label && <text x={m.l + (W - m.l - m.r) / 2} y={H - 8} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{chart.x_label}</text>}
-        {chart.y_label && <YUnitLabel text={chart.y_label} middle={(m.t + H - m.b) / 2} />}
-        <line x1={x(xAxis.lo)} y1={y(fitted[0])} x2={x(xAxis.hi)} y2={y(fitted[1])} stroke="#2a2f3a" strokeWidth={2.2} />
-        {chart.points.map((point, index) => <circle key={index} cx={x(point.x)} cy={y(point.y)} r={5} fill="#216cc0" stroke="#fff" strokeWidth={1.5}><title>{`X: ${point.x}, Y: ${point.y}, n: ${point.n}`}</title></circle>)}
-      </svg>
-    </ReportFigure>
-  );
-}
-
-/** Legacy (reports generated before the bar-chart redesign): one row per estimate, the point estimate as a dot and
- *  the 95% interval as a capped whisker (one colour). */
-function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coefficient" }> }) {
-  const W = 720;
-  const rowH = Math.max(64, ...chart.items.map((item) => wrapLabel(item.label, LABEL_FONT, 186).length * 18 + 20));
-  const m = { l: 210, r: 52, t: 16, b: 52 };
-  const H = m.t + chart.items.length * rowH + m.b;
-  const plotW = W - m.l - m.r;
-  const hasCi = chart.items.some((item) => item.ci_low != null && item.ci_high != null);
-  const maxAbs = Math.max(
-    ...chart.items.map((item) => Math.max(Math.abs(item.ci_low ?? item.value), Math.abs(item.ci_high ?? item.value))),
-    1e-6,
-  ) * 1.08;
-  const ticks = symmetricTicks(maxAbs);
-  const extent = ticks.at(-1)!;
-  const x = (value: number) => m.l + ((value + extent) / (2 * extent)) * plotW;
-  const y = (index: number) => m.t + (index + 0.5) * rowH;
-  const decimals = Math.max(0, Math.min(4, 1 - Math.floor(Math.log10(extent / 2))));
-  // Trailing zeros trimmed on ticks ("-1.5", "-0.075"); the point values below keep fixed decimals.
-  const tick = (value: number) => (needsScientific(value) ? scientific(value) : value === 0 ? "0" : String(Number(value.toFixed(decimals))));
-  // Signed, as in the result table and the step pages ("+0.008", "[-0.011, +0.026]").
-  const value = (number: number) => `${number >= 0 ? "+" : ""}${needsScientific(number) ? scientific(number) : number.toFixed(Math.max(2, decimals))}`;
-  const zero = x(0);
-  /** Where a bold label goes so it stays clear of the zero line: on the estimate's side of 0, near the point,
-   *  inside the plot; null when it is wider than that side. */
-  const awayFromZero = (text: string, at: number, positive: boolean) => {
-    const width = textWidth(text, AXIS_FONT) * 1.05;
-    if (positive) {
-      const start = Math.min(Math.max(at - width / 2, zero + 8), W - m.r - width);
-      return start >= zero + 8 ? { x: start, anchor: "start" as const } : null;
-    }
-    const end = Math.max(Math.min(at + width / 2, zero - 8), m.l + width);
-    return end <= zero - 8 ? { x: end, anchor: "end" as const } : null;
-  };
-
-  return (
-    <ReportFigure title={chart.title ?? "系数图"}>
-      <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
-        {hasCi
-          ? "点 = 估计值 · 横线 = 95% 区间（真实系数的合理取值范围） · 竖线 = 0（X 与 Y 没有关联）；区间包含 0 时方向不确定"
-          : "这次的数据不够判断方向，只显示估计值，不显示 95% 区间"}
-      </div>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${chart.title ?? "系数图"}。${chart.items.map((item) => `${item.label}: ${item.value}; CI: ${item.ci_low ?? "—"}, ${item.ci_high ?? "—"}`).join("；")}`} style={CHART_SVG_STYLE}>
-        {ticks.map((tickValue) => (
-          <g key={tickValue}>
-            {tickValue !== 0 && <line x1={x(tickValue)} x2={x(tickValue)} y1={m.t} y2={H - m.b} stroke="#eef0f4" />}
-            <text x={x(tickValue)} y={H - m.b + 18} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{tick(tickValue)}</text>
-          </g>
-        ))}
-        <line x1={m.l} x2={W - m.r} y1={H - m.b} y2={H - m.b} stroke="#d7dae2" />
-        {chart.x_label && <text x={m.l + plotW / 2} y={H - 8} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{chart.x_label}</text>}
-        {chart.items.map((item, index) => {
-          const color = !hasCi ? "#b6bac6" : "#2a2f3a";
-          const interval = item.ci_low != null && item.ci_high != null ? `[${value(item.ci_low)}, ${value(item.ci_high)}]` : "";
-          const full = interval ? `${value(item.value)}  ${interval}` : value(item.value);
-          const positive = item.value >= 0;
-          // One line above the point when it fits beside the zero line; otherwise the value above and the interval
-          // below the whisker, each on the estimate's side; centred inside the plot as a last resort.
-          const together = awayFromZero(full, x(item.value), positive);
-          const centred = (text: string) => ({
-            x: Math.min(Math.max(x(item.value), m.l + textWidth(text, AXIS_FONT) / 2), W - m.r - textWidth(text, AXIS_FONT) / 2),
-            anchor: "middle" as const,
-          });
-          const labels = together
-            ? [{ text: full, dy: -18, ...together }]
-            : [
-              { text: value(item.value), dy: -18, ...(awayFromZero(value(item.value), x(item.value), positive) ?? centred(value(item.value))) },
-              ...(interval ? [{ text: interval, dy: 28, ...(awayFromZero(interval, x(item.value), positive) ?? centred(interval)) }] : []),
-            ];
-          return (
-            <g key={`${item.label}-${index}`}>
-              <title>{`${item.label}: ${item.value}; CI: ${item.ci_low ?? "—"}, ${item.ci_high ?? "—"}`}</title>
-              <WrappedText text={item.label} width={186} x={m.l - 12} y={y(index) + 5 - (wrapLabel(item.label, LABEL_FONT, 186).length - 1) * 9} textAnchor="end" fontSize={LABEL_FONT} fill="#3a4050" />
-              {item.ci_low != null && item.ci_high != null && (
-                <g stroke={color} strokeWidth={1.8}>
-                  <line x1={x(item.ci_low)} x2={x(item.ci_high)} y1={y(index)} y2={y(index)} />
-                  <line x1={x(item.ci_low)} x2={x(item.ci_low)} y1={y(index) - 7} y2={y(index) + 7} />
-                  <line x1={x(item.ci_high)} x2={x(item.ci_high)} y1={y(index) - 7} y2={y(index) + 7} />
-                </g>
-              )}
-              <circle cx={x(item.value)} cy={y(index)} r={6.5} fill={color} stroke="#fff" strokeWidth={2} />
-              {labels.map((label) => (
-                <text key={label.text} data-coef-label x={label.x} y={y(index) + label.dy} textAnchor={label.anchor} fontSize={AXIS_FONT} fontWeight={700} fill="#2a2f3a">
-                  {label.text}
-                </text>
-              ))}
-            </g>
-          );
-        })}
-        <line x1={x(0)} x2={x(0)} y1={m.t - 6} y2={H - m.b} stroke="#1f2430" strokeWidth={1.8} />
       </svg>
     </ReportFigure>
   );
@@ -778,46 +568,6 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
   );
 }
 
-function EventChart({ chart }: { chart: Extract<ReportChart, { type: "event-study" }> }) {
-  const W = 720;
-  const labelWidth = Math.min(160, 520 / chart.points.length);
-  const labelHeight = Math.max(...chart.points.map((point) => wrapLabel(point.label, LABEL_FONT, labelWidth).length)) * 18;
-  const H = 290 + Math.max(0, labelHeight - 18);
-  const intervals = chart.points.map((point) => ({
-    ...point,
-    lo: point.ci_low ?? point.value - 1.96 * (point.se ?? 0),
-    hi: point.ci_high ?? point.value + 1.96 * (point.se ?? 0),
-  }));
-  const extent = Math.max(...intervals.flatMap((point) => [Math.abs(point.lo), Math.abs(point.hi)]), 1e-6) * 1.12;
-  const m = { l: yAxisLeft([-extent, 0, extent].map(fmt), 66), r: 26, t: 22, b: 34 + labelHeight };
-  const plotW = W - m.l - m.r;
-  const plotH = H - m.t - m.b;
-  const x = (i: number) => m.l + ((i + 0.5) / intervals.length) * plotW;
-  const y = (value: number) => m.t + ((extent - value) / (2 * extent)) * plotH;
-
-  return (
-    <ReportFigure title={chart.title ?? "事件研究动态效应"}>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "事件研究动态图"} style={CHART_SVG_STYLE}>
-        {[-extent, 0, extent].map((tick) => (
-          <g key={tick}>
-            <line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke={tick === 0 ? "#b9bec9" : "#eceef3"} />
-            <text x={m.l - 8} y={y(tick) + 5} textAnchor="end" fontSize={AXIS_FONT} fill="#5f6677">{fmt(tick)}</text>
-          </g>
-        ))}
-        {intervals.map((point, i) => (
-          <g key={`${point.label}-${i}`}>
-            <line x1={x(i)} x2={x(i)} y1={y(point.lo)} y2={y(point.hi)} stroke="#7773df" strokeWidth={2} />
-            <circle cx={x(i)} cy={y(point.value)} r={5} fill="#4b47e0" stroke="#fff" strokeWidth={2} />
-            <WrappedText text={point.label} width={labelWidth} x={x(i)} y={H - m.b + 20} textAnchor="middle" fontSize={AXIS_FONT} fill="#596173" />
-          </g>
-        ))}
-        {chart.y_label && <YUnitLabel text={chart.y_label} middle={m.t + plotH / 2} />}
-        {chart.x_label && <text x={m.l + plotW / 2} y={H - 7} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{chart.x_label}</text>}
-      </svg>
-    </ReportFigure>
-  );
-}
-
 function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> }) {
   const W = 720;
   const colors = [...GROUP_COLORS, "#c2417a", "#657000", "#3274a1"];
@@ -900,9 +650,6 @@ function ReportChartView({ chart }: { chart: ReportChart }) {
   switch (chart.type) {
     case "bar": return <BarChart chart={chart} />;
     case "diverging-bar": return <DivergingBarChart chart={chart} />;
-    case "coefficient": return <CoefficientChart chart={chart} />;
-    case "binscatter": return <BinscatterChart chart={chart} />;
-    case "event-study": return <EventChart chart={chart} />;
     case "line": return <LineChart chart={chart} />;
   }
 }
@@ -971,7 +718,7 @@ function rehypeReportTableLabels() {
 }
 
 /** The report's h2 sections a student does not need open while writing: folded on the student page (never for
- * the teacher, never when printing). Any other title, including a legacy one, stays open. */
+ * the teacher, never when printing). Any other title stays open. */
 export const FOLDED_REPORT_SECTIONS: ReadonlySet<string> = new Set([
   "理解题答题记录", "保存的实验快照", "技术附录：保存的回归结果", "附录：模型实验", "数据检查", "数据与方法说明", "方法参考文献", "报告溯源",
 ]);
@@ -1035,13 +782,6 @@ function ReportTable({ children, ...props }: ComponentPropsWithoutRef<"table">) 
   );
 }
 
-/** CommonMark cannot close "**…。**" when a letter follows the closing "**" (punctuation before it, a letter after);
- * reports generated before the server fix still contain that form, so move the punctuation outside the bold.
- * Followed by punctuation ("**指标部分（步骤 1–9）**：") the bold already closes, and the bracket stays inside it. */
-export function closeBoldBeforeCjkPunctuation(markdown: string): string {
-  return markdown.replace(/\*\*([^*\n]+?)([。，；：！？、）])\*\*(?=[^\s*\p{P}\p{S}])/gu, "**$1**$2");
-}
-
 /** External links open in a new tab, so a click does not leave the report. A link whose text is already its address
  * is marked, so the printed report does not add the same address again (styles.css, @media print). */
 function ReportLink({ node: _node, href, children, ...props }: ComponentPropsWithoutRef<"a"> & { node?: unknown }) {
@@ -1088,7 +828,7 @@ export function ReportMarkdown({ markdown, className = "report-md", foldSections
           a: ReportLink,
         }}
       >
-        {closeBoldBeforeCjkPunctuation(markdown)}
+        {markdown}
       </ReactMarkdown>
     </article>
   );

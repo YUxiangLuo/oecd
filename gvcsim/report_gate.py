@@ -17,7 +17,7 @@ from gvcsim.report_common import (
     _list_values,
     composition_set,
 )
-from gvcsim.report_saved_run import _gate_qualified_runs
+from gvcsim.report_saved_run import _saved_runs
 
 
 def _step_data(session: dict[str, Any], step: int) -> dict[str, Any]:
@@ -133,48 +133,29 @@ def _indicator_material_complete(data: dict[str, Any], step: int) -> bool:
     )
 
 
-# Steps 2–5 record the comparison automatically from the country being viewed; older explicit saves stay valid.
+# Steps 2–5 record the reading automatically from the country being viewed.
 AUTO_COMPARISON_SOURCE = "auto-indicator-comparison"
-EXPLICIT_COMPARISON_SOURCE = "explicit-indicator-table-comparison"
 
 
-def _table_comparison_complete(data: dict[str, Any], *, allow_auto: bool = False) -> bool:
-    """Steps 2–5 require one finite, country-level reading of the selected country.
-
-    Records saved before steps 2–5 became single-country hold two countries read in the same year; they stay
-    complete so those students are not blocked.
-    """
-    sources = {EXPLICIT_COMPARISON_SOURCE, AUTO_COMPARISON_SOURCE} if allow_auto else {EXPLICIT_COMPARISON_SOURCE}
+def _table_comparison_complete(data: dict[str, Any]) -> bool:
+    """Steps 2–5 require one finite, country-level reading of the selected country."""
     compared = [str(item) for item in _list_values(data.get("compared")) if str(item).strip()]
     observations = [item for item in _list_values(data.get("observations")) if isinstance(item, dict)]
     # ROW is the rest-of-world accounting remainder, not an economy.
-    if (
-        len(compared) not in (1, 2)
-        or len(set(compared)) != len(compared)
-        or "ROW" in compared
-        or len(observations) != len(compared)
-    ):
+    if len(compared) != 1 or compared == ["ROW"] or len(observations) != 1:
         return False
+    item = observations[0]
     required = ("entity", "country", "year", "value", "metric", "unit", "release", "scope", "source")
-    if any(any(item.get(key) in (None, "") for key in required) for item in observations):
-        return False
-    if any(
-        isinstance(item.get("year"), bool)
-        or not isinstance(item.get("year"), int)
-        or not finite_number(item.get("value"))
-        or str(item.get("entity")) != str(item.get("country"))
-        or item.get("scope") != "country"
-        or item.get("source") not in sources
-        for item in observations
-    ):
+    if any(item.get(key) in (None, "") for key in required):
         return False
     return (
-        {str(item["country"]) for item in observations} == set(compared)
-        and len({item["year"] for item in observations}) == 1
-        and len({str(item["metric"]) for item in observations}) == 1
-        and len({str(item["unit"]) for item in observations}) == 1
-        and len({str(item["release"]) for item in observations}) == 1
-        and data.get("metric") == observations[0]["metric"]
+        not isinstance(item.get("year"), bool)
+        and isinstance(item.get("year"), int)
+        and finite_number(item.get("value"))
+        and str(item.get("entity")) == str(item.get("country")) == compared[0]
+        and item.get("scope") == "country"
+        and item.get("source") == AUTO_COMPARISON_SOURCE
+        and data.get("metric") == item["metric"]
     )
 
 
@@ -220,7 +201,7 @@ def _network_material_complete(data: dict[str, Any]) -> bool:
     return len(years) >= 2 if sources == {"explicit-network-trend"} else len(years) == 1
 
 
-def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[str, Any]]:
+def check_material_gate(session: dict[str, Any]) -> list[dict[str, Any]]:
     """Return only missing report evidence/actions, independently of quizzes."""
     blocked: list[dict[str, Any]] = []
     observation = _step_data(session, 1).get("observation")
@@ -241,7 +222,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
     for step in range(2, 10):
         data = _step_data(session, step)
         if step in (2, 3, 4, 5):
-            if not _table_comparison_complete(data, allow_auto=True):
+            if not _table_comparison_complete(data):
                 blocked.append(
                     {
                         "step": step,
@@ -318,7 +299,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
             }
         )
 
-    qualified_steps = {run["step"] for run in _gate_qualified_runs(session)}
+    qualified_steps = {run["step"] for run in _saved_runs(session)}
     for step in sorted(_STEP_OUTCOMES):
         if step in qualified_steps:
             continue
@@ -364,9 +345,7 @@ def reflection_length(value: str) -> int:
     return len(" ".join(word for word in words if word))
 
 
-def check_gate(
-    session: dict[str, Any], *, quiz_bank: dict[str, Any] | None = None, **_unused: Any
-) -> list[dict[str, Any]]:
+def check_gate(session: dict[str, Any], *, quiz_bank: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """Return the combined quiz and report-material gate used for generation. ``quiz_only``: the step's material is
     complete and only its quiz is not (never answered, answered wrong, or saved for an older version), so the page's
     link goes to the quiz rather than the top of the step."""

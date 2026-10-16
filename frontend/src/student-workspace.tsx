@@ -105,9 +105,9 @@ interface StudentWorkspaceProps {
 /** Loaded student course shell. Data loading and all state ownership stay in App. */
 /**
  * The comparison a step opens with before it saves its own, carried from the latest earlier step that has one.
- * Steps 2–5 record one country (records saved before that may hold two): steps 3–5 carry that country.
+ * Steps 2–5 record one country: steps 3–5 carry that country.
  * Steps 6–9 compare country A with up to four others: they carry an earlier step 6–9 list as it is, and from a
- * steps 2–5 record take its country as A, with the default comparison country B unless a B was saved there.
+ * steps 2–5 record take its country as A, with the default comparison country B.
  */
 export function carriedComparisonFor(
   step: number,
@@ -170,7 +170,6 @@ export function carriedComparisonSource(
       if (unique.length === 0) continue;
       const from = pickedIn(prior, unique[0]);
       if (singleCountry) return { compared: unique.slice(0, 1), from };
-      if (unique.length >= 2) return { compared: unique.slice(0, 2), from };
       const partner = partnerOf(unique[0]);
       return { compared: partner ? [unique[0], partner] : [unique[0]], from };
     }

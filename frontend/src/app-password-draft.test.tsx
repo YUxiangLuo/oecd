@@ -25,7 +25,7 @@ test("self-service password change preserves the failed-save draft before logout
     concept: "实验", tip: "保存", deps: [], handoff: { input: "记录", action: "汇总", output: "报告" },
   }] });
   const session = spyOn(api.classroom, "session").mockResolvedValue({ release_id: releaseId, session: emptySession(), updated_at: null, report: null,
-    completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_gate: [], material_gate: [],
+    completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_current: false, report_gate: [], material_gate: [],
   });
   const save = spyOn(api.classroom, "saveSession").mockRejectedValue(new Error("offline"));
   const password = spyOn(api, "changePassword").mockResolvedValue({ ok: true, reauthenticate: true });

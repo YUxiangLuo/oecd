@@ -101,25 +101,6 @@ def test_own_login_and_number_are_allowed_and_display_case_is_preserved(teaching
     assert client.post("/api/classroom/students", json=_student("replacement", "RELEASED")).status_code == 200
 
 
-def test_legacy_padded_number_conflicts_without_rewriting_saved_data(teaching_db):
-    client = _client()
-    with db.conn() as connection:
-        connection.execute("UPDATE accounts SET student_no='  Roster.A  ' WHERE username='student'")
-    before = db.find_account("student")
-    response = client.post("/api/classroom/students", json=_student("new-owner", "roster.a"))
-    assert response.status_code == 409, response.text
-    response = client.post(
-        "/api/classroom/students/batch",
-        json={
-            "class_id": _group(),
-            "preview": True,
-            "students": [_student("ROSTER.A")],
-        },
-    )
-    assert response.json() == {"existing": ["roster.a"], "created": 0}
-    assert db.find_account("student") == before
-
-
 @pytest.mark.parametrize("claimed", ["STUDENT02", "2026002"])
 def test_demo_account_sync_checks_identifiers_and_rolls_back_without_rewriting_conflicts(
     teaching_db, monkeypatch, claimed
@@ -249,7 +230,7 @@ def test_concurrent_identity_claims_have_one_winner_and_no_partial_batch(teachin
     assert sorted(statuses) == [200, 409]
     with db.conn() as connection:
         owners = connection.execute(
-            "SELECT username,student_no FROM accounts WHERE lower(btrim(student_no))=%s OR lower(username)=%s",
+            "SELECT username,student_no FROM accounts WHERE lower(student_no)=%s OR lower(username)=%s",
             (number.lower(), number.lower()),
         ).fetchall()
         assert len(owners) == 1, owners

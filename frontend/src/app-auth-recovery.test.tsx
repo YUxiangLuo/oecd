@@ -48,7 +48,7 @@ describe("authentication dependency recovery", () => {
     const saved = emptySession();
     saved.steps["15"] = { data: { research_question: "服务恢复后保留的研究问题" } };
     const session = spyOn(api.classroom, "session").mockResolvedValue({ release_id: releaseId, session: saved, updated_at: null, report: null,
-      completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_gate: [], material_gate: [],
+      completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_current: false, report_gate: [], material_gate: [],
     });
     restorers.push(...[me, meta, steps, session].map((mock) => () => mock.mockRestore()));
     render(<App />);
@@ -81,7 +81,7 @@ describe("authentication dependency recovery", () => {
     saved.steps["15"] = { data: { research_question: "服务器上的研究问题" } };
     const session = spyOn(api.classroom, "session").mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValue({ release_id: releaseId, session: saved, updated_at: null, report: null,
-        completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_gate: [], material_gate: [],
+        completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_current: false, report_gate: [], material_gate: [],
       });
     restorers.push(...[me, meta, steps, session].map((mock) => () => mock.mockRestore()));
     render(<App />);
@@ -104,7 +104,7 @@ describe("authentication dependency recovery", () => {
       concept: "实验", tip: "保存", deps: [], handoff: { input: "记录", action: "汇总", output: "报告" },
     }] });
     const session = spyOn(api.classroom, "session").mockResolvedValue({ release_id: releaseId, session: emptySession(), updated_at: null, report: null,
-      completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_gate: [], material_gate: [],
+      completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_current: false, report_gate: [], material_gate: [],
     });
     Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
     restorers.push(...[me, meta, steps, session].map((mock) => () => mock.mockRestore()), () => { delete (navigator as { onLine?: boolean }).onLine; });

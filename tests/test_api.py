@@ -307,7 +307,7 @@ def test_report_state_machine_and_failure_preserves_grade(teaching_db, monkeypat
         return TeachingReport("# 第一版", {"years": [2020], "runs": []}, "report.md")
 
     monkeypatch.setattr(classroom_routes.concurrency, "run_report_build", generated)
-    created = student.post("/api/classroom/report/generate")
+    created = student.post("/api/classroom/report/generate", json={})
     assert created.status_code == 200
     assert created.json()["report"]["state"] == "draft"
     assert student.get("/api/classroom/session").json()["report"]["markdown"] == "# 第一版"
@@ -330,7 +330,7 @@ def test_report_state_machine_and_failure_preserves_grade(teaching_db, monkeypat
         raise ReportGateError([{"step": 1, "title": "数据", "missing": ["证据"]}])
 
     monkeypatch.setattr(classroom_routes.concurrency, "run_report_build", blocked)
-    denied = student.post("/api/classroom/report/generate")
+    denied = student.post("/api/classroom/report/generate", json={})
     assert denied.status_code == 409
     preserved = student.get("/api/classroom/session").json()["report"]
     assert preserved["state"] == "graded" and preserved["score"] == 91
@@ -339,7 +339,8 @@ def test_report_state_machine_and_failure_preserves_grade(teaching_db, monkeypat
         return TeachingReport("# 第二版", {"years": [2020], "runs": []}, "report.md")
 
     monkeypatch.setattr(classroom_routes.concurrency, "run_report_build", regenerated)
-    for payload in (None, {}, {"expected_report_updated_at": None}):
+    assert student.post("/api/classroom/report/generate").status_code == 422
+    for payload in ({}, {"expected_report_updated_at": None}):
         rejected = student.post("/api/classroom/report/generate", json=payload)
         assert rejected.status_code == 409
         assert rejected.json()["detail"]["code"] == "report_changed"
@@ -398,7 +399,7 @@ def test_report_generation_rejects_session_changed_during_cpu_work(teaching_db, 
         return TeachingReport("# stale", {"years": [2020], "runs": []}, "report.md")
 
     monkeypatch.setattr(classroom_routes.concurrency, "run_report_build", generated)
-    response = student.post("/api/classroom/report/generate")
+    response = student.post("/api/classroom/report/generate", json={})
 
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "session_changed"

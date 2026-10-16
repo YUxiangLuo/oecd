@@ -10,7 +10,6 @@ import numpy as np
 
 from gvcsim import config, quizzes
 from gvcsim.artifacts import (
-    NETWORK_ALGORITHM,
     ArtifactContractError,
     dataset_metadata,
     read_csv_artifact,
@@ -198,13 +197,7 @@ def _teaching_scenario(session: dict[str, Any]) -> tuple[dict[str, Any] | None, 
     return scenario, examples if observation in examples else recorded
 
 
-def build(
-    session: dict[str, Any],
-    student: str,
-    *_unused: Any,
-    quiz_bank: dict[str, Any] | None = None,
-    **_unused_kw: Any,
-) -> TeachingReport:
+def build(session: dict[str, Any], student: str, *, quiz_bank: dict[str, Any] | None = None) -> TeachingReport:
     blocked = check_gate(session, quiz_bank=quiz_bank)
     if blocked:
         raise ReportGateError(blocked)
@@ -249,7 +242,6 @@ def build(
         }
     )
     integrity_metadata = metadata.get("integrity")
-    network_algorithm = str(metadata.get("network_algorithm") or NETWORK_ALGORITHM)
     shock_event_sources = _viewed_shock_event_sources(session)
     provenance = {
         "generated_at": generated_at,
@@ -277,7 +269,7 @@ def build(
         "custom_results": custom_models,
         "algorithm": "WWZ/TLS and WWYZ observed indicators; separate seeded tariff simulation; entity/year fixed effects with country-clustered standard errors",
         "simulation_contract": metadata.get("simulation_contract"),
-        "network_algorithm": network_algorithm,
+        "network_algorithm": metadata["network_algorithm"],
         "viewed_shock_event_sources": shock_event_sources,
         "data_sources": data_sources,
         "indicator_data_source": data_sources.get("ci_synthetic_icio") or data_sources.get("oecd_icio"),

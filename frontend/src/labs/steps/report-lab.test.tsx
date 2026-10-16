@@ -72,6 +72,7 @@ function report(state: ClassroomReport["state"]): ClassroomReport {
       years: [2020],
       session_fingerprint: "fingerprint",
       runs: [],
+      custom_results: [],
     },
     state,
     score: state === "graded" ? 93 : null,
@@ -438,7 +439,7 @@ test("the server's report-current verdict wins over a newer session save time", 
 });
 
 const mutation = (state: ClassroomReport["state"]): ReportMutationResponse => ({
-  report: report(state), report_gate: [], material_gate: [],
+  report: report(state), report_current: true, report_gate: [], material_gate: [],
   completion: { steps: [], completed: [], completed_count: 0, total: 15 },
 });
 const finishProps = {
@@ -884,7 +885,7 @@ test("the writing area shows the autosave state and says formatting marks stay a
     const target = screen.getByRole("link", { name: label }).getAttribute("href")!;
     expect(document.querySelector(target)?.getAttribute("tabindex")).toBe("-1");
   }
-  expect(screen.getByText(/Y 以报告各节“结果指标 Y”为准（旧记录可能使用非默认 Y）；显式记入报告的选做模型见附录/)).toBeTruthy();
+  expect(screen.getByText(/Y 以报告各节“结果指标 Y”为准；显式记入报告的选做模型见附录/)).toBeTruthy();
   expect(screen.getByText(/“#”“\*\*”等符号不会变成标题或粗体/)).toBeTruthy();
   rerender(<ReportLab {...finishProps} sessionSyncing />);
   expect(screen.getByText("保存中…")).toBeTruthy();
@@ -1107,7 +1108,7 @@ test("你记录的材料 lists every step 1–14 in the words its material card 
   const steps = [1, 2, 6, 11, 15].map((n) => ({ n, title: `步骤名${n}`, lab: n === 15 ? "rep" : "viz" }));
   const data: Record<number, Record<string, unknown>> = {
     1: { observation: { row: "CHN_A01", column: "USA_A01", value: 1 }, material_label: "2020 年 CHN 中国·A01（供给）→ USA 美国·A01（使用）= 228.07 百万美元" },
-    2: { observations: [{ country: "CHN" }] },
+    2: { observations: [{ country: "CHN" }], material_label: "2020 年外国增加值项占比：CHN 中国 11.730%" },
     11: { run: { result: {} }, material_label: "默认模型：外国增加值项占比两年累计 -0.55 个百分点", experiment: { spec: {} } },
   };
   const navigated: number[] = [];
@@ -1115,7 +1116,7 @@ test("你记录的材料 lists every step 1–14 in the words its material card 
   const rows = [...document.querySelectorAll(".report-materials tbody tr")].map((row) => [...row.children].map((cell) => cell.textContent));
   expect(rows).toEqual([
     ["步骤 1 · 步骤名1", "已记录", "2020 年 CHN 中国·A01（供给）→ USA 美国·A01（使用）= 228.07 百万美元"],
-    ["步骤 2 · 步骤名2", "已记录", "已记录（旧记录，到本步查看）"],
+    ["步骤 2 · 步骤名2", "已记录", "2020 年外国增加值项占比：CHN 中国 11.730%"],
     ["步骤 6 · 步骤名6", "未记录", "请在一张读数完整的图表下点“把这张图记为本步报告材料”"],
     // The card's second line too: the model experiment put into the report.
     ["步骤 11 · 步骤名11", "已记录", "默认模型：外国增加值项占比两年累计 -0.55 个百分点另记入报告的模型实验：1 个（选做），见下方“你的模型实验”。"],
@@ -1124,10 +1125,10 @@ test("你记录的材料 lists every step 1–14 in the words its material card 
   expect(navigated).toEqual([6]);
 });
 
-test("step 15 corrects a submitted service example's old label after country-list retry without rewriting the report or its fingerprint", async () => {
+test("step 15 adds a submitted service example's country policy after a country-list retry without rewriting the report or its fingerprint", async () => {
   const saved = {
     compared: ["CHN", "AUS"], teaching_industry: "D",
-    material_label: "例子：CHN 中国（未被加税） 对 AUS 澳大利亚（未被加税） · D 电力燃气",
+    material_label: "例子：CHN 中国 对 AUS 澳大利亚 · D 电力燃气",
     teaching_observation: { country: "CHN", industry: "D", year: 2020, teaching_tariff_rate_tau: 0, teaching_tariff_exposure: 0 },
   };
   const submitted = report("pending");
@@ -1174,49 +1175,5 @@ test("step 15 corrects a submitted service example's old label after country-lis
     submit.mockRestore();
     save.mockRestore();
     changed.mockRestore();
-  }
-});
-
-test("step 15 makes no country-list request for an old example without a material label", () => {
-  const countries = spyOn(api, "teachingCountries");
-  try {
-    render(<RecordedMaterials steps={[{ n: 10, title: "政策冲击", lab: "shock" }]}
-      getStep={() => ({ compared: ["CHN"], teaching_industry: "D", teaching_observation: {} }) as never}
-      blocked={[]} onNavigateStep={() => {}} />);
-    expect(screen.getByText("已记录（旧记录，到本步查看）")).toBeTruthy();
-    expect(countries).not.toHaveBeenCalled();
-  } finally { countries.mockRestore(); }
-});
-
-test("step 15 corrects submitted industry-ranking scopes without changing material or report state", () => {
-  const materials = Object.fromEntries([6, 7, 8].map((step) => [step, {
-    compared: ["CHN", "USA"],
-    indicator_selection: { view: "industry", industry: step === 6 ? "" : "C26" },
-    browse_selection: { view: "comparison", industry: "C29" },
-    material_label: `行业排名 · 指标 ${step} · CHN 中国 对 USA 美国 · ${step === 6 ? "国家整体" : "C26 计算机电子光学"} · 2020（4 条读数）`,
-    observations: [{ country: "CHN", industry: "C26", value: 0.1 }, { country: "USA", industry: "C29", value: 0.2 }],
-  }]));
-  const submitted = report("pending");
-  submitted.markdown = "# 已提交报告\n\n原图表与数值保留。";
-  const before = JSON.stringify({ materials, submitted });
-  const generate = spyOn(api.classroom, "generateReport");
-  const submit = spyOn(api.classroom, "submitReport");
-  const save = spyOn(finishProps.state, "save");
-  const changed = spyOn(finishProps, "onReportChanged");
-  try {
-    render(<ReportLab {...finishProps} report={submitted} reportCurrent
-      steps={[6, 7, 8].map((n) => ({ n, title: `可视化 ${n}`, lab: "viz" })) as never}
-      getStep={(n) => materials[n] as never} />);
-    const labels = [...document.querySelectorAll(".report-materials tbody tr td:last-child")].map((cell) => cell.textContent);
-    expect(labels).toEqual([6, 7, 8].map((step) => `行业排名 · 指标 ${step} · CHN 中国 对 USA 美国 · 所选国家各行业 · 2020（4 条读数）`));
-    expect(screen.queryByText("报告需更新后重新提交")).toBeNull();
-    expect((screen.getByRole("button", { name: "导出 PDF" }) as HTMLButtonElement).disabled).toBe(false);
-    expect(generate).not.toHaveBeenCalled();
-    expect(submit).not.toHaveBeenCalled();
-    expect(save).not.toHaveBeenCalled();
-    expect(changed).not.toHaveBeenCalled();
-    expect(JSON.stringify({ materials, submitted })).toBe(before);
-  } finally {
-    generate.mockRestore(); submit.mockRestore(); save.mockRestore(); changed.mockRestore();
   }
 });

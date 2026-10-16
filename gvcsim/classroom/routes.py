@@ -196,13 +196,6 @@ def _checked_session(raw: dict[str, Any]) -> dict[str, Any]:
         data = payload.get("steps", {}).get(str(step), {}).get("data", {})
         if not isinstance(data, dict):
             continue
-        # The record of an earlier contract (a second saved run, a list of named models) is not carried over.
-        for legacy in ("qualified_run", "custom_results"):
-            if legacy in data:
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"步骤 {step} 的记录来自旧版本（{legacy}），当前课程不再使用；请刷新页面后重新计算。",
-                )
         raw_run = data.get("run")
         if raw_run is not None and _parse_saved_run(raw_run, _STEP_OUTCOMES[step]) is None:
             raise HTTPException(
@@ -354,15 +347,10 @@ class ReportGenerateRequest(BaseModel):
 @router.post("/report/generate")
 async def generate_report_http(
     request: Request,
+    req: ReportGenerateRequest,
     user: dict = Depends(require_student),
-    req: ReportGenerateRequest | None = None,
 ):
-    # Legacy body-less first generation remains valid; it can never replace a report.
-    return await generate_report(
-        user,
-        request=request,
-        expected_report_updated_at=req.expected_report_updated_at if req else None,
-    )
+    return await generate_report(user, request=request, expected_report_updated_at=req.expected_report_updated_at)
 
 
 @router.post("/report/submit")

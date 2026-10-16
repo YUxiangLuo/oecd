@@ -798,23 +798,13 @@ def generated_problems(panel: pd.DataFrame) -> list[str]:
 
 
 def _taxed_countries(panel: pd.DataFrame) -> pd.Series:
-    """Per row, whether its country is on the taxed list. The data rule decides, not τ: since v8 a taxed country's
-    services have τ = 0, so a country whose sampled industries are all services is still taxed. A panel without the
-    surplus column (before v7) falls back to the country's highest τ."""
-    if SURPLUS_COLUMN in panel.columns:
-        return panel[SURPLUS_COLUMN].ge(TAXED_SURPLUS_MIN)
-    return panel.groupby("country")["teaching_tariff_rate_tau"].transform("max").gt(0)
-
-
-def _waves(panel: pd.DataFrame) -> pd.Series:
-    """Per row, its country's tariff wave (0 untaxed). A panel without the wave column (before v10) had one wave."""
-    if WAVE_COLUMN in panel.columns:
-        return panel[WAVE_COLUMN].astype(int)
-    return _taxed_countries(panel).astype(int)
+    """Per row, whether its country is on the taxed list. The data rule decides, not τ: a taxed country's services
+    have τ = 0, so a country whose sampled industries are all services is still taxed."""
+    return panel[SURPLUS_COLUMN].ge(TAXED_SURPLUS_MIN)
 
 
 def _wave_starts_present(panel: pd.DataFrame, years: list[int]) -> tuple[pd.Series, dict[int, int], list[int]]:
-    waves = _waves(panel)
+    waves = panel[WAVE_COLUMN].astype(int)
     starts = wave_start_years(years[0])
     present = sorted({starts[int(wave)] for wave in waves.unique() if int(wave) in starts})
     return waves, starts, present
@@ -858,11 +848,7 @@ def country_exposure_overview(panel: pd.DataFrame) -> dict:
                 "industries": int(values.size),
                 "goods_industries": int(goods_values.get(str(country), empty).size),
                 "exposed_industries": int(values.gt(0).sum()),
-                "market_goods_surplus": (
-                    float(rows.loc[rows.country.eq(country), SURPLUS_COLUMN].iloc[0])
-                    if SURPLUS_COLUMN in rows
-                    else None
-                ),
+                "market_goods_surplus": float(rows.loc[rows.country.eq(country), SURPLUS_COLUMN].iloc[0]),
             }
         )
     countries.sort(key=lambda item: (-float(cast(float, item["mean_exposure"])), str(item["country"])))
@@ -969,8 +955,8 @@ def group_trends(panel: pd.DataFrame) -> dict:
     to its own mean before the first tariff year (so different baseline levels do not hide the gaps).
 
     This is the descriptive comparison behind the estimate: after a wave's tariff starts, does its Y move away from
-    the untaxed group's Y? ``taxed`` pools both waves (the two-line chart before v10). ``outcomes`` holds each
-    family's default Y; ``series`` holds every baseline of every family.
+    the untaxed group's Y? ``outcomes`` holds each family's default Y; ``series`` holds every baseline of every
+    family.
     """
     years = sorted(int(year) for year in panel["year"].unique())
     waves, _, present = _wave_starts_present(panel, years)
@@ -980,16 +966,11 @@ def group_trends(panel: pd.DataFrame) -> dict:
     pre_years = [year for year in years if year < policy_year]
     taxed_country = _taxed_countries(panel)
     by_wave = np.select([waves.eq(1), waves.eq(2)], ["first", "second"], "untaxed")
-    pooled = np.where(taxed_country, "taxed", "untaxed")
 
     def trend_of(column: str) -> dict[str, list[dict[str, float | int]]]:
-        means = {
-            "waves": panel.groupby([by_wave, "year"])[column].mean(),
-            "pooled": panel.groupby([pooled, "year"])[column].mean(),
-        }
+        frame = panel.groupby([by_wave, "year"])[column].mean()
         series: dict[str, list[dict[str, float | int]]] = {}
-        for name, source in (("first", "waves"), ("second", "waves"), ("untaxed", "waves"), ("taxed", "pooled")):
-            frame = means[source]
+        for name in ("first", "second", "untaxed"):
             if name not in frame.index.get_level_values(0):
                 series[name] = []
                 continue
@@ -1006,9 +987,6 @@ def group_trends(panel: pd.DataFrame) -> dict:
         for outcome in OUTCOMES
     }
     countries = panel.loc[taxed_country, "country"].nunique(), panel.loc[~taxed_country, "country"].nunique()
-    # Mean exposure of taxed-country units in the tariff years (kept for the two-line chart before v10).
-    policy_rows = panel.loc[taxed_country & panel["year"].ge(policy_year), X_COLUMN]
-    mean_exposure_taxed = float(policy_rows.mean()) if len(policy_rows) else 0.0
     return {
         "version": VERSION,
         "years": years,
@@ -1026,7 +1004,6 @@ def group_trends(panel: pd.DataFrame) -> dict:
         },
         # Industries with at least one retained unit: step 10 offers only these as examples.
         "industries": sorted(str(code) for code in panel["industry"].unique()),
-        "mean_exposure_taxed": mean_exposure_taxed,
         "outcomes": outcomes,
         "baselines": {outcome: baseline_options(outcome, panel.columns) for outcome in OUTCOMES},
         "series": series,

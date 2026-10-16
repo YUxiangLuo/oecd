@@ -22,7 +22,6 @@ STYLIZED_EXPOSURE_DISCLOSURE = "风格化出口暴露度仅供教学测试，不
 ZERO_TOTAL_EXPORTS_POLICY = "total_exports=0 时 bilateral_exports 必须为 0，export_exposure 明确定义为 0。"
 EVENT_SOURCE_COMPLETE = "official_event_source_complete"
 EVENT_SOURCE_PARTIAL = "partial_official_event_source"
-EVENT_SOURCE_OFFICIAL = EVENT_SOURCE_COMPLETE  # compatibility alias
 EVENT_SOURCE_TEACHING = "teaching_encoding_no_event_source"
 EVENT_SOURCE_STATUSES = (EVENT_SOURCE_COMPLETE, EVENT_SOURCE_PARTIAL, EVENT_SOURCE_TEACHING)
 EVENT_SOURCE_DISCLOSURE = (

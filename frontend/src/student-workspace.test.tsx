@@ -67,9 +67,6 @@ describe("steps 2–5 record one country, which the later steps carry", () => {
   test("steps 3–5 open at the country picked on an earlier step", () => {
     expect(carriedComparisonFor(3, [], from({ 2: ["DEU"] }), countries)).toEqual(["DEU"]);
     expect(carriedComparisonFor(5, [], from({ 2: ["JPN"], 3: ["DEU"] }), countries)).toEqual(["DEU"]);
-    // A record saved before steps 2–5 became single-country carries its country A.
-    expect(carriedComparisonFor(4, [], from({ 3: ["CHN", "USA"] }), countries)).toEqual(["CHN"]);
-    expect(carriedComparisonFor(5, [], from({ 4: ["JPN", "KOR", "VNM"] }))).toEqual(["JPN"]);
     // Once the step records its own country, that one is used.
     expect(carriedComparisonFor(4, ["JPN"], from({ 3: ["DEU"] }), countries)).toEqual([]);
     expect(carriedComparisonFor(2, [], from({}), countries)).toEqual([]);
@@ -91,8 +88,6 @@ describe("steps 2–5 record one country, which the later steps carry", () => {
     expect(carriedComparisonFor(6, [], from({ 3: ["DEU"] }), countries)).toEqual(["DEU", "USA"]);
     expect(carriedComparisonFor(6, [], from({ 5: ["USA"] }), countries)).toEqual(["USA", "CHN"]);
     expect(carriedComparisonFor(8, [], from({ 2: ["JPN"] }), countries)).toEqual(["JPN", "USA"]);
-    // A legacy steps 2–5 record already holds a chosen B.
-    expect(carriedComparisonFor(6, [], from({ 3: ["DEU", "JPN"] }), countries)).toEqual(["DEU", "JPN"]);
     // ROW is not an economy, neither as A nor as the default B.
     expect(carriedComparisonFor(6, [], from({ 4: ["ROW"], 3: ["DEU"] }), countries)).toEqual(["DEU", "USA"]);
     // Without the country list, A is still carried.

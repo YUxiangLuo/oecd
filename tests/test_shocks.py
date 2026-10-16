@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 from gvcsim.indicators.core import build_arrays
-from gvcsim import shocks
+from gvcsim import shock_catalog, shocks
 from gvcsim.shocks import TREATED_THRESHOLD, build_export_exposure, demo_shock_panel, events_metadata
 
 COUNTRIES = ["CHN", "USA", "DEU", "CAN", "AUS", "BRA", "VNM", "TUR"]
@@ -54,7 +54,7 @@ def _complete_exposure(
                             "export_exposure": shares[destination],
                         }
                     )
-                eu_share = sum(shares.get(member, 0.0) for member in shocks.EU27)
+                eu_share = sum(shares.get(member, 0.0) for member in shock_catalog.EU27)
                 rows.append(
                     {
                         "country": country,

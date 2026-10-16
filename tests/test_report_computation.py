@@ -194,7 +194,7 @@ def test_report_http_charges_only_after_database_success(computation, monkeypatc
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app, raise_app_exceptions=False), base_url="http://test"
         ) as client:
-            response = await client.post("/api/classroom/report/generate")
+            response = await client.post("/api/classroom/report/generate", json={})
         expected = {
             "render": 409,
             "queue": 503,
@@ -307,10 +307,10 @@ def test_database_conflict_does_not_bill_rendered_report(teaching_db, computatio
 
     monkeypatch.setattr(teaching_report, "build", build)
     client = _authenticated_client(teaching_db, "student")
-    assert client.post("/api/classroom/report/generate").status_code == 200
+    assert client.post("/api/classroom/report/generate", json={}).status_code == 200
     events = sum(map(len, limiter._events.values()))
     runs.clear_result_cache()  # Force recalculation before a real stale-report 409.
-    response = client.post("/api/classroom/report/generate")
+    response = client.post("/api/classroom/report/generate", json={})
     assert response.status_code == 409 and response.json()["detail"]["code"] == "report_changed"
     assert sum(map(len, limiter._events.values())) == events == 1
     assert not limiter._pending

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { countriesPhrase, networkMaterialLabel, recordedShockMaterialLabel, recordedVizMaterialLabel, regressionMaterialLabel, shockMaterialLabel, vizMaterialLabel } from "./material-label";
+import { countriesPhrase, networkMaterialLabel, recordedShockMaterialLabel, regressionMaterialLabel, shockMaterialLabel, vizMaterialLabel } from "./material-label";
 import type { TeachingCountriesResponse } from "./types";
 
 test("every step's material reads as one sentence of the same shape", () => {
@@ -25,51 +25,18 @@ test("industry ranking labels describe all selected countries' industries, indep
   }
 });
 
-test("saved ranking labels correct only the known scope field and never rewrite recorded data", () => {
-  for (const oldScope of ["国家整体", "C26 计算机电子光学", "所选国家各行业"]) {
-    const saved = {
-      material_label: `行业排名 · 外国增加值项占比 · CHN 中国 对 USA 美国 · ${oldScope} · 2020（4 条读数）`,
-      indicator_selection: { view: "industry", industry: oldScope === "国家整体" ? "" : "C26" },
-      browse_selection: { view: "trend", industry: "C29" },
-      observations: [{ industry: "C26", value: 0.1 }, { industry: "C29", value: 0.2 }],
-    };
-    const before = JSON.stringify(saved);
-    expect(recordedVizMaterialLabel(saved)).toBe("行业排名 · 外国增加值项占比 · CHN 中国 对 USA 美国 · 所选国家各行业 · 2020（4 条读数）");
-    expect(JSON.stringify(saved)).toBe(before);
-  }
-});
-
-test("ordinary charts and unknown legacy label formats keep their original text", () => {
-  for (const view of ["trend", "comparison"]) {
-    for (const industry of [undefined, "C26"]) {
-      const material_label = vizMaterialLabel({ view: view === "trend" ? "历年变化" : "国家对比", metric: "外国增加值项占比", countries: ["CHN", "USA"], industry, years: view === "trend" ? [2019, 2020] : [2020], readings: 4 });
-      expect(recordedVizMaterialLabel({ material_label, indicator_selection: { view, industry }, browse_selection: { view: "industry" } })).toBe(material_label);
-      expect(material_label).toContain(industry ? "C26 计算机电子光学" : "国家整体");
-    }
-  }
-  for (const material_label of ["旧材料", "行业排名 · 指标 · 国家", "行业排名 · 指标 · 国家 · 国家整体 · 未知年月", "行业排名 · 指标 · 国家 · 自定义说明 · 2020（4 条读数）", "行业排名 · 指标 · 国家 · 国家整体 · 2020（4 条读数） · 附注"]) {
-    expect(recordedVizMaterialLabel({ material_label, indicator_selection: { view: "industry" } })).toBe(material_label);
-  }
-  expect(recordedVizMaterialLabel(undefined)).toBeNull();
-  expect(recordedVizMaterialLabel({ indicator_selection: { view: "industry" } })).toBeNull();
-});
-
-test("saved service labels use country policy, not their zero industry tariff, and do not mutate history", () => {
+test("the step 10 label takes each country's policy from the country list, not its industry's zero tariff", () => {
   const saved = {
     compared: ["CHN", "AUS"], teaching_industry: "D",
-    material_label: "例子：CHN 中国（未被加税） 对 AUS 澳大利亚（未被加税） · D 电力燃气",
+    material_label: "例子：CHN 中国 对 AUS 澳大利亚 · D 电力燃气",
     teaching_observation: { country: "CHN", teaching_tariff_rate_tau: 0, teaching_tariff_exposure: 0 },
   };
   const before = JSON.stringify(saved);
-  const overview = {
-    countries: [{ country: "CHN", taxed: true }, { country: "AUS", taxed: false }],
-    taxed_rule: { scope: "goods industries (ICIO sectors A-C)" },
-  } as TeachingCountriesResponse;
+  const overview = { countries: [{ country: "CHN", taxed: true }, { country: "AUS", taxed: false }] } as TeachingCountriesResponse;
   expect(recordedShockMaterialLabel(saved, overview)).toBe("例子：CHN 中国（被加税） 对 AUS 澳大利亚（未被加税） · D 电力燃气（非货物行业，不加税）");
+  // While the country list is unavailable, the classification is left out.
   expect(recordedShockMaterialLabel(saved)).toBe("例子：CHN 中国 对 AUS 澳大利亚 · D 电力燃气");
   expect(recordedShockMaterialLabel({ ...saved, teaching_industry: "C29" }, overview)).not.toContain("非货物行业，不加税");
-  expect(recordedShockMaterialLabel(saved, { ...overview, taxed_rule: undefined })).not.toContain("非货物行业，不加税");
-  expect(recordedShockMaterialLabel({ ...saved, material_label: undefined }, overview)).toBeNull();
   expect(recordedShockMaterialLabel(undefined, overview)).toBeNull();
   expect(JSON.stringify(saved)).toBe(before);
 });

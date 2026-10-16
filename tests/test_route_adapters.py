@@ -344,12 +344,11 @@ def test_shock_filters_distinguish_nonzero_from_authoritative_treated(monkeypatc
     treated = data_routes.shock_panel(2020, "sanctions", filter="treated")
     nonzero = data_routes.shock_panel(2020, "sanctions", filter="nonzero")
     all_rows = data_routes.shock_panel(2020, "sanctions", filter="all")
-    legacy = data_routes.shock_panel(2020, "sanctions", only_hit=True)
     summary = data_routes.shock_summary("sanctions")["years"][0]
 
     assert [row["country"] for row in treated["rows"]] == ["HIGH"]
     assert [row["country"] for row in nonzero["rows"]] == ["HIGH", "EDGE", "LOW"]
-    assert nonzero["total"] == all_rows["total"] == legacy["total"] == 3
+    assert nonzero["total"] == all_rows["total"] == 3
     assert summary["treated_pairs"] == 1
     assert summary["nonzero_pairs"] == 3
     empty_treated = data_routes.shock_panel(2020, "sanctions", country="LOW", filter="treated")
@@ -361,8 +360,6 @@ def test_shock_filters_distinguish_nonzero_from_authoritative_treated(monkeypatc
     empty_nonzero = data_routes.shock_panel(2020, "sanctions", filter="nonzero")
     assert empty_nonzero["total"] == 0
     assert empty_nonzero["rows"] == []
-    with pytest.raises(HTTPException, match="不能同时"):
-        data_routes.shock_panel(2020, "sanctions", filter="treated", only_hit=True)
 
 
 def test_shock_panel_paginates_before_enrichment(monkeypatch):
@@ -912,7 +909,7 @@ def test_regression_design_and_validation(teaching_db):
     assert design.status_code == 200
     assert design.json()["outcome"] == "trade"
     assert client.get("/api/regression/design", params={"outcome": "bad"}).status_code == 400
-    assert client.get("/api/regression/design", params={"outcome": "trade", "step": 12}).status_code == 422
+    assert client.get("/api/regression/design", params={"outcome": "trade", "step": 12}).status_code == 400
     assert (
         client.get(
             "/api/regression/design",

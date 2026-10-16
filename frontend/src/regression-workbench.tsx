@@ -275,7 +275,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
     ? "这次改动没有保存：你的账号在别处保存了更新的记录，请按页面顶部的说明处理。"
     : "这次改动还没有保存成功，请稍后重试同步。";
   const draft = state.data?.custom_draft ?? {};
-  const stepBaseline = defaultResponse.design.baseline ?? "";
+  const stepBaseline = defaultResponse.design.baseline;
   // The Y the models are run on: the step's Y unless the student chose another of the family. The first column is
   // then that Y's default model (computed once, cached by the server as the overview already computed it).
   const [yKey, setYKey] = useState<string>(draft.baseline ?? stepBaseline);
@@ -482,9 +482,9 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
     setAnnouncement(state.syncConflict ? unsavedNote : `已把“${name}”从报告移除。`);
   };
   const activePreset = options.presets.find((item) => sameSpec(item.spec, spec, options))?.key ?? null;
-  const noDesignValue = options.design_values?.[outcome]?.[yKey] === null;
+  const noDesignValue = options.design_values[outcome]?.[yKey] === null;
   // A Y the course data leave unrelated to X (design value 0): "how far from the design value" reads as "is 0 still in".
-  const zeroDesignValue = options.design_values?.[outcome]?.[yKey] === 0;
+  const zeroDesignValue = options.design_values[outcome]?.[yKey] === 0;
 
   // The report's appendix takes one model a step: right under the comparison, where the model was just read; shown
   // also while another Y's default model loads or fails, so the recorded model can still be seen or removed.
@@ -622,7 +622,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       <span className="sr-only" role="status">{announcement}</span>
       {noDesignValue
         ? <p className="muted reg-design-note">当前 Y 是比值指标，没有单一的课程设定值：只和同一 Y 的默认模型比较 X 各项合计及区间。</p>
-        : options.design_value_note && <p className="muted reg-design-note">{options.design_value_note}</p>}
+        : <p className="muted reg-design-note">{options.design_value_note}</p>}
 
       {!defaultForY && reportBox}
       {defaultForY && <>
@@ -685,7 +685,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
           })}
         </ul>
         {samplesDiffer(columns) && <p className="reg-boundary" role="note">{options.sample_differs_note}</p>}
-        {columns.some((column) => canonicalSpec(column.spec, options).x_lags.join(",") === "0") && options.current_x_only_note && (
+        {columns.some((column) => canonicalSpec(column.spec, options).x_lags.join(",") === "0") && (
           <p className="reg-boundary" role="note">{options.current_x_only_note}</p>
         )}
       </div>

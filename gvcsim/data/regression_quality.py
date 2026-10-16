@@ -626,13 +626,7 @@ def _interaction_slice_metrics(
     complete_entities = set(complete[entity].astype(str))
     complete_first = timing.first_by_entity.reindex(sorted(complete_entities)).dropna().astype(int)
     try:
-        attached = _attach_baseline_gvc(
-            complete,
-            entity,
-            "year",
-            complete_first,
-            frozen_baseline=frozen_baseline,
-        )
+        attached = _attach_baseline_gvc(complete, entity, "year", frozen_baseline)
     except ValueError as exc:
         return {
             "complete_case_rows_before_derived_baseline": int(len(complete)),

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { cleanup, render as renderDom } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { closeBoldBeforeCjkPunctuation, parseReportChart, REPORT_CHART_MAX_WIDTH, ReportMarkdown, wrapLabel } from "./report-renderer";
+import { parseReportChart, REPORT_CHART_MAX_WIDTH, ReportMarkdown, wrapLabel } from "./report-renderer";
 import { layoutDivergingBars, MIN_WIDTH } from "./viz/regression/diverging-bars";
 import { NEGATIVE, POSITIVE, UNCERTAIN, ZERO_LINE } from "./viz/regression/palette";
 
@@ -16,18 +16,14 @@ describe("report chart numeric boundaries through Markdown", () => {
     return element;
   };
   const line = (labels: string[][]) => chartDom({ type: "line", series: labels.map((points, i) => ({ label: `Series ${i}`, points: points.map((label, value) => ({ label, value })) })) });
-  test.each(["coefficient", "binscatter", "line"])("%s preserves tiny nonzero readings", (type) => {
-    const element = chartDom(type === "coefficient" ? { type, items: [{ label: "Y", value: 1e-7, ci_low: 0.5e-7, ci_high: 1.5e-7 }] }
-      : type === "binscatter" ? { type, slope: 1, points: [{ x: 1e-7, y: 1e-7, n: 1 }, { x: 2e-7, y: 2e-7, n: 1 }] }
-      : { type, series: [{ label: "A", points: [{ label: "2020", value: 1e-7 }, { label: "2021", value: 2e-7 }] }] });
+  test("a line chart preserves tiny nonzero readings", () => {
+    const element = chartDom({ type: "line", series: [{ label: "A", points: [{ label: "2020", value: 1e-7 }, { label: "2021", value: 2e-7 }] }] });
     const ticks = [...element.querySelectorAll('text[fill="#5f6677"]')].map((node) => node.textContent!);
     expect(ticks.some((tick) => Number(tick) !== 0 && Number.isFinite(Number(tick)))).toBe(true);
-    if (type === "coefficient") expect(element.querySelector("[data-coef-label]")?.textContent).toContain("e-7");
   });
-  test.each(["bar", "coefficient", "line", "event-study"])("%s wraps legal 120-character labels inside the canvas", (type) => {
+  test.each(["bar", "line"])("%s wraps legal 120-character labels inside the canvas", (type) => {
     const label = "长".repeat(120);
     const element = chartDom(type === "line" ? { type, series: [{ label, points: [{ label, value: 1e12 }] }] }
-      : type === "event-study" ? { type, points: [{ label, value: 1e12, se: 1e10 }] }
       : { type, items: [{ label, value: 1e12 }] });
     const svg = element.querySelector("svg")!;
     const [, , width, height] = svg.getAttribute("viewBox")!.split(" ").map(Number);
@@ -39,10 +35,9 @@ describe("report chart numeric boundaries through Markdown", () => {
     }
     expect(svg.textContent).toContain(label);
   });
-  test.each(["bar", "coefficient", "binscatter", "line"])("%s keeps large readings in bounds and exposes the unrounded value", (type) => {
+  test.each(["bar", "line"])("%s keeps large readings in bounds and exposes the unrounded value", (type) => {
     const value = 1.234567891234e12;
-    const element = chartDom(type === "binscatter" ? { type, slope: 1, points: [{ x: -value, y: -value, n: 1 }, { x: value, y: value, n: 2 }] }
-      : type === "line" ? { type, series: [{ label: "A", points: [{ label: "2020", value }, { label: "2021", value: -value }] }] }
+    const element = chartDom(type === "line" ? { type, series: [{ label: "A", points: [{ label: "2020", value }, { label: "2021", value: -value }] }] }
       : { type, items: [{ label: "A", value }, { label: "B", value: -value }] });
     const svg = element.querySelector("svg")!;
     expect(svg.getAttribute("aria-label")).toContain(String(value));
@@ -160,12 +155,12 @@ describe("report tables", () => {
     expect(render()).toBe(render()); // No render-time counters shared between reports/renders.
   });
 
-  test("foldSections wraps each h2 section in details: appendix-like sections closed, the rest and legacy titles open", () => {
-    const markdown = "# 报告\n\n> 前言\n\n## 结论\n\n结论段\n\n## 关键证据摘要\n\n证据\n\n## 理解题答题记录\n\n答题\n\n## 保存的实验快照\n\n快照\n\n## 旧版标题\n\n旧";
+  test("foldSections wraps each h2 section in details: appendix-like sections closed, the rest and other titles open", () => {
+    const markdown = "# 报告\n\n> 前言\n\n## 结论\n\n结论段\n\n## 关键证据摘要\n\n证据\n\n## 理解题答题记录\n\n答题\n\n## 保存的实验快照\n\n快照\n\n## 其他标题\n\n旧";
     const element = document.createElement("div");
     element.innerHTML = renderToStaticMarkup(createElement(ReportMarkdown, { markdown, foldSections: true }));
     const sections = [...element.querySelectorAll("details.report-section")];
-    expect(sections.map((item) => item.querySelector("summary h2")?.textContent)).toEqual(["结论", "关键证据摘要", "理解题答题记录", "保存的实验快照", "旧版标题"]);
+    expect(sections.map((item) => item.querySelector("summary h2")?.textContent)).toEqual(["结论", "关键证据摘要", "理解题答题记录", "保存的实验快照", "其他标题"]);
     expect(sections.map((item) => item.hasAttribute("open"))).toEqual([true, true, false, false, true]);
     // The body of a section sits inside its details; what precedes the first h2 is not wrapped.
     expect(sections[2].textContent).toContain("答题");
@@ -175,7 +170,7 @@ describe("report tables", () => {
     const flat = document.createElement("div");
     flat.innerHTML = renderToStaticMarkup(createElement(ReportMarkdown, { markdown }));
     expect(flat.querySelector("details")).toBeNull();
-    expect([...flat.querySelectorAll("h2")].map((e) => e.textContent)).toEqual(["结论", "关键证据摘要", "理解题答题记录", "保存的实验快照", "旧版标题"]);
+    expect([...flat.querySelectorAll("h2")].map((e) => e.textContent)).toEqual(["结论", "关键证据摘要", "理解题答题记录", "保存的实验快照", "其他标题"]);
   });
 
   test("only a table that overflows sideways is a Tab stop named 可横向滚动", () => {
@@ -242,7 +237,7 @@ describe("report tables", () => {
 });
 
 describe("parseReportChart", () => {
-  test("accepts the versioned bar, line and event-study schemas", () => {
+  test("accepts the versioned bar and line schemas", () => {
     expect(parseReportChart(JSON.stringify({
       version: 1,
       type: "bar",
@@ -258,42 +253,15 @@ describe("parseReportChart", () => {
         { label: "USA", points: [{ label: "2019", value: 8 }, { label: "2020", value: 7 }] },
       ],
     }))).toMatchObject({ type: "line" });
-    expect(parseReportChart(JSON.stringify({
-      version: 1,
-      type: "event-study",
-      points: [{ label: "k=0", value: -0.1, ci_low: -0.15, ci_high: -0.05 }],
-    }))).toMatchObject({ type: "event-study" });
-    // 已持久化的课程升级前 v1 报告仍可查看；新报告由后端发送 t(G−1) CI。
-    expect(parseReportChart(JSON.stringify({
-      version: 1,
-      type: "event-study",
-      points: [{ label: "k=0", value: -0.1, se: 0.02 }],
-    }))).toMatchObject({ type: "event-study" });
+    // Retired chart types are not drawn.
+    for (const type of ["coefficient", "binscatter", "event-study"]) {
+      expect(parseReportChart(JSON.stringify({ version: 1, type, items: [{ label: "Y", value: 1 }] }))).toBeNull();
+    }
   });
 
-  test("rejects unknown versions, non-finite values and invalid uncertainty", () => {
+  test("rejects unknown versions, non-finite values and unknown keys", () => {
     expect(parseReportChart('{"version":2,"type":"bar","items":[{"label":"A","value":1}]}')).toBeNull();
     expect(parseReportChart('{"version":1,"type":"bar","items":[{"label":"A","value":NaN}]}')).toBeNull();
-    expect(parseReportChart(JSON.stringify({
-      version: 1,
-      type: "event-study",
-      points: [{ label: "k=0", value: 1, se: -0.1 }],
-    }))).toBeNull();
-    expect(parseReportChart(JSON.stringify({
-      version: 1,
-      type: "event-study",
-      points: [{ label: "k=0", value: 1, ci_low: 2, ci_high: 3 }],
-    }))).toBeNull();
-    expect(parseReportChart(JSON.stringify({
-      version: 1,
-      type: "event-study",
-      points: [{ label: "k=0", value: 1, ci_low: 0.5 }],
-    }))).toBeNull();
-    expect(parseReportChart(JSON.stringify({
-      version: 1,
-      type: "event-study",
-      points: [{ label: "k=0", value: 1, se: 0.1, ci_low: 0.5, ci_high: 1.5 }],
-    }))).toBeNull();
     expect(parseReportChart(JSON.stringify({
       version: 1,
       type: "bar",
@@ -444,44 +412,6 @@ describe("parseReportChart", () => {
       'fill="#216cc0" fill-opacity', 'fill="#1baf7a" fill-opacity', 'fill="#8a8f9c" fill-opacity',
     ]));
     expect(html).not.toContain("#eda100");
-  });
-
-  test("accepts and renders the regression coefficient chart with its interval", () => {
-    const chart = JSON.stringify({
-      version: 1,
-      type: "coefficient",
-      title: "步骤 11 · X 每增加 1 个百分点时 Y 的平均变化",
-      x_label: "个百分点",
-      items: [{ label: "外国增加值项占比", value: -0.5516, ci_low: -0.6073, ci_high: -0.4959 }],
-    });
-    expect(parseReportChart(chart)).toMatchObject({ type: "coefficient" });
-    // The interval must contain the estimate; a lone endpoint is rejected.
-    expect(parseReportChart(JSON.stringify({ version: 1, type: "coefficient", items: [{ label: "Y", value: 1, ci_low: 2, ci_high: 3 }] }))).toBeNull();
-    expect(parseReportChart(JSON.stringify({ version: 1, type: "coefficient", items: [{ label: "Y", value: 1, ci_low: 0 }] }))).toBeNull();
-    const html = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: `\`\`\`gvcsim-chart\n${chart}\n\`\`\`` }));
-    expect(html).toContain("外国增加值项占比");
-    expect(html).toContain("-0.55");
-    expect(html).toContain("[-0.61, -0.50]");
-    expect(html).toContain("横线 = 95% 区间（真实系数的合理取值范围）");
-  });
-
-  test("a weak estimate's label is signed and kept off the zero line", () => {
-    const chart = JSON.stringify({
-      version: 1,
-      type: "coefficient",
-      x_label: "个百分点",
-      items: [{ label: "复杂 GVC 生产份额", value: 0.00752, ci_low: -0.0112, ci_high: 0.0262 }],
-    });
-    const element = document.createElement("div");
-    element.innerHTML = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: `\`\`\`gvcsim-chart\n${chart}\n\`\`\`` }));
-    const labels = [...element.querySelectorAll("[data-coef-label]")];
-    expect(labels.map((label) => label.textContent).join(" ")).toMatch(/^\+0\.008\s+\[-0\.011, \+0\.026\]$/);
-    const zero = [...element.querySelectorAll("line")].find((line) => line.getAttribute("stroke-width") === "1.8" && line.getAttribute("x1") === line.getAttribute("x2"))!;
-    // A positive estimate's labels start right of the zero line.
-    for (const label of labels) {
-      expect(label.getAttribute("text-anchor")).toBe("start");
-      expect(Number(label.getAttribute("x"))).toBeGreaterThan(Number(zero.getAttribute("x1")));
-    }
   });
 });
 
@@ -710,21 +640,6 @@ test("react-markdown's node prop never reaches the DOM", async () => {
   const html = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: "# 标题\n\n数据版本 `step10-tariff-teaching-v5`\n\n```\nplain\n```\n\n> 引用" }));
   expect(html).not.toContain("node=");
 });
-
-test("bold ending in Chinese punctuation renders even in reports generated before the server fix", () => {
-  const old = "- **2020 年：现价与疫情期外推限制。**本节为份额，**已闭合**。 末尾**说明。**";
-  expect(closeBoldBeforeCjkPunctuation(old)).toBe("- **2020 年：现价与疫情期外推限制**。本节为份额，**已闭合**。 末尾**说明。**");
-  const html = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: old }));
-  expect(html).not.toContain("**");
-  expect(html).toContain("<strong>2020 年：现价与疫情期外推限制</strong>。本节");
-  // Followed by punctuation the bold closes on its own: the bracket stays inside it.
-  const heading = "> **指标部分（步骤 1–9）**：覆盖 2016–2020。\n\n> **关税回归部分（步骤 10–14）**：X = w × τ。";
-  expect(closeBoldBeforeCjkPunctuation(heading)).toBe(heading);
-  const rendered = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: heading }));
-  expect(rendered).toContain("<strong>指标部分（步骤 1–9）</strong>：覆盖");
-  expect(rendered).toContain("<strong>关税回归部分（步骤 10–14）</strong>：X");
-});
-
 
 test("report charts stop growing at a width where their text is not larger than the report body", () => {
   // 720-unit drawings with 15-unit text: at 1280 px the column is wider than 720 px and the text grew past the

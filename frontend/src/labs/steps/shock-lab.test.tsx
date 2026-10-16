@@ -14,15 +14,20 @@ const step: Step = {
 };
 
 const countryRow = (country: string, mean: number, industries = 44, surplus = mean > 0 ? 5000 : -800) => ({
-  // Goods only (v8): 10 of the industries are services, never taxed.
+  // Goods only: 10 of the industries are services, never taxed.
   country, taxed: mean > 0, mean_exposure: mean, max_exposure: mean * 2, industries, goods_industries: industries - 10,
   exposed_industries: mean > 0 ? industries - 10 : 0,
-  market_goods_surplus: surplus,
+  market_goods_surplus: surplus, wave: mean > 0 ? 1 : 0, start_year: mean > 0 ? 2018 : null,
 });
 /** The whole-sample overview step 10 leads with; the real counts come from the release (the API), not the page. */
 const countriesOverview: TeachingCountriesResponse = {
   version: "step10-tariff-teaching-v8", year: 2020, market: "USA", tariff_rate: 0.25, policy_year: 2018,
-  taxed_rule: { basis: "first-year goods trade surplus with the market (ICIO sectors A-C)", min_million_usd: 1000, year: 2016, scope: "goods industries (ICIO sectors A-C)" },
+  taxed_rule: {
+    basis: "first-year goods trade surplus with the market (ICIO sectors A-C)", min_million_usd: 1000, year: 2016,
+    scope: "goods industries (ICIO sectors A-C)", rate: 0.25,
+    waves: [{ wave: 1, min_million_usd: 10000, start_year_offset: 2 }, { wave: 2, min_million_usd: 1000, start_year_offset: 3 }],
+  },
+  policy_years: [2018], waves: [{ wave: 1, start_year: 2018, min_million_usd: 1000, countries: 3 }],
   taxed_countries: 3, untaxed_countries: 2, entities: 210,
   countries: [countryRow("CAN", 0.143), countryRow("CRI", 0.0782), countryRow("BRN", 0.0142), countryRow("AUT", 0), countryRow("MEX", 0, 43)],
 };
@@ -84,9 +89,9 @@ test("step 10 keeps the saved example when the chosen unit is not in the teachin
   const meta: Meta = { years: [2016, 2017, 2018, 2019, 2020], countries: ["CAN", "MEX", "USA"], sectors: ["C29", "T"] };
   const groups = spyOn(api, "teachingGroups").mockResolvedValue({
     version: "step10-tariff-teaching-v5", years: meta.years, policy_year: 2018,
-    sample: { rows: 10, entities: 2, countries: 2, industries: 1, taxed_countries: 1, untaxed_countries: 1 },
+    sample: { rows: 10, entities: 2, countries: 2, industries: 1, taxed_countries: 1, untaxed_countries: 1, first_wave_countries: 1, second_wave_countries: 0 },
     industries: ["C29"],
-    outcomes: {} as never,
+    outcomes: {} as never, policy_years: [2018], baselines: {} as never, series: {} as never,
   });
   const row = (country: string, year: number) => ({
     country, industry: "C29", year, teaching_export_share_w: 0.5, teaching_tariff_rate_tau: 0, teaching_tariff_exposure: 0,
@@ -117,9 +122,9 @@ test("step 10 keeps the saved example when a chosen unit has no row in the repre
   const meta: Meta = { years: [2016, 2017, 2018, 2019, 2020], countries: ["CAN", "MEX", "USA"], sectors: ["C29"] };
   const groups = spyOn(api, "teachingGroups").mockResolvedValue({
     version: "step10-tariff-teaching-v5", years: meta.years, policy_year: 2018,
-    sample: { rows: 10, entities: 2, countries: 2, industries: 1, taxed_countries: 1, untaxed_countries: 1 },
+    sample: { rows: 10, entities: 2, countries: 2, industries: 1, taxed_countries: 1, untaxed_countries: 1, first_wave_countries: 1, second_wave_countries: 0 },
     industries: ["C29"],
-    outcomes: {} as never,
+    outcomes: {} as never, policy_years: [2018], baselines: {} as never, series: {} as never,
   });
   const row = (country: string, year: number) => ({
     country, industry: "C29", year, teaching_export_share_w: 0.5, teaching_tariff_rate_tau: 0, teaching_tariff_exposure: 0,
@@ -146,9 +151,9 @@ test("step 10 can follow a single taxed country and records it alone", async () 
   const meta: Meta = { years: [2016, 2017, 2018, 2019, 2020], countries: ["CAN", "MEX", "USA"], sectors: ["C29"] };
   const groups = spyOn(api, "teachingGroups").mockResolvedValue({
     version: "step10-tariff-teaching-v5", years: meta.years, policy_year: 2018,
-    sample: { rows: 10, entities: 2, countries: 2, industries: 1, taxed_countries: 1, untaxed_countries: 1 },
+    sample: { rows: 10, entities: 2, countries: 2, industries: 1, taxed_countries: 1, untaxed_countries: 1, first_wave_countries: 1, second_wave_countries: 0 },
     industries: ["C29"],
-    outcomes: {} as never,
+    outcomes: {} as never, policy_years: [2018], baselines: {} as never, series: {} as never,
   });
   const series = spyOn(api, "teachingSeries").mockResolvedValue({
     version: "step10-tariff-teaching-v5", disclaimer: "", total: 5, years: meta.years,
@@ -216,14 +221,18 @@ const summaryLines = () => [...document.querySelectorAll(".teaching-example-summ
 const YEAR_TABLE_ROWS = '[aria-label="所选例子的逐年变量表"] tbody tr';
 const tenGroups = () => spyOn(api, "teachingGroups").mockResolvedValue({
   version: "step10-tariff-teaching-v5", years: tenYears, policy_year: 2018,
-  sample: { rows: 10, entities: 2, countries: 2, industries: 1, taxed_countries: 1, untaxed_countries: 1 },
+  sample: { rows: 10, entities: 2, countries: 2, industries: 1, taxed_countries: 1, untaxed_countries: 1, first_wave_countries: 1, second_wave_countries: 0 },
   industries: ["B05_06", "C26", "C29", "C30", "O"],
-  outcomes: {} as never,
+  outcomes: {} as never, policy_years: [2018], baselines: {} as never, series: {} as never,
 });
 /** Five years of one country×industry: τ from 2018 when taxed, X = w × τ. */
 const tenRows = (country: string, industry: string, w: number, taxed: boolean) => tenYears.map((year) => {
   const tau = taxed && year >= 2018 ? 0.25 : 0;
-  return { country, industry, year, teaching_export_share_w: w, teaching_tariff_rate_tau: tau, teaching_tariff_exposure: w * tau };
+  const lastTau = taxed && year >= 2019 ? 0.25 : 0;
+  return {
+    country, industry, year, teaching_export_share_w: w, teaching_tariff_rate_tau: tau, teaching_tariff_exposure: w * tau,
+    teaching_tariff_exposure_lag1: w * lastTau, teaching_exchange_rate_change: 0,
+  };
 });
 const tenSeries = (rows: (countries: string[], industry: string) => ReturnType<typeof tenRows>) =>
   spyOn(api, "teachingSeries").mockImplementation(async (countries: string[], industry: string) => ({
@@ -245,13 +254,10 @@ test("the worked example prefers the exposed row: taxed with X > 0 before a taxe
   expect(representativeRow(tenRows("MEX", "C29", 0.8, false), ["MEX"], 2020)?.country).toBe("MEX");
 });
 
-test("only an example the student picked counts as chosen; an older default save does not", () => {
-  const defaults = { first: "CAN", second: "MEX", industry: "C29" };
-  expect(exampleWasChosen(undefined, defaults)).toBe(false);
-  expect(exampleWasChosen({ compared: ["CAN", "MEX"], teaching_industry: "C29" }, defaults)).toBe(false);
-  expect(exampleWasChosen({ compared: ["CAN", "MEX"], teaching_industry: "C26" }, defaults)).toBe(true);
-  expect(exampleWasChosen({ compared: ["CAN", "MEX"], teaching_industry: "C29", teaching_example_chosen: true }, defaults)).toBe(true);
-  expect(exampleWasChosen({ compared: ["CHE"], teaching_industry: "C26", teaching_example_chosen: false }, defaults)).toBe(false);
+test("only an example the student picked counts as chosen", () => {
+  expect(exampleWasChosen(undefined)).toBe(false);
+  expect(exampleWasChosen({ teaching_example_chosen: true })).toBe(true);
+  expect(exampleWasChosen({ teaching_example_chosen: false })).toBe(false);
 });
 
 test("a fresh step 10 always opens on C29 (the autos example), whatever step 9 looked at; a saved choice wins", async () => {
@@ -404,6 +410,7 @@ test("after submission, switching the example asks first, then confirms and keep
   const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.5, country === "CAN")));
   const submitted = {
     compared: ["CAN", "MEX"], teaching_industry: "C29", teaching_example_chosen: true,
+    material_label: "例子：CAN 加拿大（被加税） 对 MEX 墨西哥（未被加税） · C29 汽车及零部件",
     teaching_observation: { country: "CAN", industry: "C29", year: 2020, teaching_export_share_w: 0.5, teaching_tariff_rate_tau: 0.25, teaching_tariff_exposure: 0.125, version: "step10-tariff-teaching-v5" },
   };
   const save = mock(() => {});
@@ -414,9 +421,9 @@ test("after submission, switching the example asks first, then confirms and keep
   }
   try {
     render(<Harness />);
-    // An older save without material_label reads as the recorded example; the card says the report is handed in.
+    // The card names the recorded example and says the report is handed in.
     expect(materialChip()).toBe("已记录");
-    expect(materialSummary()).toBe("CAN 加拿大 · C29 汽车及零部件（对比 MEX 墨西哥）");
+    await waitFor(() => expect(materialSummary()).toBe("例子：CAN 加拿大（被加税） 对 MEX 墨西哥（未被加税） · C29 汽车及零部件"));
     await waitFor(() => expect(materialHow()).toBe("当前例子就是已记录的材料。 报告已提交：浏览不再自动改动报告材料。"));
     expect(materialCard().querySelector(".material-card-action")).toBeNull();
     fireEvent.change(screen.getByRole("combobox", { name: "行业" }), { target: { value: "C26" } });
@@ -424,7 +431,7 @@ test("after submission, switching the example asks first, then confirms and keep
     expect(button.closest(".material-card")).toBe(materialCard());
     expect(materialCard().querySelectorAll("button.material-card-action")).toHaveLength(1);
     // Browsing after submission does not record: the card still names the submitted example and asks first.
-    expect(materialSummary()).toBe("CAN 加拿大 · C29 汽车及零部件（对比 MEX 墨西哥）");
+    expect(materialSummary()).toBe("例子：CAN 加拿大（被加税） 对 MEX 墨西哥（未被加税） · C29 汽车及零部件");
     expect(materialHow()).toBe("已记录的是另一个例子；换回或点下面的按钮即改为当前例子。 报告已提交：浏览不再自动改动报告材料。");
     expect(save).not.toHaveBeenCalled();
     button.focus();
@@ -579,7 +586,7 @@ test("the ranking chart stays the same whatever example is chosen: untaxed, the 
 test("the year-by-year table shows w, τ, X and last year's X; the controls card draws the exchange-rate change in percent", async () => {
   const meta: Meta = { years: tenYears, countries: ["CAN", "CRI"], sectors: ["C29"] };
   const groups = tenGroups();
-  // v10 rows: L1.X is X a year later; the first wave's currency falls from 2018 (stored in percent).
+  // L1.X is X a year later; the first wave's currency falls from 2018 (stored in percent).
   const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.5, country === "CAN").map((row, index, all) => ({
     ...row,
     teaching_tariff_exposure_lag1: index ? all[index - 1].teaching_tariff_exposure : 0,
@@ -602,8 +609,8 @@ test("the year-by-year table shows w, τ, X and last year's X; the controls card
   expect(controls.querySelector(".teaching-one-line")!.textContent).toContain("下图是例子国家每年的汇率变动。");
   const rateChart = controls.querySelector("svg")!;
   expect(rateChart).not.toBeNull();
-  // Neither example country is in a first wave here: the rate chart has no tariff line, and no cards of its own.
-  expect(controls.querySelectorAll("[data-mark-year]")).toHaveLength(0);
+  // CAN is in the first wave: the rate chart marks its 2018 start, and has no cards of its own.
+  expect([...controls.querySelectorAll("[data-mark-year]")].map((mark) => mark.getAttribute("data-mark-year"))).toEqual(["2018"]);
   expect(controls.querySelectorAll(".comparison-summary")).toHaveLength(0);
   // A rate of change in percent, as the step 11–14 form and the report define the control (the release contract).
   expect(controls.textContent).toContain("汇率变动率（本币兑美元，负为贬值） · %");
@@ -613,31 +620,6 @@ test("the year-by-year table shows w, τ, X and last year's X; the controls card
   groups.mockRestore();
   series.mockRestore();
   cleanup();
-});
-
-test("a server without the taxed rule keeps the plain scenario, tile and chart notes", async () => {
-  const { taxed_rule: _rule, ...legacy } = countriesOverview;
-  countriesSpy.mockResolvedValue({ ...legacy, countries: legacy.countries.map(({ market_goods_surplus: _surplus, ...row }) => row) });
-  const meta: Meta = { years: tenYears, countries: ["CAN", "MEX", "USA"], sectors: ["C29"] };
-  const groups = tenGroups();
-  const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.5, country === "CAN")));
-  try {
-    render(<ShockLab meta={meta} step={step} state={tenState(undefined)} />);
-    await waitFor(() => expect(document.querySelector(".teaching-tiles")).not.toBeNull());
-    expect(document.querySelector(".teaching-tiles li.taxed")!.textContent).toBe("3 国被加税，2018 年起");
-    expect(document.querySelectorAll(".teaching-tiles li")).toHaveLength(3);
-    expect([...document.querySelectorAll(".teaching-tiles li")].at(-1)!.textContent).toBe("25%加征税率，加税前为 0");
-    // No rule: no surplus threshold, and no goods-only sentence.
-    expect(document.querySelector(".teaching-scenario")!.textContent).not.toContain("非货物行业");
-    expect(document.querySelector(".country-exposure-rule")).toBeNull();
-    expect(document.querySelector(".country-exposure-note")!.textContent).toBe("悬停或用方向键查看每个国家的 X。");
-    expect(document.body.textContent).not.toContain("对美货物");
-  } finally {
-    // A failure here must not leave its page and mocks to the tests after it.
-    groups.mockRestore();
-    series.mockRestore();
-    cleanup();
-  }
 });
 
 test("the whole-sample overview shows a loading line, then an error with a retry that refetches", async () => {
@@ -732,6 +714,7 @@ test("a small X reads with the digits that check, in the example's X = w × τ l
 
 const RECORDED_CAN = {
   compared: ["CAN", "MEX"], teaching_industry: "C29", teaching_example_chosen: true,
+  material_label: "例子：CAN 加拿大（被加税） 对 MEX 墨西哥（未被加税） · C29 汽车及零部件",
   teaching_observation: { country: "CAN", industry: "C29", year: 2020, teaching_export_share_w: 0.93, teaching_tariff_rate_tau: 0.25, teaching_tariff_exposure: 0.2325, version: "step10-tariff-teaching-v5" },
 };
 
@@ -772,8 +755,8 @@ test("ISR · D outside the sample while ISR · S is recorded: one note, and the 
   const meta: Meta = { years: tenYears, countries: ["ISR", "USA"], sectors: ["D", "S"] };
   const groups = spyOn(api, "teachingGroups").mockResolvedValue({
     version: "step10-tariff-teaching-v5", years: tenYears, policy_year: 2018,
-    sample: { rows: 10, entities: 2, countries: 1, industries: 2, taxed_countries: 1, untaxed_countries: 0 },
-    industries: ["D", "S"], outcomes: {} as never,
+    sample: { rows: 10, entities: 2, countries: 1, industries: 2, taxed_countries: 1, untaxed_countries: 0, first_wave_countries: 1, second_wave_countries: 0 },
+    industries: ["D", "S"], outcomes: {} as never, policy_years: [2018], baselines: {} as never, series: {} as never,
   });
   // ISR · D has no first-year data, so it is not in the sample.
   const series = tenSeries((countries, industry) => (industry === "D" ? [] : countries.flatMap((country) => tenRows(country, industry, 0.2, true))));
@@ -869,7 +852,7 @@ test("after the report is submitted, an unconfirmed step 10 selection is kept as
   const save = mock(() => {});
   render(<ShockLab meta={meta} step={step} state={tenState({ ...RECORDED_CAN, browse_selection: { first: "CAN", second: "CRI", industry: "C29" } }, save, true)} />);
   expect((screen.getByRole("combobox", { name: "对照国家（可选）" }) as HTMLSelectElement).value).toBe("CRI");
-  await waitFor(() => expect(materialSummary()).toBe("CAN 加拿大 · C29 汽车及零部件（对比 MEX 墨西哥）"));
+  await waitFor(() => expect(materialSummary()).toBe("例子：CAN 加拿大（被加税） 对 MEX 墨西哥（未被加税） · C29 汽车及零部件"));
   expect(materialHow()).toContain("已记录的是另一个例子");
   expect(materialHow()).toContain("报告已提交：浏览不再自动改动报告材料。");
   expect(save).not.toHaveBeenCalled();

@@ -31,11 +31,6 @@ export interface RegressionExample {
   service?: boolean;
 }
 
-/** Defined with the other number formats (regression-verdict.ts); re-exported where it was first used. */
-export { networkDigits };
-
-export { groupedFixed };
-
 /**
  * An example's X in percentage points with the digits step 10 shows for it (workedNumbers: "0.0015" for a tiny X,
  * not "0.00"), so the conversion can be checked by hand; without w and τ, two decimals.

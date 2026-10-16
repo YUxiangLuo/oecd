@@ -9,7 +9,7 @@ afterEach(cleanup);
 const semester: AcademicSemester = { id: 1, name: "测试学期", is_active: true, created_at: "2026-10-15", student_count: 1,
   classes: [{ id: 2, term_id: 1, name: "一班", is_active: true, created_at: "2026-10-15", student_count: 1 }] };
 const student: StudentRow = { id: 3, username: "s3", display_name: "学生三", student_no: "03", demo_seed: false,
-  last_login_at: null, created_at: "2026-10-15", report_state: null, score: null, submitted_at: null,
+  last_login_at: null, created_at: "2026-10-15", report_state: null, report_outdated: false, score: null, submitted_at: null,
   verified_completed_count: 0, verified_total_steps: 15, verified_completed_steps: [], completion_missing: [], last_valid_activity: null,
   enrollments: [{ term_id: 1, term_name: "测试学期", class_id: 2, class_name: "一班" }] };
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (reason: Error) => void;

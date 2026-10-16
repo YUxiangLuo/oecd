@@ -2,15 +2,21 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api";
+import { pendingStepTenExample, RegressionRequestError, RegressionRunLab } from "./regression";
 import {
-  barPreviewText, degreeIdentity, exampleEffect, parallelTrendsNote, familyBarRows, forwardShareIdentity, pendingStepTenExample, tradeShareIdentity, GROUP_CHART_CAPTION, groupedFixed, groupLines, INTERRUPTED_RUN_NOTE, lagSplit, waveMarkers, networkDigits, RegressionRequestError,
-  equationSymbol, RegressionResultCard, RegressionRunLab, scrollRegressionVerdict, TEACHING_MODEL_VERSION,
-} from "./regression";
+  barPreviewText, degreeIdentity, parallelTrendsNote, familyBarRows, forwardShareIdentity, tradeShareIdentity, GROUP_CHART_CAPTION, groupLines, waveMarkers,
+} from "./regression-step/family-bars";
+import { exampleEffect, lagSplit, RegressionResultCard } from "./regression-step/result-card";
+import { equationSymbol } from "./regression-step/model-equation";
+import { TEACHING_MODEL_VERSION } from "./regression-step/saved-run";
+import { INTERRUPTED_RUN_NOTE } from "./regression-step/use-regression-run";
+import { scrollIntoCourseContent } from "./content-scroll";
+import { groupedFixed } from "./format";
 import type {
   RegressionOutcome, Step, StepStateApi, TeachingEstimate, TeachingGroupsResponse, TeachingOverviewResponse, TeachingPanelResponse,
 } from "./types";
 import { GENERATED_DATA_NOTE, GENERATED_Y_DISCLOSURE } from "./regression-lessons";
-import { shownPerPoint } from "./regression-verdict";
+import { networkDigits, shownPerPoint } from "./regression-verdict";
 import workbenchOptions from "./regression-workbench-options.fixture.json";
 
 afterEach(() => { cleanup(); mock.restore(); });
@@ -25,16 +31,17 @@ const state: StepStateApi = {
 };
 const meta = { countries: ["CAN", "MEX", "USA"], sectors: ["C29"] };
 const series = (taxed: number, from = 2) => [2016, 2017, 2018, 2019, 2020].map((year, index) => ({ year, change: index < from ? 0 : taxed }));
-// Teaching data v10: two waves (2018, 2019) and the untaxed; `taxed` pools the waves.
+// Two waves (2018, 2019) and the untaxed.
 const waves = (taxed: number, untaxed: number) => ({
-  taxed: series(taxed), first: series(taxed), second: series(taxed / 2, 3), untaxed: series(untaxed),
+  first: series(taxed), second: series(taxed / 2, 3), untaxed: series(untaxed),
 });
 const groups: TeachingGroupsResponse = {
-  version: "v", years: [2016, 2017, 2018, 2019, 2020], policy_year: 2018, policy_years: [2018, 2019], mean_exposure_taxed: 0.03,
+  version: "v", years: [2016, 2017, 2018, 2019, 2020], policy_year: 2018, policy_years: [2018, 2019],
   sample: {
     rows: 16000, entities: 3200, countries: 75, industries: 44, taxed_countries: 37, untaxed_countries: 38,
     first_wave_countries: 14, second_wave_countries: 23,
   },
+  industries: ["C29"],
   outcomes: {
     trade: waves(-0.004, 0.003),
     production: waves(-0.003, 0.002),
@@ -206,7 +213,7 @@ describe("simple regression workbench", () => {
     await waitFor(() => expect(document.querySelector('[data-bar="DVAex_share"]')?.getAttribute("aria-disabled")).toBeNull());
   });
 
-  test("restores the saved run on refresh; a record on another Y is not the step's result; never starts from the matching step 6-9 indicator", async () => {
+  test("restores the saved run on refresh; never starts from the matching step 6-9 indicator", async () => {
     mockApis();
     const saved = {
       ...savedRun("FVA_share", "外国增加值项占比", -0.5, -0.6, -0.4),
@@ -224,11 +231,6 @@ describe("simple regression workbench", () => {
     await screen.findByRole("button", { name: "外国增加值项占比：-0.50 个百分点，95% 区间 [-0.60, -0.40]，已保存" });
     expect(document.body.textContent).not.toContain("教学模拟");
     cleanup();
-    // A record from before the Y was fixed (another Y): said, not shown as the step's result.
-    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: savedRun("DVAex_share", "国内增加值出口占比") } as never }} />);
-    await screen.findByText("上次保存的结果（国内增加值出口占比）不是本步的 Y，请重新计算。");
-    expect(document.querySelector(".reg-plain-verdict")).toBeNull();
-    expect(screen.getByRole("button", { name: /^计算贸易流回归/ })).toBeTruthy();
     cleanup();
     const getStep = ((n: number) => n === 6 ? { indicator_selection: { metric: "DVAex_share" } } : undefined) as <T>(step: number) => T | undefined;
     const run = spyOn(api, "runRegression").mockResolvedValue({ ...FVA(), benchmark } as never);
@@ -329,9 +331,8 @@ describe("simple regression workbench", () => {
     expect(document.querySelector(".reg-parallel-note")).toBeNull();
   });
 
-  test("a server before v10 still gets its two lines and one marker", () => {
-    const lines = groupLines({ taxed: series(-1), untaxed: series(1) });
-    expect(lines.map((line) => line.label)).toEqual(["被加税国家组", "未被加税国家组"]);
+  test("each wave gets its line and marker; a group with no country gets no line", () => {
+    expect(groupLines({ first: series(-1), second: [], untaxed: series(1) }).map((line) => line.label)).toEqual(["第一批被加税", "未被加税"]);
     expect(waveMarkers([2018])).toEqual([{ year: 2018, label: "2018 年起加税" }]);
     expect(waveMarkers([2018, 2019]).map((marker) => marker.label)).toEqual(["2018 年第一批加税", "2019 年第二批加税"]);
     // The second wave is drawn dashed, so the two waves never differ by colour alone.
@@ -366,15 +367,6 @@ describe("simple regression workbench", () => {
     expect(note?.textContent).toContain("四项份额合计 100%，所以这四条相加约为 0");
     // After the drawing, inside the same card.
     expect(note?.previousElementSibling?.tagName.toLowerCase()).toBe("svg");
-  });
-
-  test("falls back to the default Y when the saved baseline is not offered by the release", async () => {
-    mockApis();
-    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: savedRun("FDC_share", "外国重复计算项占比") } as never }} />);
-    await screen.findByText(/上次保存的结果（外国重复计算项占比）不是本步的 Y，请重新计算/);
-    // The saved run for the missing Y is not shown as if it were the default's result.
-    expect(document.querySelector(".reg-plain-verdict")).toBeNull();
-    expect(screen.getByRole("heading", { name: /外国增加值项占比（Y）/ })).toBeTruthy();
   });
 
   test("step 12 bars: the weak Y is grey with 方向不确定, and one line says the four forward shares add up to about 0", () => {
@@ -573,7 +565,7 @@ describe("simple regression workbench", () => {
     const calls: ScrollToOptions[] = [];
     const scroller = { scrollTop: 10, getBoundingClientRect: () => ({ top: 20 }), scrollTo: (x: ScrollToOptions) => calls.push(x) };
     const target = { closest: () => scroller, getBoundingClientRect: () => ({ top: 50 }) } as unknown as HTMLElement;
-    scrollRegressionVerdict(target, "smooth");
+    scrollIntoCourseContent(target, "smooth");
     expect(calls).toEqual([{ top: 40, left: 0, behavior: "smooth" }]);
   });
 });

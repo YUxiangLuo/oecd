@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from gvcsim import artifacts, config, shocks as shock_module
+from gvcsim import artifacts, config, shock_catalog, shocks as shock_module
 from gvcsim.data import output_quality, quality, raw_icio, regression_quality
 from gvcsim.data.citations import artifact_data_sources
 from gvcsim.data.raw_icio import DimensionContract, raw_dimensions_metadata
@@ -180,7 +180,7 @@ def _release_metadata(
         "data_sources": artifact_data_sources(config.RAW_DATA_DIR),
         "raw_dimensions": raw_dimensions_metadata(FIXTURE_YEARS, config.RAW_DATA_DIR),
         "qc_contract": quality.qc_contract_metadata(),
-        "shock_contract": shock_module.shock_contract_metadata(),
+        "shock_contract": shock_catalog.shock_contract_metadata(),
         "qc": {
             "years": {str(year): quality.summarize_serialized_checks(annual) for year in FIXTURE_YEARS},
             "controls": quality.summarize_serialized_checks(controls),

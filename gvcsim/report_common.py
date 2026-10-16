@@ -177,7 +177,7 @@ def _observation_reading(observation: dict[str, Any]) -> str:
         if isinstance(raw_value, (int, float)) and not isinstance(raw_value, bool) and math.isfinite(float(raw_value))
         else _safe(raw_value)
     )
-    table = str(observation.get("table") or "z")
+    table = observation.get("table")
     if table == "y":
         return f"{row}（行·供给方） → {_safe(final_demand_label(column_code))}（列·最终需求） = {value}"
     if table == "accounts":

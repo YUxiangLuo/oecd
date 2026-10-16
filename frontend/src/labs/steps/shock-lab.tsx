@@ -13,7 +13,7 @@ import { TARIFF_IMPOSER, teachingExample } from "../../teaching-example";
 import { GENERATED_DATA_NOTE } from "../../regression-lessons";
 import { stripNegativeZero } from "../../format";
 import { countryLabel, sectorLabel } from "../../viz";
-import { CountryExposureChart, ruleYiUsd, ruleYiUsdRange, taxedRuleText } from "../../viz/regression/country-exposure";
+import { CountryExposureChart, ruleYiUsd, ruleYiUsdRange } from "../../viz/regression/country-exposure";
 import { useAsync } from "../shared";
 import { IndicatorTrendChart } from "./viz/indicator-charts";
 
@@ -87,17 +87,9 @@ export function representativeRow<T extends { country: string; year: number; tea
     ?? last[0];
 }
 
-/**
- * Whether the saved example was picked by the student. An older save carries no flag: one that differs from the
- * default example was picked; the default one may only have been saved because the page was shown.
- */
-export function exampleWasChosen(
-  saved: Pick<ShockStepState, "compared" | "teaching_industry" | "teaching_example_chosen"> | undefined,
-  defaults: { first: string; second: string; industry: string },
-): boolean {
-  if (typeof saved?.teaching_example_chosen === "boolean") return saved.teaching_example_chosen;
-  if (!saved?.teaching_industry) return false;
-  return !sameJsonValue([saved.compared ?? [], saved.teaching_industry], [[defaults.first, defaults.second].filter(Boolean), defaults.industry]);
+/** Whether the saved example was picked by the student (the default saved because the page was shown was not). */
+export function exampleWasChosen(saved: Pick<ShockStepState, "teaching_example_chosen"> | undefined): boolean {
+  return saved?.teaching_example_chosen === true;
 }
 
 /** Decimals `percentagePoints` (format.ts) prints a share with: two, or two significant digits for a tiny positive one. */
@@ -150,12 +142,6 @@ export function workedNumbers(w: number, tau: number, x: number): { w: string; x
   return { w: wAt(wBase), x: (x * 100).toFixed(xBase), xDecimals: xBase };
 }
 
-/** A number a teaching-panel row may carry (an older release sends no L1.X or exchange-rate change). */
-function numberField(row: Record<string, unknown>, key: string): number | null {
-  const value = row[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
 /** A saved step 10 browsing selection, if its countries and industry still exist. */
 export function browsedExample(raw: unknown, countries: readonly string[], sectors: readonly string[]) {
   if (typeof raw !== "object" || raw === null) return null;
@@ -169,10 +155,9 @@ export function ShockLab({ meta, step: _step, state }: {
   step: Step;
   state: StepStateApi<ShockStepState>;
 }) {
-  const defaults = teachingExample(meta);
   // A saved example always leads; a fresh one is the default CAN vs CRI in C29 (not the industry last seen on step 9,
   // which would contradict the autos reason in the lead text).
-  const savedChosen = exampleWasChosen(state.data, defaults);
+  const savedChosen = exampleWasChosen(state.data);
   const example = teachingExample(meta, state.data);
   const countries = example.countries;
   const browsed = browsedExample(state.data?.browse_selection, countries, meta.sectors);
@@ -237,7 +222,7 @@ export function ShockLab({ meta, step: _step, state }: {
         first, second: second || undefined, industry,
         firstTaxed: overview?.countries.find((row) => row.country === first)?.taxed,
         secondTaxed: overview?.countries.find((row) => row.country === second)?.taxed,
-        serviceExempt: Boolean(overview?.taxed_rule?.scope) && !/^[ABC]/.test(industry),
+        serviceExempt: Boolean(overview) && !/^[ABC]/.test(industry),
       }),
       teaching_observation: representative
         ? {
@@ -320,18 +305,14 @@ export function ShockLab({ meta, step: _step, state }: {
   const otherMissing = missing.filter((country) => !isImposer(country));
   const names = (codes: readonly string[]) => codes.map(countryLabel).join("、");
   const imposers = selectedCountries.filter(isImposer);
-  // The data rule that picks the taxed countries (teaching data v7 on); an older server sends none.
-  const ruleClause = taxedRuleText(overview?.taxed_rule, "达到或超过 ");
-  const ruleMin = overview?.taxed_rule?.min_million_usd;
   const sampleRows = sample?.rows ?? (overview ? overview.entities * years.length : undefined);
   const policyYear = groups.status === "success" ? groups.data?.policy_year : overview?.policy_year;
-  // Teaching data v8 taxes goods only (ICIO A–C); an older server sends no scope and taxed every industry.
-  const goodsOnly = Boolean(overview?.taxed_rule?.scope);
-  const isService = (code: string) => goodsOnly && !/^[ABC]/.test(code);
+  // Only goods (ICIO A–C) are taxed.
+  const isService = (code: string) => !/^[ABC]/.test(code);
   // Whether a country is on the taxed list: τ is 0 for its services, so a row's τ cannot say it.
   const countryTaxed = (code: string) => overview?.countries.find((row) => row.country === code)?.taxed ?? false;
-  // Teaching data v10 taxes in two waves: a country's own start year ("第一批，2018 年起"); one wave before v10.
-  const waves = overview?.waves?.filter((wave) => wave.countries > 0) ?? [];
+  // The tariff starts in two waves: a country's own start year ("第一批，2018 年起").
+  const waves = overview?.waves.filter((wave) => wave.countries > 0) ?? [];
   const startYearOf = (code: string) => overview?.countries.find((row) => row.country === code)?.start_year ?? policyYear ?? undefined;
   const waveText = (code: string) => {
     const row = overview?.countries.find((item) => item.country === code);
@@ -391,15 +372,9 @@ export function ShockLab({ meta, step: _step, state }: {
     return `${parts.join("；")}。${action}。${recorded}`;
   })();
 
-  // Last year's X and the country's exchange-rate change, as the year-by-year table shows them (teaching data v10).
-  const lagOf = (row: Record<string, unknown>) => numberField(row, "teaching_tariff_exposure_lag1");
-  const rateChangeOf = (row: Record<string, unknown>) => numberField(row, "teaching_exchange_rate_change");
-  const hasRateChange = rows.some((row) => rateChangeOf(row) != null);
-  const rateRows = useMemo(() => rows.flatMap((row) => {
-    const value = numberField(row, "teaching_exchange_rate_change");
-    // A rate of change in percent (-8 = 8% weaker against the dollar), drawn as the share the chart's "%" expects.
-    return value == null ? [] : [{ ...row, teaching_exchange_rate_change: value / 100 }];
-  }), [rows]);
+  // The country's exchange-rate change: a rate of change in percent (-8 = 8% weaker against the dollar), drawn as
+  // the share the chart's "%" expects.
+  const rateRows = useMemo(() => rows.map((row) => ({ ...row, teaching_exchange_rate_change: row.teaching_exchange_rate_change / 100 })), [rows]);
   const firstWave = waves.find((wave) => wave.wave === 1)?.start_year ?? policyYear ?? undefined;
   // The first wave's currencies fall from its start year: marked only when an example country is in that wave.
   const exampleInFirstWave = lastRows.some((row) => overview?.countries.find((item) => item.country === row.country)?.wave === 1);
@@ -463,18 +438,16 @@ export function ShockLab({ meta, step: _step, state }: {
           {waves.length > 1
             ? waves.map((wave, index) => <li key={wave.wave} className={`taxed wave-${wave.wave}`}>
               <b>{wave.countries} 国</b>
-              <span>{WAVE_NAMES[wave.wave] ?? `第 ${wave.wave} 批`}被加税，{wave.start_year} 年起{index === 0 && wave.min_million_usd != null
+              <span>{WAVE_NAMES[wave.wave] ?? `第 ${wave.wave} 批`}被加税，{wave.start_year} 年起{index === 0
                 ? `（对美货物顺差 ≥ ${ruleYiUsd(wave.min_million_usd)}）`
-                : index > 0 && waves[index - 1].min_million_usd != null
-                ? `（顺差 ${ruleYiUsdRange(wave.min_million_usd, waves[index - 1].min_million_usd)}）`
-                : ""}</span>
+                : `（顺差 ${ruleYiUsdRange(wave.min_million_usd, waves[index - 1].min_million_usd)}）`}</span>
             </li>)
-            : <li className="taxed"><b>{overview.taxed_countries} 国</b><span>被加税{overview.policy_year ? `，${overview.policy_year} 年起` : ""}{ruleClause && ruleMin != null ? `（对美货物顺差 ≥ ${ruleYiUsd(ruleMin)}）` : ""}</span></li>}
+            : <li className="taxed"><b>{overview.taxed_countries} 国</b><span>被加税{overview.policy_year ? `，${overview.policy_year} 年起` : ""}（对美货物顺差 ≥ {ruleYiUsd(overview.taxed_rule.min_million_usd)}）</span></li>}
           <li className="untaxed"><b>{overview.untaxed_countries} 国</b><span>未被加税，X 始终为 0</span></li>
-          <li><b>{rate(overview.tariff_rate)}</b><span>{goodsOnly ? "只对货物（农业、采矿业、制造业）征收，加税前为 0" : "加征税率，加税前为 0"}</span></li>
+          <li><b>{rate(overview.tariff_rate)}</b><span>只对货物（农业、采矿业、制造业）征收，加税前为 0</span></li>
         </ul>
         <p className="teaching-scenario">
-          {ruleClause ? `名单${waves.length > 1 ? "和批次" : ""}由 ICIO 数据按 ${overview.taxed_rule?.year ?? years[0] ?? "首年"} 年对美货物顺差确定，不是随机抽取。` : ""}{goodsOnly ? "服务、电力、建筑等非货物行业不加税。" : ""}美国是加税方，不在回归样本中。
+          名单{waves.length > 1 ? "和批次" : ""}由 ICIO 数据按 {overview.taxed_rule.year} 年对美货物顺差确定，不是随机抽取。服务、电力、建筑等非货物行业不加税。美国是加税方，不在回归样本中。
         </p>
       </>}
     </section>
@@ -483,7 +456,7 @@ export function ShockLab({ meta, step: _step, state }: {
       <h3>X = 对美出口份额 w × 加征税率 τ</h3>
       <dl className="teaching-definitions" aria-label="步骤 11–14 的模型用到的关税暴露">
         <div><dt>w</dt><dd>这个国家×行业 {years[0] ?? "首年"} 年（加税前）的出口中卖到美国的比例，之后固定不变<span className="source-tag">ICIO 数据</span></dd></div>
-        <div><dt>τ</dt><dd>美国加征的税率；加税前、未被加税的国家{goodsOnly ? "和非货物行业" : ""}都是 0<span className="source-tag">课程设定</span></dd></div>
+        <div><dt>τ</dt><dd>美国加征的税率；加税前、未被加税的国家和非货物行业都是 0<span className="source-tag">课程设定</span></dd></div>
         <div><dt>L1.X</dt><dd>上一年的 X：加税当年 X 上升，L1.X 次年才上升。Y 与关税暴露的关联可能分两年出现，所以回归同时放入 X 和 L1.X</dd></div>
       </dl>
       <h4 className="teaching-subhead">举个例子</h4>
@@ -563,11 +536,11 @@ export function ShockLab({ meta, step: _step, state }: {
                 // w is fixed at its first-year value, so every year of a unit shows it at the same digits: those its
                 // last (taxed) year needs to check by hand, not two decimals in the zero-rate years.
                 const w = sharedW(row);
-                const lag = lagOf(row);
+                const lag = row.teaching_tariff_exposure_lag1;
                 return <tr key={`${row.country}-${row.industry}-${row.year}`}>
                   <td>{countryLabel(row.country)}</td><td>{row.year}</td><td>{w}%</td><td>{rate(row.teaching_tariff_rate_tau)}</td>
                   <td><b>{w}% × {rate(row.teaching_tariff_rate_tau)} = {worked(row).x} 个百分点</b></td>
-                  <td>{lag == null ? "—" : lag === 0 ? "0 个百分点" : `${stripNegativeZero((lag * 100).toFixed(worked(row).xDecimals))} 个百分点`}</td>
+                  <td>{lag === 0 ? "0 个百分点" : `${stripNegativeZero((lag * 100).toFixed(worked(row).xDecimals))} 个百分点`}</td>
                 </tr>;
               })}</tbody>
             </table>
@@ -584,10 +557,7 @@ export function ShockLab({ meta, step: _step, state }: {
           // A new example's data on the way: it is recorded once they arrive (not "kept as it is"); a failed load or
           // a submitted report keeps the record.
           : !panel ? (query.status === "loading" && !state.materialLocked ? "正在读取新例子的数据，读完后自动记录。" : "已记录的例子保持不变。")
-          : !complete ? (savedExample
-            // An older record the page can no longer use (its comparison is the USA): the same selection, not another.
-            ? "这就是已记录的例子，但其中有国家不能用作例子或对照（原因见上方提示），所以下面不显示趋势；报告材料保持不变。"
-            : "已记录的例子保持不变；当前选择暂不能记录，见上方提示。")
+          : !complete ? "已记录的例子保持不变；当前选择暂不能记录，见上方提示。"
           : state.materialLocked ? (savedExample ? "当前例子就是已记录的材料。" : "已记录的是另一个例子；换回或点下面的按钮即改为当前例子。")
           : savedExample ? "当前例子就是已记录的材料；换国家或行业后自动更新。"
           : AUTO_RECORD_HOW}
@@ -613,11 +583,11 @@ export function ShockLab({ meta, step: _step, state }: {
     <section className="reg-run-card">
       <span className="reg-section-step">控制变量</span>
       <h3>回归还控制汇率变动、GDP 对数和贸易开放度</h3>
-      <p className="teaching-one-line">它们和加税同时变化，也会影响步骤 11–14 的 Y，所以默认模型把它们作为控制变量（由课程生成）。{hasRateChange && shownExample ? "下图是例子国家每年的汇率变动。" : ""}</p>
-      {hasRateChange && shownExample && exampleLaterWave && firstWave && (
+      <p className="teaching-one-line">它们和加税同时变化，也会影响步骤 11–14 的 Y，所以默认模型把它们作为控制变量（由课程生成）。{shownExample ? "下图是例子国家每年的汇率变动。" : ""}</p>
+      {shownExample && exampleLaterWave && firstWave && (
         <p className="muted teaching-one-line">课程设定的汇率贬值只发生在第一批被加税国家（{firstWave} 年起）；这个例子没有第一批国家，所以加税那年看不出汇率变化。</p>
       )}
-      {hasRateChange && shownExample && (
+      {shownExample && (
         <IndicatorTrendChart
           rows={rateRows}
           countries={shownCountries}
@@ -626,7 +596,7 @@ export function ShockLab({ meta, step: _step, state }: {
           label="汇率变动率（本币兑美元，负为贬值）"
           unit="%"
           markYear={firstWave && exampleInFirstWave ? { year: firstWave, label: `${firstWave} 年第一批加税` }
-            : exampleLaterWave ? { year: exampleLaterWave.start_year!, label: `${exampleLaterWave.start_year} 年${WAVE_NAMES[exampleLaterWave.wave!] ?? `第 ${exampleLaterWave.wave} 批`}加税` }
+            : exampleLaterWave ? { year: exampleLaterWave.start_year!, label: `${exampleLaterWave.start_year} 年${WAVE_NAMES[exampleLaterWave.wave] ?? `第 ${exampleLaterWave.wave} 批`}加税` }
             : undefined}
           digits={1}
           cards={false}
@@ -653,10 +623,10 @@ export function ShockLab({ meta, step: _step, state }: {
     {overview && <section className="reg-run-card">
       <span className="reg-section-step">各国的关税暴露</span>
       <h3>{overview.taxed_countries} 个被加税国家的 X（从高到低）</h3>
-      <p className="teaching-one-line">每条是一个国家 {overview.year} 年{goodsOnly ? "货物" : "各"}行业的平均 X；先画 X 最高的 15 个，可在图下展开全部。</p>
+      <p className="teaching-one-line">每条是一个国家 {overview.year} 年货物行业的平均 X；先画 X 最高的 15 个，可在图下展开全部。</p>
       <CountryExposureChart data={overview} limit={15} />
       <p className="muted teaching-table-note">
-        回归样本：{overview.countries.length} 国的 {overview.entities.toLocaleString("zh-CN")} 个国家×行业{sampleRows ? ` × ${years.length} 年 = ${sampleRows.toLocaleString("zh-CN")} 条记录` : ""}{goodsOnly ? "，货物和非货物行业都在内" : ""}{overview.entities < overview.countries.length * meta.sectors.length ? `；${years[0] ?? "首年"} 年没有出口或增加值的行业不进入样本` : ""}。
+        回归样本：{overview.countries.length} 国的 {overview.entities.toLocaleString("zh-CN")} 个国家×行业{sampleRows ? ` × ${years.length} 年 = ${sampleRows.toLocaleString("zh-CN")} 条记录` : ""}，货物和非货物行业都在内{overview.entities < overview.countries.length * meta.sectors.length ? `；${years[0] ?? "首年"} 年没有出口或增加值的行业不进入样本` : ""}。
       </p>
     </section>}
   </div>;

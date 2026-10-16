@@ -85,7 +85,7 @@ def main():
         for path in ("/api/classroom/students", "/api/classroom/reports", "/api/classroom/reports/1"):
             check("student-role-boundary", {403}, "GET", path, token=student)
         check("teacher-role-boundary", {403}, "GET", "/api/classroom/session", token=teacher)
-        check("empty-report-generate", {409}, "POST", "/api/classroom/report/generate", token=student)
+        check("empty-report-generate", {409}, "POST", "/api/classroom/report/generate", {}, student)
         check("empty-report-submit", {409}, "POST", "/api/classroom/report/submit", token=student)
         for query in ("page=0", "page=-1", "page_size=0", "page_size=201", "page=NaN", "page=1e309"):
             check("pagination-" + query, {422}, "GET", "/api/db/slice?year=2020&" + query, token=student)

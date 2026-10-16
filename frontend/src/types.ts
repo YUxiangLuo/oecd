@@ -274,6 +274,10 @@ export interface TeachingPanelRow {
   teaching_export_share_w: number;
   teaching_tariff_rate_tau: number;
   teaching_tariff_exposure: number;
+  /** Last year's X (L1.X; 0 in the first year). */
+  teaching_tariff_exposure_lag1: number;
+  /** The country's exchange-rate change against the dollar, in percent (-8 = 8% weaker). */
+  teaching_exchange_rate_change: number;
   teaching_y_trade: number;
   teaching_y_production: number;
   teaching_y_length: number;
@@ -290,12 +294,11 @@ export interface TeachingPanelResponse {
 
 export interface TeachingGroupPoint { year: number; change: number }
 
-/** Each group's mean change of a Y: `taxed` pools both waves; `first`/`second` are the waves (teaching data v10). */
+/** Each group's mean change of a Y: the first and second tariff waves and the untaxed countries. */
 export interface TeachingGroupSeries {
-  taxed: TeachingGroupPoint[];
+  first: TeachingGroupPoint[];
+  second: TeachingGroupPoint[];
   untaxed: TeachingGroupPoint[];
-  first?: TeachingGroupPoint[];
-  second?: TeachingGroupPoint[];
 }
 
 /** Taxed vs untaxed mean change of each simulated Y, relative to each group's pre-policy mean. */
@@ -309,33 +312,33 @@ export interface TeachingCountriesResponse {
   taxed_countries: number;
   untaxed_countries: number;
   /** The data rule that picks the taxed countries: a goods trade surplus with the market of at least
-   * `min_million_usd` (million USD) in `year`. Servers before teaching data v7 omit it. */
-  taxed_rule?: {
-    basis?: string; min_million_usd: number; year?: number; scope?: string; rate?: number;
-    /** Teaching data v10: the tariff starts in waves, by the size of the goods surplus. */
-    waves?: { wave: number; min_million_usd: number; start_year_offset: number }[];
-  } | null;
-  /** Teaching data v10: the start year of each wave present (the first is `policy_year`). */
-  policy_years?: number[];
-  waves?: { wave: number; start_year: number; min_million_usd: number; countries: number }[];
+   * `min_million_usd` (million USD) in `year`, taxed on goods (`scope`). */
+  taxed_rule: {
+    basis: string; min_million_usd: number; year: number; scope: string; rate: number;
+    /** The tariff starts in waves, by the size of the goods surplus. */
+    waves: { wave: number; min_million_usd: number; start_year_offset: number }[];
+  };
+  /** The start year of each wave present (the first is `policy_year`). */
+  policy_years: number[];
+  waves: { wave: number; start_year: number; min_million_usd: number; countries: number }[];
   entities: number;
   /** Sorted from the highest mean exposure down; X is a fraction (0.23 = 23 percentage points). */
   countries: {
     country: string;
     taxed: boolean;
-    /** Mean and max X over the country's goods industries in the sample (the tariff falls on goods, v8). */
+    /** Mean and max X over the country's goods industries in the sample (the tariff falls on goods). */
     mean_exposure: number;
     max_exposure: number;
     /** All the country's industries in the sample, services included (their X is always 0). */
     industries: number;
-    /** Its goods industries (ICIO A–C) in the sample; absent before v8. */
-    goods_industries?: number;
+    /** Its goods industries (ICIO A–C) in the sample. */
+    goods_industries: number;
     exposed_industries: number;
-    /** Goods trade balance with the market in the rule's year, million USD (negative = deficit); absent before v7. */
-    market_goods_surplus?: number | null;
-    /** Teaching data v10: 0 untaxed, 1 first wave, 2 second wave; and the year its tariff starts. */
-    wave?: number;
-    start_year?: number | null;
+    /** Goods trade balance with the market in the rule's year, million USD (negative = deficit). */
+    market_goods_surplus: number;
+    /** 0 untaxed, 1 first wave, 2 second wave; and the year its tariff starts (null when untaxed). */
+    wave: number;
+    start_year: number | null;
   }[];
 }
 
@@ -369,8 +372,8 @@ export interface TeachingGroupsResponse {
   version: string;
   years: number[];
   policy_year: number;
-  /** Teaching data v10: the start year of each tariff wave. */
-  policy_years?: number[];
+  /** The start year of each tariff wave. */
+  policy_years: number[];
   sample: {
     rows: number;
     entities: number;
@@ -378,18 +381,16 @@ export interface TeachingGroupsResponse {
     industries: number;
     taxed_countries: number;
     untaxed_countries: number;
-    first_wave_countries?: number;
-    second_wave_countries?: number;
+    first_wave_countries: number;
+    second_wave_countries: number;
   };
-  /** Industries with at least one unit in the teaching panel (older servers omit it). */
-  industries?: string[];
-  /** Mean X of taxed-country units in the policy years (a proportion); β × it is the implied group gap. */
-  mean_exposure_taxed?: number;
+  /** Industries with at least one unit in the teaching panel. */
+  industries: string[];
   outcomes: Record<RegressionOutcome, TeachingGroupSeries>;
-  /** Same-family Y choices per step (the default first); older servers omit it. */
-  baselines?: Record<RegressionOutcome, TeachingBaselineOption[]>;
+  /** Same-family Y choices per step (the default first). */
+  baselines: Record<RegressionOutcome, TeachingBaselineOption[]>;
   /** Group trends of every baseline's Y, keyed by outcome then baseline key. */
-  series?: Record<RegressionOutcome, Record<string, TeachingGroupSeries>>;
+  series: Record<RegressionOutcome, Record<string, TeachingGroupSeries>>;
 }
 
 export interface TeachingBaselineOption {
@@ -609,8 +610,8 @@ export interface ClassroomReport {
     years: number[];
     session_fingerprint: string;
     runs: ReportRun[];
-    /** The model experiments the report printed (one a step at most); absent on older reports. */
-    custom_results?: ReportedCustomResult[];
+    /** The model experiments the report printed (one a step at most). */
+    custom_results: ReportedCustomResult[];
   };
   state: "draft" | "pending" | "graded";
   score: number | null;
@@ -641,8 +642,8 @@ export interface SessionResponse extends QuizLearningState {
   session: ExperimentSession;
   updated_at?: string | null;
   completion: CompletionSummary;
-  /** Whether the latest report was generated from this record (absent from older servers). */
-  report_current?: boolean;
+  /** Whether the latest report was generated from this record. */
+  report_current: boolean;
   report_gate: ReportGateItem[];
   material_gate: ReportGateItem[];
   report: ClassroomReport | null;
@@ -652,8 +653,8 @@ export interface SessionSaveResponse extends QuizLearningState {
   /** Acknowledges the submitted snapshot without retransmitting its contents. */
   updated_at: string;
   completion: CompletionSummary;
-  /** Whether the latest report was generated from this record (absent from older servers). */
-  report_current?: boolean;
+  /** Whether the latest report was generated from this record. */
+  report_current: boolean;
   report_gate: ReportGateItem[];
   material_gate: ReportGateItem[];
 }
@@ -661,8 +662,8 @@ export interface SessionSaveResponse extends QuizLearningState {
 export interface ReportMutationResponse extends QuizLearningState {
   report: ClassroomReport;
   completion: CompletionSummary;
-  /** Whether the latest report was generated from this record (absent from older servers). */
-  report_current?: boolean;
+  /** Whether the latest report was generated from this record. */
+  report_current: boolean;
   report_gate: ReportGateItem[];
   material_gate: ReportGateItem[];
 }
@@ -689,9 +690,8 @@ export interface TreatmentSupport {
   paired_control_clusters?: number | null;
   support_basis?: string;
   treated_entities: number;
-  /** 旧会话保存的回归快照可能没有这两个实体级字段。 */
-  untreated_entities?: number;
-  total_entities?: number;
+  untreated_entities: number;
+  total_entities: number;
   reversal_entities: string[];
   reversal_share: number;
   absorbing: boolean;
@@ -706,8 +706,8 @@ export type DepvarKind = "share" | "length" | "position" | "network";
 
 export interface RegressionDesignInfo {
   outcome: RegressionOutcome;
-  /** Same-family generation baseline of Y (absent on runs saved before v4, which the pages reject anyway). */
-  baseline?: string;
+  /** Same-family generation baseline of Y. */
+  baseline: string;
   baseline_label?: string;
   depvar: string;
   depvar_label: string;
@@ -723,8 +723,6 @@ export interface RegressionDesignInfo {
   interaction: boolean;
   price_mode: string;
   scenario: string;
-  /** Optional only for readable regression snapshots saved before the typed HTTP contract. */
-  weight_mode?: string;
   granularity_label?: string;
   shock_type_label?: string;
   method_label?: string;
@@ -737,8 +735,8 @@ export interface RegressionDesignInfo {
   control_labels: Record<string, string>;
   equation: string;
   equation_parts: EquationPart[];
-  /** The model: X lags, controls (with lags) and fixed effects (teaching data v10; absent on older runs). */
-  spec?: ModelSpec | null;
+  /** The model: X lags, controls (with lags) and fixed effects. */
+  spec: ModelSpec | null;
   panel_file: string;
   entity: string;
   cluster: string;
@@ -795,8 +793,6 @@ export interface RegressionResponse {
     status_reasons: string[];
     support: TreatmentSupport | null;
     sample_flow?: RegressionSampleFlow | null;
-    /** Binned scatter of the within-transformed Y against X; absent on older saved runs. */
-    binscatter?: { bins: { x: number; y: number; n: number }[]; slope: number; transform: string } | null;
     /** The X terms' summed coefficient (X + L1.X in the course model, teaching data v10): the step's headline. */
     cumulative?: CoefStat | null;
     /** The constant of a model without fixed effects. */
@@ -808,8 +804,8 @@ export interface RegressionResponse {
     f_stat?: number | null;
     f_df?: number[] | null;
     f_p?: number | null;
-    /** Root mean squared error of the residuals (Stata's Root MSE); absent on older saved runs. */
-    root_mse?: number | null;
+    /** Root mean squared error of the residuals (Stata's Root MSE). */
+    root_mse: number | null;
   };
   /** The first wave's change in Y since before its tariff, as the fitted model splits it (teaching runs). */
   decomposition?: FirstWaveDecomposition | null;
@@ -922,8 +918,8 @@ export interface StudentRow {
   last_login_at: string | null;
   created_at: string;
   report_state: "draft" | "pending" | "graded" | null;
-  /** Handed in, then the record changed (the teacher holds the submitted version); absent from older servers. */
-  report_outdated?: boolean;
+  /** Handed in, then the record changed (the teacher holds the submitted version). */
+  report_outdated: boolean;
   score: number | null;
   submitted_at: string | null;
   /** Server-verified completion; never inferred from max_step. */
@@ -977,7 +973,7 @@ export interface WorkbenchOptions {
   footnote: string;
   sample_differs_note: string;
   /** Under the table when a column has X alone: its coefficient is not the default's 当年 term. */
-  current_x_only_note?: string;
+  current_x_only_note: string;
   suppressed_note: string;
 }
 

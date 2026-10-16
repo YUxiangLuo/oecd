@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from gvcsim import publication, shocks
+from gvcsim import publication, shock_catalog, shocks
 from gvcsim.artifacts import (
     NETWORK_ALGORITHM,
     integrity_check_summary,
@@ -409,7 +409,7 @@ def finalize_release(staging: Path, selected_years: list[int], *, release_id: st
                 "data_sources": artifact_data_sources(RAW_DATA_DIR),
                 "raw_dimensions": raw_dimensions_metadata(selected_years, RAW_DATA_DIR),
                 "qc_contract": quality.qc_contract_metadata(),
-                "shock_contract": shocks.shock_contract_metadata(),
+                "shock_contract": shock_catalog.shock_contract_metadata(),
                 "qc": release_qc,
                 "output_qc_contract": output_quality.output_qc_contract_metadata(),
                 "output_qc": {"years": output_qc_years},

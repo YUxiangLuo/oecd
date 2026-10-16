@@ -19,8 +19,6 @@ from gvcsim.report_common import (
 )
 from gvcsim.report_gate import check_gate, check_material_gate
 from gvcsim.report_observed import _observed_chart, _observed_charts
-from gvcsim.report_render import _experiment_sections, _qc_release_summary
-from gvcsim.report_saved_run import _gate_qualified_runs, _result_is_qualified, _saved_runs
 
 __all__ = [
     "ReportGateError",

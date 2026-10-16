@@ -423,9 +423,9 @@ def test_group_trends_compare_taxed_and_untaxed_changes_against_their_own_pre_po
         ("first", wave[wave.eq(1)].index),
         ("second", wave[wave.eq(2)].index),
         ("untaxed", wave[wave.eq(0)].index),
-        ("taxed", taxed[taxed].index),
     )
     for outcome, column in Y_COLUMNS.items():
+        assert set(result["outcomes"][outcome]) == {"first", "second", "untaxed"}
         for name, members in groups:
             series = result["outcomes"][outcome][name]
             if not len(members):
@@ -465,18 +465,6 @@ def test_run_returns_a_binned_scatter_whose_bins_follow_the_estimate():
     assert abs(sum(point["x"] * point["n"] for point in bins)) < 1e-9
     assert abs(sum(point["y"] * point["n"] for point in bins)) < 1e-9
     assert all("binscatter" in result.to_dict() for _ in [0])
-
-
-def test_group_trends_report_the_mean_exposure_of_taxed_units():
-    from gvcsim.regression.teaching import group_trends
-
-    source = _source(tuple(f"C{i:02}" for i in range(30)))
-    panel = build_teaching_panel(source, _exposure(source))
-    trends = group_trends(panel)
-    taxed = panel.groupby("country").teaching_tariff_rate_tau.max().gt(0)
-    policy = panel.loc[panel.country.map(taxed) & panel.year.ge(trends["policy_year"]), X_COLUMN]
-    assert trends["mean_exposure_taxed"] == pytest.approx(float(policy.mean()))
-    assert trends["mean_exposure_taxed"] > 0
 
 
 def _full_source(countries=("AAA", "BBB", "CCC", "DDD")) -> pd.DataFrame:
@@ -593,7 +581,7 @@ def test_group_trends_list_the_baselines_a_panel_carries_with_their_series():
     }
     assert trends["series"]["trade"]["FVA_share"] == trends["outcomes"]["trade"]
     assert set(trends["series"]["length"]) == {"PLv_GVC", "PLy_GVC", "GVCPs"}
-    assert trends["series"]["length"]["GVCPs"]["taxed"][0]["year"] == 2016
+    assert trends["series"]["length"]["GVCPs"]["first"][0]["year"] == 2016
     source = _source(countries)
     thin = group_trends(build_teaching_panel(source, _exposure(source)))
     assert [option["key"] for option in thin["baselines"]["trade"]] == ["FVA_share"]

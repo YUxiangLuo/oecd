@@ -15,7 +15,7 @@ from scipy import stats
 
 from gvcsim.numeric import finite_number
 from gvcsim.regression.design import RegressionDesign
-from gvcsim.regression.teaching import Y_COLUMNS, model_snapshot, selectable_baselines, variable_catalog
+from gvcsim.regression.teaching import Y_COLUMNS, default_baseline, model_snapshot, variable_catalog
 from gvcsim.steps import STEPS
 
 _STEP_OUTCOMES = {
@@ -25,13 +25,12 @@ _FIXED_FIELDS = ("granularity", "shock_type", "method", "control_mode", "interac
 
 
 def _course_design(design: dict[str, Any]) -> RegressionDesign | None:
-    """The course default design of the saved run's outcome and Y, or None when the run names neither validly."""
-    outcome, baseline = design.get("outcome"), design.get("baseline")
-    if outcome not in Y_COLUMNS or not isinstance(baseline, str):
+    """The course default design of the saved run's outcome, or None unless the run names it with the step's
+    default Y."""
+    outcome = design.get("outcome")
+    if outcome not in Y_COLUMNS or design.get("baseline") != default_baseline(outcome).key:
         return None
-    if baseline not in {item.key for item in selectable_baselines(outcome)}:
-        return None
-    return RegressionDesign(outcome, teaching=True, baseline=baseline)
+    return RegressionDesign(outcome, teaching=True, baseline=design["baseline"])
 
 
 def _fixed_design_matches(design: dict[str, Any]) -> bool:
@@ -54,9 +53,7 @@ def _parse_saved_run(raw: Any, outcome: str) -> tuple[dict[str, Any], dict[str, 
         return None
     if not _fixed_design_matches(design):
         return None
-    baseline = design.get("baseline")
-    if not isinstance(baseline, str) or baseline not in {item.key for item in selectable_baselines(outcome)}:
-        return None
+    baseline = design["baseline"]
     # JSON persistence changes calibration tuples to lists. Compare the complete
     # published model, not just its version and variable names.
     if json.loads(json.dumps(snapshot)) != json.loads(json.dumps(model_snapshot(outcome, baseline))):
@@ -94,19 +91,6 @@ def _parse_saved_run(raw: Any, outcome: str) -> tuple[dict[str, Any], dict[str, 
     if not _result_is_reportable(result, design):
         return None
     return design, result
-
-
-def _result_is_qualified(result: dict[str, Any], design: dict[str, Any] | None = None) -> bool:
-    if not isinstance(design, dict) or not _result_is_reportable(result, design):
-        return False
-    support = result.get("support")
-    support = support if isinstance(support, dict) else {}
-    statuses = [value for value in (result.get("status"), support.get("status")) if isinstance(value, str)]
-    return (
-        bool(statuses)
-        and all(value in {"ok", "warning"} for value in statuses)
-        and support.get("suppress_inference") is not True
-    )
 
 
 def _estimate_is_consistent(coefficient: Any, n_clusters: int, inferential: bool) -> bool:
@@ -210,12 +194,6 @@ def _saved_runs(session: dict[str, Any]) -> list[dict[str, Any]]:
     return runs
 
 
-def _gate_qualified_runs(session: dict[str, Any]) -> list[dict[str, Any]]:
-    # Completion accepts a complete stopped-inference diagnosis, not only an
-    # inferential estimate. _saved_runs already validates reportability.
-    return _saved_runs(session)
-
-
 def server_runs(session: dict[str, Any], panel: Any, release: str) -> list[dict[str, Any]]:
     """Saved runs select completed steps/Ys, never the report's numeric values."""
     from gvcsim.regression_routes import cached_run
@@ -240,4 +218,4 @@ def server_runs(session: dict[str, Any], panel: Any, release: str) -> list[dict[
     return runs
 
 
-__all__ = ["_gate_qualified_runs", "_parse_saved_run", "_result_is_qualified", "_result_is_reportable", "_saved_runs"]
+__all__ = ["_parse_saved_run", "_result_is_reportable", "_saved_runs"]

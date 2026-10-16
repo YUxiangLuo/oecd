@@ -10,7 +10,7 @@ afterEach(cleanup);
 
 const row: StudentRow = {
   id: 1, username: "s1", display_name: "很长很长的名字".repeat(8), student_no: "", demo_seed: false, last_login_at: null,
-  created_at: "2026-09-01T00:00:00Z", report_state: null, score: null, submitted_at: null,
+  created_at: "2026-09-01T00:00:00Z", report_state: null, report_outdated: false, score: null, submitted_at: null,
   verified_completed_count: 0, verified_total_steps: 15, verified_completed_steps: [], completion_missing: [],
   last_valid_activity: null, enrollments: [],
 };

@@ -24,7 +24,7 @@ const row = (country: string, industry?: string) => ({
 
 for (const [Component, stepNumber] of [[TradeVizStep, 6], [ProductionVizStep, 7], [LengthVizStep, 8]] as const) {
   for (const initialIndustry of ["", "C26"]) {
-    test(`step ${stepNumber} records ranking scope and repairs locked legacy labels after ${initialIndustry || "country"} browsing`, async () => {
+    test(`step ${stepNumber} records ranking scope and keeps it after ${initialIndustry || "country"} browsing`, async () => {
       spies.push(spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} }));
       spies.push(spyOn(api, "countryIndicators").mockImplementation(async () => ["CHN", "USA"].map((country) => row(country))));
       spies.push(spyOn(api, "industryIndicatorsAll").mockImplementation(async (_year, country) => ({ rows: ["C26", "C29"].map((industry) => row(country, industry)), total: 2, page: 1, page_size: 2 })));
@@ -51,19 +51,18 @@ for (const [Component, stepNumber] of [[TradeVizStep, 6], [ProductionVizStep, 7]
       expect([...new Set(ranking.observations!.map((item) => item.industry))].sort()).toEqual(["C26", "C29"]);
       expect(ranking.indicator_selection?.industry).toBe(initialIndustry);
 
-      // A submitted older record keeps its values and selection. Only its displayed description changes.
-      // Browsing a different view must not make the recorded ranking acquire that new chart's scope.
-      const legacy = { ...ranking, material_label: (ranking.material_label as string).replace("所选国家各行业", oldScope), browse_selection: ordinary.indicator_selection };
-      const before = JSON.stringify(legacy);
+      // Browsing a different view on a submitted report must not make the recorded ranking acquire that chart's scope.
+      const submitted = { ...ranking, browse_selection: ordinary.indicator_selection };
+      const before = JSON.stringify(submitted);
       saves.length = 0;
       view.unmount();
-      const reopened = render(<Component meta={meta} step={step} state={{ ...state, data: legacy, materialLocked: true }} />);
+      const reopened = render(<Component meta={meta} step={step} state={{ ...state, data: submitted, materialLocked: true }} />);
       await reopened.findByRole("button", { name: REPLACE_MATERIAL_ACTION });
       const card = reopened.getByRole("region", { name: MATERIAL_CARD_TITLE });
       expect(card.textContent).toContain(ranking.material_label as string);
       expect(card.textContent).not.toContain(` · ${oldScope} · `);
       expect(saves).toHaveLength(0);
-      expect(JSON.stringify(legacy)).toBe(before);
+      expect(JSON.stringify(submitted)).toBe(before);
     });
   }
 }

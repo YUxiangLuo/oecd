@@ -13,6 +13,7 @@ import {
 import { api } from "./api";
 import { snapshotOf } from "./regression-workbench-table";
 import optionsFixture from "./regression-workbench-options.fixture.json";
+import { DEFAULT_BASELINES } from "./regression-lessons";
 import type { CoefStat, RegressionOutcome, RegressionResponse, TeachingOverviewResponse, WorkbenchOptions } from "./types";
 
 const coefficient = (coef: number, low: number, high: number): CoefStat => ({
@@ -22,16 +23,16 @@ const coefficient = (coef: number, low: number, high: number): CoefStat => ({
 function response(outcome: RegressionOutcome, coef: CoefStat): RegressionResponse {
   return {
     design: {
-      outcome, depvar: "y", depvar_label: "Y", granularity: "country_industry", shock_type: "tariff",
+      outcome, baseline: DEFAULT_BASELINES[outcome], depvar: "y", depvar_label: "Y", granularity: "country_industry", shock_type: "tariff",
       shock_col: "teaching_tariff_exposure", treated_col: "teaching_treated", method: "twfe_intensity", control_mode: "none",
       interaction: false, price_mode: "nominal", scenario: "clean", scenario_label: "基准", sample_filter: "排除ROW",
       exclude_row: true, controls: [], control_labels: {}, equation: "y=x", equation_parts: [], panel_file: "panel_teaching.csv",
-      entity: "entity_id", cluster: "country",
+      entity: "entity_id", cluster: "country", spec: null,
     },
     result: {
       depvar: "y", coefs: [coef], n_obs: 10, n_entities: 2, n_times: 5, n_clusters: 2, r2_within: 0.1,
       depvar_mean: 1, depvar_std: 2, depvar_within_std: 2, diagnostics: {}, notes: [],
-      status: "ok", status_reasons: [], support: null,
+      status: "ok", status_reasons: [], support: null, root_mse: null,
     },
     benchmark: {
       backend: "PanelOLS", policy_coefs: [], max_abs_coef_diff: 0, max_abs_se_diff: 0,
@@ -230,7 +231,7 @@ describe("ReportedExperiments", () => {
   }
 
   for (const baseline of [undefined, "FVA_share"]) {
-  test(`lists the experiment next to the step default (baseline: ${baseline ?? "legacy"})`, async () => {
+  test(`lists the experiment next to the step default (baseline: ${baseline ?? "omitted, the step default"})`, async () => {
     const defaultRun = withSum(-0.55, -0.57, -0.53);
     const noRate = withSum(-0.70, -0.75, -0.65);
     const options = spyOn(api, "regressionOptions").mockResolvedValue(optionsFixture as WorkbenchOptions);

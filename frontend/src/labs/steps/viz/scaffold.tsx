@@ -76,6 +76,8 @@ export interface VizStepState extends QuizCompletionState, Record<string, unknow
   observations?: VizObservation[];
   /** The student recorded this material explicitly after submitting the report (automatic saves clear it). */
   material_chosen?: boolean;
+  /** The sentence the recorded chart was saved as; the card and step 15 repeat it. */
+  material_label?: string;
 }
 
 /** Step 9's browsing state (see `VizStepState.network_browse`). */

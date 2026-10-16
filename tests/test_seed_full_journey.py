@@ -182,7 +182,7 @@ def test_seed_records_step_observations_like_the_ui(api):
             "source": "auto-indicator-comparison",
         }
         assert isinstance(observation["value"], float)
-        assert _table_comparison_complete(data, allow_auto=True)
+        assert _table_comparison_complete(data)
     for step, (metric, unit) in journey._COMPARISON_STEPS.items():
         data = saved["steps"][str(step)]["data"]
         assert data["metric"] == metric

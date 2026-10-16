@@ -222,7 +222,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const applyLearningState = (response: Pick<SessionSaveResponse, "completion" | "report_current" | "report_gate" | "material_gate" | "quiz_revision" | "quizzes">) => {
     if (!applyQuizState(response)) return;
     setCompletion(response.completion);
-    setReportCurrent(response.report_current ?? null);
+    setReportCurrent(response.report_current);
     setReportGate(response.report_gate);
     setMaterialGate(response.material_gate);
   };

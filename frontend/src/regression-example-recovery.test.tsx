@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api } from "./api";
-import { RegressionRunLab, TEACHING_MODEL_VERSION, type RegressionStepState } from "./regression";
+import { RegressionRunLab } from "./regression";
+import { TEACHING_MODEL_VERSION, type RegressionStepState } from "./regression-step/saved-run";
 import { DEFAULT_BASELINES, lessonFor } from "./regression-lessons";
 import type { RegressionOutcome, RegressionResponse, Step, StepStateApi, TeachingPanelResponse } from "./types";
 import workbenchOptions from "./regression-workbench-options.fixture.json";
@@ -12,7 +13,8 @@ const meta = { countries: ["CAN", "MEX"], sectors: ["C29"] };
 const outcomes: RegressionOutcome[] = ["trade", "production", "length", "network"];
 const years = [2016, 2020];
 const group = {
-  taxed: years.map((year) => ({ year, change: year === 2016 ? 0 : -0.01 })),
+  first: years.map((year) => ({ year, change: year === 2016 ? 0 : -0.01 })),
+  second: [],
   untaxed: years.map((year) => ({ year, change: 0 })),
 };
 const panel: TeachingPanelResponse = {
@@ -21,6 +23,7 @@ const panel: TeachingPanelResponse = {
     country, industry: "C29", year: 2020, teaching_export_share_w: 0.8,
     teaching_tariff_rate_tau: country === "CAN" ? 0.25 : 0,
     teaching_tariff_exposure: country === "CAN" ? 0.2 : 0,
+    teaching_tariff_exposure_lag1: country === "CAN" ? 0.2 : 0, teaching_exchange_rate_change: 0,
     teaching_y_trade: 0, teaching_y_production: 0, teaching_y_length: 0, teaching_y_network: 0,
   })),
 };
@@ -36,12 +39,12 @@ function response(outcome: RegressionOutcome): RegressionResponse {
       treated_col: "teaching_treated", method: "twfe_intensity", control_mode: "none", interaction: false,
       price_mode: "nominal", scenario: "clean", scenario_label: "基准", sample_filter: "排除 ROW", exclude_row: true,
       controls: [], control_labels: {}, equation: "Y = beta X", equation_parts: [], panel_file: "teaching.csv",
-      entity: "entity_id", cluster: "country",
+      entity: "entity_id", cluster: "country", spec: null,
     },
     result: {
       depvar: "y", coefs: [{ name: "teaching_tariff_exposure", coef: -0.55, se: 0.05, t: -11, p: 0.001, stars: "***", ci_low: -0.65, ci_high: -0.45 }],
       n_obs: 100, n_entities: 20, n_times: 5, n_clusters: 10, r2_within: 0.2, depvar_mean: 0.3,
-      depvar_std: 0.1, depvar_within_std: 0.1, diagnostics: {}, notes: [], status: "ok", status_reasons: [], support: null,
+      depvar_std: 0.1, depvar_within_std: 0.1, diagnostics: {}, notes: [], status: "ok", status_reasons: [], support: null, root_mse: null,
     },
     benchmark: { backend: "test", policy_coefs: [], max_abs_coef_diff: 0, max_abs_se_diff: 0, coef_check_passed: true, se_check_mode: "test", notes: [] },
     model_snapshot: { version: TEACHING_MODEL_VERSION, x_columns: ["teaching_tariff_exposure"], y_column: "y", entity: "entity_id", time: "year", fixed_effects: ["entity", "year"], controls: [], interactions: [], seed: 1, beta: -0.55, tariff_path: [], disclaimer: "教学" },
@@ -53,8 +56,12 @@ function setup(outcome: RegressionOutcome, restored = true) {
   const run = response(outcome);
   spyOn(api, "teachingGroups").mockResolvedValue({
     version: "v", years, policy_year: 2018,
-    sample: { rows: 100, entities: 20, countries: 10, industries: 2, taxed_countries: 5, untaxed_countries: 5 },
+    policy_years: [2018],
+    sample: { rows: 100, entities: 20, countries: 10, industries: 2, taxed_countries: 5, untaxed_countries: 5, first_wave_countries: 5, second_wave_countries: 0 },
+    industries: ["C29"],
     outcomes: { trade: group, production: group, length: group, network: group },
+    baselines: { trade: [], production: [], length: [], network: [] },
+    series: { trade: {}, production: {}, length: {}, network: {} },
   });
   spyOn(api, "regressionDesign").mockResolvedValue(run.design);
   spyOn(api, "regressionOptions").mockResolvedValue(workbenchOptions as never);
@@ -64,7 +71,7 @@ function setup(outcome: RegressionOutcome, restored = true) {
   const runCall = spyOn(api, "runRegression").mockResolvedValue(run as never);
   const save = mock(() => {});
   const state: StepStateApi<RegressionStepState> = {
-    data: restored ? { run, material_label: "已保存的默认回归结果" } : undefined,
+    data: restored ? { run: { ...run, decomposition: null }, material_label: "已保存的默认回归结果" } : undefined,
     save, complete: false, syncing: false, syncError: null, syncNow: () => {},
   };
   const step: Step = {

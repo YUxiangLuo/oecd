@@ -40,10 +40,10 @@ def test_read_reported_output_rejects_missing_node_column(tmp_path):
         loader._read_reported_output(path, index)
 
 
-def test_source_csv_rejects_ambiguous_year(tmp_path, monkeypatch):
+def test_year_source_rejects_ambiguous_year(tmp_path, monkeypatch):
     (tmp_path / "ICIO2023_2020.csv").touch()
     (tmp_path / "ICIO_ALT_2020.csv").touch()
     monkeypatch.setattr(loader, "RAW_DATA_DIR", tmp_path)
 
     with pytest.raises(FileNotFoundError, match="实际找到 2 个"):
-        loader._source_csv(2020)
+        loader.resolve_year_source(2020, loader.RAW_DATA_DIR)

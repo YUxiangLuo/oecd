@@ -75,19 +75,13 @@ export function familyBarRows(
   return { rows, unitTitle: BAR_UNIT_TITLES[unit] };
 }
 
-/** The 加税前后 chart's lines: the two tariff waves and the untaxed countries; a server before v10 sends one taxed group. */
+/** The 加税前后 chart's lines: the two tariff waves and the untaxed countries (a group with no country has none). */
 export function groupLines(series: TeachingGroupSeries): GroupLine[] {
-  if (series.first?.length || series.second?.length) {
-    return [
-      { key: "first", label: "第一批被加税", color: TAXED, points: series.first ?? [] },
-      { key: "second", label: "第二批被加税", color: TAXED_LATER, points: series.second ?? [], dashed: true },
-      { key: "untaxed", label: "未被加税", color: UNTAXED, points: series.untaxed },
-    ].filter((line) => line.points.length > 0);
-  }
   return [
-    { key: "taxed", label: "被加税国家组", color: TAXED, points: series.taxed },
-    { key: "untaxed", label: "未被加税国家组", color: UNTAXED, points: series.untaxed },
-  ];
+    { key: "first", label: "第一批被加税", color: TAXED, points: series.first },
+    { key: "second", label: "第二批被加税", color: TAXED_LATER, points: series.second, dashed: true },
+    { key: "untaxed", label: "未被加税", color: UNTAXED, points: series.untaxed },
+  ].filter((line) => line.points.length > 0);
 }
 
 /** "2018 年第一批加税", "2019 年第二批加税"; a single start year reads "2018 年起加税". */

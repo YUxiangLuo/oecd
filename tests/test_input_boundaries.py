@@ -144,26 +144,6 @@ def test_out_of_range_regression_save_preserves_previous_session(teaching_db, me
     assert restored.json()["updated_at"] == initial.json()["updated_at"]
 
 
-@pytest.mark.parametrize("step", [10, 11])
-def test_legacy_out_of_range_regression_session_is_readable_and_recoverable(teaching_db, step):
-    client = client_for("student")
-    valid = _regression_session()
-    legacy = deepcopy(valid)
-    _poison_regression_number(legacy, step, 10**400)
-    db.save_session("student", legacy)
-
-    restored = client.get("/api/classroom/session")
-
-    assert restored.status_code == 200, restored.text
-    assert restored.json()["session"] == legacy
-    assert step in {item["step"] for item in restored.json()["material_gate"]}
-    recovered = client.put(
-        "/api/classroom/session", json={"session": valid, "base_updated_at": restored.json()["updated_at"]}
-    )
-    assert recovered.status_code == 200, recovered.text
-    assert client.get("/api/classroom/session").json()["session"] == valid
-
-
 @pytest.mark.parametrize("username,password", [("a\x00b", "password"), ("unknown", "\ud800"), ("\ud800", "password")])
 def test_invalid_login_text_returns_422_without_echoing_password(teaching_db, username, password):
     response = TestClient(app, raise_server_exceptions=False).post(
@@ -251,18 +231,14 @@ def test_login_ignores_spaces_around_the_username(teaching_db):
     assert response.json()["user"]["username"] == "student"
 
 
-def test_student_number_matches_legacy_padded_values_and_strips_invisible_characters(teaching_db):
+def test_student_number_strips_invisible_characters(teaching_db):
     client = client_for("teacher")
-    owner = client.post(
-        "/api/classroom/students",
-        json={"username": "legacy-owner", "display_name": "甲", "password": "valid-password-2026"},
-    ).json()
-    # A 学号 stored with spaces before inputs were trimmed.
-    with db.conn() as connection:
-        connection.execute("UPDATE accounts SET student_no=' 2026999 ' WHERE id=%s", (owner["id"],))
-    body = {"username": "legacy-new", "display_name": "乙", "password": "valid-password-2026", "student_no": "2026999"}
-    assert client.post("/api/classroom/students", json=body).status_code == 409
-    bom = {**body, "username": "\ufeffbom-user\u200b", "student_no": "\ufeff2026998"}
+    bom = {
+        "username": "\ufeffbom-user\u200b",
+        "display_name": "乙",
+        "password": "valid-password-2026",
+        "student_no": "\ufeff2026998",
+    }
     created = client.post("/api/classroom/students", json=bom)
     assert created.status_code == 200, created.text
     assert created.json()["username"] == "bom-user"

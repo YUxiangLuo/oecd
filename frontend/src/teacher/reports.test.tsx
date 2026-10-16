@@ -25,6 +25,7 @@ const report: TeacherReport = {
     years: [2020],
     session_fingerprint: "fingerprint",
     runs: [],
+    custom_results: [],
   },
   state: "graded",
   score: 90,
@@ -573,7 +574,7 @@ describe("moving through the list while grading", () => {
   test("a submitted report's status in 学生与进度 opens it in 报告评阅", async () => {
     const student = {
       id: 8, username: "s8", display_name: "学生8", student_no: "", demo_seed: false, last_login_at: null,
-      created_at: "2026-09-01T00:00:00Z", report_state: "pending" as const, score: null, submitted_at: report.submitted_at,
+      created_at: "2026-09-01T00:00:00Z", report_state: "pending" as const, report_outdated: false, score: null, submitted_at: report.submitted_at,
       verified_completed_count: 15, verified_total_steps: 15, verified_completed_steps: [], completion_missing: [],
       last_valid_activity: null, enrollments: [],
     };
