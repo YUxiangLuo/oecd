@@ -203,11 +203,22 @@ describe("fixed teaching regression reading", () => {
     expect(container.querySelector(".reg-headline-main")?.textContent)
       .toContain("前向 GVC 段长度平均短 0.0182 个长度单位（幅度约 0.031 个标准差）");
     // What a standard deviation is: one line under the headline, not inside it.
-    expect(container.querySelector(".reg-sd-note")?.textContent).toBe("标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏。");
+    expect(container.querySelector(".reg-sd-note")?.textContent).toBe("1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化。");
     expect(container.querySelector(".reg-interval-words")?.textContent).toContain("[-0.0190, -0.0170] 个长度单位；约 [-0.033, -0.029] 个标准差");
     expect(container.textContent).not.toContain("样本均值");
     // The definition is said once on the card.
-    expect(container.textContent?.match(/标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏/g)).toHaveLength(1);
+    expect(container.textContent?.match(/1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化/g)).toHaveLength(1);
+  });
+
+  test("a share reading keeps points in the headline and gives its size in standard deviations once, as step 15 compares", () => {
+    const data = response();
+    Object.assign(data.result.coefs[0], { coef: -0.55, ci_low: -0.57, ci_high: -0.53 });
+    data.result.depvar_within_std = 0.015;
+    const { container } = render(<RegressionResultCard outcome="trade" response={data} />);
+    expect(container.querySelector(".reg-headline-main")?.textContent).not.toContain("标准差");
+    // (-0.55 × 0.01) / 0.015 = -0.367, at the digits step 15 prints (-0.37 个标准差).
+    expect(container.querySelector(".reg-sd-note")?.textContent).toBe(
+      "换算成标准差：幅度约 0.37 个标准差（步骤 15 用它并列比较四步；1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化）。");
   });
 
   test("the position index reads in standard deviations too", () => {

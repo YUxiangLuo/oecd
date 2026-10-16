@@ -11,6 +11,8 @@ import {
   networkDigits,
   SD_DEFINITION,
   shownPerPoint,
+  standardizedDigits,
+  standardizedEffect,
 } from "../regression-verdict";
 import { workedNumbers } from "../labs/steps/shock-lab";
 import type { CoefStat, RegressionOutcome, RegressionResponse } from "../types";
@@ -130,6 +132,14 @@ export function RegressionResultCard({ outcome, response, examples = [], example
       )}
       {verdict.coefficient && split && <p className="reg-lag-split">{split}</p>}
       {standardized && <p className="muted reg-sd-note">{SD_DEFINITION}。</p>}
+      {/* A share Y reads in points here, but step 15 sets the four steps side by side in standard deviations: the
+          same size is given once, so the number there can be found here. */}
+      {!standardized && verdict.coefficient && !suppressed && (() => {
+        const sd = standardizedEffect(verdict.coefficient.coef, response.result.depvar_within_std);
+        return sd == null ? null : (
+          <p className="muted reg-sd-note">换算成标准差：幅度约 {Math.abs(sd).toFixed(standardizedDigits(sd, null))} 个标准差（步骤 15 用它并列比较四步；{SD_DEFINITION}）。</p>
+        );
+      })()}
       {verdict.coefficient && !suppressed && response.model_snapshot && "beta" in response.model_snapshot && (
         <p className="reg-design-value" role="note">{designValueSentence(outcome, response, verdict.coefficient)}</p>
       )}

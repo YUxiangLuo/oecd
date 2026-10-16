@@ -658,7 +658,7 @@ def _difference_words(kind: str) -> tuple[str, str]:
 
 # The page shows the same words at the top of every step 11–14 result card (frontend ``GENERATED_Y_DISCLOSURE``).
 GENERATED_Y_DISCLOSURE = (
-    "教学数据：步骤 11–14 的 Y 由课程按设定生成，与 X 的关联是有意设计的，多数 Y 设得很清晰（区间窄、p 值小），"
+    "教学数据：步骤 11–14 的 Y 由课程按设定生成，与 X 的关联是有意设计的，多数 Y 设得很清晰（区间窄），"
     "精度高于真实数据通常能得到的结果。结果用于练习读回归，不是真实关税影响的证据。"
 )
 

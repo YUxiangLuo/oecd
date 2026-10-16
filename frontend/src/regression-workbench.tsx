@@ -143,7 +143,7 @@ function ModelForm({ options, spec, onChange, disabled = false }: {
         <p className="reg-custom-note">控制变量不是越多越好：本身会受关税影响的变量（如按 ICIO 计算的制造业增加值占比、出口强度）放进模型，可能把 X 的一部分关联“控制掉”。课程数据里这些变量与 Y 无关，加上后结果几乎不变；真实研究中要先想清楚因果顺序。</p>
       </fieldset>
       <fieldset>
-        <legend>固定效应</legend>
+        <legend>固定效应（FE）</legend>
         {options.fixed_effects.map((item) => {
           const parent = includedBy(item.key, spec.fixed_effects, options);
           return (
@@ -680,6 +680,17 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       </details>}
 
       <p className="muted reg-custom-footnote">{options.footnote}{options.hints[1] ? ` ${options.hints[1]}` : ""}</p>
+      {/* The table's statistics in plain words, folded: the reading of this course needs only X's rows. */}
+      <details className="reg-custom-details reg-custom-glossary">
+        <summary>表中的缩写和统计量是什么意思</summary>
+        <dl className="teaching-definitions">
+          <dt>FE</dt><dd>固定效应：每个国家×行业（或国家、行业、年份）一个截距，扣掉它自己的平均水平。</dd>
+          <dt>括号里的数、星号</dt><dd>括号里是标准误，表示估计值的不确定程度；星号越多，越难用偶然波动解释（*** p&lt;0.01，** p&lt;0.05，* p&lt;0.1）。</dd>
+          <dt>R²、调整 R²、组内 R²</dt><dd>模型能解释 Y 变化的比例；组内 R² 只看扣掉固定效应之后的那部分变化。</dd>
+          <dt>F、Prob &gt; F</dt><dd>检验除常数项外的各项是否全部为 0；Prob &gt; F 越小，越不像全为 0。</dd>
+          <dt>Root MSE</dt><dd>模型没有解释的部分（残差）的典型大小，单位与 Y 相同。</dd>
+        </dl>
+      </details>
     </div>
   );
 }

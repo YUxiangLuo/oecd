@@ -216,9 +216,9 @@ describe("simple regression workbench", () => {
     await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("外国增加值项占比平均低 0.50 个百分点"));
     // The sentence under the chart comes back with the saved run (it is saved with it), not only after a fresh run.
     expect([...document.querySelectorAll(".reg-decomposition li")].map((item) => item.textContent)).toEqual(
-      ["与关税 X 相关 −1.6", "与汇率变动同步 −4.3", "其余（各年共同的变化与噪声） −2.5"]);
+      ["与关税 X 相关 −1.6 个百分点", "与汇率变动同步 −4.3 个百分点", "其余（各年共同的变化与噪声） −2.5 个百分点"]);
     // The part the headline's estimate is about is marked.
-    expect(document.querySelector(".reg-decomposition-tariff")?.textContent).toBe("与关税 X 相关 −1.6");
+    expect(document.querySelector(".reg-decomposition-tariff")?.textContent).toBe("与关税 X 相关 −1.6 个百分点");
     // The saved run, not the overview, is the selected bar: page and report agree.
     await screen.findByRole("button", { name: "外国增加值项占比：-0.50 个百分点，95% 区间 [-0.60, -0.40]，已保存" });
     expect(document.body.textContent).not.toContain("教学模拟");

@@ -5,7 +5,7 @@ import type { RegressionOutcome } from "./types";
  * step 10, in the step 11–14 result card and, from gvcsim/regression/teaching.py, in the report).
  */
 /** Shown at the top of every step 11–14 result card (the report's 关键证据摘要 opens with the same words). */
-export const GENERATED_Y_DISCLOSURE = "教学数据：Y 由课程按设定生成，与 X 的关联是有意设计的，多数 Y 设得很清晰（区间窄、p 值小），精度高于真实数据通常能得到的结果。结果用于练习读回归，不是真实关税影响的证据。";
+export const GENERATED_Y_DISCLOSURE = "教学数据：Y 由课程按设定生成，与 X 的关联是有意设计的，多数 Y 设得很清晰（区间窄），精度高于真实数据通常能得到的结果。结果用于练习读回归，不是真实关税影响的证据。";
 export const GENERATED_DATA_NOTE = "关税情景、GDP、人口增长率、贸易开放度、汇率、FDI 和步骤 11–14 的 Y 都由课程按设定生成，用来练习建模，不是真实政策效应或官方宏观统计；制造业增加值占比等少数可选控制变量按 ICIO 计算，页面上另有标注。";
 
 export type ReadingDirection = "negative" | "positive" | "insufficient" | "suppressed";
@@ -67,7 +67,8 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "长度单位",
     priorStep: 4,
     priorLabel: "GVC 长度分解指标",
-    definition: "前向 GVC 段长度：一国增加值进入跨境生产后，到被最终使用之前平均还要经过的生产环节数（见步骤 4）。",
+    // The unit and the standard deviation are said here, before the bars and the task card use them.
+    definition: "前向 GVC 段长度：一国增加值进入跨境生产后，到被最终使用之前平均还要经过的生产环节数（见步骤 4）。单位是长度单位（1 个约等于多经过 1 个生产环节）；条形图另用“个标准差”比较几个 Y：1 个标准差约等于这个 Y 平常上下波动的典型幅度。",
     dontClaim: "不要将它与贸易流回归的估计值直接比较：两者单位不同。",
   },
   network: {
@@ -79,7 +80,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "中心性原始单位（另附标准差换算）",
     priorStep: 5,
     priorLabel: "全球生产网络指标",
-    definition: "加权总度：一个国家×行业在全球投入产出网络中买入与卖出的流量之和（见步骤 5）；本步的 Y 由课程按它的排名校准生成，数值没有金额含义，主要看方向和标准差大小。",
+    definition: "加权总度：一个国家×行业在全球投入产出网络中买入与卖出的流量之和（见步骤 5）。本步的 Y 是课程生成的分数，单位记作“中心性原始单位”，不是金额，只看正负和相差几个标准差（1 个标准差约等于这个 Y 平常上下波动的典型幅度）。条形图里另有加权入度（买入）、加权出度（卖出）、介数（处在其他行业之间最短供货路线上的程度）和接近中心性（离其他行业有多近）。",
     dontClaim: "不要写成连接已经减少或脱钩，也不要将其视为关税的“总影响”。",
   },
 };

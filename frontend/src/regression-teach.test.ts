@@ -140,7 +140,7 @@ describe("student-first regression reading", () => {
       .querySelectorAll("td")[4].textContent).toMatch(/^\[-0\.0192, -0\.0176\] 个长度单位/);
     expect(effect("14")).toBe("-40.11 个中心性原始单位（幅度约 0.047 个标准差）");
     expect(html).not.toContain("样本均值");
-    expect(html.match(/标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏/g)).toHaveLength(1);
+    expect(html.match(/1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化/g)).toHaveLength(1);
   });
 
 });
@@ -309,10 +309,13 @@ describe("the sentence under the three-group chart (v13)", () => {
       ],
       remainder: -0.026,
     }, "外国增加值项占比", 100, "个百分点", 1);
-    expect(text).toContain("第一批被加税国家 2020 年的外国增加值项占比，比加税前（2016、2017 年平均）低 8.4 个百分点。按默认模型的估计可拆成：");
-    expect(text).toContain("与关税 X 相关 −1.6，与汇率变动同步 −4.1，与 GDP 对数同步 −5.0，与贸易开放度同步 +4.9，其余（各年共同的变化与噪声） −2.6");
+    expect(text).toContain("第一批被加税国家 2020 年的外国增加值项占比，比加税前（2016、2017 年平均）低 8.4 个百分点。按默认模型的估计，这个总变化等于下面各项之和：");
+    // Every part carries its unit.
+    expect(text).toContain("与关税 X 相关 −1.6 个百分点，与汇率变动同步 −4.1 个百分点，与 GDP 对数同步 −5.0 个百分点，与贸易开放度同步 +4.9 个百分点，其余（各年共同的变化与噪声） −2.6 个百分点");
     expect(decompositionSentence({ group: "first", wave_start: 2018, year: 2020, pre_years: [2016, 2017], observed: -0.32, terms: [], remainder: -0.32 }, "前向 GVC 段长度", 1, "长度单位", 3))
       .toContain("年平均）低 0.320 个长度单位");
-    expect(text).toContain("第二批税率相同");
+    // What the regression's result is of the split; no causal story for the second wave.
+    expect(text).toContain("回归结论只对应第一项：它等于默认模型的系数 × 第一批国家 X 的平均变化。");
+    expect(text).not.toContain("第二批");
   });
 });

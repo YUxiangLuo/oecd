@@ -167,7 +167,7 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
         )
         if outcome in ("length", "network"):
             assert (
-                "条长都换算成标准差（标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏），这样单位或量级差异较大的 Y 也能并列比较"
+                "条长都换算成标准差（1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化），这样单位或量级差异较大的 Y 也能并列比较"
                 in section
             )
             assert "放在一起比" not in section

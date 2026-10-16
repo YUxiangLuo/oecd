@@ -1609,7 +1609,7 @@ def test_report_renders_authoritative_result_fixture_without_calling_estimator(t
     )
     assert "本实验没有生成冲击后的投入产出表或网络" not in report.markdown
     assert "不能证明真实关税" not in report.markdown
-    assert "标准误按国家聚类，95% 区间据此计算，是近似值" in report.markdown
+    assert "标准误按国家聚类（同一国家的记录允许一起波动），95% 区间据此计算，是近似值" in report.markdown
     assert "区间可能偏窄" in report.markdown
     # The interval is named for what it is, once, where the results start.
     assert "区间说明：95% 区间是真实系数的合理取值范围，包含 0 时方向不确定。" in report.markdown
@@ -2498,13 +2498,13 @@ def test_technical_appendix_states_the_chosen_y_unit_not_the_family_unit():
     }
     lines = _run_sections([run])
     assert (
-        "- 单位：无量纲（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏）"
+        "- 单位：无量纲（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化）"
         in lines
     )
     assert "- 结果指标 Y：GVC 位置指数" in lines
     default = {**run, "design": {"depvar_label": "前向生产长度", "equation": "Y = βX + FE"}}
     assert (
-        "- 单位：长度单位（1 个长度单位约等于平均多经过 1 个生产环节）；另附标准差换算（标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏）"
+        "- 单位：长度单位（1 个长度单位约等于平均多经过 1 个生产环节）；另附标准差换算（1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化）"
         in _run_sections([default])
     )
 

@@ -212,7 +212,7 @@ def family_chart(
     }
     if standardized:
         chart["note"] = (
-            "条长都换算成标准差（标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏），这样单位或量级差异较大的 Y 也能并列比较；"
+            "条长都换算成标准差（1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化），这样单位或量级差异较大的 Y 也能并列比较；"
             "条旁先写原始单位的数值，括号里是标准差。"
         )
     lines = _chart_block(chart)
@@ -259,7 +259,7 @@ def summary_chart(qualified: dict[int, dict[str, Any]]) -> list[str]:
         items.append({"label": _y_label(run["outcome"], design), "sub": family, **bar})
     if not items:
         return []
-    note = "标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏；条形旁先写各步原始单位的数值（和上表相同），括号里是个标准差。"
+    note = "1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化；条形旁先写各步原始单位的数值（和上表相同），括号里是个标准差。"
     chart: dict[str, Any] = {
         "version": 1,
         "type": "diverging-bar",

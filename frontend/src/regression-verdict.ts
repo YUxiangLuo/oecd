@@ -8,7 +8,8 @@ export type EvidenceState = "negative" | "positive" | "insufficient" | "suppress
 export const INTERVAL_FIRST_MENTION = "95% 区间（模型系数的不确定性范围）";
 
 /** What a standard deviation of Y is, said once where a size in standard deviations first appears. */
-export const SD_DEFINITION = "标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏";
+// Plain words first ("how much Y usually moves"); what is taken out before measuring it, in brackets.
+export const SD_DEFINITION = "1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化";
 
 /** How a gap in Y is said: lengths are 长/短, everything else 高/低. */
 export function differenceWords(kind: DepvarKind): { higher: string; lower: string } {

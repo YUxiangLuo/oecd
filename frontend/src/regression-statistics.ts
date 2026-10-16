@@ -1,5 +1,5 @@
 /** Shared display conventions for the fixed teaching model and its report. */
-export const CLUSTER_INTERVAL_NOTE = "标准误按国家聚类，95% 区间据此计算，是近似值；结果主要由少数国家决定时，区间可能偏窄。";
+export const CLUSTER_INTERVAL_NOTE = "标准误按国家聚类（同一国家的记录允许一起波动），95% 区间据此计算，是近似值；结果主要由少数国家决定时，区间可能偏窄。";
 
 /** Match report_common._number(..., p_value=True); zero may be numerical underflow. */
 export function formatPValue(value: number | null | undefined, missing = "—"): string {

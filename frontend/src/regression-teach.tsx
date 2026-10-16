@@ -249,7 +249,8 @@ export function decompositionParts(
   // "8.4 个百分点", "0.320 个长度单位": the chart's unit, counted.
   const counted = unit.startsWith("个") ? unit : `个${unit}`;
   const amount = (value: number) => `${(value * scale).toFixed(digits)} ${counted}`;
-  const signedAmount = (value: number) => `${value >= 0 ? "+" : "−"}${Math.abs(value * scale).toFixed(digits)}`;
+  // Each part with its unit, as the total: a bare "−1.6" read as a number of nothing.
+  const signedAmount = (value: number) => `${value >= 0 ? "+" : "−"}${Math.abs(value * scale).toFixed(digits)} ${counted}`;
   const observed = decomposition.observed;
   const direction = observed < 0 ? "低" : "高";
   // "与 GDP 对数同步" keeps a space before a Latin name, "与汇率变动同步" none.
@@ -260,9 +261,10 @@ export function decompositionParts(
   }));
   parts.push({ label: "其余（各年共同的变化与噪声）", value: signedAmount(decomposition.remainder), tariff: false });
   return {
-    lead: `第一批被加税国家 ${decomposition.year} 年的${metric}，比加税前（${decomposition.pre_years.join("、")} 年平均）${direction} ${amount(Math.abs(observed))}。按默认模型的估计可拆成：`,
+    lead: `第一批被加税国家 ${decomposition.year} 年的${metric}，比加税前（${decomposition.pre_years.join("、")} 年平均）${direction} ${amount(Math.abs(observed))}。按默认模型的估计，这个总变化等于下面各项之和：`,
     parts,
-    tail: "回归结论说的只是“与关税 X 相关”这一项，它等于默认模型的系数乘以第一批国家 X 的平均变化；结果卡里的例子换算用的是例子自己的 X，可能比这里大得多。各项相加等于总变化，控制变量的几项可能正负相抵。第二批税率相同，但对美出口份额小、X 小，所以变化也小。",
+    // One point a sentence: what the regression's result is of the split, and why the example's number differs.
+    tail: "回归结论只对应第一项：它等于默认模型的系数 × 第一批国家 X 的平均变化。结果卡里的例子换算用的是例子自己的 X，数值可能大得多。",
   };
 }
 

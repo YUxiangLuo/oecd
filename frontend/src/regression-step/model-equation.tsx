@@ -90,10 +90,10 @@ export function DesignEquation({ design, expanded = true }: { design: Regression
         <summary>公式里各项的意思</summary>
       <ul className="model-eq-terms" aria-label="公式里各项的意思">
         {lagged
-          ? <li><b>β₁·X + β₂·L1.X</b>：当年和上一年的关税暴露。关税的影响可能分两年显现，β₁ 是当年的关联，β₂ 是次年再出现的关联，<b>两者之和是两年累计关联</b>，即本步的主结果。累计的是系数，不是把图上两个年份的 Y 变化相加。</li>
+          ? <li><b>β₁·X + β₂·L1.X</b>：当年和上一年的关税暴露。与 X 的关联可能分两年出现，β₁ 是当年的关联，β₂ 是次年再出现的关联，<b>两者之和是两年累计关联</b>，即本步的主结果。累计的是系数，不是把图上两个年份的 Y 变化相加。</li>
           : <li><b>β·X</b>：关税暴露（首年对美出口份额 w × 加征税率 τ）；β 是 X 每高 1 个百分点时 Y 平均相差多少。</li>}
         {controls.length > 0 && (
-          <li><b>γ·{controls.join("、")}</b>：控制变量。{controls.length > 1 ? "它们" : "它"}与加税同时变化、又与 Y 有关，放进模型是为了不把{controls.length > 1 ? "它们" : "它"}的作用算到关税头上。</li>
+          <li><b>γ·{controls.join("、")}</b>：控制变量。{controls.length > 1 ? "它们" : "它"}与加税同时变化、又与 Y 有关，放进模型是为了不把与{controls.length > 1 ? "它们" : "它"}相关的变化算到 X 上。</li>
         )}
         <li><b>α + λ</b>：先扣掉每个国家×行业自己的平均水平（α）和每年所有国家×行业共同的变化（λ），即“双向固定效应”；ε 是剩下的随机波动。Y 是{yLabel}，i = 国家，j = 行业，t = 年份。</li>
       </ul>
