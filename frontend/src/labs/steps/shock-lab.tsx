@@ -397,7 +397,8 @@ export function ShockLab({ meta, step: _step, state }: {
   const hasRateChange = rows.some((row) => rateChangeOf(row) != null);
   const rateRows = useMemo(() => rows.flatMap((row) => {
     const value = numberField(row, "teaching_exchange_rate_change");
-    return value == null ? [] : [{ ...row, teaching_exchange_rate_change: value }];
+    // A rate of change in percent (-8 = 8% weaker against the dollar), drawn as the share the chart's "%" expects.
+    return value == null ? [] : [{ ...row, teaching_exchange_rate_change: value / 100 }];
   }), [rows]);
   const firstWave = waves.find((wave) => wave.wave === 1)?.start_year ?? policyYear ?? undefined;
   // The first wave's currencies fall from its start year: marked only when an example country is in that wave.
@@ -622,8 +623,8 @@ export function ShockLab({ meta, step: _step, state }: {
           countries={shownCountries}
           years={years}
           metric="teaching_exchange_rate_change"
-          label="汇率变动（本币兑美元，负为贬值）"
-          unit="个百分点"
+          label="汇率变动率（本币兑美元，负为贬值）"
+          unit="%"
           markYear={firstWave && exampleInFirstWave ? { year: firstWave, label: `${firstWave} 年第一批加税` }
             : exampleLaterWave ? { year: exampleLaterWave.start_year!, label: `${exampleLaterWave.start_year} 年${WAVE_NAMES[exampleLaterWave.wave!] ?? `第 ${exampleLaterWave.wave} 批`}加税` }
             : undefined}
@@ -636,7 +637,7 @@ export function ShockLab({ meta, step: _step, state }: {
         <dl className="teaching-variables" aria-label="步骤 11–14 的默认控制变量">
           <div>
             <dt>汇率变动</dt>
-            <dd>本币兑美元的年变动（百分点，负为贬值），每个国家每年一个值<span className="source-tag">课程生成</span>。</dd>
+            <dd>本币兑美元的年变动率（%，负为贬值），每个国家每年一个值<span className="source-tag">课程生成</span>。</dd>
           </div>
           <div>
             <dt>GDP 对数与贸易开放度</dt>

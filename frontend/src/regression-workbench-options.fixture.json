@@ -289,7 +289,7 @@
     {
       "name": "teaching_exchange_rate_change",
       "label": "汇率变动",
-      "definition": "本币兑美元的年变动（百分点，负为贬值）",
+      "definition": "本币兑美元的年变动率（%，负为贬值）",
       "source": "课程生成"
     },
     {

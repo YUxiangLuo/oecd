@@ -34,7 +34,7 @@ class ControlInfo:
 
 # Order is the order of the page and of a normalised spec.
 CONTROLS: dict[str, ControlInfo] = {
-    EXCHANGE_RATE_COLUMN: ControlInfo("汇率变动", "本币兑美元的年变动（百分点，负为贬值）", "generated"),
+    EXCHANGE_RATE_COLUMN: ControlInfo("汇率变动", "本币兑美元的年变动率（%，负为贬值）", "generated"),
     GDP_COLUMN: ControlInfo("GDP 对数", "ln（模拟 GDP，美元）；首年以 ICIO 国家增加值规模校准", "generated"),
     POPULATION_COLUMN: ControlInfo("人口增长率", "模拟年度人口增长率（%），独立于 GDP 生成", "generated"),
     OPENNESS_COLUMN: ControlInfo("贸易开放度", "模拟进出口总额 / GDP（%），不是 ICIO 出口强度", "generated"),

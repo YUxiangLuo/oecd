@@ -15,7 +15,7 @@ PR59 审查修复的实现与验证边界见 [审查记录](docs/review-pr59-202
 | [实验手册 PDF](实验手册.pdf) | 学生操作指南；正文与重新生成方法见 [docs/student-manual](docs/student-manual/README.md) |
 | [docs/indicator-readings](docs/indicator-readings/README.md) | 步骤 2–5 指标说明 PDF 的源文件与构建方法 |
 
-当前 v13 的本地验收 release 为 `8565f226719d4179967f6372dbc7c49e`（2016–2020）：步骤 11–14 可构造的 1,183 种模型设定 × 17 个 Y 共 20,111 次估计全部通过标准库对照，漏汇率／漏 GDP／漏开放度与去掉年份固定效应的设计偏差 15/15、15/15、15/15、90/90 显现，200 种子基准的两年累计区间覆盖率 91.5%–95.5%（`benchmarks/model_space_v13.json`、`benchmarks/teaching_design_v13.json`，结论见 [模型空间核查](docs/regression-model-space-check-2026-10-14.md) 与 [最终优化方案](docs/regression-steps-11-14-optimization-final-2026-10-14.md)）。此前 v12 的本地验收 release 为 `be37a7cfe40444f09749a77a276f45a3`。4,743 个分层选择的模型全部通过标准库对照，原先 30 个数值门禁失败已消除；独立复算 364 个案例中 352 个成功估计、12 个一致拒绝，无超容差差异。四类报告案例已完成生成、提交与重新读取检查。详见[当前规格与验证边界](docs/regression-refactor-20261010.md)。这不是全部模型组合、多随机种子或生产容量验收；历史 review 和版本评估只适用于其注明的基线。
+当前 v13 的本地验收 release 为 `88063fb4cbf24ce2b4657d6f3c679a66`（2016–2020；2026-10-16 为把汇率变动的单位改为“年变动率，%”重建，数据与上一 release `8565f226719d4179967f6372dbc7c49e` 相同，仅介数有 1e-13 量级的浮点差异；下述核查数字在该 release 上得出）：步骤 11–14 可构造的 1,183 种模型设定 × 17 个 Y 共 20,111 次估计全部通过标准库对照，漏汇率／漏 GDP／漏开放度与去掉年份固定效应的设计偏差 15/15、15/15、15/15、90/90 显现，200 种子基准的两年累计区间覆盖率 91.5%–95.5%（`benchmarks/model_space_v13.json`、`benchmarks/teaching_design_v13.json`，结论见 [模型空间核查](docs/regression-model-space-check-2026-10-14.md) 与 [最终优化方案](docs/regression-steps-11-14-optimization-final-2026-10-14.md)）。此前 v12 的本地验收 release 为 `be37a7cfe40444f09749a77a276f45a3`。4,743 个分层选择的模型全部通过标准库对照，原先 30 个数值门禁失败已消除；独立复算 364 个案例中 352 个成功估计、12 个一致拒绝，无超容差差异。四类报告案例已完成生成、提交与重新读取检查。详见[当前规格与验证边界](docs/regression-refactor-20261010.md)。这不是全部模型组合、多随机种子或生产容量验收；历史 review 和版本评估只适用于其注明的基线。
 
 ## 支持范围
 

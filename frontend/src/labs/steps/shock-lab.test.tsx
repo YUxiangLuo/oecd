@@ -576,7 +576,7 @@ test("the ranking chart stays the same whatever example is chosen: untaxed, the 
   cleanup();
 });
 
-test("the year-by-year table shows w, τ, X and last year's X; the controls card draws the exchange-rate change in points", async () => {
+test("the year-by-year table shows w, τ, X and last year's X; the controls card draws the exchange-rate change in percent", async () => {
   const meta: Meta = { years: tenYears, countries: ["CAN", "CRI"], sectors: ["C29"] };
   const groups = tenGroups();
   // v10 rows: L1.X is X a year later; the first wave's currency falls from 2018 (stored in percent).
@@ -598,17 +598,17 @@ test("the year-by-year table shows w, τ, X and last year's X; the controls card
   const [, example, controls] = [...document.querySelectorAll(".shock-workbench > section")];
   expect(example.querySelectorAll("[data-mark-year]")).toHaveLength(1);
   expect(example.textContent).toContain("关税暴露 X · 两国同一刻度");
-  expect(example.textContent).not.toContain("汇率变动（本币兑美元");
+  expect(example.textContent).not.toContain("汇率变动率（本币兑美元");
   expect(controls.querySelector(".teaching-one-line")!.textContent).toContain("下图是例子国家每年的汇率变动。");
   const rateChart = controls.querySelector("svg")!;
   expect(rateChart).not.toBeNull();
   // Neither example country is in a first wave here: the rate chart has no tariff line, and no cards of its own.
   expect(controls.querySelectorAll("[data-mark-year]")).toHaveLength(0);
   expect(controls.querySelectorAll(".comparison-summary")).toHaveLength(0);
-  expect(controls.textContent).toContain("汇率变动（本币兑美元，负为贬值）");
-  // In 个百分点, as the step 11–14 form and the report define the control (the release contract's wording).
-  expect(controls.textContent).toContain("汇率变动（本币兑美元，负为贬值） · 个百分点");
-  expect(controls.textContent).not.toMatch(/-?\d%/);
+  // A rate of change in percent, as the step 11–14 form and the report define the control (the release contract).
+  expect(controls.textContent).toContain("汇率变动率（本币兑美元，负为贬值） · %");
+  expect(controls.textContent).not.toContain("个百分点");
+  // Read as the percent it is (-7.5%), not multiplied once more (-750%).
   expect(controls.textContent).not.toMatch(/-[1-9]\d{2,}%/);
   groups.mockRestore();
   series.mockRestore();

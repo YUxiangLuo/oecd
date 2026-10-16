@@ -89,7 +89,7 @@ EXCHANGE_RATE_DEPRECIATION = -8.0
 EXCHANGE_RATE_GAMMA_FACTOR = -0.0095
 EXCHANGE_RATE = {
     "column": EXCHANGE_RATE_COLUMN,
-    "unit": "percentage points; negative = depreciation",
+    "unit": "percent change; negative = depreciation",
     "noise_sd": EXCHANGE_RATE_NOISE_SD,
     "first_wave_depreciation": EXCHANGE_RATE_DEPRECIATION,
     "gamma_factor": EXCHANGE_RATE_GAMMA_FACTOR,
