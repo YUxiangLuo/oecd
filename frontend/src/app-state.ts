@@ -16,10 +16,30 @@ interface StepHistoryWriter {
 
 export type StepHistoryMode = "push" | "replace";
 
+/** The course's last step (the report): a ?step= beyond it opens this one. */
+export const LAST_STEP = 15;
+
+/**
+ * The step a ?step= link asks for: 1–15 as written, a larger whole number the last step (15). Anything else
+ * (0, "abc", "1e1", "0x5", " 7 ", "07") is no step: the caller opens the student's first unfinished step.
+ */
 export function stepFromSearch(search: string): number | null {
   // Only a plain step number: Number() would also accept "1e1", "0x5" or " 7 ".
   const raw = new URLSearchParams(search).get("step");
-  return raw != null && /^(?:[1-9]|1[0-5])$/.test(raw) ? Number(raw) : null;
+  if (raw == null || !/^[1-9]\d*$/.test(raw)) return null;
+  return raw.length > 2 || Number(raw) > LAST_STEP ? LAST_STEP : Number(raw);
+}
+
+/**
+ * The one-time notice (role="status") for a ?step= link that names no course step, once `opened` is the step shown
+ * instead (the URL is then rewritten to it). Null for a valid step, an empty one, or no ?step= at all.
+ */
+export function stepLinkNotice(search: string, opened: number): string | null {
+  const raw = new URLSearchParams(search).get("step");
+  if (raw == null || raw === "" || /^(?:[1-9]|1[0-5])$/.test(raw)) return null;
+  if (/^[1-9]\d*$/.test(raw)) return `链接里的步骤 ${raw.length > 6 ? `${raw.slice(0, 6)}…` : raw} 不存在（课程共 ${LAST_STEP} 步），已打开步骤 ${opened}。`;
+  const shown = raw.length > 12 ? `${raw.slice(0, 12)}…` : raw;
+  return `链接里的步骤“${shown}”不是有效的步骤号，已按你的进度打开步骤 ${opened}。`;
 }
 
 export function storeAuthentication(storage: StorageWriter, token: string): void {

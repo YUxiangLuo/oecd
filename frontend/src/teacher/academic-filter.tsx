@@ -22,6 +22,12 @@ export function matchesAcademicFilter(
   return inSemester?.class_id === classId;
 }
 
+/** Semesters (or classes) in use first, archived ones after, each group in its own order: the one a teacher filters
+ *  by is near the top however many old semesters there are. */
+export function activeFirst<T extends { is_active: boolean }>(items: readonly T[]): T[] {
+  return [...items.filter((item) => item.is_active), ...items.filter((item) => !item.is_active)];
+}
+
 export function AcademicFilters({
   semesters,
   semesterId,
@@ -47,13 +53,13 @@ export function AcademicFilters({
         }}
       >
         <option value="">全部学生</option>
-        {semesters.map((item) => <option key={item.id} value={item.id}>{item.name}{item.is_active ? "" : "（已归档）"}</option>)}
+        {activeFirst(semesters).map((item) => <option key={item.id} value={item.id}>{item.name}{item.is_active ? "" : "（已归档）"}</option>)}
       </select>
       {semester && (
         <select aria-label="筛选班级" value={classId ?? ""} onChange={(event) => onClassChange(event.target.value ? Number(event.target.value) : null)}>
           <option value="">该学期全部已分班学生</option>
           <option value={UNASSIGNED_CLASS}>该学期未分班</option>
-          {semester.classes.map((group) => <option key={group.id} value={group.id}>{group.name}{group.is_active ? "" : "（已归档）"}</option>)}
+          {activeFirst(semester.classes).map((group) => <option key={group.id} value={group.id}>{group.name}{group.is_active ? "" : "（已归档）"}</option>)}
         </select>
       )}
     </div>

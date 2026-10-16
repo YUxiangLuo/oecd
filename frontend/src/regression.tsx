@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { scrollIntoCourseContent } from "./content-scroll";
-import { sameJsonValue } from "./session-store";
 import { api } from "./api";
-import { useAsync } from "./labs";
+import { useAsync } from "./labs/shared";
 import { DEFAULT_BASELINES, displayBaselineLabel, GENERATED_DATA_NOTE, lessonFor, lessonQuestion } from "./regression-lessons";
 import { chartDisplayScale, depvarKind, headlineCoefficient } from "./regression-verdict";
 import { exampleWasChosen } from "./labs/steps/shock-lab";
@@ -27,7 +26,8 @@ import { perPointDigits, perPointReading, shownModelLabel } from "./regression-w
 import { MaterialCard } from "./material-card";
 import { regressionMaterialLabel } from "./material-label";
 import { DesignEquation } from "./regression-step/model-equation";
-import { RegressionResultCard, type RegressionExample } from "./regression-step/result-card";
+import { RegressionResultCard } from "./regression-step/result-card";
+import type { RegressionExample } from "./regression-step/result-text";
 import { regressionRunSnapshotIdentity, savedRegressionResponse, TEACHING_MODEL_VERSION, type RegressionStepState } from "./regression-step/saved-run";
 import {
   barPreviewText, degreeIdentity, familyBarRows, familyBarsTitle, forwardShareIdentity, tradeShareIdentity, GROUP_CHART_CAPTION, groupLines, kindOf,
@@ -35,6 +35,7 @@ import {
 } from "./regression-step/family-bars";
 import { INTERRUPTED_RUN_NOTE, useRegressionRun } from "./regression-step/use-regression-run";
 import { DecompositionList } from "./regression-teach";
+import { pendingStepTenExample } from "./regression-step/step-ten-example";
 
 export function RegressionRequestError({ label, error, onRetry }: {
   label: string;
@@ -55,23 +56,6 @@ export function RegressionRequestError({ label, error, onRetry }: {
  * course default model on the step's default Y; that run is the headline and the report material. The bars show
  * every Y of the family; a click on another bar previews its reading and saves nothing.
  */
-/**
- * Step 10 records its example once its data have loaded; a student who changed the example and left at once has a
- * newer choice on step 10 than the one steps 11–14 convert with. Said here, so the conversion is not taken as the new
- * one; null when the two agree.
- */
-export function pendingStepTenExample(
-  stepTen: { browse_selection?: { first: string; second?: string; industry: string } } | undefined,
-  recorded: { first: string; second?: string; industry: string },
-): string | null {
-  const browsed = stepTen?.browse_selection;
-  if (!browsed?.first || !browsed.industry) return null;
-  const key = (item: { first: string; second?: string; industry: string }) => [item.first, item.second || "", item.industry];
-  if (sameJsonValue(key(browsed), key(recorded))) return null;
-  const name = `${countryLabel(browsed.first)} · ${sectorLabel(browsed.industry)}${browsed.second ? `（对比 ${countryLabel(browsed.second)}）` : ""}`;
-  return `你在步骤 10 最后选的例子（${name}）还没有记录，这里仍按已记录的例子换算。回到步骤 10 等数据加载完，会自动记录；美国、或不在回归样本里的国家和行业不能作例子，步骤 10 会说明原因。`;
-}
-
 export function RegressionRunLab({ step, meta, state, getStep, reportCustomResults, reportOutdated = false, quiz }: {
   step: Step;
   /** The step's quiz panel: placed after the result, before the optional workbench. */

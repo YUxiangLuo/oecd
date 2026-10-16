@@ -2,7 +2,7 @@ import { DbLab, IndicatorLab, ReportLab, ShockLab, VizLab } from "./labs";
 import {
   RegressionRunLab,
 } from "./regression";
-import type { SiblingStepData } from "./regression-teach";
+import type { SiblingStepData } from "./regression-teach-logic";
 import type { ClassroomReport, Meta, ReportGateItem, ReportMutationResponse, Step, StepStateApi } from "./types";
 import type { SessionStatus } from "./use-session";
 import type { ReactNode } from "react";

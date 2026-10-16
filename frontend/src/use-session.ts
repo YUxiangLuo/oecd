@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, isApiErrorStatus, RequestTimeoutError } from "./api";
-import { emptySession, isValidSession, patchStep as patchStoredStep, readStep, sameMaterialContent, sameSessionContent } from "./session-store";
+import { emptySession, isValidSession, mergeSessions, patchStep as patchStoredStep, readStep, sameMaterialContent, sameSessionContent } from "./session-store";
 import type { ClassroomReport, CompletionSummary, ExperimentSession, QuizLearningState, ReportGateItem, ReportMutationResponse, SessionSaveResponse } from "./types";
 import { isNetworkFailure, userFacingRequestError } from "./user-facing-error";
 
@@ -96,6 +96,8 @@ export interface SessionApi extends QuizLearningState {
 
 interface SaveQueueCallbacks {
   onSaved: (response: SessionSaveResponse, saved: ExperimentSession, hasNewer: boolean) => void;
+  /** Another tab saved first and the two records were merged: the server's version and this tab's merged one. */
+  onMerged: (remote: ExperimentSession, remoteUpdatedAt: string | null, merged: ExperimentSession) => void;
   onError: (cause: unknown) => void;
   onSyncing: (value: boolean) => void;
   onUnsynced: (value: boolean) => void;
@@ -107,15 +109,21 @@ class SessionSaveQueue {
   private saving: Promise<void> | null = null;
   private baseUpdatedAt: string | null = null;
   private confirmed: ExperimentSession | null = null;
+  /** The server's record at `baseUpdatedAt`, when this tab knows it: the base of a merge after a 409. A draft
+   * restored from another load does not know it, and is never merged. */
+  private mergeBase: ExperimentSession | null = null;
   private sent: ExperimentSession | null = null;
   private outcomeUncertain = false;
   private stopped = false;
   constructor(
     private readonly save: (session: ExperimentSession, base: string | null) => Promise<SessionSaveResponse>,
     private readonly callbacks: SaveQueueCallbacks,
+    /** The server's current record, read after a 409 to merge this tab's edits into it. */
+    private readonly load?: () => Promise<{ session: ExperimentSession; updated_at?: string | null }>,
   ) {}
   setBaseUpdatedAt(value: string | null) { this.baseUpdatedAt = value; }
   setConfirmedSession(session: ExperimentSession) { this.confirmed = session; this.sent = null; this.outcomeUncertain = false; }
+  setMergeBase(session: ExperimentSession | null) { this.mergeBase = session; }
   getSentSession() { return this.sent; }
   getBaseUpdatedAt() { return this.baseUpdatedAt; }
   stop() { this.stopped = true; }
@@ -128,6 +136,8 @@ class SessionSaveQueue {
     let run!: Promise<void>;
     run = (async () => {
       this.callbacks.onSyncing(true);
+      // A few merges in a row at most: two tabs saving in turn every second must not loop for ever.
+      let merges = 0;
       try {
         while (this.pending && !this.stopped) {
           const next = this.outcomeUncertain && this.sent ? this.sent : this.pending;
@@ -139,6 +149,25 @@ class SessionSaveQueue {
           try { response = await this.save(next, this.baseUpdatedAt); }
           catch (cause) {
             if (this.stopped) throw cause;
+            // Another tab or device saved first: merge this tab's edits into the server's record and send that,
+            // unless both changed the same material (a real conflict, left to the student).
+            if (isApiErrorStatus(cause, 409) && this.load && this.mergeBase && merges < 3) {
+              const base = this.mergeBase;
+              let remote: { session: ExperimentSession; updated_at?: string | null } | null = null;
+              try { remote = await this.load(); } catch { remote = null; }
+              if (this.stopped) return;
+              const local = this.pending ?? next;
+              const merged = remote ? mergeSessions(base, local, remote.session) : null;
+              if (remote && merged) {
+                merges++;
+                this.baseUpdatedAt = remote.updated_at ?? null;
+                this.setConfirmedSession(remote.session);
+                this.mergeBase = remote.session;
+                this.pending = merged;
+                this.callbacks.onMerged(remote.session, remote.updated_at ?? null, merged);
+                continue;
+              }
+            }
             if (cause instanceof ApiError && [400, 413, 422].includes(cause.status)) {
               this.sent = null;
               this.outcomeUncertain = false;
@@ -153,6 +182,7 @@ class SessionSaveQueue {
           if (this.stopped) return;
           this.baseUpdatedAt = response.updated_at;
           this.setConfirmedSession(next);
+          this.mergeBase = next;
           this.callbacks.onSaved(response, next, this.pending !== null);
         }
       } finally {
@@ -169,7 +199,7 @@ class SessionSaveQueue {
 
 type SaveState = { phase: "saved" | "pending" | "saving" | "failed"; error: string | null; blocked: boolean };
 const SAVED: SaveState = { phase: "saved", error: null, blocked: false };
-const VERSION_ERROR = "服务器记录版本不一致。本页内容已保留，请先复制需要保留的内容，再放弃本页修改并重新加载。";
+const VERSION_ERROR = "你的账号在另一个标签页或电脑上也改了同一份材料，无法自动合并。本页内容已保留，请先复制需要保留的内容，再放弃本页修改并重新加载。";
 
 export function useSession(enabled: boolean, username?: string): SessionApi {
   const [status, setStatus] = useState<SessionStatus>(enabled ? "loading" : "unavailable");
@@ -198,6 +228,8 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const quizRevision = useRef(-1);
   const currentQuizzes = useRef<QuizLearningState["quizzes"]>(undefined);
   const reportMutation = useRef(0);
+  // Counts this tab's saves and merges: a record read before one of them must not replace it.
+  const saves = useRef(0);
 
   const persistDraft = useCallback(() => {
     if (!enabled || !username || !releaseId.current || !queue.current) return false;
@@ -232,8 +264,18 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       return api.classroom.saveSession({ session: value, base_updated_at: base });
     },
     {
+      onMerged: (remote, remoteUpdatedAt, merged) => {
+        if (!mounted.current) return;
+        saves.current++;
+        // The page shows the merged record at once (another tab's steps, this tab's edits); its save follows.
+        setConfirmed(remote);
+        setUpdatedAt(remoteUpdatedAt);
+        sessionRef.current = merged;
+        setSession(merged);
+      },
       onSaved: (response, snapshot, newer) => {
         if (!mounted.current) return;
+        saves.current++;
         setConfirmed(snapshot);
         setUpdatedAt(response.updated_at);
         applyLearningState(response);
@@ -266,6 +308,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         } else setSaveState((old) => old.phase === "saved" ? { ...old, phase: "pending" } : old);
       },
     },
+    () => api.classroom.session(),
   );
 
   useEffect(() => {
@@ -295,6 +338,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       releaseId.current = response.release_id;
       queue.current!.setBaseUpdatedAt(response.updated_at ?? null);
       queue.current!.setConfirmedSession(response.session);
+      queue.current!.setMergeBase(response.session);
       setConfirmed(response.session);
       setUpdatedAt(response.updated_at ?? null);
       setReport(response.report);
@@ -310,6 +354,8 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         setRestoredEdits((n) => n + 1);
         queue.current!.enqueue(kept.session);
         queue.current!.setBaseUpdatedAt(kept.base_updated_at);
+        // The kept draft's base is the server's record only when the versions match; otherwise it is unknown here.
+        if (kept.base_updated_at !== (response.updated_at ?? null)) queue.current!.setMergeBase(null);
         if (kept.sent) {
           queue.current!.restoreSent(kept.sent);
         } else if (kept.base_updated_at !== (response.updated_at ?? null)) {
@@ -345,11 +391,26 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     if (!enabled || status !== "ready") return;
     const ownedQueue = queue.current;
     const reportVersion = reportMutation.current;
+    const savesBefore = saves.current;
     const response = await api.classroom.session();
     if (!mounted.current || queue.current !== ownedQueue || reportMutation.current !== reportVersion) return;
     // Refresh only metadata for the acknowledged snapshot, never overwrite local edits or
     // allow a read overtaken by a save to restore outdated completion/report gates.
     if ((response.updated_at ?? null) !== ownedQueue?.getBaseUpdatedAt()) {
+      // Another tab or device saved meanwhile. With nothing unsaved here, this tab takes the newer record now, so it
+      // neither shows the old one nor meets a conflict on its next edit; with unsaved edits, the next save merges.
+      if (ownedQueue && !ownedQueue.hasUnsynced() && !blocked.current && saves.current === savesBefore) {
+        ownedQueue.setBaseUpdatedAt(response.updated_at ?? null);
+        ownedQueue.setConfirmedSession(response.session);
+        ownedQueue.setMergeBase(response.session);
+        setConfirmed(response.session);
+        setUpdatedAt(response.updated_at ?? null);
+        sessionRef.current = response.session;
+        setSession(response.session);
+        setReport(response.report);
+        applyLearningState(response);
+        return;
+      }
       // The teacher's question bank is independent of the student's saved snapshot.
       applyQuizState(response);
       return;

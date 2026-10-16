@@ -219,6 +219,24 @@ export function panelAmountDecimals(values: readonly number[], total: number): {
   }
 }
 
+/** Decimals for a panel whose total is 0 or below (ISL C21 2017: SVA −10.54), which has no shares: one precision for
+ * the total, every row, the sum line and the formula ("−10.104", "−0.058", not "−10.10" beside "−0.058"). It starts at
+ * the larger of the total's and the parts' usual precision and adds decimals until the rows as shown add up to the
+ * total as shown; `checks` is false when {@link MAX_PANEL_DIGITS} is reached first (the sum line then reads "≈").
+ * Null when every part and the total are 0. */
+export function signedPanelDecimals(values: readonly number[], total: number): { decimals: number; checks: boolean } | null {
+  if (!Number.isFinite(total) || total > 0) return null;
+  const largest = Math.max(Math.abs(total), ...values.map(Math.abs));
+  if (!(largest > 0) || !Number.isFinite(largest)) return null;
+  const magnitude = Math.floor(Math.log10(largest));
+  const start = Math.max(amountDecimals(largest), ...values.filter((value) => value !== 0).map(amountDecimals));
+  const last = Math.max(start, MAX_PANEL_DIGITS - Math.max(1, magnitude + 1));
+  for (let decimals = start; ; decimals += 1) {
+    if (displayedRowsAddUp(values, total, decimals)) return { decimals, checks: true };
+    if (decimals >= last) return { decimals, checks: false };
+  }
+}
+
 /** Under a table whose rows cannot all be checked by hand within {@link MAX_PANEL_DIGITS}. */
 export const PANEL_ROUNDING_NOTE = "百分比按未四舍五入的金额计算，按表中显示值手算，末位可能有出入。";
 
@@ -333,8 +351,9 @@ function percentText(percent: number): string {
 
 /** The same digits as the decomposition table beside it; a tiny operand keeps three significant digits so the
  * substituted formula never reads "0 / 0". */
-function disclosureAmount(value: number | null): string {
-  return value == null ? "—" : formulaAmount(value);
+function disclosureAmount(value: number | null, decimals?: number): string {
+  if (value == null) return "—";
+  return decimals != null ? amountAt(value, decimals) : formulaAmount(value);
 }
 
 /** Lengths are read to three decimals everywhere (e.g. PLv = 2.216); a tiny signed value keeps its sign. */
@@ -372,7 +391,8 @@ export function IndicatorCalculationDisclosure({ step, row, decimals }: { step: 
         <div className="icd-title">{title}</div>
         <div className="icd-formula">{title} = {numeratorKey} / {denominatorLabel}</div>
         <div className="icd-calc">
-          = {operands?.numerator ?? disclosureAmount(numerator)} / {operands?.denominator ?? disclosureAmount(denominator)} = <b>{operands?.percent ?? disclosureRatioGap(numerator, denominator)}</b>
+          {/* Without a share (a total of 0 or below) the operands still read as the table rows beside them. */}
+          = {operands?.numerator ?? disclosureAmount(numerator, decimals)} / {operands?.denominator ?? disclosureAmount(denominator, decimals)} = <b>{operands?.percent ?? disclosureRatioGap(numerator, denominator)}</b>
         </div>
         <p>{step === 4
           ? "FVA 不包括外国重复计算 FDC。分母是下面六项相加得到的总出口，所以这个比例和 OECD TiVA 公布的“出口中外国增加值占比”不完全相同。"
@@ -490,6 +510,9 @@ export const PLY_DECOMP: DecompCfg = {
   ],
 };
 
+/** Steps 2–5: why the country lists have no ROW (step 5's table says it beside “全部”). */
+export const ROW_AGGREGATE = "世界其他地区（ROW，是一个汇总项，不能单独选）";
+
 /** Step 2: an industry that produces (SVA ≠ 0) but exports nothing has every export part 0 (CHN·E). */
 export const NO_EXPORTS_NOTE = "该行业这一年没有出口，出口分解各项为 0";
 
@@ -575,6 +598,8 @@ function MiniBackwardBar({ row }: { row: Row }) {
   }
   const domain = signedDomain([model.values], true, [model.total]);
   const layout = signedStack(model.values, domain, true, model.total);
+  // Lengths are shown to three decimals, as in the forward table above.
+  const shownAddsUp = displayedRowsAddUp(model.values, model.sum, 3);
   return (
     <div style={{ marginTop: 14, padding: 12, borderRadius: 10, background: "#f8f9fc" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 11.5, marginBottom: 7 }}>
@@ -599,9 +624,13 @@ function MiniBackwardBar({ row }: { row: Row }) {
       {hasBackwardSegmentLength(row) && <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>{segmentLengths(row, "后向")}（上面是这些长度乘以最终产品份额后的贡献）。</div>}
       {domain.negative > 0 && <p className="decomp-table-note">负贡献为抵减项，用斜纹表示并位于零轴左侧；正贡献位于右侧，各段按带符号数值相加得到 PLy，不是都为正的份额。</p>}
       <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>
-        {/* Name what the sum is checked against: the PLy computed directly, shown at the right of the heading. */}
-        各段（最终产品中的份额 × 段长度）之和 = {fmt(model.sum, "number")}；{model.error < 1e-6
-          ? `等于直接算出的后向总生产长度 PLy（${fmt(model.total, "number")}），即 PLy 是三段长度按最终产品份额的加权平均`
+        {/* Name what the sum is checked against: the PLy computed directly, shown at the right of the heading. As in
+            the forward line, "=" only when the three contributions as shown add up to the shown sum (CHN 2018:
+            1.813 + 0.181 + 0.512 reads ≈ 2.505). */}
+        各段（最终产品中的份额 × 段长度）之和 {shownAddsUp ? "=" : "≈"} {fmt(model.sum, "number")}；{model.error < 1e-6
+          ? shownAddsUp
+            ? `等于直接算出的后向总生产长度 PLy（${fmt(model.total, "number")}），即 PLy 是三段长度按最终产品份额的加权平均`
+            : `与直接算出的后向总生产长度 PLy（${fmt(model.total, "number")}）一致${displayedSumNote(model.values, model.sum, 3)?.replace("上表", "上面") ?? "（差别来自四舍五入）"}，即 PLy 是三段长度按最终产品份额的加权平均`
           : `与直接算出的后向总生产长度 PLy（${fmt(model.total, "number")}）相差 ${model.error.toPrecision(2)}`}。
       </div>
     </div>
@@ -745,6 +774,8 @@ export function DecompositionDemo({
           )}
         </LabeledControl>
       </>}
+      {/* After the selects, so it does not split 国家 from 行业. */}
+      {!meta.countries.includes("ROW") && <span className="muted demo-row-note" style={{ fontSize: 12 }}>国家列表不含{ROW_AGGREGATE}。</span>}
     </div>
   );
 
@@ -824,7 +855,9 @@ export function DecompositionDemo({
     const sharesAvailable = model.shares != null;
     // One amount precision for the total line, the table, the sum lines and the formula, so every share in the table
     // checks by hand from the amounts beside it.
-    const precision = cfg.unit === "amount" ? panelAmountDecimals(model.values, model.total) : null;
+    // A total of 0 or below has no shares; its rows still read at one precision that adds up as shown.
+    const precision = cfg.unit !== "amount" ? null
+      : model.total > 0 ? panelAmountDecimals(model.values, model.total) : signedPanelDecimals(model.values, model.total);
     const amount = (value: number) => (precision ? amountAt(value, precision.decimals) : fmt(value, cfg.unit));
     // The decimals the rows are shown at (lengths in step 4: three), so the sum line reads "≈" whenever the shown
     // rows do not add up to the shown sum, as in steps 2–3.
@@ -838,8 +871,9 @@ export function DecompositionDemo({
         {/* Step 4's GVCPs is another indicator (forward over backward GVC length): it follows both bars below, not
             between the PLv heading and the PLv bar it does not decompose. */}
         {step !== 6 && <IndicatorCalculationDisclosure step={step} row={row} decimals={precision?.decimals} />}
-        {/* All parts 0: nothing to stack, so no empty grey bar (the line below says why). */}
-        {model.values.some((value) => value !== 0) && <div className="decomp-bar" style={{ position: "relative", display: "block", overflow: "hidden" }}>
+        {/* All parts 0: nothing to stack, so no empty grey bar (the line below says why). A total of 0 or below has
+            no proportions either: a full-width bar would read as 100% (ISL C21 2017). */}
+        {model.total > 0 && model.values.some((value) => value !== 0) && <div className="decomp-bar" style={{ position: "relative", display: "block", overflow: "hidden" }}>
           {panelDomain.negative > 0 && <span aria-hidden style={{ position: "absolute", zIndex: 3, left: `${layout.zeroPct}%`, top: -2, bottom: -2, borderLeft: "2px solid #4b5263" }} />}
           {cfg.parts.map((part, index) => {
             const value = model.values![index];
@@ -861,7 +895,8 @@ export function DecompositionDemo({
           // A zero total is explained once, by the specific hint below.
           <div className="decomp-identity neutral" role="status">
             ℹ {decompositionModelReason(model, cfg.weightTotal, noExports)}
-            {model.amountCloses != null && ` ${cfg.parts.length} 项金额相加${model.amountCloses ? "等于" : "不等于"}总量。`}
+            {/* As the "✓ N 项相加" line: "=" only when the rows as shown add up to the shown sum. */}
+            {model.amountCloses != null && ` ${cfg.parts.length} 项金额相加 ${sumLine(model.amountCloses, displayedRowsAddUp(model.values, model.sum, shownDecimals), amount(model.sum), "总量", displayedSumNote(model.values, model.sum, shownDecimals))}。`}
           </div>
         )}
         {negligible && <div className="decomp-identity neutral decomp-hint" role="note">ℹ {countryLabel(country)} · {sectorLabel(sector)}：{
@@ -877,7 +912,7 @@ export function DecompositionDemo({
           onHover={setHover}
           negativeNote={cfg.negativeNote}
           decimals={precision?.decimals}
-          roundingNote={precision?.checks === false}
+          roundingNote={model.total > 0 && precision?.checks === false}
         />
         {cfg.note && sharesAvailable && <div className="decomp-note">{cfg.note(row, model.values, precision?.decimals)}</div>}
         {step === 6 && <MiniBackwardBar row={row} />}

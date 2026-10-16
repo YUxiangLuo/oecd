@@ -79,11 +79,25 @@ export function StudentWorkspaceSkipLink({
   );
 }
 
+/** Why the opened step is not the one a ?step= link named; the student can dismiss it. */
+export function StepLinkNotice({ text, onDismiss }: { text: string | null; onDismiss?: () => void }) {
+  if (!text) return null;
+  return (
+    <div className="tipbox student-first-step" role="status">
+      <span>{text}</span>
+      {onDismiss && <button type="button" className="secondary" onClick={onDismiss}>知道了</button>}
+    </div>
+  );
+}
+
 interface StudentWorkspaceProps {
   user: AuthUser;
   meta: Meta | null;
   stepsData: StepsResponse;
   current: number;
+  /** Why the step a link asked for was not the one opened; shown until dismissed or the step changes. */
+  stepNotice?: string | null;
+  onDismissStepNotice?: () => void;
   session: SessionApi;
   stepState: StepStateApi;
   completedSteps: Set<number>;
@@ -198,6 +212,8 @@ export function StudentWorkspace({
   meta,
   stepsData,
   current,
+  stepNotice = null,
+  onDismissStepNotice,
   session,
   stepState,
   completedSteps,
@@ -336,6 +352,7 @@ export function StudentWorkspace({
 
           <div className="workarea">
             <SyncProblemBanner problem={syncProblem} />
+            <StepLinkNotice text={stepNotice} onDismiss={onDismissStepNotice} />
             {user.initial_password && <div className="tipbox student-first-step" role="note">
               <span>{STUDENT_INITIAL_PASSWORD_HINT}</span>
               <button type="button" className="secondary" onClick={onRequestPasswordChange}>立即修改密码</button>

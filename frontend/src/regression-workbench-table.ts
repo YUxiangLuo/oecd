@@ -11,7 +11,9 @@ import { formatPValue } from "./regression-statistics";
 import type {
   CoefStat,
   CustomResultSnapshot,
+  Experiment,
   ModelSpec,
+  ReportedCustomResult,
   RegressionOutcome,
   RegressionResponse,
   WorkbenchOptions,
@@ -496,4 +498,15 @@ export function comparisonCsv(
   }
   lines.push([options.footnote.replace("括号内为按国家聚类的标准误", "“标准误”一行为按国家聚类的标准误")]);
   return `\ufeff${lines.map((line) => line.map(csvField).join(",")).join("\r\n")}\r\n`;
+}
+
+/** Whether the model put into the report differs from the one the report printed for this step (compared as
+ *  models, not strings: the report's copy comes back from the database with each control's keys in another order). */
+export function experimentReportChanged(
+  stepNumber: number, experiment: Experiment | null | undefined, reported: readonly ReportedCustomResult[] | undefined, options: WorkbenchOptions,
+  stepBaseline: string,
+): boolean {
+  const mine = experiment ? [`${experiment.baseline ?? stepBaseline}:${specKey(canonicalSpec(experiment.spec, options))}`] : [];
+  const theirs = (reported ?? []).filter((item) => item.step === stepNumber).map((item) => `${item.baseline}:${specKey(canonicalSpec(item.spec, options))}`);
+  return mine.join("|") !== theirs.join("|");
 }

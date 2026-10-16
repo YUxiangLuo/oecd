@@ -34,6 +34,30 @@ function validate(questions: TeacherQuizQuestion[]): Issue | null {
 }
 
 const QUIZ_ERROR_ID = "teacher-quiz-error";
+/** What a student sees after a wrong answer when the hint is left empty (gvcsim/quizzes.py grade). */
+const DEFAULT_WRONG_FEEDBACK = "回答不正确，请重新阅读题目与选项后再试。";
+const RESTORE_NOTE = "“恢复默认”把当前默认题目填进编辑区，点“保存并生效”后才生效。";
+
+type QuizStep = TeacherQuizBank["steps"][number];
+const pad = (value: number) => String(value).padStart(2, "0");
+/** "2026-10-16 14:05" in the teacher's own time zone. */
+function savedAt(iso: string): string {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime())
+    ? iso
+    : `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/**
+ * How a step's questions stand against the current defaults, one judgment for its button (`badge`) and the line
+ * under its heading (`detail`): the defaults; a teacher's saved edit (who and when); or questions without a saver,
+ * an older default set that the current defaults have since replaced.
+ */
+export function quizStepStatus(step: Pick<QuizStep, "is_default" | "updated_at" | "updated_by">): { badge: string; detail: string } {
+  if (step.is_default) return { badge: "默认题目", detail: "默认题目" };
+  if (step.updated_at) return { badge: "已自定义", detail: `已自定义（${step.updated_by ?? "教师"} ${savedAt(step.updated_at)}）` };
+  return { badge: "与默认不同", detail: "与当前默认题目不同，可点“恢复默认”更新" };
+}
 
 export function QuizzesTab() {
   const [bank, setBank] = useState<TeacherQuizBank | null>(null);
@@ -114,15 +138,15 @@ export function QuizzesTab() {
   };
   if (!bank) return error ? <LoadFailure what="理解题" error={error} onRetry={() => { void load(); }} /> : <p role="status">正在加载理解题…</p>;
   return <div className="teacher-quizzes">
-    <p className="tipbox">步骤 1–14 为系统统一题库，不按班级配置。每步 1–3 道判断题或单选题。{IMPACT.split("确定保存吗？")[0]}恢复默认仅加载本地编辑草稿，仍需点击保存并生效。</p>
+    <p className="tipbox">步骤 1–14 为系统统一题库，不按班级配置。每步 1–3 道判断题或单选题。{IMPACT.split("确定保存吗？")[0]}{RESTORE_NOTE}</p>
     <div className="toolbar" aria-label="理解题步骤列表">
       {bank.steps.filter((s) => s.step >= 1 && s.step <= 14).map((s) => <button key={s.step} disabled={saving} aria-current={step === s.step ? "step" : undefined}
         onClick={() => { if (s.step !== step) guard.attempt(() => { setStep(s.step); setDraft(structuredClone(s.questions)); setConflict(false); setError(null); setNotice(""); setInvalidField(null); }); }}>
-        {s.step}. {s.title} · {s.questions.length} 题 · {s.is_default ? "默认" : "已自定义"}
+        {s.step}. {s.title} · {s.questions.length} 题 · {quizStepStatus(s).badge}
       </button>)}
     </div>
     <h3>步骤 {step} · {current?.title}</h3>
-    <p>版本 {current?.version} · {current?.updated_at ? `${current.updated_at} / ${current.updated_by ?? "教师"}` : "默认题库"}</p>
+    {current && <p>{quizStepStatus(current).detail}</p>}
     <fieldset ref={form} disabled={saving} className="quiz-editor">
       <legend className="sr-only">理解题编辑</legend>
       {draft.map((q, i) => <section key={q.id} className="teacher-quiz-card" aria-label={`第 ${i + 1} 题`}>
@@ -164,13 +188,20 @@ export function QuizzesTab() {
         <button onClick={() => {
           const defaults = current?.defaults ?? [];
           setDraft(structuredClone(defaults)); setError(null); setInvalidField(null);
-          setNotice(current && sameJsonValue(defaults, current.questions) ? "本步当前就是默认题目，无需保存。" : "已载入默认草稿，尚未保存。");
+          setNotice(current && sameJsonValue(defaults, current.questions) ? "本步当前就是默认题目，无需保存。" : "已把当前默认题目填进编辑区，点“保存并生效”后才生效。");
         }}>恢复默认</button>
         <button className="primary" disabled={!dirty || conflict} onClick={requestSave}>{saving ? "正在保存…" : "保存并生效"}</button>
       </div>
     </fieldset>
-    <section aria-label="学生预览" className="teacher-quiz-preview"><h3>学生预览（不显示答案）</h3>
-      {draft.map((q, i) => <fieldset key={q.id}><legend>{i + 1}. 【{q.kind === "true_false" ? "判断题" : "单选题"}】{q.prompt}</legend><div className="quiz-options">{q.options.map((o) => <label key={o.id}><input type="radio" name={`preview-${q.id}`} value={o.id} disabled={saving} />{o.label}</label>)}</div></fieldset>)}
+    <section aria-label="学生预览" className="teacher-quiz-preview"><h3>学生预览</h3>
+      <p className="muted">学生页面不标出正确选项；提交后逐题显示反馈：答错的题显示“提示”，答对的题显示“解析”，如下。</p>
+      {draft.map((q, i) => <fieldset key={q.id}><legend>{i + 1}. 【{q.kind === "true_false" ? "判断题" : "单选题"}】{q.prompt}</legend><div className="quiz-options">{q.options.map((o) => <label key={o.id}><input type="radio" name={`preview-${q.id}`} value={o.id} disabled={saving} />{o.label}</label>)}</div>
+        {/* The feedback as the student page words it (step-quiz.tsx): a bold verdict, then the hint or the explanation. */}
+        <dl className="teacher-quiz-feedback">
+          <dt>答错时显示</dt><dd><b>回答有误。</b>{q.hint.trim() || DEFAULT_WRONG_FEEDBACK}</dd>
+          <dt>答对后显示</dt><dd><b>回答正确。</b>{q.explanation.trim() || <span className="muted">（未填解析）</span>}</dd>
+        </dl>
+      </fieldset>)}
     </section>
     {confirmation && <ConfirmModal title={confirmation.title} message={confirmation.message} onConfirm={confirmation.run} onClose={() => setConfirmation(null)} />}
   </div>;

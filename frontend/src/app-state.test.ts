@@ -6,6 +6,7 @@ import {
   dropStepFromHistory,
   shouldDropStepOnLogin,
   stepFromSearch,
+  stepLinkNotice,
   shouldAutoShowIntro,
   storeAuthentication,
   urlWithStep,
@@ -21,13 +22,25 @@ class MemoryStorage {
 }
 
 describe("application URL state", () => {
-  test("accepts only the fixed 15-step range", () => {
+  test("accepts the fixed 15-step range; a larger step number opens step 15", () => {
     expect(stepFromSearch("?step=1")).toBe(1);
     expect(stepFromSearch("?step=15")).toBe(15);
-    expect(stepFromSearch("?step=16")).toBeNull();
-    for (const search of ["", "?step=0", "?step=17", "?step=1.5", "?step=bad", "?step=1e1", "?step=0x5", "?step=%207%20", "?step=07"]) {
+    expect(stepFromSearch("?step=16")).toBe(15);
+    expect(stepFromSearch("?step=99")).toBe(15);
+    expect(stepFromSearch("?step=123456789012345678901234567890")).toBe(15);
+    for (const search of ["", "?step=", "?step=0", "?step=-3", "?step=1.5", "?step=bad", "?step=1e1", "?step=0x5", "?step=%207%20", "?step=07"]) {
       expect(stepFromSearch(search)).toBeNull();
     }
+  });
+
+  test("an invalid ?step= gets a one-time notice naming the step opened instead; a valid or missing one none", () => {
+    for (const search of ["", "?step=", "?step=1", "?step=9", "?step=15", "?mode=demo"]) expect(stepLinkNotice(search, 3)).toBeNull();
+    expect(stepLinkNotice("?step=16", 15)).toBe("链接里的步骤 16 不存在（课程共 15 步），已打开步骤 15。");
+    expect(stepLinkNotice("?step=12345678", 15)).toBe("链接里的步骤 123456… 不存在（课程共 15 步），已打开步骤 15。");
+    expect(stepLinkNotice("?step=abc", 4)).toBe("链接里的步骤“abc”不是有效的步骤号，已按你的进度打开步骤 4。");
+    expect(stepLinkNotice("?step=0", 1)).toBe("链接里的步骤“0”不是有效的步骤号，已按你的进度打开步骤 1。");
+    expect(stepLinkNotice("?step=07", 2)).toContain("“07”");
+    expect(stepLinkNotice(`?step=${"x".repeat(40)}`, 2)).toContain("“xxxxxxxxxxxx…”");
   });
 
   test("updates only the step query while preserving other URL state", () => {

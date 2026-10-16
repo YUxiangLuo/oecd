@@ -5,6 +5,8 @@ import type { IndicatorSchema, Meta, StepStateApi } from "../../../types";
 import {
   IndicatorDataTable,
   IndicatorRequestBoundary,
+  NETWORK_COLUMN_UNITS,
+  NETWORK_UNITS_NOTE,
   IndicatorTable,
   type IndicatorStepState,
 } from "./indicator-table";
@@ -275,4 +277,29 @@ test("steps 2–5 tables use the compact cells that let step 5's nine columns fi
   const css = await Bun.file(new URL("./indicator-method.css", import.meta.url)).text();
   expect(css).toContain(".data-table.indicator-data-table th, .data-table.indicator-data-table td { padding-left: 8px; padding-right: 8px; }");
   expect(css).toContain(".data-table.indicator-data-table td.text-col { white-space: normal;");
+});
+
+test("step 5: the centrality headers and caption name their units; a small betweenness reads <1 (round 5)", () => {
+  const schema: IndicatorSchema = {
+    groups: [],
+    fields: {
+      country: { label: "国家", format: "number", desc: "" },
+      "weighted degree": { label: "加权总度", format: "amount", desc: "" },
+      degree: { label: "度", format: "count", desc: "" },
+      betweenesscentrality: { label: "介数", format: "count", desc: "" },
+      closnesscentrality: { label: "接近中心性", format: "number", desc: "" },
+    },
+  };
+  const view = render(
+    <IndicatorDataTable groupLabel="生产网络指标" schema={schema} units={NETWORK_COLUMN_UNITS}
+      columns={["country", "weighted degree", "degree", "betweenesscentrality", "closnesscentrality"]}
+      rows={[{ country: "LUX", "weighted degree": 1234.5, degree: 12, betweenesscentrality: 0.31, closnesscentrality: 0.5 }]}
+      year={2020} country="LUX" page={1} />,
+  );
+  const headers = [...view.container.querySelectorAll("thead th")].map((th) => th.textContent);
+  expect(headers).toEqual(["国家", "加权总度（百万美元）", "度（连接数）", "介数（未归一化）", "接近中心性"]);
+  expect(view.container.querySelector("caption")?.textContent).toContain("加权出度为百万美元");
+  expect(NETWORK_UNITS_NOTE).toContain("无量纲");
+  expect([...view.container.querySelectorAll("tbody td")].map((td) => td.textContent)).toEqual(["1,235", "12", "<1", "0.500"]);
+  cleanup();
 });

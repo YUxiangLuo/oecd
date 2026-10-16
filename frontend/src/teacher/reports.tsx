@@ -305,6 +305,27 @@ function ReportView({ accountId, queue, grader, semesters, backLabel = BACK_TO_L
   />;
 }
 
+/** The review as printed above the report: the saved one, or what is typed, marked unsaved; never the form itself. */
+export function GradePrintSummary({ data, score, feedback, dirty, grader }: {
+  data: Pick<TeacherReport, "state" | "score" | "feedback" | "graded_by" | "graded_at">;
+  score: string;
+  feedback: string;
+  dirty: boolean;
+  grader: string;
+}) {
+  const saved = !dirty && data.state === "graded" && data.score != null;
+  const shownScore = saved ? String(data.score) : score.trim();
+  const shownFeedback = (saved ? data.feedback : feedback).trim();
+  return (
+    <section className="grade-print-summary" aria-label="评阅（打印）">
+      <h3>评阅{dirty ? "（草稿，尚未保存）" : saved ? "" : "（尚未评分）"}</h3>
+      <p><b>分数：</b>{shownScore ? `${shownScore} 分` : "—"}</p>
+      <p><b>评语：</b>{shownFeedback || "（无评语）"}</p>
+      <p className="muted">评阅人：{saved ? `${data.graded_by ?? grader} · ${fmtTime(data.graded_at)}` : grader}</p>
+    </section>
+  );
+}
+
 export function GradeView({ data, grader, semesters = [], backLabel = BACK_TO_LIST, onBack, onReload, initialDraft, position, onPrevious, onNext, guardOwnedByParent = false }: {
   data: TeacherReport;
   grader: string;
@@ -413,8 +434,11 @@ export function GradeView({ data, grader, semesters = [], backLabel = BACK_TO_LI
         <a className="review-skip" href={`#${formHeadingId}`} onClick={skipToForm}>跳到评阅表单</a>
         <h3 ref={headingRef} tabIndex={-1} className="stage-chip review-student">{data.display_name}（{data.username}）</h3>
         <span className="muted">{data.enrollments.map((item) => enrollmentLabel(item, semesters)).join("；") || "未分班"} · 提交于 {fmtTime(data.submitted_at)}</span>
+        <button type="button" className="secondary sm review-print" onClick={() => window.print()}>打印</button>
       </div>
       {data.report_outdated && <p className="muted">{OUTDATED_REPORT_NOTE}</p>}
+      {/* Paper only (teacher.css): the grading panel is not printed, so the review goes on top of the report, read-only. */}
+      <GradePrintSummary data={data} score={score} feedback={feedback} dirty={dirty} grader={grader} />
       <div className="grade-split">
         <div className="grade-doc"><ReportMarkdown markdown={data.markdown} /></div>
         <aside className="grade-side"><div className="panel grade-panel">

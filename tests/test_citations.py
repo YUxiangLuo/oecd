@@ -36,6 +36,11 @@ def test_real_release_metadata_carries_oecd_attribution(tmp_path, monkeypatch):
     assert controls["generator_version"] == "2.0.0"
     assert "Not WDI data" in controls["observations_disclosure"]
     validate_data_sources(metadata)
+    # Students read the disclosure under the report's references: no module path, version or data-package column.
+    disclosure = "\n".join(report_source_disclosures(metadata))
+    assert "课程按固定规则生成的教学数据" in disclosure and "不能当作真实宏观数据引用" in disclosure
+    for internal in ("gvcsim.", controls["generator_version"], "生成器", "占位列"):
+        assert internal not in disclosure
 
 
 def test_ci_synthetic_release_is_never_attributed_as_oecd_observations(tmp_path, monkeypatch):

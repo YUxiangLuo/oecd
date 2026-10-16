@@ -26,8 +26,14 @@ export function formatMetric(value: number, format?: string): string {
     return stripNegativeZero(value.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits }));
   }
   // Degrees and eccentricity count edges or steps; unnormalised betweenness (a sum of shares over node pairs) is
-  // rounded to the same whole numbers, as in the report.
-  if (format === "count") return stripNegativeZero(value.toLocaleString("zh-CN", { maximumFractionDigits: 0 }));
+  // rounded to the same whole numbers, as in the report. A betweenness above 0 but below 0.5 is real (a node on a
+  // few of the shortest routes) and reads "<1", not the "0" of a node on none.
+  if (format === "count") {
+    // Rounding noise still reads 0, as for amounts.
+    if (Math.abs(value) < 1e-9) return "0";
+    if (Math.abs(value) < 0.5) return value > 0 ? "<1" : ">-1";
+    return stripNegativeZero(value.toLocaleString("zh-CN", { maximumFractionDigits: 0 }));
+  }
   // Counts (degree, eccentricity) are whole numbers: "43", not "43.000". Large dimensionless values (betweenness
   // reaches tens of thousands) read as grouped integers rather than widening the table with three decimals.
   if (Number.isInteger(value) || Math.abs(value) >= 100) {

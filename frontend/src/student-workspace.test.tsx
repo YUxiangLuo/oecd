@@ -4,6 +4,7 @@ import {
   carriedComparisonFor,
   carriedComparisonSource,
   latestComparison,
+  StepLinkNotice,
   StudentWorkspaceSkipLink,
   focusStepMainContent,
   stepMainContentId,
@@ -11,6 +12,18 @@ import {
 } from "./student-workspace";
 import { cleanup, render, renderHook, screen } from "@testing-library/react";
 import { ToastHost } from "./toast";
+
+describe("step link notice", () => {
+  test("says which step opened instead, as a status the student can dismiss", () => {
+    let dismissed = 0;
+    render(<StepLinkNotice text="链接里的步骤 16 不存在（课程共 15 步），已打开步骤 15。" onDismiss={() => { dismissed += 1; }} />);
+    expect(screen.getByRole("status").textContent).toContain("已打开步骤 15");
+    screen.getByRole("button", { name: "知道了" }).click();
+    expect(dismissed).toBe(1);
+    cleanup();
+    expect(renderToStaticMarkup(<StepLinkNotice text={null} />)).toBe("");
+  });
+});
 
 describe("student workspace skip link", () => {
   test("is the first native Tab stop and has one unique current-main target", () => {

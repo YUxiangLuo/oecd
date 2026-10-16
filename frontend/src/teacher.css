@@ -459,6 +459,10 @@
 .teacher-quiz-preview .quiz-options { display: grid; gap: 7px; }
 .teacher-quiz-preview .quiz-options label { display: flex; gap: 8px; padding: 7px 9px; cursor: pointer; }
 .teacher-quiz-preview .quiz-options input { accent-color: #4b47e0; }
+/* What the student sees after submitting: the hint for a wrong answer, the explanation for a right one. */
+.teacher-quiz-feedback { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 10px; margin: 10px 0 2px; font-size: 12.5px; }
+.teacher-quiz-feedback dt { color: #5b6170; }
+.teacher-quiz-feedback dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* The field a failed check pointed at, next to the message beside 保存并生效. */
 .quiz-editor [aria-invalid="true"] { border-color: #d0413a; box-shadow: 0 0 0 2px rgba(208, 65, 58, 0.18); }
@@ -467,15 +471,29 @@
 
 /* Printing a report under review: the report full width, the student named once; navigation and the grading
    panel are the workspace, not the report. (The report body's own print rules are in styles.css.) */
+/* On screen the grading panel holds the review; the summary is for paper. */
+.grade-print-summary { display: none; }
 @media print {
   .teacher-nav,
   .dash-header,
   .grade-side,
   .review-topbar .back-btn,
+  .review-topbar .review-print,
   .review-skip,
   .teacher-first-step {
     display: none !important;
   }
+  /* The review read-only above the report (the panel with its form and buttons is not printed). */
+  .grade-print-summary {
+    display: block;
+    margin: 0 0 12pt;
+    padding: 8pt 10pt;
+    border: 1px solid #c9ccd6;
+    border-radius: 4pt;
+    break-inside: avoid;
+  }
+  .grade-print-summary h3 { margin: 0 0 4pt; font-size: 12pt; }
+  .grade-print-summary p { margin: 2pt 0; white-space: pre-wrap; overflow-wrap: anywhere; }
   .teacher-layout,
   .teacher-main,
   .teacher-content,

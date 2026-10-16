@@ -24,3 +24,9 @@ test("teacher name keys remove default ignorables and blank-like characters", ()
   expect(searchKey("Ａ（秋）\ufe0f")).toBe(searchKey("a(秋)"));
   expect(searchKey("ΟΣ")).toBe("οσ");
 });
+
+test("a search ignores spaces: “张 三” finds “张三”, “2026秋” finds “2026 秋”", () => {
+  expect(searchKey("张 三")).toBe(searchKey("张三"));
+  expect(searchKey("2026 秋").includes(searchKey("2026秋"))).toBe(true);
+  expect(searchKey("国贸　1 班")).toBe("国贸1班");
+});

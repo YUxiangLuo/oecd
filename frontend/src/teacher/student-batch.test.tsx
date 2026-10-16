@@ -6,7 +6,7 @@ import {
   BATCH_DISCARD_CONFIRM, batchClassOptions, detectRosterSeparator, parseRoster, ROSTER_COLUMNS_MISSING, rosterFileContent, rosterFileName,
   StudentBatchModal,
 } from "./student-batch";
-import { STUDENT_DISCARD_CONFIRM, StudentModal } from "./students";
+import { newStudentServerField, STUDENT_DISCARD_CONFIRM, StudentModal } from "./students";
 
 afterEach(cleanup);
 
@@ -284,5 +284,34 @@ test("a pasted roster or a typed student is not dropped by a click beside the di
     expect(closed).toBe(2);
   } finally {
     confirm.mockRestore();
+  }
+});
+
+test("a username or 学号 the server says is taken marks its own field", async () => {
+  expect(newStudentServerField(new ApiError(409, "用户名 s01 已存在", ""))).toBe("username");
+  expect(newStudentServerField(new ApiError(409, "学号 2024001 已被 张三（s02）使用", ""))).toBe("student_no");
+  expect(newStudentServerField(new ApiError(400, "用户名只能包含字母、数字、下划线、点与连字符", ""))).toBe("username");
+  expect(newStudentServerField(new ApiError(400, "班级已归档", ""))).toBeNull();
+  expect(newStudentServerField(new Error("用户名 s01 已存在"))).toBeNull();
+
+  const username = /用户名/;
+  for (const [message, label] of [["用户名 s01 已存在", username], ["学号 2024001 已被 张三（s02）使用", "学号（选填）"]] as const) {
+    const refused = new ApiError(409, message, "");
+    const view = render(<StudentModal onClose={() => {}} onSubmit={async () => { throw refused; }} />);
+    fireEvent.change(screen.getByLabelText(/用户名/), { target: { value: "s01" } });
+    fireEvent.change(screen.getByLabelText("姓名"), { target: { value: "李四" } });
+    fireEvent.change(screen.getByLabelText("学号（选填）"), { target: { value: "2024001" } });
+    fireEvent.change(screen.getByLabelText(/初始密码/), { target: { value: "long-password-123" } });
+    fireEvent.click(screen.getByRole("button", { name: "创建账号" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain(message);
+    const field = screen.getByLabelText(label);
+    await waitFor(() => expect(document.activeElement).toBe(field));
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    expect(field.getAttribute("aria-describedby")?.split(" ")).toContain(alert.id);
+    for (const other of [username, "姓名", "学号（选填）"].filter((name) => name !== label)) {
+      expect(screen.getByLabelText(other).getAttribute("aria-invalid")).toBeNull();
+    }
+    view.unmount();
   }
 });

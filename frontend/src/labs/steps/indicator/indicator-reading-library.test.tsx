@@ -62,4 +62,28 @@ describe("indicator PDF reading library", () => {
     expect(view.getAllByText("原始资料 · 年份未标注 · 方法说明（历史资料）").length)
       .toBeGreaterThanOrEqual(2);
   });
+
+  test("the PDF preview is one Tab stop with its own focus ring; Enter moves into the preview", () => {
+    const view = render(<IndicatorReadingLibrary topic="trade" />);
+    const preview = view.getByLabelText("总贸易流分解指标说明（课程校订版） PDF 预览");
+    // The plugin never shows :focus-visible and its toolbar adds stops: the object is out of the Tab order and
+    // the frame around it is the one stop.
+    expect(preview.getAttribute("tabindex")).toBe("-1");
+    const frame = view.getByRole("group", { name: /PDF 预览区，按 Enter 进入预览/ });
+    expect(frame.getAttribute("tabindex")).toBe("0");
+    expect(frame.contains(preview)).toBe(true);
+    frame.focus();
+    fireEvent.keyDown(frame, { key: "Enter" });
+    expect(document.activeElement).toBe(preview);
+  });
+
+  test("a browser without an inline PDF viewer gets the open-in-new-tab link and no empty preview stop", () => {
+    Object.defineProperty(navigator, "pdfViewerEnabled", { configurable: true, get: () => false });
+    try {
+      const view = render(<IndicatorReadingLibrary topic="trade" />);
+      expect(view.queryByLabelText(/PDF 预览/)).toBeNull();
+      expect(view.getByText("当前浏览器无法内嵌显示这份 PDF。")).toBeTruthy();
+      expect(view.getByRole("link", { name: "请在新标签页中打开" })).toBeTruthy();
+    } finally { delete (navigator as { pdfViewerEnabled?: boolean }).pdfViewerEnabled; }
+  });
 });

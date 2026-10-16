@@ -233,8 +233,9 @@ export function NameModal({ title, label, initial, refreshNotice, onClose, onSub
     inputRef.current?.focus();
   };
   const submit = async () => {
-    // Comparison folds typography; display text must keep the teacher's punctuation and emoji.
-    const normalized = name.trim();
+    // Comparison folds typography; display text must keep the teacher's punctuation and emoji. Inner runs of spaces
+    // become one, as the server stores and compares the name ("2026  秋" is "2026 秋").
+    const normalized = name.trim().replace(/\s+/g, " ");
     if (!searchKey(normalized)) return invalid(`${label}不能为空`);
     if (/[\p{Cs}\u0000]/u.test(normalized)) return invalid(`${label}包含无效的 Unicode 字符`);
     const length = [...normalized].length;

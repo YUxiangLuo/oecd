@@ -14,6 +14,10 @@ describe("formatMetric", () => {
     // Whole counts (degree, eccentricity) carry no decimals.
     expect(formatMetric(43, "number")).toBe("43");
     expect(formatMetric(98.105, "count")).toBe("98");
+    // A small but real betweenness is not the 0 of a node on no shortest route (round 5).
+    expect(formatMetric(0.3, "count")).toBe("<1");
+    expect(formatMetric(0.6, "count")).toBe("1");
+    expect(formatMetric(0, "count")).toBe("0");
   });
 
   test("shows large dimensionless metrics as grouped integers instead of x.000", () => {

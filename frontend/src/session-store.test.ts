@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { emptySession, isValidSession, patchStep, readShared, readStep, sameMaterialContent, writeShared } from "./session-store";
+import { emptySession, isValidSession, mergeSessions, patchStep, readShared, readStep, sameMaterialContent, writeShared } from "./session-store";
 import { SESSION_VERSION } from "./types";
 
 describe("simple session store", () => {
@@ -29,5 +29,27 @@ describe("simple session store", () => {
     expect(readShared<Record<string, unknown>>(session, "regression_settings")).toEqual({ trade: { method: "did" } });
     expect(isValidSession(session)).toBe(true);
     expect(isValidSession({ ...session, shared: { regression_history: { data: {} } } })).toBe(false);
+  });
+});
+
+describe("mergeSessions", () => {
+  const base = patchStep(patchStep(emptySession(), 10, { compared: ["CAN"], browse_selection: { first: "CAN" } }), 15, { research_question: "a" });
+  test("edits to different steps combine", () => {
+    const local = patchStep(base, 15, { research_question: "mine" });
+    const remote = patchStep(base, 11, { run: { y: 1 } });
+    const merged = mergeSessions(base, local, remote)!;
+    expect(merged.steps["15"].data).toEqual({ research_question: "mine" });
+    expect(merged.steps["11"].data).toEqual({ run: { y: 1 } });
+  });
+  test("browsing in one tab and recording in another combine within a step; this tab's view wins a tie", () => {
+    const local = patchStep(base, 10, { browse_selection: { first: "MEX" } });
+    const remote = patchStep(base, 10, { compared: ["JPN"], browse_selection: { first: "JPN" } });
+    const merged = mergeSessions(base, local, remote)!;
+    expect(merged.steps["10"].data).toEqual({ compared: ["JPN"], browse_selection: { first: "MEX" } });
+  });
+  test("both changing a step's material differently is a conflict; changing it alike is not", () => {
+    expect(mergeSessions(base, patchStep(base, 15, { research_question: "mine" }), patchStep(base, 15, { research_question: "theirs" }))).toBeNull();
+    const same = patchStep(base, 15, { research_question: "same" });
+    expect(mergeSessions(base, same, same)!.steps["15"].data).toEqual({ research_question: "same" });
   });
 });

@@ -23,7 +23,7 @@ def test_course_stage_names_match_login_report_gate_and_manual():
     assert flow is not None
     assert json.loads(flow[1]) == list(STAGE_NAMES.values())
 
-    report = (root / "frontend/src/labs/steps/report-lab.tsx").read_text()
+    report = (root / "frontend/src/labs/steps/report-lab-logic.ts").read_text()
     groups = re.findall(r'\{ label: "([^"]+)", first: (\d+), last: (\d+) \}', report)
     assert [label for label, _, _ in groups] == list(STAGE_NAMES.values())
     for step in STEPS:

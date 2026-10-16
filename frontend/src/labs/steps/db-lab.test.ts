@@ -23,6 +23,9 @@ import {
   STEP1_ACCOUNT_LEGEND,
   STEP1_OUT_IDENTITY_GUIDE,
   dbRowSumText,
+  autoCellHow,
+  fmtDbCell,
+  STEP1_CELL_LEGEND,
 } from "./db-lab";
 
 test("Step 1 shows a compact automatic integrity status without student action", () => {
@@ -358,4 +361,33 @@ test("step 1 所选列之和 reads ≈ when the cells as shown do not add up to 
   expect(dbRowSumText([12.34, 3.12], 15.46)).toBe("15.46");
   expect(dbRowSumText([null, 0], 0)).toBe("0");
   expect(dbRowSumText([1200.004, 0.001], 1200.005)).toBe("≈ 1,200.01");
+});
+
+test("step 1 cells keep trailing zeros, so a column reads at the same decimals for its size (round 5)", () => {
+  // ROW → USA 2016: "90" and "3.55" sat beside "888.11" and "2.442".
+  expect(fmtDbCell(90)).toBe("90.00");
+  expect(fmtDbCell(3.55)).toBe("3.550");
+  expect(fmtDbCell(0.044)).toBe("0.0440");
+  expect(fmtDbCell(36160.55)).toBe("36,160.55");
+  expect(fmtDbCell(9.9996)).toBe("10.00");
+  expect(fmtDbCell(-2.5)).toBe("-2.500");
+  expect(fmtDbCell(0)).toBe("0");
+  expect(fmtDbCell(0.00001)).toBe("1e−5");
+  expect(fmtDbCell(null)).toBe("—");
+  expect(STEP1_CELL_LEGEND).toContain("不足补 0");
+  expect(STEP1_CELL_LEGEND).toContain("蓝色越深");
+  expect(STEP1_CELL_LEGEND).toContain("红色表示负值");
+});
+
+test("the default cell's line says 本页 only while the table shows the slice it came from (round 5)", () => {
+  const selection = { year: 2020, table: "z" as const, rowCountry: "CHN", colCountry: "USA", rowSector: "", colSector: "" };
+  const { observation } = captureDbObservation(selection, { row: "CHN_C26", column: "USA_C26", value: 1 });
+  const auto = { ...observation!, auto: true };
+  expect(autoCellHow(auto, { ...selection, page: 1 })).toBe("系统先记录了本页数值最大的一格；点表中其他数值即改为记录那一格。");
+  const moved = autoCellHow(auto, { ...selection, year: 2016, rowCountry: "ROW", page: 1 });
+  expect(moved).toBe("系统先记录了 2020 年中间投入 Z 表（供给国 CHN 中国 → 使用国 USA 美国）当时页面上数值最大的一格；点表中其他数值即改为记录那一格。");
+  expect(autoCellHow(auto, { ...selection, page: 2 })).not.toContain("本页");
+  // Accounts have no using country.
+  const accounts = captureDbObservation({ ...selection, table: "accounts", colCountry: "" }, { row: "CHN_C26", column: "OUT", value: 1 }).observation!;
+  expect(autoCellHow(accounts, { ...selection, page: 1 })).toContain("2020 年账户项表（CHN 中国）");
 });

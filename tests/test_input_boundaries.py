@@ -314,10 +314,10 @@ def test_lookalike_semester_and_class_names_collide(teaching_db):
     client = client_for("teacher")
     created = client.post("/api/classroom/semesters", json={"name": "2026  秋"})
     assert created.status_code == 200, created.text
-    assert created.json()["name"] == "2026  秋"
-    # Comparison preserves interior whitespace; NFKC, invisibles and edge
-    # whitespace are normalized without collapsing the displayed name.
-    for lookalike in ["2026　　秋", "２０２６  秋", "2026  ​秋", " 2026  秋 "]:
+    # Inner runs of whitespace become one space, in the stored name as in its comparison key; NFKC, invisibles
+    # and edge whitespace are normalized for comparison only.
+    assert created.json()["name"] == "2026 秋"
+    for lookalike in ["2026 秋", "2026　　秋", "２０２６  秋", "2026  ​秋", " 2026  秋 ", "2026\t秋"]:
         response = client.post("/api/classroom/semesters", json={"name": lookalike})
         assert response.status_code == 409, (lookalike, response.text)
     term_id = created.json()["id"]

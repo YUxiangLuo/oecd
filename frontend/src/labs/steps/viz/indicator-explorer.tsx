@@ -61,6 +61,9 @@ import { MaxCountriesNote } from "./add-country";
 import { Year2020Note } from "./scaffold";
 import { carriedCountryNote } from "../indicator/indicator-table";
 
+/** Steps 6–8 历年变化 with one industry: why the global median and band are not drawn. */
+export const INDUSTRY_TREND_NO_REFERENCE = "全球中位数与中间 50% 按国家整体计算；选择了行业时只显示所选国家的同行业走势，不画全球参照。";
+
 /** A saved browsing selection, if it still names a country of this release as A (unknown comparison countries go). */
 export function browsedSelection(raw: unknown, countries: readonly string[]): IndicatorSelection | null {
   if (typeof raw !== "object" || raw === null) return null;
@@ -446,6 +449,10 @@ export function IndicatorExplorer({
         return finiteValue(raw) && raw <= 0 ? [{ country, year: at, value: raw }] : [];
       }))
     : [];
+  // Another year range helps only if some affected country has a usable total in some year of the range; a total of 0
+  // (or below) in every year is not fixed by moving the years.
+  const totalIssueEveryYear = [...new Set(totalIssues.map((item) => item.country))].every((country) =>
+    chartYears.every((at) => totalIssues.some((item) => item.country === country && item.year === at)));
   // Name the actual reason the material cannot be saved instead of one catch-all sentence.
   const blockedReason =
     view === "positioning"
@@ -462,7 +469,7 @@ export function IndicatorExplorer({
             ? "趋势至少需要两个年份；请把起始年份和结束年份设为不同年份。"
             : !completeComposition
               ? totalIssues.length
-                ? `${joinCountries([...new Set(totalIssues.map((item) => item.country))])}${industry ? `在 ${sectorLabel(industry)}` : ""}的${label(activeComposition!.total)}${totalIssues.every((item) => item.value === 0) ? "为 0" : totalIssues.every((item) => item.value < 0) ? "为负" : "为 0 或为负"}，构成份额无法计算（不是缺少数据）；请换一个${industry ? "行业或" : ""}国家${timeView ? "，或调整年份范围" : ""}。`
+                ? `${joinCountries([...new Set(totalIssues.map((item) => item.country))])}${industry ? `在 ${sectorLabel(industry)}` : ""}的${label(activeComposition!.total)}${totalIssues.every((item) => item.value === 0) ? "为 0" : totalIssues.every((item) => item.value < 0) ? "为负" : "为 0 或为负"}，构成份额无法计算（不是缺少数据）；请换一个${industry ? "行业或" : ""}国家${timeView && !totalIssueEveryYear ? "，或调整年份范围" : ""}。`
                 : "构成图需要每个分项都有数据，且总量大于 0；请换国家、行业或年份。"
               : view === "industry" && !rankComplete.length && rankGaps.length
                 ? `${year} 年显示的行业里，没有一个行业所有所选国家都有读数（${rankGapText}）；请换国家${rankGapsUndefined || years.length < 2 ? "" : "或换一个年份"}。`
@@ -978,6 +985,8 @@ export function IndicatorExplorer({
       ) : (
         <>
           <Fragment key={chartKey}>
+          {/* As 国家对比 says it: an industry scope loads only the selected countries, so no global reference. */}
+          {view === "trend" && industry && <p className="muted">{INDUSTRY_TREND_NO_REFERENCE}</p>}
           {view === "trend" && (
             <IndicatorTrendChart
               rows={scoped}

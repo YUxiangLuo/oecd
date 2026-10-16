@@ -620,3 +620,25 @@ test("the rubric words the generated data as the student pages do, not as a simu
   expect(boundary).toContain("汇率变动");
   expect(boundary).not.toContain("模拟");
 });
+
+test("the review page prints: a button calls the browser's print, and the paper carries the score and feedback read-only", () => {
+  // happy-dom has no window.print.
+  const original = window.print;
+  const print = mock(() => {});
+  window.print = print;
+  try {
+    const { container } = render(<GradeView data={report} grader="teacher" onBack={() => {}} onReload={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "打印" }));
+    expect(print).toHaveBeenCalledTimes(1);
+    const summary = container.querySelector(".grade-print-summary") as HTMLElement;
+    // Above the report (the grading panel itself is not printed), the saved review with its grader.
+    expect(summary.compareDocumentPosition(container.querySelector(".grade-doc")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(summary.textContent).toBe("评阅分数：90 分评语：旧评语评阅人：teacher · 2026-08-13 00:02");
+    expect(summary.querySelector("textarea, input, button")).toBeNull();
+    // What is typed and not saved prints as a draft.
+    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "75" } });
+    expect(summary.textContent).toBe("评阅（草稿，尚未保存）分数：75 分评语：旧评语评阅人：teacher");
+  } finally {
+    window.print = original;
+  }
+});

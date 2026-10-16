@@ -6,7 +6,7 @@
  * 未开启时下面这段快捷账号 UI 与口令常量会被一起摇掉,不进产物。
  */
 import { useEffect, useRef, useState } from "react";
-import { api, isApiErrorStatus } from "./api";
+import { api, ApiError, isApiErrorStatus } from "./api";
 import { LogoMark } from "./brand";
 import type { LoginResponse } from "./types";
 import { userFacingRequestError } from "./user-facing-error";
@@ -74,6 +74,14 @@ export function chooseDemoStudent(
   const normalized = Number.isFinite(randomValue) ? Math.min(Math.max(randomValue, 0), 0.999999999) : 0;
   const student = candidates[Math.floor(normalized * candidates.length)]!;
   return { student, nextSeen: [...cycleSeen, student.username] };
+}
+
+/** A user name typed by hand is a choice, not a mistake: say which account it is and how to get the offered one. */
+function ownAccountHint(username: string, offer: string): string {
+  const name = username.trim();
+  return name
+    ? `你填写的是 ${name}；${offer}，点上方“学生身份”。`
+    : `${offer}，点上方“学生身份”。`;
 }
 
 /** 左侧背景:静态勾勒的贸易网络(手工布点,非装饰性随机) */
@@ -157,19 +165,48 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
   // The student the server confirmed idle; null before it answers (or outside the suggestion flow).
   const [confirmedStudent, setConfirmedStudent] = useState<string | null>(null);
   const userRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   // A rate-limit message carries the wait time; typing must not hide it (a retry would only hit 429 again).
   const keepError = useRef(false);
   const clearError = () => { if (!keepError.current) setError(null); };
   const [busy, setBusy] = useState(false);
   const submitRef = useRef<HTMLButtonElement>(null);
+  // After a 429 with Retry-After: the time sign-in is accepted again, and the seconds left (shown on the button).
+  const [retryAt, setRetryAt] = useState<number | null>(null);
+  const [retryLeft, setRetryLeft] = useState(0);
+  // Where focus goes after a failure: a wrong password is retyped, anything else is retried from the button.
+  const [errorFocus, setErrorFocus] = useState<{ target: "password" | "submit" } | null>(null);
 
   useEffect(() => {
-    if (error) submitRef.current?.focus();
-  }, [error]);
+    if (!errorFocus) return;
+    if (errorFocus.target === "password" && passwordRef.current) {
+      passwordRef.current.focus();
+      passwordRef.current.select();
+    } else submitRef.current?.focus();
+  }, [errorFocus]);
 
-  // "现在没有网络" notices and network errors are stale once the connection is back.
-  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    if (retryAt == null) return;
+    const tick = () => {
+      const left = Math.ceil((retryAt - Date.now()) / 1000);
+      if (left > 0) { setRetryLeft(left); return; }
+      // The wait is over: the limit message no longer applies and the button signs in again.
+      window.clearInterval(timer);
+      setRetryAt(null);
+      setRetryLeft(0);
+      keepError.current = false;
+      setError(null);
+    };
+    const timer = window.setInterval(tick, 250);
+    tick();
+    return () => window.clearInterval(timer);
+  }, [retryAt]);
+  const waiting = retryAt != null && retryLeft > 0;
+
+  // "现在没有网络" notices and network errors are stale once the connection is back. Starts from the browser's own
+  // state: a page shown offline (退出登录 without a network) must see the later "online" as a change.
+  const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine !== false);
   useEffect(() => {
     const back = () => {
       setOnline(true);
@@ -189,7 +226,9 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
   }, [online, notice]);
   const shownNotice = notice && !(noticeCleared && notice.includes("没有网络"))
     ? notice
-    : noticeCleared ? "网络已恢复，可以重新登录。" : null;
+    : noticeCleared
+      ? notice?.includes("未保存的修改") ? "网络已恢复。重新登录后，未保存的修改会自动保存。" : "网络已恢复，可以重新登录。"
+      : null;
 
   // A random pick per tab collides across a classroom; the server knows which demo accounts are idle and
   // spreads simultaneous page loads. Its suggestion replaces the local pick unless the user already typed.
@@ -286,6 +325,8 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // During the rate-limit wait the button is only marked unavailable (it keeps focus): a press does nothing.
+    if (waiting) return;
     setBusy(true);
     setError(null);
     try {
@@ -294,9 +335,16 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
       if (demoMode) rememberDemoStudent(response.user.username);
       onLogin(response);
     } catch (err) {
-      keepError.current = isApiErrorStatus(err, 429);
+      const limited = isApiErrorStatus(err, 429);
+      keepError.current = limited;
       setError(userFacingRequestError(err, "登录失败"));
+      const wait = limited && err instanceof ApiError ? err.retryAfter : undefined;
+      if (wait) {
+        setRetryLeft(Math.ceil(wait));
+        setRetryAt(Date.now() + wait * 1000);
+      }
       setBusy(false);
+      setErrorFocus({ target: isApiErrorStatus(err, 401) ? "password" : "submit" });
     }
   };
 
@@ -373,14 +421,18 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
           />
           <label className="login-label" htmlFor="login-pass">密码</label>
           <input
+            ref={passwordRef}
             id="login-pass" className="login-input" type="password" value={password} required
             autoFocus={Boolean(username) && !password}
             autoComplete="current-password" onChange={(e) => { edited.current = true; setPassword(e.target.value); clearError(); }}
           />
           {error && <div className="error-box" role="alert" style={{ marginTop: 14, padding: "10px 14px" }}>{error}</div>}
           {/* With both fields prefilled (demo accounts), start on the button: Enter signs in. */}
-          <button ref={submitRef} className="login-btn" type="submit" disabled={busy || awaitingSuggestion} autoFocus={Boolean(username && password)}>
-            {busy ? "正在登录…" : awaitingSuggestion ? "正在分配空闲账号…" : "登录"}
+          <button
+            ref={submitRef} className="login-btn" type="submit" disabled={busy || awaitingSuggestion}
+            aria-disabled={waiting || undefined} autoFocus={Boolean(username && password)}
+          >
+            {busy ? "正在登录…" : awaitingSuggestion ? "正在分配空闲账号…" : waiting ? `${retryLeft} 秒后可再次登录` : "登录"}
           </button>
           <div className="login-hint">
             {demoMode && !returningUsername && (noIdleDemoStudent
@@ -391,13 +443,13 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
                 ? <>已为你预填上次在这台电脑用过的演示学生账号，之前的进度都在。在这台电脑的浏览器里再次登录，仍是这个账号。{" "}
                   <button type="button" className="login-hint-link" onClick={switchToIdleStudent}>不是你的？换一个空闲账号</button><br /></>
               : previousDemoStudent
-                ? <>这不是上次在这台电脑用的账号。点上方“学生身份”可换回。<br /></>
+                ? <>{ownAccountHint(username, "如需换回上次在这台电脑用的演示账号")}<br /></>
               : suggestion === "failed"
                 ? <>暂时无法分配空闲账号，当前预填的账号可能有同学在用。请稍后刷新页面，或向老师申请账号。<br /></>
                 : suggestion === "pending"
                   ? <>正在分配空闲的演示账号…<br /></>
                   : confirmedStudent !== null && username !== confirmedStudent
-                    ? <>这不是系统分配的账号。点上方“学生身份”可换回。<br /></>
+                    ? <>{ownAccountHint(username, "如需系统分配的空闲账号")}<br /></>
                     : <>已为你预填一个空闲的演示学生账号。用它登录后，在这台电脑的浏览器里再次登录仍是这个账号。<br /></>)}
             登录用于区分每位同学的实验记录。刷新页面不会丢失进度。
           </div>

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { api } from "./api";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { api, ApiError } from "./api";
 import {
   chooseDemoStudent,
   demoStudentCredentials,
@@ -265,7 +265,9 @@ describe("demo-mode login UI source behavior", () => {
         expect((document.querySelector(".login-btn") as HTMLButtonElement).disabled).toBe(false);
         // Typing another account is not passed off as the remembered one; the chip brings it back.
         fireEvent.change(document.getElementById("login-user")!, { target: { value: "student20" } });
-        expect(document.querySelector(".login-hint")?.textContent).toContain("这不是上次在这台电脑用的账号");
+        // Said as a fact, not as a mistake: the name typed, and how to get the remembered account back.
+        expect(document.querySelector(".login-hint")?.textContent).toContain("你填写的是 student20；如需换回上次在这台电脑用的演示账号，点上方“学生身份”。");
+        expect(document.querySelector(".login-hint")?.textContent).not.toContain("这不是");
         fireEvent.click(chip);
         expect(inputValue("login-user")).toBe("student07");
       });
@@ -341,5 +343,58 @@ describe("login failure presentation", () => {
     } finally {
       api.login = original;
     }
+  });
+
+  test("a wrong password puts focus on the password, selected for retyping", async () => {
+    const login = spyOn(api, "login").mockRejectedValue(new ApiError(401, "用户名或密码错误", "登录失败"));
+    try {
+      render(<LoginPage onLogin={() => {}} />);
+      fireEvent.change(document.getElementById("login-user")!, { target: { value: "student43" } });
+      fireEvent.change(document.getElementById("login-pass")!, { target: { value: "wrong-one" } });
+      fireEvent.submit(document.querySelector("form")!);
+      await screen.findByRole("alert");
+      const password = document.getElementById("login-pass") as HTMLInputElement;
+      await waitFor(() => expect(document.activeElement).toBe(password));
+      expect([password.selectionStart, password.selectionEnd]).toEqual([0, "wrong-one".length]);
+    } finally { login.mockRestore(); }
+  });
+
+  test("a rate limit counts down on the button, which stays focused but unavailable, and clears at the end", async () => {
+    const login = spyOn(api, "login").mockRejectedValue(new ApiError(429, "尝试次数过多，请约 2 秒后再试。", "登录失败", 2));
+    try {
+      render(<LoginPage onLogin={() => {}} />);
+      fireEvent.change(document.getElementById("login-user")!, { target: { value: "student43" } });
+      fireEvent.change(document.getElementById("login-pass")!, { target: { value: "x" } });
+      fireEvent.submit(document.querySelector("form")!);
+      expect((await screen.findByRole("alert")).textContent).toContain("尝试次数过多");
+      const button = document.querySelector<HTMLButtonElement>(".login-btn")!;
+      await waitFor(() => expect(document.activeElement).toBe(button));
+      expect(button.getAttribute("aria-disabled")).toBe("true");
+      expect(button.disabled).toBe(false);
+      expect(button.textContent).toMatch(/^[12] 秒后可再次登录$/);
+      // Pressing it during the wait sends nothing; typing does not hide the wait either.
+      fireEvent.submit(document.querySelector("form")!);
+      fireEvent.change(document.getElementById("login-pass")!, { target: { value: "xy" } });
+      expect(login).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("alert")).toBeTruthy();
+      // Real time passes (Testing Library's waitFor stalls timers under Bun): poll until the wait is over.
+      const until = Date.now() + 3500;
+      while (screen.queryByRole("alert") && Date.now() < until) await act(() => new Promise((done) => setTimeout(done, 100)));
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(button.getAttribute("aria-disabled")).toBeNull();
+      expect(button.textContent).toBe("登录");
+    } finally { login.mockRestore(); }
+  });
+
+  test("a page shown offline (退出登录 without a network) updates its notice when the connection returns", async () => {
+    let connected = false;
+    Object.defineProperty(navigator, "onLine", { configurable: true, get: () => connected });
+    try {
+      render(<LoginPage notice="已退出登录。现在没有网络，未保存的修改还在本页；联网后在这里重新登录，就会自动保存。" onLogin={() => {}} />);
+      expect(screen.getByRole("status").textContent).toContain("现在没有网络");
+      connected = true;
+      act(() => { window.dispatchEvent(new Event("online")); });
+      await waitFor(() => expect(screen.getByRole("status").textContent).toBe("网络已恢复。重新登录后，未保存的修改会自动保存。"));
+    } finally { delete (navigator as { onLine?: boolean }).onLine; }
   });
 });

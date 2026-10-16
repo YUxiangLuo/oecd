@@ -285,6 +285,21 @@ describe("trend cards name the empty year and say why (round 12)", () => {
   });
 });
 
+test("industry ranking bars keep a long country name on one line (HKG 中国香港, round 5)", () => {
+  const view = render(
+    <IndicatorPairBars countries={["BRN", "IDN", "HKG"]} unit="无量纲"
+      groups={[{ key: "C20", label: "C20 化学品", values: [1.75, 1.2, 0.546] }]} />,
+  );
+  const rows = [...view.container.querySelectorAll<HTMLElement>(".pair-bar-group > div")];
+  // One width for every row, wide enough for "IDN 印度尼西亚" (3 Latin letters, a space and 5 CJK characters).
+  const widths = new Set(rows.map((row) => row.style.gridTemplateColumns.split(" ")[0]));
+  expect(widths.size).toBe(1);
+  expect(parseFloat([...widths][0])).toBeGreaterThanOrEqual(7.4);
+  expect((rows[2].firstElementChild as HTMLElement).style.whiteSpace).toBe("nowrap");
+  expect(rows[2].firstElementChild!.textContent).toBe("HKG 中国香港");
+  cleanup();
+});
+
 describe("trend cards name the industry when the scope is one industry (round 21)", () => {
   const readings = [2016, 2020].map((year) => ({ country: "JPN", year, value: year === 2016 ? 0.13084 : 0.14945 }));
 
@@ -302,6 +317,34 @@ describe("trend cards name the industry when the scope is one industry (round 21
     expect(text).toContain("无产出，不排名");
     expect(text).toContain("2016、2020 年该行业在 LUX 卢森堡没有产出");
     expect(text).not.toContain("第 76");
+    cleanup();
+  });
+
+  test("step 9 BRN vs HKG·B05_06: a comparison country with no output is not compared as a real 0 (round 5)", () => {
+    const rows = [2016, 2020].flatMap((year) => [
+      { country: "BRN", year, value: year === 2016 ? 7426 : 8314 },
+      { country: "HKG", year, value: 0 },
+      { country: "DEU", year, value: year === 2016 ? 6000 : 11000 },
+    ]);
+    const reference = [2016, 2020].map((year) => ({ year, n: 70, p25: 10, median: 500, p75: 2000, ranks: { BRN: 26, DEU: 30 }, ties: { BRN: 1, DEU: 1 }, noOutput: ["HKG"] }));
+    const view = render(<TrendSummary readings={rows} countries={["BRN", "HKG", "DEU"]} years={[2016, 2020]} unit="百万美元" distribution={reference} sameIndustry industry="B05_06" />);
+    const cards = [...view.getByLabelText("趋势读数").children].map((card) => card.textContent ?? "");
+    const hkg = cards.find((card) => card.includes("与对比国家 HKG"))!;
+    expect(hkg).toContain("无产出，不比较差距");
+    expect(hkg).toContain("2016、2020 年该行业在 HKG 中国香港没有产出，读数 0 不是真实的 0，暂不比较差距");
+    expect(hkg).not.toContain("比它高");
+    // A comparison country with output is still compared.
+    expect(cards.find((card) => card.includes("与对比国家 DEU"))).toContain("比它低");
+    cleanup();
+  });
+
+  test("step 9: the change reads at the decimals of the two readings under it (BRN C26: 10 → 11, round 5)", () => {
+    const small = [2016, 2020].map((year) => ({ country: "BRN", year, value: year === 2016 ? 10.42 : 10.997 }));
+    const view = render(<TrendSummary readings={small} countries={["BRN"]} years={[2016, 2020]} unit="百万美元" sameIndustry industry="C26" />);
+    const own = view.getByLabelText("趋势读数").children[0].textContent ?? "";
+    expect(own).toContain("+1 百万美元");
+    expect(own).toContain("10 → 11");
+    expect(own).not.toContain("0.577");
     cleanup();
   });
 

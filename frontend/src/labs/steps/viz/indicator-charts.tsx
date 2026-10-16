@@ -68,6 +68,13 @@ const magnitudeReading = (value: number, unit: string, digits?: number) => {
   return /^0(\.0+)?( |$)/.test(reading) ? null : reading;
 };
 
+/** A country label's width in em: a CJK character is about 1em, a Latin letter, digit or space about 0.62em. */
+export const labelEm = (country: string) =>
+  [...countryLabel(country)].reduce((width, char) => width + (/[⺀-鿿]/.test(char) ? 1 : 0.62), 0);
+
+/** Step 9: a comparison where either side has no output in the industry (see {@link NO_OUTPUT}). */
+export const NO_OUTPUT_GAP = "无产出，不比较差距";
+
 /** Under the trend cards, as the report says it (report_observed): a change is the unrounded difference, so it can
  *  differ in the last digit from the two readings shown under it (“+0.524” beside “16.743% → 17.266%”). */
 export const CHANGE_ROUNDING_NOTE = "变化按未取整的原值计算，可能与两端读数之差相差末位 1。";
@@ -156,7 +163,21 @@ export function TrendSummary({
   const endRef = distribution.find((item) => item.year === lastYear);
   const startRank = startRef?.ranks[first];
   const endRank = endRef?.ranks[first];
+  /** Step 9: the end years in which the industry has no output in `country` (its 0 is not a reading). */
+  const idleYears = (country: string) =>
+    [...new Set([startRef, endRef].filter((ref) => ref?.noOutput?.includes(country)).map((ref) => ref!.year))];
   const gapCards = others.map((second) => {
+    // A 0 for no output is not compared, as it is not ranked: neither side's gap is a real difference.
+    const idle = [first, second].map((country) => ({ country, years: idleYears(country) })).filter((item) => item.years.length);
+    if (idle.length) {
+      return (
+        <div key={second}>
+          <span>与对比国家 {scopeLabel(second, industry)}</span>
+          <b>{NO_OUTPUT_GAP}</b>
+          <small>{`${idle.map((item) => `${item.years.join("、")} 年该行业在 ${countryLabel(item.country)}没有产出`).join("；")}，读数 0 不是真实的 0，暂不比较差距`}</small>
+        </div>
+      );
+    }
     if (value(second, firstYear) === null || value(second, lastYear) === null) {
       // Name the empty year(s) and why: an undefined share is not missing data.
       const gap = gapText(second, [firstYear, lastYear].filter((year) => value(second, year) === null));
@@ -194,7 +215,9 @@ export function TrendSummary({
     <CardGrid label="趋势读数">
       <div>
         <span>{scopeLabel(first, industry)} · {metricLabel ? `${metricLabel} · ` : ""}{firstYear}→{lastYear}</span>
-        <b>{changeReading(start, end, unit, digits)}</b>
+        {/* The change at the decimals of the two readings under it ("+1 百万美元" beside "10 → 11", not "+0.577"),
+            as the median card does. */}
+        <b>{changeReading(start, end, unit, digits ?? Math.max(...[start, end].map((value) => smallAmountDigits(value, unit) ?? readingDigits(value, unit))))}</b>
         {/* An exact zero end reads "0" ("0 → 0.00039"), not "0.00000" at a tiny-value precision. */}
         <small>{start === 0 && end === 0 ? indicatorNumber(0, unit) : [start, end].map((value) => (value === 0 ? indicatorNumber(0, unit) : fixedIndicatorNumber(value, unit, digits ?? smallAmountDigits(value, unit)))).join(" → ")}</small>
       </div>
@@ -1157,6 +1180,9 @@ export function IndicatorPairBars({
     hi = Math.max(0, ...values),
     extent = hi - lo || 1;
   const zero = (-lo / extent) * 100;
+  // The name column fits the longest selected name on one line ("HKG 中国香港", "IDN 印度尼西亚"), the same width in
+  // every row so the bars still line up; a fixed 84px wrapped the longer names onto two lines.
+  const nameWidth = `${Math.max(5, ...countries.map(labelEm)) + 0.5}em`;
   return (
     <div aria-label="同刻度比较条形图" role="region" className="hover-wrap" ref={wrapRef}>
       {groups.map((group) => (
@@ -1184,13 +1210,13 @@ export function IndicatorPairBars({
               key={countries[i]}
               style={{
                 display: "grid",
-                gridTemplateColumns: "84px minmax(80px, 1fr) 130px",
+                gridTemplateColumns: `${nameWidth} minmax(80px, 1fr) 130px`,
                 gap: 10,
                 alignItems: "center",
                 paddingTop: 7,
               }}
             >
-              <span>{countryLabel(countries[i])}</span>
+              <span style={{ whiteSpace: "nowrap" }}>{countryLabel(countries[i])}</span>
               <div
                 style={{
                   position: "relative",

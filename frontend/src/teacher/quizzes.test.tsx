@@ -2,7 +2,7 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { api, ApiError } from "../api";
 import type { TeacherQuizBank, TeacherQuizQuestion } from "../types";
-import { QuizzesTab } from "./quizzes";
+import { quizStepStatus, QuizzesTab } from "./quizzes";
 import { TeacherReviewGuardProvider } from "./review-guard";
 
 afterEach(cleanup);
@@ -13,7 +13,7 @@ const pressSave = () => {
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "确认" }));
 };
 
-test("defaults remain a draft, confirmed saves use current expected version and preview hides answers", async () => {
+test("defaults remain a draft, confirmed saves use current expected version and preview shows feedback, not the answer", async () => {
   const load = spyOn(api.classroom, "quizBank").mockResolvedValue(bank());
   const save = spyOn(api.classroom, "saveQuizStep").mockImplementation(async (_step, body) => {
     const next = bank(); next.steps[0].version = "v2"; next.steps[0].questions = body.questions; return next;
@@ -22,10 +22,17 @@ test("defaults remain a draft, confirmed saves use current expected version and 
     render(<TeacherReviewGuardProvider><QuizzesTab /></TeacherReviewGuardProvider>);
     const prompt = await screen.findByLabelText("题干（最多 500 字）");
     expect((screen.getByRole("button", { name: "保存并生效" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(within(screen.getByRole("region", { name: "学生预览" })).queryByText("秘密解析")).toBeNull();
+    // The preview marks no option correct, and shows what a student reads after a wrong and a right answer.
+    const preview = within(screen.getByRole("region", { name: "学生预览" }));
+    expect(preview.getAllByRole("radio").some((radio) => (radio as HTMLInputElement).checked)).toBe(false);
+    expect(preview.getByText("答错时显示").nextElementSibling?.textContent).toBe("回答有误。提示");
+    expect(preview.getByText("答对后显示").nextElementSibling?.textContent).toBe("回答正确。秘密解析");
+    fireEvent.change(screen.getByLabelText("提示（最多 1000 字）"), { target: { value: " " } });
+    expect(preview.getByText("答错时显示").nextElementSibling?.textContent).toBe("回答有误。回答不正确，请重新阅读题目与选项后再试。");
     fireEvent.click(screen.getByRole("button", { name: "恢复默认" }));
     expect(save).not.toHaveBeenCalled();
     expect((prompt as HTMLTextAreaElement).value).toBe("默认题");
+    expect(screen.getByRole("status").textContent).toBe("已把当前默认题目填进编辑区，点“保存并生效”后才生效。");
     pressSave(); await screen.findByText("已保存并生效。");
     expect(save.mock.calls[0][1].version).toBe("v1");
     fireEvent.change(prompt, { target: { value: "再次修改" } }); pressSave();
@@ -156,4 +163,29 @@ test("after a failed check, a later server error is shown even when the marked q
     expect((await screen.findByRole("alert")).textContent).toContain("题目 ID 必须全局唯一");
     expect(document.querySelector(".quiz-save-blocked")).toBeNull();
   } finally { load.mockRestore(); save.mockRestore(); }
+});
+
+test("a step's button and its heading line agree on how its questions stand; no internal version is shown", async () => {
+  const stored = bank();
+  // Step 1: an older default set nobody saved; step 2: a teacher's edit.
+  stored.steps[1].updated_at = "2026-10-16T06:05:00+00:00";
+  stored.steps[1].updated_by = "teacher";
+  const load = spyOn(api.classroom, "quizBank").mockResolvedValue(stored);
+  try {
+    render(<TeacherReviewGuardProvider><QuizzesTab /></TeacherReviewGuardProvider>);
+    await screen.findByLabelText("题干（最多 500 字）");
+    expect(screen.getByRole("button", { name: /^1\./ }).textContent).toBe("1. 步骤1 · 1 题 · 与默认不同");
+    expect(screen.getByText("与当前默认题目不同，可点“恢复默认”更新")).toBeTruthy();
+    expect(screen.queryByText(/版本|默认题库/)).toBeNull();
+    expect(document.body.textContent).not.toContain("v1");
+    expect(document.querySelector(".tipbox")?.textContent).toContain("“恢复默认”把当前默认题目填进编辑区，点“保存并生效”后才生效。");
+    fireEvent.click(screen.getByRole("button", { name: /^2\./ }));
+    expect(screen.getByRole("button", { name: /^2\./ }).textContent).toBe("2. 步骤2 · 1 题 · 已自定义");
+    expect(screen.getByText(/^已自定义（teacher 2026-10-1\d \d\d:\d\d）$/)).toBeTruthy();
+  } finally { load.mockRestore(); }
+});
+
+test("the defaults read as such whoever saved them last", () => {
+  expect(quizStepStatus({ is_default: true, updated_at: "2026-10-16T06:05:00+00:00", updated_by: "teacher" })).toEqual({ badge: "默认题目", detail: "默认题目" });
+  expect(quizStepStatus({ is_default: false, updated_at: "2026-10-16T06:05:00+00:00", updated_by: null }).detail).toMatch(/^已自定义（教师 /);
 });

@@ -65,9 +65,10 @@
   flex: none; border: 1px solid #d5d9e6; border-radius: 8px; padding: 7px 9px;
   background: #fff; color: #4540ad; font-size: 11px; font-weight: 650; text-decoration: none;
 }
-.indicator-reading-viewer object { width: 100%; flex: 1; min-height: 410px; border: 0; background: #eef1f6; }
-/* The embedded PDF takes a Tab stop; show where focus is. */
-.indicator-reading-viewer object:focus-visible { outline: 3px solid #8272c4; outline-offset: -3px; }
+/* The preview's one Tab stop. The ring sits in the frame's padding: the PDF plugin paints over anything inside it. */
+.indicator-reading-pdf-frame { flex: 1; display: flex; min-height: 410px; padding: 3px; }
+.indicator-reading-pdf-frame:focus-visible { outline: 3px solid #8272c4; outline-offset: -3px; }
+.indicator-reading-viewer object { width: 100%; flex: 1; min-height: 404px; border: 0; background: #eef1f6; }
 .indicator-reading-pdf-fallback {
   display: grid; place-content: center; gap: 10px; min-height: 410px; padding: 24px;
   color: #50596d; text-align: center;

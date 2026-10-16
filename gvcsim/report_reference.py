@@ -91,7 +91,8 @@ def industry_reference(
 ) -> list[dict[str, Any]]:
     """Per industry: median, quartiles and the given countries' ranks of ``metric`` across all economies.
 
-    Step 9 reads one country's industry against the same industry in every other economy (ROW excluded);
+    Step 9 reads one country's industry against the same industry in every other economy (ROW, and economies
+    with no output in that industry, excluded);
     network metrics are computed on the full global graph, so each economy's industry row is comparable.
     Returns an empty list when the artifact or the metric is unavailable.
     """
@@ -107,15 +108,15 @@ def industry_reference(
         return []
     frame = df.loc[df["country"].astype(str) != "ROW", ["country", "industry", metric]].copy()
     # An economy whose industry neither adds value nor buys or sells intermediates has no output there (LUX·A03):
-    # its 0 is not a position, so a requested country in that case is flagged instead of ranked last.
+    # its 0 is not a position. Every such economy is left out of the median, the quartiles, the ranks and n (HKG·B05
+    # among them), and a requested country in that case is flagged instead of ranked.
     no_output: set[tuple[str, str]] = set()
-    if countries and {"SVA", "weighted degree"} <= set(df.columns):
-        idle = df[
-            (pd.to_numeric(df["SVA"], errors="coerce") == 0)
-            & (pd.to_numeric(df["weighted degree"], errors="coerce") == 0)
-            & df["country"].astype(str).isin(countries)
-        ]
-        no_output = set(zip(idle["country"].astype(str), idle["industry"].astype(str)))
+    if {"SVA", "weighted degree"} <= set(df.columns):
+        idle = (pd.to_numeric(df["SVA"], errors="coerce") == 0) & (
+            pd.to_numeric(df["weighted degree"], errors="coerce") == 0
+        )
+        no_output = set(zip(df.loc[idle, "country"].astype(str), df.loc[idle, "industry"].astype(str)))
+        frame = frame.loc[~idle.loc[frame.index]]
     if industry is not None:
         frame = frame[frame["industry"].astype(str) == industry]
     frame[metric] = pd.to_numeric(frame[metric], errors="coerce").astype(float)

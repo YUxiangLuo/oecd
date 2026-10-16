@@ -80,7 +80,7 @@ test("material status ignores browsing saves but stays pending when an in-flight
   expect(result.current.hasMaterialChanges(7)).toBe(false);
 });
 
-test("409 stops saves without fetching or merging; cancel preserves the draft, confirm clears and reloads", async () => {
+test("a 409 the server keeps refusing ends in the conflict after a few merges; cancel preserves the draft, confirm clears and reloads", async () => {
   const get = spyOn(api.classroom, "session").mockResolvedValue(response());
   const save = spyOn(api.classroom, "saveSession").mockRejectedValue(new ApiError(409, null, "conflict"));
   const confirm = spyOn(window, "confirm").mockReturnValue(false);
@@ -94,10 +94,12 @@ test("409 stops saves without fetching or merging; cancel preserves the draft, c
     await result.current.syncNow().catch(() => {});
   });
   expect(result.current.syncConflict).toBe(true);
+  // One read and one save per merge, three at most: two tabs saving in turn never loop for ever.
+  expect(get).toHaveBeenCalledTimes(4);
+  expect(save).toHaveBeenCalledTimes(4);
   act(() => result.current.patchStep(2, { country: "FRA" }));
   await act(async () => { await new Promise((done) => setTimeout(done, 950)); });
-  expect(get).toHaveBeenCalledTimes(1); // No conflict reconciliation GET.
-  expect(save).toHaveBeenCalledTimes(1); // No delayed overwrite after conflict.
+  expect(save).toHaveBeenCalledTimes(4); // No delayed overwrite after the conflict.
   const draft = sessionStorage.getItem(KEPT_EDITS_KEY);
   await act(async () => { await result.current.resolveSyncConflict(); });
   expect(confirm).toHaveBeenCalled();
@@ -109,7 +111,51 @@ test("409 stops saves without fetching or merging; cancel preserves the draft, c
   expect(sessionStorage.getItem(KEPT_EDITS_KEY)).toBeNull();
   for (const key of otherKeys) expect(sessionStorage.getItem(key)).toBe("unrelated draft");
   expect(reload).toHaveBeenCalled();
-  expect(get).toHaveBeenCalledTimes(1);
+});
+
+test("another tab's save to a different step (or only its browsing) merges with this tab's edit, no conflict", async () => {
+  const other = patchStep(emptySession(), 7, { browse_selection: { first: "JPN" } });
+  let server = response(emptySession());
+  const get = spyOn(api.classroom, "session").mockImplementation(async () => server);
+  const save = spyOn(api.classroom, "saveSession").mockImplementation(async (body) => {
+    if (body.base_updated_at !== server.updated_at) throw new ApiError(409, null, "conflict");
+    return server = response(body.session, "2026-09-10T00:02:00Z");
+  });
+  const { result } = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  // The other tab: only switched step 7's view, which still moved the record's version.
+  server = response(other, NEWER);
+  await act(async () => {
+    result.current.patchStep(15, { research_question: "mine" });
+    await result.current.syncNow();
+  });
+  expect(result.current.syncConflict).toBe(false);
+  expect(get).toHaveBeenCalledTimes(2);
+  expect(save.mock.calls.at(-1)![0].base_updated_at).toBe(NEWER);
+  expect(server.session.steps["7"].data).toEqual({ browse_selection: { first: "JPN" } });
+  expect(server.session.steps["15"].data).toEqual({ research_question: "mine" });
+  expect(result.current.session).toEqual(server.session);
+});
+
+test("both tabs changing the same step's material is a real conflict: kept here, nothing overwritten", async () => {
+  let server = response(emptySession());
+  spyOn(api.classroom, "session").mockImplementation(async () => server);
+  const save = spyOn(api.classroom, "saveSession").mockImplementation(async (body) => {
+    if (body.base_updated_at !== server.updated_at) throw new ApiError(409, null, "conflict");
+    return server = response(body.session, "2026-09-10T00:02:00Z");
+  });
+  const { result } = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  const edited = (text: string) => patchStep(emptySession(), 15, { research_question: text });
+  server = response(edited("theirs"), NEWER);
+  await act(async () => {
+    result.current.patchStep(15, { research_question: "mine" });
+    await result.current.syncNow().catch(() => {});
+  });
+  expect(result.current.syncConflict).toBe(true);
+  expect(save).toHaveBeenCalledTimes(1);
+  expect(server.session).toEqual(edited("theirs"));
+  expect(result.current.session).toEqual(edited("mine"));
 });
 
 test("network failure retries automatically without a new edit or click", async () => {

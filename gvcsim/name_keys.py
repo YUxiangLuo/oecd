@@ -15,14 +15,18 @@ _IGNORABLE = re.compile(
     "\ufe00-\ufe0f\ufeff\uffa0\ufff0-\ufff8"
     "\U0001bca0-\U0001bca3\U0001d173-\U0001d17a\U000e0000-\U000e0fff]"
 )
+# Blanks: trimmed at the edges, and a run of them inside a name compares as one space.
+_BLANKS = (
+    "\t\n\v\f\r \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005"
+    "\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000"
+)
+_BLANK_RUN = re.compile(f"[{_BLANKS}]+")
 
 
 def name_key(value: str) -> str:
+    """Trimmed, with every inner run of blanks one space: "2026  秋" and "2026 秋" are the same name."""
     value = unicodedata.normalize("NFKC", value)
-    return _IGNORABLE.sub("", "".join(char.lower() for char in value)).strip(
-        "\t\n\v\f\r \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005"
-        "\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000"
-    )
+    return _BLANK_RUN.sub(" ", _IGNORABLE.sub("", "".join(char.lower() for char in value))).strip(" ")
 
 
 def required_name_key(value: str) -> str:
@@ -33,8 +37,9 @@ def required_name_key(value: str) -> str:
 
 
 def normalize_academic_name(value: Any) -> Any:
-    """A request's display name: trim edges, leaving typography and emoji intact."""
-    return value.strip() if isinstance(value, str) else value
+    """A request's display name: trim edges and make each inner run of whitespace one space (as the comparison key
+    does, so the stored name is the one that was compared), leaving typography and emoji intact."""
+    return " ".join(value.split()) if isinstance(value, str) else value
 
 
 def username_key(value: str) -> str:

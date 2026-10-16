@@ -274,7 +274,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       active={view}
       onPick={setView}
     />
-    {view === "topology" && <p className="muted lens-hint">流量与路径：每个点是一个行业。横轴是买卖总金额（加权总度，对数刻度），纵轴是介数（经过它的最短路线所占比例，对所有节点对求和）。两种排序是否一致？选了多个国家时每国一张。这张图没有可记录的读数条目。</p>}
+    {view === "topology" && <p className="muted lens-hint">流量与路径：每个点是一个行业。横轴是加权总度（买卖总金额，百万美元，对数刻度），纵轴是介数（只看连接、不看金额：经过它的最短路线所占比例，对所有节点对求和）。两种排序是否一致？选了多个国家时每国一张。这张图没有可记录的读数条目。</p>}
     {view === "flows" && <p className="muted lens-hint">买入与卖出：每行一个行业，左边是加权入度（买入），右边是加权出度（卖出），按加权总度排序；左边条长的行业主要是买方，右边条长的主要是卖方。这张图没有可记录的读数条目。</p>}
     {(view === "topology" || view === "flows") && <div className="controls">
       <LabeledControl label="年份">{(id) => <select id={id} value={year} onChange={(event) => setYear(Number(event.target.value))}>{years.map((value) => <option key={value} value={value}>{value}</option>)}</select>}</LabeledControl>
@@ -425,8 +425,13 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         : { label: locked && observations.length ? REPLACE_MATERIAL_ACTION : RECORD_CHART_ACTION, onClick: () => { setRechosen(locked); onRecord(selected, pendingObservations, pendingLabel); } }}
       check={observations.length ? { label: `核对已记录的读数 · ${observations.length} 条`, content: (
         <ScrollableRegion className="table-wrap bounded-data-table" label="已记录报告材料读数"><table className="data-table">
-          <thead><tr><th>国家与行业</th><th>年份</th><th>数值</th></tr></thead>
-          <tbody>{observations.map((item, index) => <tr key={index}><td>{countryLabel(item.country)} · {sectorLabel(item.industry ?? "")}</td><td>{item.year}</td><td>{indicatorNumber(item.value, item.unit ?? unit)}</td></tr>)}</tbody>
+          {/* The same columns as steps 6–8. */}
+          <thead><tr><th>国家／行业</th><th>年份</th><th>指标</th><th>单位</th><th>读数</th></tr></thead>
+          <tbody>{observations.map((item, index) => <tr key={index}>
+            <td>{countryLabel(item.country)} · {sectorLabel(item.industry ?? "")}</td><td>{item.year}</td>
+            <td>{schema?.fields[item.metric ?? ""]?.label ?? (item.metric === "weighted degree" ? "加权总度" : item.metric ?? label)}</td>
+            <td>{item.unit ?? unit}</td><td>{indicatorNumber(item.value, item.unit ?? unit)}</td>
+          </tr>)}</tbody>
         </table></ScrollableRegion>) } : null}
       syncing={syncing}
       syncError={syncError}

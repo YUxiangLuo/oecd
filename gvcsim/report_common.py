@@ -22,7 +22,7 @@ _STEP_OUTCOMES = {
 _KIND_DIMENSIONS = {
     "share": "份额（×100 = 百分点）",
     "length": "长度单位（1 个长度单位约等于平均多经过 1 个生产环节）；另附标准差换算（1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化）",
-    "position": "无量纲（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化）",
+    "position": "比值，无单位（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化）",
     "network": "中心性原始单位（课程生成的分数，高低顺序参照真实网络指标，不是步骤 5、9 的百万美元）；另附标准差换算（1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化）",
 }
 _STUDENT_METRIC_LABELS = {
@@ -259,8 +259,9 @@ def estimate_digits(kind: str, value: float, bounds: tuple[float, float] | None)
 
 
 # The unit as named beside a chart or a bar, and as a counted quantity (frontend ``unitName`` / ``countUnit``): the
-# position index is a ratio, "无量纲" as on step 7, so its amounts are bare numbers ("约低 0.0021").
-UNIT_NAMES = {"share": "百分点", "length": "长度单位", "position": "无量纲", "network": "中心性原始单位"}
+# position index is a ratio, "比值，无单位" as step 13 names it (frontend ``POSITION_UNIT_WORDS``), so its amounts
+# are bare numbers ("约低 0.0021").
+UNIT_NAMES = {"share": "百分点", "length": "长度单位", "position": "比值，无单位", "network": "中心性原始单位"}
 COUNT_UNITS = {"share": "个百分点", "length": "个长度单位", "position": "", "network": "个中心性原始单位"}
 
 
@@ -406,7 +407,7 @@ def _natural_effect(
         # Lengths, the position index and centrality: the value in its own unit, with its size in standard
         # deviations of Y as on the page ("-0.018 个长度单位（幅度约 0.031 个标准差）"); the sd size is unsigned,
         # the number before it carries the sign.
-        # The position index has no unit ("无量纲"): its amounts are bare numbers, as on the page.
+        # The position index has no unit ("比值，无单位"): its amounts are bare numbers, as on the page.
         # The within SD (two-way demeaned Y), the variation the model uses, as on the page.
         sd = result.get("depvar_within_std")
         positive_sd = float(sd) if isinstance(sd, (int, float)) and math.isfinite(sd) and float(sd) > 0 else None
@@ -430,6 +431,20 @@ def _natural_effect(
             else "—"
         )
     return effect_label, effect_text, interval
+
+
+def share_size(outcome: str, design: dict[str, Any], result: dict[str, Any], coefficient: dict[str, Any]) -> str:
+    """A share Y's size in standard deviations, as the summary table on the page appends it (frontend ``shareSize``):
+    "（幅度约 0.37 个标准差）"; empty for other Ys (their reading carries it already) or without inference."""
+    if _depvar_kind(outcome, design) != "share" or _global_inference_suppressed(result):
+        return ""
+    sd = result.get("depvar_within_std")
+    coef = coefficient.get("coef")
+    if not isinstance(sd, (int, float)) or not math.isfinite(sd) or sd <= 0 or not isinstance(coef, (int, float)):
+        return ""
+    size = abs(float(coef) * 0.01 / float(sd))
+    text = "不到 0.001" if size < 0.0005 else f"{size:.{standardized_digits(size, None)}f}"
+    return f"（幅度约 {text} 个标准差）"
 
 
 def y_display(label: Any) -> str:

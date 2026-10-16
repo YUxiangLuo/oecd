@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { exampleXText, RegressionResultCard } from "./regression-step/result-card";
+import { RegressionResultCard } from "./regression-step/result-card";
+import { exampleXText } from "./regression-step/result-text";
 import { TEACHING_MODEL_VERSION } from "./regression-step/saved-run";
 import { BASELINE_LESSONS, GENERATED_Y_DISCLOSURE, REGRESSION_LESSONS } from "./regression-lessons";
 import type { RegressionResponse } from "./types";

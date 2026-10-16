@@ -8,7 +8,7 @@ import { ScrollableRegion } from "./a11y";
 import { groupedFixed } from "./format";
 import { POSITION_UNIT_WORDS } from "./regression-verdict";
 import { api, ApiError } from "./api";
-import { useAsync } from "./labs";
+import { useAsync } from "./labs/shared";
 import {
   canonicalSpec,
   coefficientRows,
@@ -29,13 +29,13 @@ import {
   designValueRow,
   snapshotOf,
   specSummary,
-  specKey,
   summaryRows,
   termLabel,
   type TableColumn,
   X_COLUMNS,
   xSum,
   xSpanLabel,
+  experimentReportChanged,
 } from "./regression-workbench-table";
 import { DivergingBarChart, type DivergingBarRow } from "./viz/regression/diverging-bars";
 import { formatPValue } from "./regression-statistics";
@@ -67,17 +67,6 @@ export interface WorkbenchStepState extends Record<string, unknown> {
 }
 
 const DEFAULT_COLUMN = "默认模型";
-
-/** Whether the model put into the report differs from the one the report printed for this step (compared as
- *  models, not strings: the report's copy comes back from the database with each control's keys in another order). */
-export function experimentReportChanged(
-  stepNumber: number, experiment: Experiment | null | undefined, reported: readonly ReportedCustomResult[] | undefined, options: WorkbenchOptions,
-  stepBaseline: string,
-): boolean {
-  const mine = experiment ? [`${experiment.baseline ?? stepBaseline}:${specKey(canonicalSpec(experiment.spec, options))}`] : [];
-  const theirs = (reported ?? []).filter((item) => item.step === stepNumber).map((item) => `${item.baseline}:${specKey(canonicalSpec(item.spec, options))}`);
-  return mine.join("|") !== theirs.join("|");
-}
 
 function download(text: string, filename: string) {
   const url = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));

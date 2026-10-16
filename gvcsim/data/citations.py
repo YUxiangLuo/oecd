@@ -146,14 +146,12 @@ def report_source_disclosures(data_sources: dict[str, Any] | None) -> list[str]:
             "- OECD ICIO 声明只覆盖本系统的指标输入与其派生结果；不覆盖课程生成的关税情景。",
             "- 本报告是教学系统生成的衍生结果，不代表 OECD 审核、参与或背书；再分发前应复核下载时适用的元数据和条款。",
         ]
-    controls = sources["simulated_macro_controls"]
-    lines.extend(
-        [
-            "- 数据包中的旧宏观占位列未用于本实验回归"
-            f"（生成器 {controls['generator']}@{controls['generator_version']}）。"
-            "回归工作台的 GDP、人口增长率、贸易开放度、汇率和 FDI 由关税教学生成器独立构造，"
-            "不是 WDI 或 IMF 观测值；各模型实际选用的变量及来源见其设定。",
-        ]
+    # Students read this under the references: no module names, versions or data-package columns (the release
+    # metadata keeps those).
+    lines.append(
+        "- 回归中的 GDP、人口增长率、贸易开放度、汇率和 FDI 是课程按固定规则生成的教学数据，"
+        "不是世界银行（WDI）或国际货币基金组织（IMF）公布的真实统计，不能当作真实宏观数据引用；"
+        "各模型实际用了哪些变量、每个变量怎么来的，见该模型的设定。"
     )
     return lines
 

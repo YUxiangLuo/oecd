@@ -39,7 +39,7 @@ GVCSIM_FILE_CACHE_MODE=notify uv run gvcsim serve --port 8000   # 多人使用�
 
 - 原始表放在 `OECD_ICIO/`，产物入口为 `data/processed`；生产环境用 `GVCSIM_RAW_DATA_DIR`、`GVCSIM_DATA_DIR` 指向代码目录外的持久目录。
 - 当前开发教学库 schema 为 `gvcsim-teaching-db-v15`（会话契约 `experiment-session-simple-v4`：步骤 11–14 只保存 `run` 和一个 `experiment`），新增独立于数据 release 的系统统一题库快照，没有历史版本迁移；使用新建空开发库，版本不匹配应停止，不以普通代码部署为理由清空已有库。保存接口预算为规范化 UTF-8 JSON 300000 字节，PUT/PATCH 应答只含 `updated_at` 与学习状态，不回传 `session`（见技术手册）。
-- 教师可在“理解题”配置步骤 1–14：每步 1–3 道判断／单选题，单选 2–4 个选项，默认共 24 题。保存仅变更本步版本，无实质变化不变版；“恢复默认”仅载入待保存草稿。改题不删除实验材料或已提交报告，未提交报告需重新生成。`scripts/seed_full_journey.py` 仅支持服务器当前默认版本与公开题目，使用学生 workspace 核对，不需要教师口令或读取私有答案。
+- 教师可在“理解题”配置步骤 1–14：每步 1–3 道判断／单选题，单选 2–4 个选项，默认共 24 题。保存仅变更本步版本，无实质变化不变版；“恢复默认”把当前默认题目填进编辑区，点“保存并生效”后才生效。改题不删除实验材料或已提交报告，未提交报告需重新生成。`scripts/seed_full_journey.py` 仅支持服务器当前默认版本与公开题目，使用学生 workspace 核对，不需要教师口令或读取私有答案。
 - `serve` 默认只监听本机回环地址；课堂局域网访问用 `--host 0.0.0.0` 或设置 `GVCSIM_BIND_HOST`。
 - 前端开发：`cd frontend && bun run dev`。Vite 把 `/api` 代理到本机 8000 端口，其他位置用 `GVCSIM_API_PROXY=http://<api主机>:<端口>`。
 - 演示构建 `bun run build:demo` 内置 50 组学生快捷登录（`student`，`student02`–`student50` 的口令为基础口令加 `-02`–`-50`）和教师 `teacher`。基础口令默认 `gvclab2026`，可用 `VITE_DEMO_PASSWORD` 覆盖，须与服务端 `GVCSIM_BOOTSTRAP_PASSWORD` 一致；服务端运行一次 `classroom-init` 即可幂等补齐这些账号。普通构建不含这些凭证。

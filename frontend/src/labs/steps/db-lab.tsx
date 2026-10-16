@@ -9,7 +9,7 @@ import { ColumnInfo, useMeasuredWidth } from "../../table-aids";
 import type { DbMeta, DbSlice, DbTableKind, Meta, QuizCompletionState, StepStateApi } from "../../types";
 import { userFacingRequestError } from "../../user-facing-error";
 import { countryLabel, sectorLabel } from "../../viz";
-import { cjkJoin } from "../../format";
+import { cjkJoin, stripNegativeZero } from "../../format";
 import { fmtDb, Pager, useAsync } from "../shared";
 
 /** `detail` is shown on the tab only; `label` also names the table in titles and the recorded source. */
@@ -618,14 +618,14 @@ export function DbSliceTable({
                           value: numericValue,
                         }))}
                       >
-                        {fmtDb(numericValue)}{selected ? " ✓" : ""}
+                        {fmtDbCell(numericValue)}{selected ? " ✓" : ""}
                       </button>
                     )}
                   </td>
                 );
               })}
               {showSummaries && <td>{dbRowSumText(dataColumns.map((column) => row[column]), slice?.row_summaries?.[rowIndex]?.slice_total ?? null)}</td>}
-              {showSummaries && <td>{fmtDb(slice?.row_summaries?.[rowIndex]?.out ?? null)}</td>}
+              {showSummaries && <td>{fmtDbCell(slice?.row_summaries?.[rowIndex]?.out ?? null)}</td>}
             </tr>
           ))}
           {slice && rows.length === 0 && (
@@ -636,8 +636,8 @@ export function DbSliceTable({
           <tfoot>
             <tr style={{ fontWeight: 700, background: "#f7f8fb" }}>
               <th scope="row" style={{ position: "sticky", left: 0, zIndex: 2, background: "#f7f8fb", textAlign: "left" }}>本页列合计</th>
-              {dataColumns.map((column) => <td key={column}>{fmtDb(columnTotals[column])}</td>)}
-              {showSummaries && <td>{fmtDb((slice.row_summaries ?? []).reduce((sum, item) => sum + item.slice_total, 0))}</td>}
+              {dataColumns.map((column) => <td key={column}>{fmtDbCell(columnTotals[column])}</td>)}
+              {showSummaries && <td>{fmtDbCell((slice.row_summaries ?? []).reduce((sum, item) => sum + item.slice_total, 0))}</td>}
               {showSummaries && <td>—</td>}
             </tr>
           </tfoot>
@@ -647,16 +647,54 @@ export function DbSliceTable({
   );
 }
 
+/** A table cell at the step's fixed decimals for its size, trailing zeros kept, so a column reads alike ("90.00"
+ * beside "888.11", "0.0440" beside "0.0351"): two decimals from 10 up, three from 1, four below 1 (as {@link fmtDb},
+ * which the material sentence and the report keep). */
+export function fmtDbCell(value: number | null): string {
+  const text = String(fmtDb(value));
+  if (value == null || !Number.isFinite(value) || value === 0 || Math.abs(value) < 0.0001) return text;
+  const magnitude = Math.abs(value);
+  const digits = magnitude < 1 ? 4 : magnitude < 10 ? 3 : 2;
+  // The rounded value decides, as fmtDb does (9.9996 reads "10.00", not "10.000").
+  const rounded = Math.abs(Number(text.replace(/,/g, "")));
+  const shownDigits = rounded >= 10 ? 2 : rounded >= 1 ? Math.min(digits, 3) : digits;
+  return stripNegativeZero(value.toLocaleString("zh-CN", { minimumFractionDigits: shownDigits, maximumFractionDigits: shownDigits }));
+}
+
+/** How the cells are written and shaded, under 读表说明. */
+export const STEP1_CELL_LEGEND = "数值按大小统一保留小数：10 以上两位，1–10 三位，1 以下四位（不足补 0），极小值用科学计数法。底色只帮助在一行中找大数：蓝色越深，表示该格绝对值越接近本行最大的一格（只有一列时与整列比较）；红色表示负值。颜色不是单独的指标。";
+
+/** The material card's line for a cell the system recorded by default: "本页" only while the table still shows the
+ * slice it was recorded from; after a switch it names that slice ("2020 年中间投入 Z 表（供给国 CHN 中国 → 使用国
+ * USA 美国）"). */
+export function autoCellHow(observation: NonNullable<DbStepState["observation"]>, current: DbSliceSelection & { page: number }): string {
+  const tail = "点表中其他数值即改为记录那一格。";
+  const same = current.page === 1
+    && observation.year === current.year
+    && observation.table === current.table
+    && (observation.row_country ?? "") === current.rowCountry
+    && (observation.row_sector ?? "") === current.rowSector
+    && (current.table === "accounts" || ((observation.col_country ?? "") === current.colCountry && (observation.col_sector ?? "") === current.colSector));
+  if (same || observation.year == null || !observation.table) return `系统先记录了本页数值最大的一格；${tail}`;
+  const tableLabel = DB_TABLES.find((item) => item.key === observation.table)?.label ?? observation.table;
+  const side = (country?: string, sector?: string) =>
+    country ? `${countryLabel(country)}${sector ? `·${sectorLabel(sector)}` : ""}` : "";
+  const supply = side(observation.row_country, observation.row_sector);
+  const use = observation.table === "accounts" ? "" : side(observation.col_country, observation.col_sector);
+  const scope = supply && use ? `（供给国 ${supply} → 使用国 ${use}）` : supply ? `（${supply}）` : "";
+  return `系统先记录了 ${observation.year} 年${cjkJoin(tableLabel, "表")}${scope}当时页面上数值最大的一格；${tail}`;
+}
+
 const ROW_SUM_HELP = "本行在当前所选列上的合计，按未四舍五入的数值相加；前面有“≈”时，与表中显示的各格相加略有差别，来自四舍五入。";
 
 /** 所选列之和 as shown, with "≈" in front when the cells as displayed do not add up to it (rounding), as steps 2–3 do. */
 export function dbRowSumText(cells: readonly unknown[], total: number | null): string {
-  const shown = String(fmtDb(total));
+  const shown = fmtDbCell(total);
   if (total == null || !Number.isFinite(total)) return shown;
   const added = cells
     .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
     .reduce((sum, value) => sum + Number(String(fmtDb(value)).replace(/,/g, "").replace("−", "-")), 0);
-  return String(fmtDb(added)) === shown ? shown : `≈ ${shown}`;
+  return fmtDbCell(added) === shown ? shown : `≈ ${shown}`;
 }
 
 export function ReleaseIntegrityStatus({ meta }: { meta: Meta | null }) {
@@ -942,7 +980,8 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
           <summary>读表说明</summary>
           <ul>
             <li><b>怎么读：</b>{HOW_TO_READ[table]}</li>
-            <li><b>记录规则：</b>系统先自动记录本页数值最大的单元格；点击其他单元格即改为记录该单元格。切换数据表或筛选条件不影响已记录的单元格。</li>
+            <li><b>记录规则：</b>第一次打开本步时，系统先自动记录当时页面上数值最大的单元格；点击其他单元格即改为记录该单元格。切换数据表或筛选条件不影响已记录的单元格。</li>
+            <li><b>数字与颜色：</b>{STEP1_CELL_LEGEND}</li>
             <li><b>账户与符号：</b>{STEP1_ACCOUNT_LEGEND}</li>
             {table !== "accounts" && <li><b>恒等式：</b>{STEP1_OUT_IDENTITY_GUIDE}</li>}
             <li><b>键盘：</b>Tab 进入表格后，方向键逐格移动，Home / End 到行首 / 行尾，Ctrl+Home / Ctrl+End 到表首 / 表尾，PageUp / PageDown 上下跳 10 行；Enter 或空格记录当前单元格。</li>
@@ -979,7 +1018,9 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
         summary={selectedObservation
           ? dbMaterialSentence(selectedObservation, table)
           : "尚未记录：点表中任一数值即记录这个单元格。"}
-        how={state.materialLocked ? "点击单元格只会选中，要换成报告材料请点下面的按钮。" : selectedObservation?.auto ? "系统先记录了本页数值最大的一格；点表中其他数值即改为记录那一格。" : "点表中其他数值即改为记录那一格。"}
+        how={state.materialLocked ? "点击单元格只会选中，要换成报告材料请点下面的按钮。" : selectedObservation?.auto
+          ? autoCellHow(selectedObservation, { year: slice?.year ?? year ?? 0, table, rowCountry, colCountry, rowSector, colSector, page })
+          : "点表中其他数值即改为记录那一格。"}
         locked={state.materialLocked}
         rechosen={rechosen && !pickedCell}
         action={state.materialLocked && pickedCell?.observation && !sameJsonValue(pickedCell.observation, selectedObservation)

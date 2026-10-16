@@ -2,7 +2,8 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { api, ApiError } from "./api";
-import { ColumnDetails, experimentReportChanged, ModelComparisonChart, RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
+import { ColumnDetails, ModelComparisonChart, RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
+import { experimentReportChanged } from "./regression-workbench-table";
 import {
   canonicalSpec, coefficientRows, comparisonCsv, designDeviation, designDeviationText, designValueRow, effectiveEffects, equationPreview, experimentLabel, includedBy, omittedSummary, perPointReading,
   perPointRow, samplesDiffer, shownCoefficient, shownModelLabel, chartModelLabel, significanceStars, snapshotOf, specSummary, summaryRows, termLabel,

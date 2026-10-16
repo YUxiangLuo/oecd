@@ -738,6 +738,9 @@ describe("readouts and the record button follow the chart on screen (round 10)",
       fireEvent.click(view.getByRole("button", { name: "历年构成" }));
       await waitFor(() => expect(view.container.textContent).toContain("每个色带是总出口的一项"));
       expect(view.container.textContent).not.toContain("每条是");
+      // 0 in every year of the range: another year range would not help, so it is not suggested (round 5).
+      expect(materialCard(view).textContent).toContain("为 0，构成份额无法计算（不是缺少数据）；请换一个国家。");
+      expect(materialCard(view).textContent).not.toContain("调整年份范围");
     } finally { rows.mockRestore(); schema.mockRestore(); }
   });
 });
@@ -935,7 +938,11 @@ describe("undefined lengths and medians that say nothing (round 11)", () => {
       const view = setup(LengthVizStep);
       await view.findByRole("button", { name: "前后向位置" });
       fireEvent.click(view.getByRole("button", { name: "历年变化" }));
+      await waitFor(() => expect(view.getByLabelText("比较范围")).toBeTruthy());
+      expect(view.container.textContent).not.toContain("选择了行业时只显示所选国家的同行业走势");
       fireEvent.change(view.getByLabelText("比较范围"), { target: { value: "A" } });
+      // The industry trend says why it has no global reference, as 国家对比 does (round 5).
+      await waitFor(() => expect(view.container.textContent).toContain("全球中位数与中间 50% 按国家整体计算；选择了行业时只显示所选国家的同行业走势，不画全球参照。"));
       // The notice under the chart (where the record button would be) names the real reason.
       const material = materialCard(view);
       await waitFor(() => expect(material.textContent).toContain("该行业没有 GVC 生产（GVC 增加值为 0），前向 GVC 段长度无法计算（不是缺少数据）"));

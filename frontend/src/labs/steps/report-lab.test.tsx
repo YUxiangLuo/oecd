@@ -6,11 +6,9 @@ import { ToastHost } from "../../toast";
 import { MaterialCard } from "../../material-card";
 import { ReportOutro } from "../../report-outro";
 import type { ClassroomReport, ReportMutationResponse, TeachingCountriesResponse } from "../../types";
+import { GateCard, RecordedMaterials, ReportLab, ReportStatus } from "./report-lab";
 import {
-  GateCard,
   REPORT_REFLECTION_INCOMPLETE_SELECTOR,
-  ReportLab,
-  ReportStatus,
   activateReportGateDestination,
   focusReportGateDestination,
   reflectionCountLabel,
@@ -27,8 +25,7 @@ import {
   gradedExportRefusal,
   reportStatusChanged,
   revealWithOffset,
-  RecordedMaterials,
-} from "./report-lab";
+} from "./report-lab-logic";
 import { useState } from "react";
 
 afterEach(cleanup);

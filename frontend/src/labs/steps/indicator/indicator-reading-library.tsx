@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import "./indicator-reading-library.css";
 
 export type IndicatorReadingTopic = "trade" | "production" | "length" | "network";
@@ -166,6 +166,15 @@ export function IndicatorReadingLibrary({ topic }: { topic: IndicatorReadingTopi
   const [selectedId, setSelectedId] = useState(readings[0].id);
   const selected = readings.find((reading) => reading.id === selectedId) ?? readings[0];
   const selectedUrl = readingAssetUrl(selected.file);
+  const previewRef = useRef<HTMLObjectElement>(null);
+  // A browser that says it cannot show PDFs inline gets the fallback (one link) without an empty preview stop.
+  const embedsPdf = typeof navigator === "undefined" || navigator.pdfViewerEnabled !== false;
+  const fallback = (
+    <div className="indicator-reading-pdf-fallback" role="status">
+      <b>当前浏览器无法内嵌显示这份 PDF。</b>
+      <a href={selectedUrl} target="_blank" rel="noopener noreferrer">请在新标签页中打开</a>
+    </div>
+  );
 
   return (
     <details
@@ -225,17 +234,33 @@ export function IndicatorReadingLibrary({ topic }: { topic: IndicatorReadingTopi
           </div>
           {expanded && (
             <>
-              <object
-                key={selected.id}
-                data={`${selectedUrl}#view=FitH`}
-                type="application/pdf"
-                aria-label={`${selected.title} PDF 预览`}
-              >
-                <div className="indicator-reading-pdf-fallback" role="status">
-                  <b>当前浏览器无法内嵌显示这份 PDF。</b>
-                  <a href={selectedUrl} target="_blank" rel="noopener noreferrer">请在新标签页中打开</a>
+              {embedsPdf ? (
+                // One Tab stop with a visible ring: the embedded viewer itself never matches :focus-visible (focus
+                // goes into the plugin's own frame), and its toolbar would add stops of its own. Enter moves into
+                // the preview to scroll it; "新标签页打开 PDF" above is the full keyboard route.
+                <div
+                  className="indicator-reading-pdf-frame"
+                  tabIndex={0}
+                  role="group"
+                  aria-label={`${selected.title}：PDF 预览区，按 Enter 进入预览滚动阅读`}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" || event.target !== event.currentTarget) return;
+                    event.preventDefault();
+                    previewRef.current?.focus();
+                  }}
+                >
+                  <object
+                    ref={previewRef}
+                    key={selected.id}
+                    data={`${selectedUrl}#view=FitH`}
+                    type="application/pdf"
+                    tabIndex={-1}
+                    aria-label={`${selected.title} PDF 预览`}
+                  >
+                    {fallback}
+                  </object>
                 </div>
-              </object>
+              ) : fallback}
               <div className="indicator-reading-preview-help">
                 如果预览空白或加载失败，请使用上方“新标签页打开 PDF”；仍无法打开时请联系老师。
               </div>

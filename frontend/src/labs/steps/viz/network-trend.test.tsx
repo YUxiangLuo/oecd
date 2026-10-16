@@ -179,6 +179,11 @@ test("recording takes a click, never a browse; the card says whether the chart o
   expect(materialSummary().textContent).toBe(`CHN 中国 与 USA 美国 · 加权总度 · 2018–2020 年 · C26 计算机电子光学（${saved.length} 条读数）`);
   expect(materialHow()!.textContent).toBe("当前图表就是已记录的材料；换视角、国家或指标不会改动它。");
   expect(materialCard().querySelector("details.material-card-check summary")!.textContent).toBe(`核对已记录的读数 · ${saved.length} 条`);
+  // The same columns as steps 6–8: 指标 and 单位 beside each reading (round 5).
+  expect([...materialCard().querySelectorAll("details.material-card-check thead th")].map((th) => th.textContent))
+    .toEqual(["国家／行业", "年份", "指标", "单位", "读数"]);
+  const firstRow = [...materialCard().querySelectorAll("details.material-card-check tbody tr")][0];
+  expect([...firstRow.querySelectorAll("td")].slice(2, 4).map((td) => td.textContent)).toEqual(["加权总度", "百万美元"]);
   expect(recordedButton().disabled).toBe(true);
   rerender(<NetworkTrend {...props} observations={saved} syncing />);
   expect(screen.getByText("正在同步实验记录…")).toBeTruthy();
@@ -428,6 +433,9 @@ test("step 9 keeps the countries, view and industry of an exploration view after
   const browsed: unknown[] = [];
   const first = render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={() => {}} onBrowse={(value) => browsed.push(value)} />);
   fireEvent.click(screen.getByRole("button", { name: "流量与路径" }));
+  // The hint names betweenness as the y axis does: only links, not amounts (round 5).
+  expect(document.querySelector(".lens-hint")!.textContent).toContain("纵轴是介数（只看连接、不看金额：");
+  expect(document.querySelector(".lens-hint")!.textContent).toContain("横轴是加权总度（买卖总金额，百万美元，对数刻度）");
   fireEvent.change(screen.getByLabelText("国家 A"), { target: { value: "DEU" } });
   await waitFor(() => expect(browsed.at(-1)).toMatchObject({ countries: ["DEU", "USA"], view: "topology", industry: "C26" }));
   first.unmount();

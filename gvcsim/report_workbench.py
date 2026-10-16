@@ -435,6 +435,15 @@ def _omitted_groups(omitted: list[dict[str, Any]]) -> list[str]:
     return [f"{reason}：{'、'.join(labels)}" for reason, labels in groups.items()]
 
 
+# The chart's unit as its note words it, by the Y's kind: only a share is converted (to points).
+_NATIVE_UNIT_NOTES = {
+    "share": "份额转换为百分点",
+    "length": "长度单位",
+    "position": "位置指数是比值，无单位",
+    "network": "中心性原始单位",
+}
+
+
 def _comparison_chart(table: dict[str, Any], label: str) -> list[str]:
     """Compare the same Y in native units; missing estimates are omitted, never zero placeholders."""
     items: list[dict[str, Any]] = []
@@ -486,7 +495,7 @@ def _comparison_chart(table: dict[str, Any], label: str) -> list[str]:
                 "type": "diverging-bar",
                 "title": f"步骤 {table['step']} · 模型 X 效应及 95% 区间（Y：{label}）",
                 "x_label": f"X 每高 1 个百分点，所选 X 项效应（{UNIT_NAMES.get(kind, '原始单位')}）",
-                "note": "同一 Y 使用原始单位（份额转换为百分点），不按各模型标准差归一化；"
+                "note": f"同一 Y 使用原始单位（{_NATIVE_UNIT_NOTES.get(kind, '原始单位')}），不按各模型标准差归一化；"
                 "单项用该项系数，多项用累计系数；X 项范围见各条标签，样本数和年份见图下说明。不同跨度不是同一个估计量。",
                 "items": items[start : start + 8],
             }

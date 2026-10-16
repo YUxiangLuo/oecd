@@ -5,7 +5,7 @@ import re
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from gvcsim.regression.teaching import MARKET
+from gvcsim.regression.teaching import MARKET, X_LAG_COLUMNS
 from gvcsim.regression.validity import CLUSTER_INTERVAL_NOTE
 from gvcsim.report_common import (
     _KIND_DIMENSIONS,
@@ -29,10 +29,13 @@ from gvcsim.report_common import (
     _primary_coefficient,
     _safe,
     _setting_value,
+    _signed,
     _summary_design_limit,
     _y_label,
+    estimate_digits,
     network_digits,
     reading_number,
+    share_size,
     shown_per_point,
     with_count_unit,
     y_display,
@@ -512,6 +515,8 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
         _effect_label, effect, interval = _natural_effect(outcome, design, result, coefficient)
         suppressed = _global_inference_suppressed(result)
         evidence, _interpretation = _evidence_reading(outcome, coefficient, suppressed, design)
+        # A share's size in standard deviations too, as the page's summary table adds it.
+        effect += share_size(outcome, design, result, coefficient)
         lines.append(
             f"| {step} | {_safe(_depvar_display(design.get('depvar_label', outcome)))} | {effect} | {interval} | {evidence} |"
         )
@@ -808,9 +813,32 @@ def _technical_estimate_tables(
         "| 变量 | X 每高 1 个百分点，Y 两年累计平均相差 | 系数（X 按份额计） | 95% 区间（按系数计） | 标准误（按国家聚类） | t 值 | p 值 |",
         "|---|---:|---:|---:|---:|---:|---:|",
     ]
-    primary = _primary_coefficient(design, result)
     cumulative = result.get("cumulative")
     rows = [*result.get("coefs", []), *([cumulative] if isinstance(cumulative, dict) else [])]
+    # Each X term (X, L1.X) and their sum read per point, all at one set of decimals: the most any of them needs,
+    # as the page's "X 每高 1 个百分点" column (frontend ``ColumnDetails``); a control is not "per point of X".
+    kind = _depvar_kind(outcome, design) if outcome is not None else ""
+    scale = 1.0 if kind == "share" else 0.01
+
+    def point_and_bounds(coefficient: dict[str, Any]) -> tuple[float, tuple[float, float] | None]:
+        low, high = coefficient.get("ci_low"), coefficient.get("ci_high")
+        bounds = (
+            (float(low) * scale, float(high) * scale)
+            if not suppressed and isinstance(low, (int, float)) and isinstance(high, (int, float))
+            else None
+        )
+        return float(coefficient["coef"]) * scale, bounds
+
+    x_terms = [
+        coefficient
+        for coefficient in rows
+        if outcome is not None
+        and isinstance(coefficient, dict)
+        and (coefficient is cumulative or coefficient.get("name") in X_LAG_COLUMNS.values())
+        and isinstance(coefficient.get("coef"), (int, float))
+        and math.isfinite(coefficient["coef"])
+    ]
+    per_point_digits = max((estimate_digits(kind, *point_and_bounds(term)) for term in x_terms), default=0)
     for coefficient in rows:
         if not isinstance(coefficient, dict):
             continue
@@ -824,8 +852,8 @@ def _technical_estimate_tables(
             suppressed=suppressed,
         )
         per_point = (
-            _natural_effect(outcome, design, result, coefficient)[1].split("（")[0]
-            if outcome is not None and coefficient is primary and isinstance(coefficient.get("coef"), (int, float))
+            with_count_unit(_signed(point_and_bounds(coefficient)[0], per_point_digits), kind)
+            if any(coefficient is term for term in x_terms)
             else "—"
         )
         t = coefficient.get("t")

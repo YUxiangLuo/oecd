@@ -2,7 +2,7 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { api, ApiError } from "../api";
 import type { AcademicSemester } from "../types";
-import { SemestersTab } from "./semesters";
+import { NameModal, SemestersTab } from "./semesters";
 
 afterEach(cleanup);
 
@@ -198,4 +198,12 @@ test("a failed load reads as Chinese and can be retried", async () => {
     fireEvent.click(screen.getByRole("button", { name: "重试" }));
     expect(await screen.findByText("还没有学期")).toBeTruthy();
   } finally { list.mockRestore(); }
+});
+
+test("a name is saved with each inner run of spaces as one, as the server compares it", async () => {
+  const names: string[] = [];
+  render(<NameModal title="新建学期" label="学期名称" initial="" onClose={() => {}} onSubmit={async (name) => { names.push(name); }} />);
+  fireEvent.change(screen.getByLabelText("学期名称"), { target: { value: "  r5-d  2026\u3000秋季 \t（测试） " } });
+  fireEvent.click(screen.getByRole("button", { name: "保存" }));
+  await waitFor(() => expect(names).toEqual(["r5-d 2026 秋季 （测试）"]));
 });

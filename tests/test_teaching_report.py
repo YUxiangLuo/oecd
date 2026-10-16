@@ -1514,7 +1514,9 @@ def test_report_renders_authoritative_result_fixture_without_calling_estimator(t
         in report.markdown
     )
     # Four decimals for every number but p, as the page's 详细数字 table prints them.
-    assert "| 关税暴露 X | — | 0.7200 |" in report.markdown
+    # Each X term is read per point too, as on the page's 详细数字 table (one set of decimals for X, L1.X and the sum).
+    assert "| 关税暴露 X | +0.72 个百分点 | 0.7200 |" in report.markdown
+    assert "| 关税暴露 L1.X | +0.48 个百分点 | 0.4800 |" in report.markdown
     assert "4 位有效数字" not in report.markdown and "保留 4 位小数" in report.markdown
     # Versions and the session digest are listed only under "报告溯源", at the end; the unused macro controls
     # are not mentioned at all.
@@ -1595,7 +1597,7 @@ def test_report_preserves_the_full_accepted_research_question(tmp_path, monkeypa
     report = build(session, "同学")
 
     assert question in report.markdown
-    frontend = (config.ROOT / "frontend" / "src" / "labs" / "steps" / "report-lab.tsx").read_text()
+    frontend = (config.ROOT / "frontend" / "src" / "labs" / "steps" / "report-lab-logic.ts").read_text()
     assert f"export const REFLECTION_MAX_LENGTH = {REFLECTION_TEXT_LIMIT};" in frontend
 
 
@@ -1955,8 +1957,9 @@ def test_report_marks_suppressed_inference_and_reasons(tmp_path, monkeypatch):
 
     assert "这一项不显示 95% 区间" in report.markdown
     assert "处理聚类不足" in report.markdown
-    assert "| 关税暴露 X | — | -0.1200 | 不显示 | — | — | 不显示 |" in report.markdown
-    assert "| X 各项合计 | -0.20 个百分点 | -0.2000 | 不显示 | — | — | 不显示 |" in report.markdown
+    assert "| 关税暴露 X | -0.120 个百分点 | -0.1200 | 不显示 | — | — | 不显示 |" in report.markdown
+    # The sum at the decimals its terms need (-0.120 beside -0.200, not -0.20), as the page's 详细数字 column.
+    assert "| X 各项合计 | -0.200 个百分点 | -0.2000 | 不显示 | — | — | 不显示 |" in report.markdown
 
 
 def test_report_translates_settings_controls_and_rounds_display_values(tmp_path, monkeypatch):
@@ -2408,7 +2411,7 @@ def test_technical_appendix_states_the_chosen_y_unit_not_the_family_unit():
     }
     lines = _run_sections([run])
     assert (
-        "- 单位：无量纲（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化）"
+        "- 单位：比值，无单位（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化）"
         in lines
     )
     assert "- 结果指标 Y：GVC 位置指数" in lines
@@ -2821,6 +2824,53 @@ def test_report_appendix_groups_thousands_like_the_page_detail_table():
     )
 
 
+def test_report_appendix_reads_every_x_term_per_point_like_the_page_detail_table():
+    """The page's 详细数字 table reads X, L1.X and their sum per point of X, at one set of decimals (the most any of
+    them needs); a control row has none."""
+    from gvcsim.regression.spec import EXCHANGE_RATE_COLUMN, X_LAG_COLUMNS
+    from gvcsim.report_render import _technical_estimate_tables
+
+    def term(name, coef, low, high):
+        return {"name": name, "coef": coef, "se": 0.1, "t": 1.0, "p": 0.5, "ci_low": low, "ci_high": high}
+
+    result = {
+        "status": "ok",
+        "coefs": [
+            term(X_LAG_COLUMNS[0], -1.2, -1.5, -0.9),
+            term(X_LAG_COLUMNS[1], -0.62, -0.9, -0.34),
+            term(EXCHANGE_RATE_COLUMN, 0.3, 0.1, 0.5),
+        ],
+        "cumulative": term("cumulative", -1.82, -2.2, -1.44),
+    }
+    lines = _technical_estimate_tables({"depvar_kind": "length"}, result, suppressed=False, outcome="length")
+    cells = {line.split(" | ")[0].removeprefix("| "): line.split(" | ")[1] for line in lines if line.startswith("| ")}
+    assert cells["关税暴露 X"] == "-0.0120 个长度单位"
+    assert cells["关税暴露 L1.X"] == "-0.0062 个长度单位"
+    assert cells["X 各项合计"] == "-0.0182 个长度单位"
+    assert cells["汇率变动"] == "—"
+
+
+def test_summary_table_gives_a_share_its_size_in_standard_deviations(monkeypatch):
+    """As the page's 四项回归结果汇总 (``shareSize``): a share's reading is followed by "（幅度约 x 个标准差）", which the
+    other Ys carry in their reading already; none without inference."""
+    from gvcsim import report_render
+    from gvcsim.report_common import share_size
+
+    monkeypatch.setattr(report_render, "_result_is_reportable", lambda result, design: True)
+    coefficient = {"name": X_COLUMN, "coef": -0.55, "ci_low": -0.7, "ci_high": -0.4}
+    result = {"status": "ok", "depvar_within_std": 0.09, "coefs": [coefficient]}
+    run = {"step": 11, "outcome": "trade", "design": {"outcome": "trade", "depvar_label": "外国增加值项占比"}}
+    lines = report_render._comparison_table([{**run, "result": result}])
+    row = next(line for line in lines if line.startswith("| 11 |"))
+    assert "| -0.55 个百分点（幅度约 0.061 个标准差） | [-0.70, -0.40] 个百分点 |" in row
+    assert share_size("trade", run["design"], {**result, "depvar_within_std": 1000}, coefficient) == (
+        "（幅度约 不到 0.001 个标准差）"
+    )
+    suppressed = {**result, "support": {"suppress_inference": True}}
+    assert share_size("trade", run["design"], suppressed, coefficient) == ""
+    assert share_size("length", {}, result, coefficient) == ""
+
+
 def test_report_example_conversion_groups_thousands_like_the_page():
     from gvcsim.report_render import _example_size
 
@@ -3153,7 +3203,7 @@ def test_report_marks_a_default_step_10_example_and_names_accounts_rows(tmp_path
     )
 
 
-@pytest.mark.parametrize("kind,scale", [("share", 1.0), ("length", 0.01), ("network", 0.01)])
+@pytest.mark.parametrize("kind,scale", [("share", 1.0), ("length", 0.01), ("position", 0.01), ("network", 0.01)])
 def test_custom_report_chart_compares_native_effects_and_omits_invalid_models(kind, scale):
     from gvcsim.regression import workbench
     from gvcsim.regression.spec import DEFAULT_SPEC, ModelSpec, X_LAG_COLUMNS
@@ -3210,6 +3260,11 @@ def test_custom_report_chart_compares_native_effects_and_omits_invalid_models(ki
     assert "仅 L1.X；N = 100" in markdown
     assert "标准差" not in chart["x_label"]
     assert "百分点" in chart["x_label"] if kind == "share" else "原始单位" in chart["note"]
+    # The note names the Y's own unit: only a share is converted to points (step 13's index is a bare ratio).
+    native = {"share": "份额转换为百分点", "length": "长度单位", "position": "位置指数是比值，无单位"}
+    assert chart["note"].startswith(f"同一 Y 使用原始单位（{native.get(kind, '中心性原始单位')}），")
+    if kind == "position":
+        assert chart["x_label"].endswith("（比值，无单位）")
     assert markdown.count("不绘制对应模型") == 5
     assert workbench.SAMPLE_DIFFERS_NOTE in markdown
     # A column with one X term ("仅 L1.X" here) gets the note.

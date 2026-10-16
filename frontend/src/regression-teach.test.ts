@@ -2,14 +2,8 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import {
-  RegressionEvidenceMatrix,
-  RegressionSummaryBars,
-  ReportedExperiments,
-  decompositionSentence,
-  familyVerdict,
-  regressionSummaryRows,
-} from "./regression-teach";
+import { RegressionEvidenceMatrix, RegressionSummaryBars, ReportedExperiments } from "./regression-teach";
+import { decompositionSentence, familyVerdict, regressionSummaryRows } from "./regression-teach-logic";
 import { api } from "./api";
 import { snapshotOf } from "./regression-workbench-table";
 import optionsFixture from "./regression-workbench-options.fixture.json";

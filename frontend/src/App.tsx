@@ -7,6 +7,7 @@ import {
   shouldAutoShowIntro,
   shouldDropStepOnLogin,
   stepFromSearch,
+  stepLinkNotice,
   storeAuthentication,
   writeStepHistory,
   type StepHistoryMode,
@@ -55,7 +56,10 @@ function AppContent() {
   const [stepsData, setStepsData] = useState<StepsResponse | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [metaReady, setMetaReady] = useState(false);
-  const explicitStep = useRef(stepFromSearch(window.location.search));
+  const initialSearch = useRef(window.location.search);
+  const explicitStep = useRef(stepFromSearch(initialSearch.current));
+  // Said once, on the step the link opened: a ?step= that is not a course step was replaced by another one.
+  const [stepNotice, setStepNotice] = useState<{ step: number; text: string } | null>(null);
   const initialStepChosen = useRef(false);
   const [current, setCurrent] = useState(() => explicitStep.current ?? 1);
   const contentRef = useRef<HTMLElement>(null);
@@ -305,16 +309,16 @@ function AppContent() {
   useEffect(() => {
     if (!stepsData || session.status !== "ready" || initialStepChosen.current) return;
     initialStepChosen.current = true;
-    if (explicitStep.current != null) {
-      // A deep link keeps its step; the history entry is rewritten for it (as every other step change is).
-      selectStep(explicitStep.current, "replace");
-      return;
-    }
     const completed = new Set(session.completion?.completed ?? []);
-    // With everything done, open the report step: that is where the receipt and teacher feedback are.
-    const firstIncomplete = stepsData.steps.find((step) => !completed.has(step.n))?.n ?? stepsData.steps.at(-1)?.n ?? 1;
-    selectStep(firstIncomplete, "replace");
-  }, [selectStep, session.completion, session.status, stepsData]);
+    // A deep link keeps its step; the history entry is rewritten for it (as every other step change is).
+    // Without one, open the first unfinished step; with everything done, the report step: that is where the
+    // receipt and teacher feedback are.
+    const target = resolveStep(explicitStep.current
+      ?? stepsData.steps.find((step) => !completed.has(step.n))?.n ?? stepsData.steps.at(-1)?.n ?? 1);
+    selectStep(target, "replace");
+    const notice = stepLinkNotice(initialSearch.current, target);
+    if (notice) setStepNotice({ step: target, text: notice });
+  }, [resolveStep, selectStep, session.completion, session.status, stepsData]);
 
   // Each step gets its own tab title, so history entries and assistive tech can tell steps apart.
   const currentTitle = user?.role === "student" ? stepsData?.steps.find((item) => item.n === current)?.title : undefined;
@@ -422,6 +426,8 @@ function AppContent() {
       meta={meta}
       stepsData={session.quizzes ? { ...stepsData, steps: stepsData.steps.map((step) => ({ ...step, quiz: session.quizzes![String(step.n)] })) } : stepsData}
       current={current}
+      stepNotice={stepNotice?.step === current ? stepNotice.text : null}
+      onDismissStepNotice={() => setStepNotice(null)}
       session={session}
       stepState={stepState}
       completedSteps={completedSteps}

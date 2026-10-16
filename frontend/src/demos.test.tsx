@@ -24,6 +24,7 @@ import {
   nextNetworkDemoNode,
   panelAmountDecimals,
   ratioOperands,
+  signedPanelDecimals,
   sumText,
   teachingBetweennessPairs,
   teachingNetworkCentralitySnapshot,
@@ -274,6 +275,32 @@ describe("step 4: the sum line says ≈ when the shown lengths do not add up to 
       expect(text).toContain("后向各段长度：纯国内 1.310、传统贸易 1.500、GVC 2.100（上面是这些长度乘以最终产品份额后的贡献）。");
       expect(text).toContain("各段（最终产品中的份额 × 段长度）之和 = 1.555；等于直接算出的后向总生产长度 PLy（1.555），即 PLy 是三段长度按最终产品份额的加权平均。");
       expect(text).not.toContain("与总量一致");
+    } finally {
+      countryRequest.mockRestore();
+      industryRequest.mockRestore();
+      cleanup();
+    }
+  });
+
+  test("the backward PLy line also reads ≈ when the shown contributions do not add up (CHN 2018, round 5)", async () => {
+    // Contributions 1.8134 + 0.1814 + 0.5104 = 2.5052: the rows read 1.813 + 0.181 + 0.510 = 2.504 against 2.505.
+    const row = {
+      country: "CHN", year: 2017, SVA: 1, PLv: 2, "1_VA_D": 0.6, "2_VA_RT": 0.1, "3_VA_GVC": 0.3, PLv_D: 2, PLv_RT: 2, PLv_GVC: 2,
+      FGY: 1, PLy: 2.5052, "1_FGY_D": 0.5, "2_FGY_RT": 0.25, "3_FGY_GVC": 0.25, PLy_D: 3.6268, PLy_RT: 0.7256, PLy_GVC: 2.0416, GVCPs: 0.98,
+    };
+    const countryRequest = spyOn(api, "countryIndicatorsForCountry").mockResolvedValue([{ ...row, industry: null }]);
+    const industryRequest = spyOn(api, "industryIndicatorsAll").mockResolvedValue({ total: 1, page: 1, page_size: 200, rows: [{ ...row, industry: "A" }] });
+    try {
+      const view = render(
+        <DecompositionDemo step={6} meta={{ years: [2017], countries: ["CHN"], sectors: ["A"], dataset: null }} primaryYear={2017} primaryCountry="CHN" />,
+      );
+      await waitFor(() => expect(view.container.textContent).toContain("后向总生产长度 PLy（从最终产品端回溯）"));
+      const expected = "各段（最终产品中的份额 × 段长度）之和 ≈ 2.505；与直接算出的后向总生产长度 PLy（2.505）一致（差别来自四舍五入），即 PLy 是三段长度按最终产品份额的加权平均。";
+      expect(view.container.textContent).toContain(expected);
+      expect(view.container.textContent).not.toContain("之和 = 2.505");
+      // The same check for a single industry.
+      fireEvent.click(view.getByRole("button", { name: "单个行业" }));
+      await waitFor(() => expect(view.container.textContent).toContain(expected));
     } finally {
       countryRequest.mockRestore();
       industryRequest.mockRestore();
@@ -645,6 +672,11 @@ describe("single-entity decomposition scope", () => {
   });
 });
 
+test("steps 2–4: the country picker says why ROW is not in the list, as step 5 does (round 5)", () => {
+  const html = renderToStaticMarkup(<DecompositionDemo step={4} meta={meta} primaryYear={2020} primaryCountry="CHN" />);
+  expect(html).toContain("国家列表不含世界其他地区（ROW，是一个汇总项，不能单独选）。");
+});
+
 describe("one country only", () => {
   test("decomposes the selected country, with 国家整体／单个行业 and no second country or side-by-side option", async () => {
     const row = (country: string, industry = "") => ({ country, industry, year: 2020, SVA: 10, "1_VA_D": 4, "2_VA_RT": 2, "3_VA_GVC": 4, "3a_VA_GVC_S": 1, "3b_VA_GVC_C": 3 });
@@ -850,6 +882,39 @@ describe("small amounts read with the precision of the table rows (round 10)", (
       countryRequest.mockRestore();
       industryRequest.mockRestore();
     }
+  });
+
+  test("ISL C21 2017: a negative total reads at one precision, adds up as shown and draws no 100% bar (round 5)", async () => {
+    const row = {
+      country: "ISL", industry: "C21", year: 2017,
+      SVA: -10.5382, "1_VA_D": -10.104, "2_VA_RT": -0.262, "3_VA_GVC": -0.1722, "3a_VA_GVC_S": -0.114, "3b_VA_GVC_C": -0.0582,
+    };
+    const countryRequest = spyOn(api, "countryIndicatorsForCountry").mockResolvedValue([{ ...row, industry: null, SVA: 5000, "1_VA_D": 5000, "2_VA_RT": 0, "3_VA_GVC": 0, "3a_VA_GVC_S": 0, "3b_VA_GVC_C": 0 }]);
+    const industryRequest = spyOn(api, "industryIndicatorsAll").mockResolvedValue({ total: 1, page: 1, page_size: 200, rows: [row] });
+    try {
+      const view = render(
+        <DecompositionDemo step={5} meta={{ years: [2017], countries: ["ISL"], sectors: ["C21"], dataset: null }}
+          primaryYear={2017} primaryCountry="ISL" initialView={{ level: "sector", industry: "C21" }} />,
+      );
+      await waitFor(() => expect(view.container.textContent).toContain("总量为负，无法算比重"));
+      const text = view.container.textContent ?? "";
+      expect([...view.container.querySelectorAll(".decomp-table tbody tr .dt-val")].map((cell) => cell.textContent))
+        .toEqual(["-10.104", "-0.262", "-0.114", "-0.058"]);
+      expect(text).toContain("总增加值 SVA = -10.538");
+      expect(text).toContain("= -0.058 / -10.538 = —（总量为负，无法计算比重）");
+      expect(text).toContain("4 项金额相加 = -10.538，等于总量。");
+      expect(view.container.querySelector(".decomp-bar")).toBeNull();
+    } finally {
+      countryRequest.mockRestore();
+      industryRequest.mockRestore();
+      cleanup();
+    }
+  });
+
+  test("a signed panel starts at its parts' precision; a positive or all-zero panel is not one", () => {
+    expect(signedPanelDecimals([-10.104, -0.262, -0.114, -0.0582], -10.5382)).toEqual({ decimals: 3, checks: true });
+    expect(signedPanelDecimals([0, 0], 0)).toBeNull();
+    expect(signedPanelDecimals([1, 2], 3)).toBeNull();
   });
 
   test("a small total, its parts and the sum line agree in the rendered decomposition", async () => {

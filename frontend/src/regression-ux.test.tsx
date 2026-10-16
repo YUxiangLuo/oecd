@@ -2,12 +2,14 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api";
-import { pendingStepTenExample, RegressionRequestError, RegressionRunLab } from "./regression";
+import { RegressionRequestError, RegressionRunLab } from "./regression";
+import { pendingStepTenExample } from "./regression-step/step-ten-example";
 import {
   barPreviewText, degreeIdentity, parallelTrendsNote, familyBarRows, forwardShareIdentity, tradeShareIdentity, GROUP_CHART_CAPTION, groupLines, waveMarkers,
 } from "./regression-step/family-bars";
-import { exampleEffect, lagSplit, RegressionResultCard } from "./regression-step/result-card";
-import { equationSymbol } from "./regression-step/model-equation";
+import { RegressionResultCard } from "./regression-step/result-card";
+import { exampleEffect, lagSplit } from "./regression-step/result-text";
+import { equationSymbol } from "./regression-step/model-equation-text";
 import { TEACHING_MODEL_VERSION } from "./regression-step/saved-run";
 import { INTERRUPTED_RUN_NOTE } from "./regression-step/use-regression-run";
 import { scrollIntoCourseContent } from "./content-scroll";

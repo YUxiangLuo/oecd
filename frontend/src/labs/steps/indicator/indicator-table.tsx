@@ -13,7 +13,7 @@ import type { IndicatorSchema, IndustryPage, Meta, QuizCompletionState, StepStat
 import { userFacingRequestError } from "../../../user-facing-error";
 import { countryLabel, sectorLabel } from "../../../viz";
 import { PATH_UNDEFINED_LABEL, PATH_UNDEFINED_NOTE, pathMetricUndefined } from "../../../viz/views/network-heat";
-import type { DecompositionView } from "../../../demos";
+import { ROW_AGGREGATE, type DecompositionView } from "../../../demos";
 import { AsyncStateMessage, Pager, fieldLabel, fmtField, useAsync, type AsyncStatus } from "../../shared";
 
 const BASE_DESC: Record<string, string> = {
@@ -346,6 +346,28 @@ function IndicatorHeaderLabel({ label, children }: { label: string; children?: R
   return <>{label.slice(0, split)}<span className="th-note">{label.slice(split)}{children}</span></>;
 }
 
+/** Step 5: each centrality column's unit, written into its header ("加权总度（百万美元）"); the ratios have none. */
+export const NETWORK_COLUMN_UNITS: Readonly<Record<string, string>> = {
+  "weighted degree": "百万美元",
+  "weighted indegree": "百万美元",
+  "weighted outdegree": "百万美元",
+  degree: "连接数",
+  indegree: "连接数",
+  outdegree: "连接数",
+  Eccentricity: "步数",
+  betweenesscentrality: "未归一化",
+};
+
+/** Step 5: the units above the centrality table, so its title names them as the headers do. */
+export const NETWORK_UNITS_NOTE = "单位：加权总度、加权入度、加权出度为百万美元（只算中间品流量）；度、入度、出度为连接数；离心率为步数；介数未归一化（经过该节点的最短路线所占比例，对所有节点对求和），不足 1 时显示“<1”；接近中心性、调和中心性和特征向量中心性是无量纲的比值。";
+
+/** A column's header text: its label, with its unit where the table gives one. */
+export function indicatorColumnLabel(column: string, schema?: IndicatorSchema | null, units?: Readonly<Record<string, string>>): string {
+  const label = fieldLabel(column, schema);
+  const unit = units?.[column];
+  return unit ? `${label}（${unit}）` : label;
+}
+
 export function IndicatorDataTable({
   groupLabel,
   schema,
@@ -355,6 +377,7 @@ export function IndicatorDataTable({
   country,
   page,
   totalPages = 1,
+  units,
 }: {
   groupLabel: string;
   schema: IndicatorSchema | null | undefined;
@@ -365,6 +388,8 @@ export function IndicatorDataTable({
   page: number;
   /** Only a multi-page table names its page. */
   totalPages?: number;
+  /** Units for the headers and the caption (step 5: {@link NETWORK_COLUMN_UNITS}). */
+  units?: Readonly<Record<string, string>>;
 }) {
   // A group label may already end in “指标” (e.g. “生产网络指标”); do not say it twice.
   const captionLabel = groupLabel.endsWith("指标") ? `${groupLabel}数据` : `${groupLabel}指标数据`;
@@ -380,7 +405,7 @@ export function IndicatorDataTable({
     index === 0 ? 0 : index <= lastSticky ? (index === 1 ? firstWidth : firstWidth + secondWidth) : null;
   return (
     <table className="data-table indicator-data-table">
-      <caption className="sr-only">{captionLabel} · {year} 年 · {country ? countryLabel(country) : "全部国家"}{totalPages > 1 ? ` · 第 ${page} 页` : ""}</caption>
+      <caption className="sr-only">{captionLabel} · {year} 年 · {country ? countryLabel(country) : "全部国家"}{totalPages > 1 ? ` · 第 ${page} 页` : ""}{units ? ` · ${NETWORK_UNITS_NOTE}` : ""}</caption>
       <thead>
         <tr>
           {columns.map((column, index) => {
@@ -396,7 +421,7 @@ export function IndicatorDataTable({
                 className={TEXT_COLUMNS.has(column) ? "text-col" : undefined}
                 style={left != null ? { position: "sticky", left, zIndex: index === 0 ? 5 : 4, background: "#fafbfd" } : undefined}
               >
-                <IndicatorHeaderLabel label={fieldLabel(column, schema)}>
+                <IndicatorHeaderLabel label={indicatorColumnLabel(column, schema, units)}>
                   {desc && <ColumnInfo label={fieldLabel(column, schema)} text={desc} />}
                 </IndicatorHeaderLabel>
               </th>
@@ -524,7 +549,7 @@ export function IndicatorTable({ meta, groupKey, schema, schemaStatus = "success
         </LabeledControl>
         <span className="muted">{countLabel}</span>
         {countryNote && <span className="muted indicator-carried-note" role="note">{countryNote}</span>}
-        {!country && <span className="muted">“全部”也包括世界其他地区（ROW，是一个汇总项，不能单独选）。</span>}
+        {!country && <span className="muted">“全部”也包括{ROW_AGGREGATE}。</span>}
         <FullscreenTriggerSlot />
       </div>
 
@@ -571,11 +596,13 @@ export function IndicatorTable({ meta, groupKey, schema, schemaStatus = "success
               </button>
             </div>
           )}
+          {groupKey === "network" && <p className="muted indicator-table-units" role="note">{NETWORK_UNITS_NOTE}</p>}
           <ScrollableRegion
             className="table-wrap bounded-data-table indicator-table-scroll"
             label={`${group?.label ?? "指标"}数据表，可横向滚动`}
           >
             <IndicatorDataTable
+              units={groupKey === "network" ? NETWORK_COLUMN_UNITS : undefined}
               groupLabel={group?.label ?? "指标"}
               schema={schema}
               columns={cols}

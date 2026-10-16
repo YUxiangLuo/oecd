@@ -23,10 +23,10 @@ export function normalizeLabel(value: string): string {
 }
 
 /**
- * What a teacher's search compares: the label with full-width punctuation folded as well, case-folded. Names keep
- * their Chinese punctuation as typed, but rows stored before that rule have it folded to ASCII, so “王五（” must also
- * find “王五(转专业)” (and the other way round).
+ * What a teacher's search compares: the label with full-width punctuation folded as well, case-folded, without any
+ * spaces. Names keep their Chinese punctuation as typed, but rows stored before that rule have it folded to ASCII, so
+ * “王五（” must also find “王五(转专业)” (and the other way round); “张 三” finds “张三”, “2026秋” finds “2026 秋”.
  */
 export function searchKey(value: string): string {
-  return nameKey(value).replace(/\s+/g, " ");
+  return nameKey(value).replace(/\s+/g, "");
 }

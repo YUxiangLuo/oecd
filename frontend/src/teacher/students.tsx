@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { LabeledControl, ScrollableRegion } from "../a11y";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import { useAsync } from "../labs/shared";
 import type { AcademicSemester, StudentRow } from "../types";
 import { userFacingRequestError } from "../user-facing-error";
@@ -88,6 +88,18 @@ export function newStudentProblem(student: NewStudent): { field: NewStudentField
   ];
   const problem = checks.find(([, message]) => message != null);
   return problem ? { field: problem[0], message: problem[1]! } : null;
+}
+
+/**
+ * The create form's field a server refusal is about, from its message (gvcsim/classroom/routes.py create_student):
+ * "用户名 x 已存在", "学号 x 已被 某某（y）使用", "用户名只能包含…"; null for anything else (the box shows it alone).
+ */
+export function newStudentServerField(cause: unknown): NewStudentField | null {
+  if (!(cause instanceof ApiError) || (cause.status !== 409 && cause.status !== 400)) return null;
+  const message = cause.message.trim();
+  if (/^用户名.*(已存在|只能包含)/.test(message)) return "username";
+  if (/^学号.*已被.*使用/.test(message)) return "student_no";
+  return null;
 }
 
 export function newStudentError(student: NewStudent): string | null {
@@ -521,7 +533,7 @@ export function StudentModal({ semesters = [], refreshNotice, onClose, onSubmit 
     student_no: useRef<HTMLInputElement>(null),
     password: useRef<HTMLInputElement>(null),
   };
-  // A check that names its field sends focus there; a server refusal goes to the error box.
+  // A check or a server refusal that names its field sends focus there; any other refusal goes to the error box.
   const errorRef = useFieldErrorFocus(error, errorField ? fields[errorField] : null);
   // The scrim and Esc close too: what was typed is not dropped without asking.
   const typed = [form.username, form.display_name, form.password, form.student_no].some((value) => value.trim());
@@ -546,7 +558,20 @@ export function StudentModal({ semesters = [], refreshNotice, onClose, onSubmit 
       return;
     }
     setErrorField(null);
-    await settleModalSubmission(() => onSubmit(body), onClose, setError, setSaving);
+    // A taken username or 学号 marks its field, focused and described by the message, as a local check does.
+    let refusedField: NewStudentField | null = null;
+    await settleModalSubmission(
+      () => onSubmit(body).catch((cause: unknown) => {
+        refusedField = newStudentServerField(cause);
+        throw cause;
+      }),
+      onClose,
+      (message) => {
+        setErrorField(message ? refusedField : null);
+        setError(message);
+      },
+      setSaving,
+    );
   };
   return (
     <Modal title="添加学生账号" onClose={close}><form className="modal-form" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
