@@ -112,3 +112,16 @@ test("an arrow key that moves focus to the next bar keeps its tip through the sc
   fireEvent.scroll(view.getByTestId("scroll"));
   expect(tip.style.opacity).toBe("0");
 });
+
+function LongTip() {
+  const { wrapRef, Tip, show } = useTip();
+  return <div ref={wrapRef} data-testid="chart"><button onMouseMove={(event) => show(event, [["", "row"], ["说明", "完整设定：本次：自定义（加制造业增加值占比；加增加值总额对数；加出口强度）"], ["估计值", "-0.55 个百分点"]])}>mark</button>{Tip}</div>;
+}
+
+test("a long value wraps inside the tip; a short one keeps its unit on one line", () => {
+  const view = render(<LongTip />);
+  fireEvent.mouseMove(view.getByText("mark"), { clientX: 20, clientY: 30 });
+  const values = [...(view.getByTestId("chart").lastElementChild as HTMLElement).querySelectorAll("b")];
+  expect(values[0].style.whiteSpace).toBe("normal");
+  expect(values[1].style.whiteSpace).toBe("nowrap");
+});

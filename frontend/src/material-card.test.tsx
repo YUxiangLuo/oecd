@@ -61,3 +61,12 @@ test("an unsaved material is not called recorded; a conflict says where to act i
   expect(card.className).toContain("material-card--recorded");
   expect(screen.queryByRole("alert")).toBeNull();
 });
+
+test("a conflict caused by another save marks the card as waiting to sync, not as recorded", () => {
+  render(<MaterialCard state="recorded" summary="JPN 9.891%" how="当前例子就是已记录的材料；换国家或行业后自动更新。" syncConflict />);
+  const card = screen.getByRole("region", { name: "本步报告材料" });
+  expect(card.querySelector(".material-chip")?.textContent).toBe("待同步");
+  expect(card.className).toContain("material-card--missing");
+  expect(card.querySelector(".material-card-how")).toBeNull();
+  expect(screen.getByRole("alert").textContent).toContain("这里显示的可能不是最新的材料");
+});

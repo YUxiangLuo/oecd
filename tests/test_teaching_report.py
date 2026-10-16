@@ -1555,7 +1555,10 @@ def test_report_renders_authoritative_result_fixture_without_calling_estimator(t
     )
     assert "本实验没有生成冲击后的投入产出表或网络" not in report.markdown
     assert "不能证明真实关税" not in report.markdown
-    assert "标准误按国家聚类（同一国家的记录允许一起波动），95% 区间据此计算，是近似值" in report.markdown
+    assert (
+        "标准误（估计值的不确定程度）按国家聚类计算（同一国家的记录允许一起波动），95% 区间据此计算，是近似值"
+        in report.markdown
+    )
     assert "区间可能偏窄" in report.markdown
     # The interval is named for what it is, once, where the results start.
     assert "区间说明：95% 区间是真实系数的合理取值范围，包含 0 时方向不确定。" in report.markdown
@@ -2879,7 +2882,7 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     assert "### 步骤 11 · 贸易流回归（Y：外国增加值项占比）" in appendix
     # The course's design value sits under the per-point row with each column's deviation from it.
     assert re.search(
-        r"\| 课程设定值（X 每高 1 个百分点） \| -0\.55 个百分点；(幅度比设定值[大小] \d+%|与设定值几乎相同|方向与设定值相反)",
+        r"\| 课程设定值（X 每高 1 个百分点） \| -0\.550? 个百分点；(幅度比设定值[大小] \d+%|与设定值几乎相同|方向与设定值相反)",
         appendix,
     )
     assert f"| 变量 | 默认模型 | {escaped_name} |" in appendix
@@ -2914,7 +2917,10 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     cells = per_point.strip(" |").split(" | ")[1:]
     assert len(cells) == 2 and all(cell.endswith(" 个百分点（两年累计）") for cell in cells)
     default_run = regression_routes.cached_run(panel, RegressionDesign("trade", teaching=True, spec=DEFAULT_SPEC))
-    assert cells[0] == f"{default_run['result']['cumulative']['coef']:+.2f} 个百分点（两年累计）"
+    # The first column's decimals, one more when the two sums would read alike (the page's sharedPerPointDigits).
+    total = default_run["result"]["cumulative"]["coef"]
+    assert cells[0] in {f"{total:+.2f} 个百分点（两年累计）", f"{total:+.3f} 个百分点（两年累计）"}
+    assert cells[0] != cells[1]
     (chart,) = [json.loads(block) for block in re.findall(r"```gvcsim-chart\n(.*?)\n```", step11, re.S)]
     assert [item["label"] for item in chart["items"]] == ["默认模型", custom_name]
     for bar, spec in zip(chart["items"], (DEFAULT_SPEC, country_year), strict=True):
@@ -3206,8 +3212,9 @@ def test_custom_report_chart_compares_native_effects_and_omits_invalid_models(ki
     assert "百分点" in chart["x_label"] if kind == "share" else "原始单位" in chart["note"]
     assert markdown.count("不绘制对应模型") == 5
     assert workbench.SAMPLE_DIFFERS_NOTE in markdown
-    # No column with X alone: no note about it.
-    assert workbench.CURRENT_X_ONLY_NOTE not in markdown
+    # A column with one X term ("仅 L1.X" here) gets the note.
+    assert workbench.CURRENT_X_ONLY_NOTE in markdown
+    assert workbench.CURRENT_X_ONLY_NOTE not in "\n".join(custom_model_sections([{**table, "columns": [columns[0]]}]))
     current_only = {**table, "columns": [columns[0], column("只放当期 X", ModelSpec((0,), (), ()), coefficient)]}
     assert workbench.CURRENT_X_ONLY_NOTE in "\n".join(custom_model_sections([current_only]))
     assert markdown.index("| 变量 |") < markdown.index("```gvcsim-chart")

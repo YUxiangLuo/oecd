@@ -55,7 +55,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "百分点",
     priorStep: 3,
     priorLabel: "GVC 生产分解指标",
-    definition: "复杂 GVC 生产份额：一国创造的增加值中，以中间品出口、在最终使用前跨境两次及以上的部分所占的比例（按增加值来源，即前向口径；见步骤 3）。",
+    definition: "复杂 GVC 生产份额：一国创造的增加值中，以中间品出口、在最终使用前跨境两次及以上的部分所占的比例（见步骤 3）。",
     dontClaim: "不要写成“复杂 GVC 生产规模缩小”。这一项是占总增加值的份额，份额较低不代表复杂 GVC 生产的绝对量较小。",
   },
   length: {
@@ -68,7 +68,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     priorStep: 4,
     priorLabel: "GVC 长度分解指标",
     // The unit and the standard deviation are said here, before the bars and the task card use them.
-    definition: "前向 GVC 段长度：一国增加值进入跨境生产后，到被最终使用之前平均还要经过的生产环节数（见步骤 4）。单位是长度单位（1 个约等于多经过 1 个生产环节）；条形图另用“个标准差”比较几个 Y：1 个标准差约等于这个 Y 平常上下波动的典型幅度。",
+    definition: "前向 GVC 段长度：一国增加值进入跨境生产后，到被最终使用之前平均还要经过的生产环节数（见步骤 4）。单位是长度单位（1 个约等于多经过 1 个生产环节）；条形图另用“个标准差”比较几个 Y：1 个标准差约等于这个 Y 平常上下波动的典型幅度。条形图里另有后向 GVC 段长度（从最终品一侧看的段长度，见步骤 4）和 GVC 位置指数（前向段长度 ÷ 后向段长度，大于 1 表示相对更上游，即更靠近原料、零部件这一端；见步骤 7）。",
     dontClaim: "不要将它与贸易流回归的估计值直接比较：两者单位不同。",
   },
   network: {
@@ -80,7 +80,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "中心性原始单位（另附标准差换算）",
     priorStep: 5,
     priorLabel: "全球生产网络指标",
-    definition: "加权总度：一个国家×行业在全球投入产出网络中买入与卖出的流量之和（见步骤 5）。本步的 Y 是课程生成的分数，单位记作“中心性原始单位”，不是金额，只看正负和相差几个标准差（1 个标准差约等于这个 Y 平常上下波动的典型幅度）。条形图里另有加权入度（买入）、加权出度（卖出）、介数（处在其他行业之间最短供货路线上的程度）和接近中心性（离其他行业有多近）。",
+    definition: "加权总度：一个国家×行业在全球投入产出网络中买入与卖出的流量之和（见步骤 5）。本步的 Y 是课程生成的分数（高低顺序参照真实网络指标），页面上记作“中心性原始单位”，没有实际单位、也不是金额，只看正负和相差几个标准差（1 个标准差约等于这个 Y 平常上下波动的典型幅度）。条形图里另有加权入度（买入）、加权出度（卖出）、介数（处在其他行业之间最短供货路线上的程度）和接近中心性（离其他行业有多近）。",
     dontClaim: "不要写成连接已经减少或脱钩，也不要将其视为关税的“总影响”。",
   },
 };

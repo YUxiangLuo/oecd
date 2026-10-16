@@ -311,3 +311,22 @@ test("a wave's surplus range formats both ends alike, with the unit once", () =>
   expect(ruleYiUsdRange(1000, 10000)).toBe("10–100 亿美元");
   expect(ruleYiUsdRange(1234, 10000)).toBe("12.3–100 亿美元");
 });
+
+test("the chart keeps one Tab stop when the bar left off on is hidden by a shorter list or a closed table", async () => {
+  const view = render(<CountryExposureChart data={countriesFixture} limit={3} />);
+  const tabStops = () => [...view.container.querySelectorAll('[tabindex="0"][data-country]')].map((node) => node.getAttribute("data-country"));
+  fireEvent.click(screen.getByRole("button", { name: /展开全部/ }));
+  // Left off on the fifth taxed country, then the list is shortened to three again.
+  fireEvent.focus(view.container.querySelector('[data-country="LUX"]')!);
+  expect(tabStops()).toEqual(["LUX"]);
+  fireEvent.click(screen.getByRole("button", { name: /只看/ }));
+  expect(tabStops()).toEqual(["CAN"]);
+});
+
+test("a window resize closes the readout, so it never sits off the chart at its old place", () => {
+  const view = render(<CountryExposureChart data={countriesFixture} />);
+  fireEvent.mouseMove(view.container.querySelector("[data-country]")!, { clientX: 100, clientY: 100 });
+  expect(view.container.querySelector('[role="status"]')?.textContent).toContain("加拿大");
+  act(() => { window.dispatchEvent(new Event("resize")); });
+  expect(view.container.querySelector('[role="status"]')?.textContent).toBe("");
+});

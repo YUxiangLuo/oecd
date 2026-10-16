@@ -224,9 +224,9 @@ describe("simple regression workbench", () => {
     await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("外国增加值项占比平均低 0.50 个百分点"));
     // The sentence under the chart comes back with the saved run (it is saved with it), not only after a fresh run.
     expect([...document.querySelectorAll(".reg-decomposition li")].map((item) => item.textContent)).toEqual(
-      ["与关税 X 相关 −1.6 个百分点", "与汇率变动同步 −4.3 个百分点", "其余（各年共同的变化与噪声） −2.5 个百分点"]);
+      ["与关税 X 相关 -1.6 个百分点", "与汇率变动同步 -4.3 个百分点", "其余（各年共同的变化与噪声） -2.5 个百分点"]);
     // The part the headline's estimate is about is marked.
-    expect(document.querySelector(".reg-decomposition-tariff")?.textContent).toBe("与关税 X 相关 −1.6 个百分点");
+    expect(document.querySelector(".reg-decomposition-tariff")?.textContent).toBe("与关税 X 相关 -1.6 个百分点");
     // The saved run, not the overview, is the selected bar: page and report agree.
     await screen.findByRole("button", { name: "外国增加值项占比：-0.50 个百分点，95% 区间 [-0.60, -0.40]，已保存" });
     expect(document.body.textContent).not.toContain("教学模拟");
@@ -522,7 +522,7 @@ describe("simple regression workbench", () => {
         cumulative: { ...run.result.coefs[0], name: "cumulative", coef: -0.55, ci_low: -0.57, ci_high: -0.53 },
       },
     };
-    expect(lagSplit("trade", twoYear as never)).toBe("其中当年 -0.33 个百分点，次年再 -0.22 个百分点。");
+    expect(lagSplit("trade", twoYear as never)).toBe("其中当年 -0.33 个百分点，次年再 -0.22 个百分点，两者相加就是两年累计；“平均”指对所有国家×行业取平均。");
     expect(lagSplit("trade", run as never)).toBeNull();
     render(<RegressionResultCard outcome="trade" response={{ ...twoYear, benchmark } as never} />);
     expect(screen.getByRole("heading", { level: 3 }).textContent).toContain("两年累计平均低 0.55 个百分点");
@@ -541,7 +541,7 @@ describe("simple regression workbench", () => {
         cumulative: { ...twoYear.result.cumulative, coef: 0.0743, ci_low: 0.061, ci_high: 0.0876 },
       },
     };
-    expect(lagSplit("trade", small as never)).toBe("其中当年 +0.041 个百分点，次年再 +0.033 个百分点。");
+    expect(lagSplit("trade", small as never)).toBe("其中当年 +0.041 个百分点，次年再 +0.033 个百分点，两者相加就是两年累计；“平均”指对所有国家×行业取平均。");
     // "两年累计" is said for X + L1.X only: a sum of other terms is not over the tariff's year and the next.
     render(<RegressionResultCard outcome="trade" response={{ ...twoYear, design: { ...twoYear.design, spec: { x_lags: [0, 2], controls: [], fixed_effects: ["year"] } }, benchmark } as never} />);
     expect(screen.getByRole("heading", { level: 3 }).textContent).not.toContain("两年累计");

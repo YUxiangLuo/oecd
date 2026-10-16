@@ -215,14 +215,15 @@ describe("ReportedExperiments", () => {
           } } : undefined,
         }));
         const defaultCell = () => view.container.querySelectorAll("tbody tr td")[3]?.textContent;
-        expect(defaultCell()).toBe("…");
+        // The default model's sample is the family's one, known from the step's run; its number waits for the overview.
+        expect(defaultCell()).toBe("…样本 N = 10");
         expect(view.container.textContent).not.toContain("-0.55");
         if (fails) reject(new Error("offline"));
         else resolve({ version: "test", disclaimer: "", outcomes: { trade: [
           { key: "FVA_share", label: "wrong Y", kind: "share", default: true, coef: -99, ci_low: -100, ci_high: -98, p: 0.01, status: "ok", suppress_inference: false, depvar_std: 1, depvar_mean: 1, n_obs: 10 },
           { key: "DVAex_share", label: "selected Y", kind: "share", default: false, coef: 2.37, ci_low: 2.1, ci_high: 2.6, p: 0.01, status: "ok", suppress_inference: false, depvar_std: 1, depvar_mean: 1, n_obs: 10 },
         ], production: [], length: [], network: [] } });
-        await waitFor(() => expect(defaultCell()).toBe(fails ? "—" : "+2.37 个百分点"));
+        await waitFor(() => expect(defaultCell()).toBe(fails ? "—样本 N = 10" : "+2.37 个百分点样本 N = 10"));
         // The total, then its sample on the next line.
         expect(view.container.querySelectorAll("tbody tr td")[2]?.textContent).toBe("+1.73 个百分点（两年累计）样本 N = 10");
         expect(view.container.textContent).toContain("同一 Y 的默认模型");
@@ -302,7 +303,7 @@ test("the step-15 summary table gives each of its seven columns a share of the w
 describe("the sentence under the three-group chart (v13)", () => {
   test("it reads the first wave's change and the fitted split in the chart's unit, X first, the remainder last", () => {
     const text = decompositionSentence({
-      group: "first", wave_start: 2018, year: 2020, pre_years: [2016, 2017], observed: -0.084,
+      group: "first", wave_start: 2018, year: 2020, pre_years: [2016, 2017], observed: -0.084, x_mean: 0.029,
       terms: [
         { name: "x_terms", label: "关税 X", change: -0.016 },
         { name: "teaching_exchange_rate_change", label: "汇率变动", change: -0.041 },
@@ -313,11 +314,12 @@ describe("the sentence under the three-group chart (v13)", () => {
     }, "外国增加值项占比", 100, "个百分点", 1);
     expect(text).toContain("第一批被加税国家 2020 年的外国增加值项占比，比加税前（2016、2017 年平均）低 8.4 个百分点。按默认模型（见下方）的估计，这个总变化等于下面各项之和：");
     // Every part carries its unit.
-    expect(text).toContain("与关税 X 相关 −1.6 个百分点，与汇率变动同步 −4.1 个百分点，与 GDP 对数同步 −5.0 个百分点，与贸易开放度同步 +4.9 个百分点，其余（各年共同的变化与噪声） −2.6 个百分点");
-    expect(decompositionSentence({ group: "first", wave_start: 2018, year: 2020, pre_years: [2016, 2017], observed: -0.32, terms: [], remainder: -0.32 }, "前向 GVC 段长度", 1, "长度单位", 3))
+    expect(text).toContain("与关税 X 相关 -1.6 个百分点，与汇率变动同步 -4.1 个百分点，与 GDP 对数同步 -5.0 个百分点，与贸易开放度同步 +4.9 个百分点，其余（各年共同的变化与噪声） -2.6 个百分点");
+    expect(decompositionSentence({ group: "first", wave_start: 2018, year: 2020, pre_years: [2016, 2017], observed: -0.32, x_mean: null, terms: [], remainder: -0.32 }, "前向 GVC 段长度", 1, "长度单位", 3))
       .toContain("年平均）低 0.320 个长度单位");
     // What the regression's result is of the split; no causal story for the second wave.
-    expect(text).toContain("回归结论只对应第一项：它等于默认模型的系数 × 第一批国家 X 的平均变化。");
+    // The mean X it multiplies is given, so the part can be checked by hand (-0.55 × 2.9 ≈ -1.6).
+    expect(text).toContain("回归结论只对应第一项：它约等于两年累计的系数 × 第一批国家 2020 年的平均 X（2.9 个百分点，按全部行业平均，非货物行业的 X 为 0，所以比步骤 10 的货物行业平均小）。");
     expect(text).not.toContain("第二批");
   });
 });

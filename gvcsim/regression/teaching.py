@@ -945,6 +945,9 @@ def first_wave_decomposition(panel: pd.DataFrame, depvar: str, coefs: dict[str, 
         "year": years[-1],
         "pre_years": [year for year in years if year < start],
         "observed": observed,
+        # The first wave's mean X in the last year (0 before the tariff, so also its change), over every industry:
+        # the page says what the X part is made of, and a student can multiply it out.
+        "x_mean": change(ordered[X_COLUMN]) if X_COLUMN in ordered.columns else None,
         "terms": terms,
         "remainder": observed - explained,
     }

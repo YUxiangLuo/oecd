@@ -219,7 +219,7 @@ describe("fixed teaching regression reading", () => {
     expect(container.querySelector(".reg-headline-main")?.textContent).not.toContain("标准差");
     // (-0.55 × 0.01) / 0.015 = -0.367, at the digits step 15 prints (-0.37 个标准差).
     expect(container.querySelector(".reg-sd-note")?.textContent).toBe(
-      "换算成标准差：幅度约 0.37 个标准差（步骤 15 用它并列比较四步；1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化）。");
+      "换算成标准差：这 0.55 个百分点约等于 0.37 个标准差。1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化；步骤 15 用它并列比较单位不同的四步。");
   });
 
   test("the position index reads in standard deviations too", () => {

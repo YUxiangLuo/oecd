@@ -225,8 +225,11 @@ export function useTip() {
         if (i === 0) { div.style.cssText = "font-weight:700;font-size:12.5px;margin-bottom:3px"; div.textContent = value; }
         else {
           const b = document.createElement("b");
-          // A value keeps its unit on the same line ("274,951 百万美元", not "百万 / 美元"); the label may wrap.
-          b.style.cssText = "color:#fff;font-weight:600;white-space:nowrap";
+          // A short value keeps its unit on the same line ("274,951 百万美元", not "百万 / 美元"); a sentence (a model's
+          // full settings) wraps inside the tip instead of running out of it.
+          b.style.cssText = value.length > 24
+            ? "color:#fff;font-weight:600;white-space:normal;overflow-wrap:anywhere"
+            : "color:#fff;font-weight:600;white-space:nowrap";
           b.textContent = value;
           const span = document.createElement("span");
           span.style.color = "#c8ccd6";

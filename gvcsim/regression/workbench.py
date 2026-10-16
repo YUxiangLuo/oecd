@@ -140,15 +140,15 @@ HINTS = (
 FOOTNOTE = (
     "注：括号内为按国家聚类的标准误。*** p<0.01, ** p<0.05, * p<0.1。系数为原单位，X 以份额计（0.25 = 25%），"
     "X 增加 1 个百分点时 Y 的变化 = 系数 × 0.01（份额类 Y 再 × 100，即个百分点）。2018 年以前没有关税，X 的滞后在加税前按 0 处理。"
-    # The 11% is the default model's gap (country × industry effects); with fewer effects the gap is smaller (about 1%
-    # with country × year effects alone), so it is not stated as one number for every column.
-    "自由度计入样本内全部固定效应；用其他统计软件的默认设置复算时，含国家×行业固定效应的模型（如默认模型）"
-    "标准误可能小约 11%，其他设定差得少一些，属于计算口径不同。"
+    # The gap depends on the effects and the sample (default model about 11%, a shorter sample about 13%, country ×
+    # year effects alone about 1%), so only the default model's is given as a number.
+    "自由度计入样本内全部固定效应；用其他统计软件的默认设置复算时，标准误可能小一些（默认模型约小 11%，"
+    "具体随固定效应和样本而不同），属于计算口径不同。"
 )
 SAMPLE_DIFFERS_NOTE = "这几列的样本不同，差异有一部分来自样本，而不只是设定。"
-# A model with X alone: its coefficient also takes up part of the next-year link (X and L1.X move together), so it is
-# not the default model's 当年 term, which the result card shows.
-CURRENT_X_ONLY_NOTE = "只放当期 X 的列：X 的系数会吸收一部分与上一年 X 相关的变化，不等于默认模型里“当年”那一项。"
+# A model with one X term (X alone, or L1.X alone): its coefficient also takes up part of the other term's link (X and
+# L1.X move together), so it is not the default model's 当年 or 次年 term, which the result card shows.
+CURRENT_X_ONLY_NOTE = "只放一项 X 的列（仅当期 X、仅 L1.X 等）：这一项的系数会吸收另一项的一部分关联，不等于默认模型里“当年”或“次年”那一项。"
 # Said whatever stopped the inference: the library check (regression.panel) or the design's treatment support.
 SUPPRESSED_NOTE = "未通过估计检查，已隐藏推断结果（标准误、t 值、p 值、星号与区间）。"
 

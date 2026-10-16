@@ -123,7 +123,9 @@ export function CountryExposureChart({ data, limit }: {
 }) {
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
   useEffect(() => { hide(); }, [data, limit, hide]);
-  const [activeIndex, setActiveIndex] = useState(0);
+  // The item the keyboard left off on, by country: an index would point elsewhere once the list is shortened.
+  const [activeCountry, setActiveCountry] = useState<string | null>(null);
+  const [tableOpen, setTableOpen] = useState(false);
   // The focused item draws its own ring (an SVG group shows no outline in every browser).
   const [focused, setFocused] = useState<number | null>(null);
   const nodeRefs = useRef<(Element & { focus: () => void } | null)[]>([]);
@@ -156,6 +158,10 @@ export function CountryExposureChart({ data, limit }: {
   const untaxed = data.countries.filter((row) => !row.taxed);
   // Keyboard order: the taxed bars from the top, then the untaxed codes.
   const order = [...taxed, ...untaxed];
+  // The one Tab stop: the country left off on while it is on screen (a shortened list or a closed readings table
+  // hides it), else the first bar, so the chart can always be reached by Tab.
+  const remembered = order.findIndex((row) => row.country === activeCountry);
+  const activeIndex = remembered >= 0 && (remembered < taxed.length || tableOpen) ? remembered : 0;
   const rows = Math.max(taxed.length, 1);
 
   // Drawn at the card's width (600–1,100 units at 1:1), so the bars fill a wide card at the same text size.
@@ -168,7 +174,7 @@ export function CountryExposureChart({ data, limit }: {
   const scale = (pp: number) => (pp / hi) * barW;
 
   const focusAt = (index: number) => {
-    setActiveIndex(index);
+    setActiveCountry(order[index]?.country ?? null);
     // The untaxed codes sit in the folded readings table: open it before focusing one of them.
     if (index >= taxed.length && tableRef.current && !tableRef.current.open) tableRef.current.open = true;
     nodeRefs.current[index]?.focus();
@@ -202,7 +208,7 @@ export function CountryExposureChart({ data, limit }: {
     onMouseLeave: hide,
     onKeyDown: (event: KeyboardEvent) => onKeyDown(event, index),
     onFocus: (event: { currentTarget: Element }) => {
-      setActiveIndex(index);
+      setActiveCountry(row.country);
       setFocused(index);
       focusTip(event.currentTarget, countryTipLines(row, data.year, rule));
     },
@@ -273,7 +279,7 @@ export function CountryExposureChart({ data, limit }: {
       )}
       {/* The rule and the imposer are stated once, in the policy line above the chart. */}
       <p className="country-exposure-note">悬停或用方向键查看每个国家的 X 与对美货物顺差。</p>
-      <details className="country-exposure-table" ref={tableRef}>
+      <details className="country-exposure-table" ref={tableRef} onToggle={(event) => setTableOpen(event.currentTarget.open)}>
         <summary>{data.countries.length} 国读数表{untaxed.length ? `（含 ${untaxed.length} 国未被加税）` : ""}</summary>
       {untaxed.length > 0 && (
           <div className="country-exposure-untaxed" role="group" aria-label={`${untaxed.length} 国未被加税，X = 0`}>

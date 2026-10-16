@@ -345,7 +345,10 @@ export function ShockLab({ meta, step: _step, state }: {
       return waveStarts.map(([year, wave]) => ({ year, label: `${year} 年${WAVE_NAMES[wave] ?? `第 ${wave} 批`}加税` }));
     }
     if (!exampleStart) return undefined;
-    return { year: exampleStart, label: isService(shownIndustry) ? `${exampleStart} 年起对货物加税` : `${exampleStart} 年起加税` };
+    // Named as the exchange-rate chart and steps 11–14 name it ("2018 年第一批加税"), the wave included.
+    const wave = waveStarts[0]?.[1] ?? overview?.countries.find((item) => item.start_year === exampleStart && item.wave)?.wave;
+    const name = wave ? WAVE_NAMES[wave] ?? `第 ${wave} 批` : "";
+    return { year: exampleStart, label: isService(shownIndustry) ? `${exampleStart} 年${name}对货物加税` : `${exampleStart} 年${name}加税` };
   })();
   // One note under the selects for a selection outside the regression sample (the imposer, or an industry with
   // no first-year data), and what is shown instead.
@@ -378,6 +381,13 @@ export function ShockLab({ meta, step: _step, state }: {
   const firstWave = waves.find((wave) => wave.wave === 1)?.start_year ?? policyYear ?? undefined;
   // The first wave's currencies fall from its start year: marked only when an example country is in that wave.
   const exampleInFirstWave = lastRows.some((row) => overview?.countries.find((item) => item.country === row.country)?.wave === 1);
+  // Each wave an example country is taxed in, for the exchange-rate chart: a first-wave country beside a second-wave
+  // one gets both lines, as the X chart above (a currency moves with its country, whatever the industry).
+  const exampleCountryWaves = [...new Map(lastRows.flatMap((row) => {
+    const item = overview?.countries.find((entry) => entry.country === row.country);
+    return item?.taxed && item.wave && item.start_year != null ? [[item.start_year, item.wave] as const] : [];
+  })).entries()].sort(([a], [b]) => a - b)
+    .map(([year, wave]) => ({ year, label: `${year} 年${WAVE_NAMES[wave] ?? `第 ${wave} 批`}加税` }));
   // A later wave only (COL: 2019): its line is drawn too, and the page says why the currency does not move then (the
   // course's depreciation is the first wave's).
   const exampleLaterWave = exampleInFirstWave ? undefined : lastRows
@@ -447,7 +457,7 @@ export function ShockLab({ meta, step: _step, state }: {
           <li><b>{rate(overview.tariff_rate)}</b><span>只对货物（农业、采矿业、制造业）征收，加税前为 0</span></li>
         </ul>
         <p className="teaching-scenario">
-          名单{waves.length > 1 ? "和批次" : ""}由 ICIO 数据按 {overview.taxed_rule.year} 年对美货物顺差确定，不是随机抽取。服务、电力、建筑等非货物行业不加税。美国是加税方，不在回归样本中。
+          名单{waves.length > 1 ? "和批次" : ""}由 ICIO 数据按 {overview.taxed_rule.year} 年对美货物顺差确定，不是随机抽取。货物按 ICIO 行业代码 A–C 划分（采矿支持服务 B09 属采矿业，也加税）；电力、建筑和其余服务业不加税。美国是加税方，不在回归样本中。
         </p>
       </>}
     </section>
@@ -455,8 +465,8 @@ export function ShockLab({ meta, step: _step, state }: {
       <span className="reg-section-step">关税暴露 X</span>
       <h3>X = 对美出口份额 w × 加征税率 τ</h3>
       <dl className="teaching-definitions" aria-label="步骤 11–14 的模型用到的关税暴露">
-        <div><dt>w</dt><dd>这个国家×行业 {years[0] ?? "首年"} 年（加税前）的出口中卖到美国的比例，之后固定不变<span className="source-tag">ICIO 数据</span></dd></div>
-        <div><dt>τ</dt><dd>美国加征的税率；加税前、未被加税的国家和非货物行业都是 0<span className="source-tag">课程设定</span></dd></div>
+        <div><dt>w</dt><dd>这个国家×行业 {years[0] ?? "首年"} 年（加税前）的出口中卖到美国的比例，之后固定不变<span className="sr-only">（来源：</span><span className="source-tag">ICIO 数据</span><span className="sr-only">）</span></dd></div>
+        <div><dt>τ</dt><dd>美国加征的税率；加税前、未被加税的国家和非货物行业都是 0<span className="sr-only">（来源：</span><span className="source-tag">课程设定</span><span className="sr-only">）</span></dd></div>
         <div><dt>L1.X</dt><dd>上一年的 X：加税当年 X 上升，L1.X 次年才上升。Y 与关税暴露的关联可能分两年出现，所以回归同时放入 X 和 L1.X</dd></div>
       </dl>
       <h4 className="teaching-subhead">举个例子</h4>
@@ -562,7 +572,7 @@ export function ShockLab({ meta, step: _step, state }: {
           : savedExample ? "当前例子就是已记录的材料；换国家或行业后自动更新。"
           : AUTO_RECORD_HOW}
         extra={`步骤 11–14 会把回归结果换算到这个例子上；例子只用来展示，不改变回归样本。${recordedX === 0
-          ? "这个例子的 X 为 0，换算结果也会是 0；想看到不为 0 的换算，选被加税国家的货物行业（如加拿大的汽车行业）。"
+          ? "这个例子的 X 为 0，换算结果也会是 0；想看到不为 0 的换算，选被加税国家、对美有出口（w 不为 0）的货物行业（如加拿大的汽车行业）。"
           // Steps 11–14 convert every country of the example: "close to 0" only when the largest X is tiny, read off
           // the countries on screen while they are the recorded example; otherwise only a one-country record, whose X
           // is the one kept, can tell.
@@ -595,9 +605,7 @@ export function ShockLab({ meta, step: _step, state }: {
           metric="teaching_exchange_rate_change"
           label="汇率变动率（本币兑美元，负为贬值）"
           unit="%"
-          markYear={firstWave && exampleInFirstWave ? { year: firstWave, label: `${firstWave} 年第一批加税` }
-            : exampleLaterWave ? { year: exampleLaterWave.start_year!, label: `${exampleLaterWave.start_year} 年${WAVE_NAMES[exampleLaterWave.wave] ?? `第 ${exampleLaterWave.wave} 批`}加税` }
-            : undefined}
+          markYear={exampleCountryWaves.length ? exampleCountryWaves : undefined}
           digits={1}
           cards={false}
         />
@@ -607,15 +615,15 @@ export function ShockLab({ meta, step: _step, state }: {
         <dl className="teaching-variables" aria-label="步骤 11–14 的默认控制变量">
           <div>
             <dt>汇率变动</dt>
-            <dd>本币兑美元的年变动率（%，负为贬值），每个国家每年一个值<span className="source-tag">课程生成</span>。</dd>
+            <dd>本币兑美元的年变动率（%，负为贬值），每个国家每年一个值<span className="sr-only">（来源：</span><span className="source-tag">课程生成</span><span className="sr-only">）</span>。</dd>
           </div>
           <div>
             <dt>GDP 对数与贸易开放度</dt>
-            <dd>GDP 对数为 ln（模拟 GDP，美元），开放度为模拟进出口总额 / GDP（%）<span className="source-tag">课程生成</span>。</dd>
+            <dd>GDP 对数为 ln（模拟 GDP，美元），开放度为模拟进出口总额 / GDP（%）<span className="sr-only">（来源：</span><span className="source-tag">课程生成</span><span className="sr-only">）</span>。</dd>
           </div>
           <div>
             <dt>可选控制</dt>
-            <dd>步骤 11–14 的“改模型、对比”里还可加入人口增长率、FDI 净流入占比<span className="source-tag">课程生成</span>和制造业增加值占比等<span className="source-tag">按 ICIO 计算</span>。控制变量不是越多越好：本身受关税影响的变量不应作为控制。</dd>
+            <dd>步骤 11–14 的“改模型、对比”里还可加入人口增长率、FDI 净流入占比<span className="sr-only">（来源：</span><span className="source-tag">课程生成</span><span className="sr-only">）</span>和制造业增加值占比等<span className="sr-only">（来源：</span><span className="source-tag">按 ICIO 计算</span><span className="sr-only">）</span>。控制变量不是越多越好：本身受关税影响的变量不应作为控制。</dd>
           </div>
         </dl>
       </details>

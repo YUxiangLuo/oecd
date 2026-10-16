@@ -265,10 +265,29 @@ export function xSum(snapshot: CustomResultSnapshot, spec: Pick<ModelSpec, "x_la
  * "合计：X 每高 1 个百分点": each column's X-terms sum read per percentage point, all at the first column's decimals
  * so the row compares like with like, each saying which years it covers ("（两年累计）", "（仅当期 X）").
  */
+/**
+ * The decimals every column's X-terms sum is read at: the first column's, plus one (at most two) while two different
+ * sums would read alike (step 13's position index: -0.001862 and -0.001915 both "-0.0019").
+ */
+export function sharedPerPointDigits(columns: TableColumn[], outcome: RegressionOutcome): number | undefined {
+  const sums = columns.flatMap(({ snapshot, spec }) => {
+    const sum = xSum(snapshot, spec);
+    return sum ? [{ sum, snapshot }] : [];
+  });
+  if (!sums.length) return undefined;
+  const base = perPointDigits(outcome, sums[0].sum, sums[0].snapshot);
+  for (let digits = base; digits < base + 2; digits += 1) {
+    const shown = sums.map(({ sum, snapshot }) => perPointReading(outcome, sum, snapshot, digits));
+    const alike = sums.some((a, i) => sums.some((b, j) => j > i && a.sum.coef !== b.sum.coef && shown[i] === shown[j]));
+    if (!alike) return digits;
+  }
+  return base + 2;
+}
+
 export function perPointRow(columns: TableColumn[], outcome: RegressionOutcome): SummaryRow | null {
   const first = columns.find(({ snapshot, spec }) => xSum(snapshot, spec));
   if (!first) return null;
-  const digits = perPointDigits(outcome, xSum(first.snapshot, first.spec)!, first.snapshot);
+  const digits = sharedPerPointDigits(columns, outcome)!;
   return {
     key: "per_point",
     label: "合计：X 每高 1 个百分点",
@@ -318,6 +337,16 @@ export function designDeviationText(deviation: number): string {
 }
 
 /** How far an estimate's size is from the design value: + larger, − smaller; a sign flip reads beyond −100%. */
+/**
+ * A coefficient as the page shows it per percentage point (rounded to `digits`), back on the coefficient's scale:
+ * deviations are taken between the numbers a student reads, so two columns that read -0.0183 against a design
+ * value of -0.0180 both say "大 2%" (unrounded, 1.53% and 1.48% read 2% and 1%).
+ */
+export function shownCoefficient(coef: number, kind: string, digits: number): number {
+  const scale = kind === "share" ? 1 : 0.01;
+  return Number((coef * scale).toFixed(digits)) / scale;
+}
+
 export function designDeviation(estimate: number, design: number): number {
   if (design === 0) return Number.NaN;
   return Math.sign(estimate) === Math.sign(design)
@@ -346,7 +375,7 @@ export function designValueRow(columns: TableColumn[], outcome: RegressionOutcom
   if (!first) return null;
   if (design === null) return { key: "design", label: "课程设定值", cells: columns.map(() => "无单一设定值（比值 Y）") };
   if (design === 0) return { key: "design", label: "课程设定值", cells: columns.map(() => "设定为 0（与 X 无关）") };
-  const digits = perPointDigits(outcome, xSum(first.snapshot, first.spec)!, first.snapshot);
+  const digits = sharedPerPointDigits(columns, outcome)!;
   const target = perPointReading(outcome, { coef: design, ci_low: null, ci_high: null }, { depvar_kind: first.snapshot.depvar_kind, result: { suppressed: true } }, digits);
   return {
     key: "design",
@@ -355,7 +384,8 @@ export function designValueRow(columns: TableColumn[], outcome: RegressionOutcom
       const sum = xSum(snapshot, spec);
       if (!sum) return "";
       if (!coversDesignSpan(spec)) return `${target}（两年累计）；本列跨度不同，不计偏差`;
-      const deviation = designDeviation(sum.coef, design);
+      const kind = snapshot.depvar_kind;
+      const deviation = designDeviation(shownCoefficient(sum.coef, kind, digits), shownCoefficient(design, kind, digits));
       return `${target}；${designDeviationText(deviation)}`;
     }),
   };
@@ -420,8 +450,10 @@ export function shownModelLabel(spec: ModelSpec, options: WorkbenchOptions): str
  * page's name when it is short, else "自定义（7 处改动）". The table's column headers keep the full name.
  */
 export function chartModelLabel(name: string): string {
-  if (name.length <= 20 || !name.startsWith("自定义（")) return name;
-  return `自定义（${name.slice(4, -1).split("；").length} 处改动）`;
+  // One change is named in full: "自定义（1 处改动）" would say less than the change itself.
+  const changes = name.startsWith("自定义（") ? name.slice(4, -1).split("；").length : 0;
+  if (name.length <= 20 || changes < 2) return name;
+  return `自定义（${changes} 处改动）`;
 }
 
 /** How the page and the report name a model experiment: shownModelLabel (the server's workbench.experiment_label). */
@@ -459,7 +491,7 @@ export function comparisonCsv(
     return `${specSummary(column.spec, options)}${omitted.length ? `；已省略（${omitted.join("；")}）` : ""}`;
   })]);
   if (samplesDiffer(columns)) lines.push([options.sample_differs_note]);
-  if (columns.some((column) => canonicalSpec(column.spec, options).x_lags.join(",") === "0")) {
+  if (columns.some((column) => canonicalSpec(column.spec, options).x_lags.length === 1)) {
     lines.push([options.current_x_only_note]);
   }
   lines.push([options.footnote.replace("括号内为按国家聚类的标准误", "“标准误”一行为按国家聚类的标准误")]);

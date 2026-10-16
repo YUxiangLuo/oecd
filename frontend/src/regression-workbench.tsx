@@ -3,7 +3,7 @@
  * (each changes one setting of the course default model) or a custom setting, reads it in one regression table next
  * to the default model, and may put one model a step into the report (whose appendix recomputes it from the model).
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ScrollableRegion } from "./a11y";
 import { groupedFixed } from "./format";
 import { POSITION_UNIT_WORDS } from "./regression-verdict";
@@ -20,6 +20,7 @@ import {
   includedBy,
   omittedSummary,
   perPointDigits,
+  sharedPerPointDigits,
   perPointReading,
   perPointRow,
   sameSpec,
@@ -94,6 +95,9 @@ function ModelForm({ options, spec, onChange, disabled = false }: {
   /** While a model is computed: the settings stay those of the model being computed. */
   disabled?: boolean;
 }) {
+  // Each choice is named by its label alone; its explanation is read as the description, not as part of the name
+  // (the country × year effect's ran to some 180 characters).
+  const uid = useId();
   const toggleLag = (lag: number) => onChange({
     ...spec, x_lags: spec.x_lags.includes(lag) ? spec.x_lags.filter((item) => item !== lag) : [...spec.x_lags, lag],
   });
@@ -116,8 +120,9 @@ function ModelForm({ options, spec, onChange, disabled = false }: {
         <legend>关税暴露 X（至少选一项）</legend>
         {options.x_lags.map((item) => (
           <label key={item.lag} className="reg-custom-choice">
-            <input type="checkbox" checked={spec.x_lags.includes(item.lag)} onChange={() => toggleLag(item.lag)} />
-            <span><b>{item.label}</b><span className="sr-only">，</span><small>{item.description}</small></span>
+            <input type="checkbox" checked={spec.x_lags.includes(item.lag)} onChange={() => toggleLag(item.lag)}
+              aria-label={item.label} aria-describedby={`${uid}-x${item.lag}`} />
+            <span><b>{item.label}</b><small id={`${uid}-x${item.lag}`}>{item.description}</small></span>
           </label>
         ))}
         <p className="muted reg-custom-note">{options.x_lag_note}</p>
@@ -129,8 +134,9 @@ function ModelForm({ options, spec, onChange, disabled = false }: {
           return (
             <div key={item.name} className="reg-custom-control">
               <label className="reg-custom-choice">
-                <input type="checkbox" checked={Boolean(chosen)} onChange={() => toggleControl(item.name)} />
-                <span><b>{item.label}</b><span className="sr-only">，</span><small>{item.definition} · {item.source}</small></span>
+                <input type="checkbox" checked={Boolean(chosen)} onChange={() => toggleControl(item.name)}
+                  aria-label={item.label} aria-describedby={`${uid}-c-${item.name}`} />
+                <span><b>{item.label}</b><small id={`${uid}-c-${item.name}`}>{item.definition} · {item.source}</small></span>
               </label>
               {chosen && (
                 <select aria-label={`${item.label}的期数`} value={chosen.lag} onChange={(event) => setControlLag(item.name, Number(event.target.value))}>
@@ -154,8 +160,10 @@ function ModelForm({ options, spec, onChange, disabled = false }: {
                 checked={parent != null || spec.fixed_effects.includes(item.key)}
                 disabled={parent != null}
                 onChange={() => toggleEffect(item.key)}
+                aria-label={item.label}
+                aria-describedby={`${uid}-fe-${item.key}`}
               />
-              <span><b>{item.label}</b><span className="sr-only">，</span><small>{parent ? `已包含在${parent}${/[A-Za-z]$/.test(parent) ? " " : ""}中` : item.description}</small></span>
+              <span><b>{item.label}</b><small id={`${uid}-fe-${item.key}`}>{parent ? `已包含在${parent}${/[A-Za-z]$/.test(parent) ? " " : ""}中` : item.description}</small></span>
             </label>
           );
         })}
@@ -172,8 +180,10 @@ function ModelForm({ options, spec, onChange, disabled = false }: {
 }
 
 /** One column's every number: coefficient, SE, t, p and the 95% interval of each term, the sum included. */
-export function ColumnDetails({ column, options, perPoint }: {
-  column: TableColumn; options: WorkbenchOptions; perPoint: (stat: CoefStat, snapshot: CustomResultSnapshot) => string;
+export function ColumnDetails({ column, options, perPoint, digits }: {
+  column: TableColumn; options: WorkbenchOptions; perPoint: (stat: CoefStat, snapshot: CustomResultSnapshot, digits?: number) => string;
+  /** One set of decimals for the column's per-point readings (-0.180 and -0.099, not -0.18 beside -0.099). */
+  digits?: number;
 }) {
   const { result } = column.snapshot;
   const xTerms = result.coefs.filter((item) => Object.values(X_COLUMNS).includes(item.name)).length;
@@ -198,7 +208,7 @@ export function ColumnDetails({ column, options, perPoint }: {
               <td>{result.suppressed || coef.ci_low == null || coef.ci_high == null ? "—" : `[${fixed4(coef.ci_low)}, ${fixed4(coef.ci_high)}]`}</td>
               {/* The page's reading for each X term and their sum (the result card's 当年 / 次年 split); a control
                   is not "per point of X". */}
-              <td>{coef.name === "cumulative" || Object.values(X_COLUMNS).includes(coef.name) ? perPoint(coef, column.snapshot) : "—"}</td>
+              <td>{coef.name === "cumulative" || Object.values(X_COLUMNS).includes(coef.name) ? perPoint(coef, column.snapshot, digits) : "—"}</td>
             </tr>
           ))}
         </tbody>
@@ -207,12 +217,15 @@ export function ColumnDetails({ column, options, perPoint }: {
   );
 }
 
+/** Said when a change to the report cannot be saved: another tab saved a newer record first. */
+const CONFLICT_SAVE_NOTE = "这次改动没有保存：你的账号在别处保存了更新的记录，请按页面顶部的说明处理。";
+
 export function ModelComparisonChart({ columns, outcome }: { columns: TableColumn[]; outcome: RegressionOutcome }) {
   const rows: DivergingBarRow[] = [];
   const notes: string[] = [];
   // Every row at the first column's decimals, as the table's "合计" row (+0.08 there was +0.084 here).
   const first = columns.find((column) => xSum(column.snapshot, column.spec));
-  const sharedDigits = first ? perPointDigits(outcome, xSum(first.snapshot, first.spec)!, first.snapshot) : undefined;
+  const sharedDigits = first ? sharedPerPointDigits(columns, outcome) : undefined;
   for (const [index, column] of columns.entries()) {
     const stat = xSum(column.snapshot, column.spec);
     const result = column.snapshot.result;
@@ -244,7 +257,7 @@ export function ModelComparisonChart({ columns, outcome }: { columns: TableColum
     <h4>同一个 Y，换模型后怎样变？</h4>
     <p className="muted">每行一个模型：X 各项合计及 95% 区间，行下注明所含期数和样本。</p>
     {samplesDiffer(columns) && <p className="reg-stale-note">这几列的样本不同，差异有一部分来自样本，而不只是设定。</p>}
-    {rows.length > 0 && <DivergingBarChart rows={rows} title="同一 Y 的模型比较" unitTitle="X 每高 1 个百分点，Y 平均相差（各行标注原始单位）" />}
+    {rows.length > 0 && <DivergingBarChart rows={rows} title="同一 Y 的模型比较" unitTitle="X 每高 1 个百分点，X 各项合计的 Y 平均相差（期数见行下，单位见条末）" />}
     {columns.some((column) => column.chartName && column.chartName !== column.name) && (
       <p className="muted">图中较长的自定义模型只写改动处数，完整设定见下方结果表的列名（行的顺序与列相同）。</p>
     )}
@@ -270,10 +283,12 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   // This step's material did not reach the server (another tab saved first, or the network failed): the model in the
   // box is this page's choice, not yet the report's, so it is not called "已记入报告".
   const reportUnsaved = Boolean(state.materialSyncError);
-  const reportedWord = reportUnsaved ? "记入报告（未保存）" : "已记入报告";
-  const unsavedNote = state.syncConflict
-    ? "这次改动没有保存：你的账号在别处保存了更新的记录，请按页面顶部的说明处理。"
-    : "这次改动还没有保存成功，请稍后重试同步。";
+  // Another save of this page (a draft) met a newer record: the model shown may not be the report's any more.
+  const reportStale = !reportUnsaved && Boolean(state.syncConflict);
+  const reportedWord = reportUnsaved ? "记入报告（未保存）" : reportStale ? "已记入报告（可能已过期）" : "已记入报告";
+  const unsavedNote = reportStale
+    ? "你的账号在别处保存了更新的记录，这里显示的可能不是报告里现在的模型；请按页面顶部的说明处理。"
+    : state.syncConflict ? CONFLICT_SAVE_NOTE : "这次改动还没有保存成功，请稍后重试同步。";
   const draft = state.data?.custom_draft ?? {};
   const stepBaseline = defaultResponse.design.baseline;
   // The Y the models are run on: the step's Y unless the student chose another of the family. The first column is
@@ -356,7 +371,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   }
   if (!options || !spec) return <div className="reg-request-state muted" role="status" aria-busy="true">正在载入可选的设定…</div>;
 
-  const perPoint = (stat: CoefStat, snapshot: CustomResultSnapshot) => perPointReading(outcome, stat, snapshot);
+  const perPoint = (stat: CoefStat, snapshot: CustomResultSnapshot, digits?: number) => perPointReading(outcome, stat, snapshot, digits);
   const label = (model: ModelSpec) => shownModelLabel(model, options);
   const changeSpec = (next: ModelSpec) => {
     setLocalSpec(next);
@@ -412,14 +427,18 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         setRetryAt(Date.now() + cause.retryAfter * 1000);
         rateLimitMessage.current = `计算太频繁：每分钟最多算 ${options.limits.runs_per_minute} 个新模型，新的设定请等倒计时结束；仍在服务器缓存中的设定不计次，现在就能算。`;
         setError(rateLimitMessage.current);
-      } else if (!(cause instanceof DOMException && cause.name === "AbortError")) {
+      } else if (!request.signal.aborted) {
+        // A request this page cancelled (a newer one replaced it) is not an error, whatever the client threw for it.
         setError(userFacingRequestError(cause, "这个模型没有算出结果"));
         if (cause instanceof ApiError && cause.status === 400) setComputed(null);
       }
     } finally {
-      if (controller.current === request) controller.current = null;
-      setRunning(false);
-      setRunningSpec(null);
+      // Only the latest request ends the computing state: a cancelled earlier one must not clear a newer one's.
+      if (controller.current === request) {
+        controller.current = null;
+        setRunning(false);
+        setRunningSpec(null);
+      }
     }
   };
   /** A preset: its model goes into the form and is computed at once. */
@@ -472,14 +491,14 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       saved_at: new Date().toISOString(), snapshot: snapshotOf(latest),
     } });
     // With another tab's newer record on the server this save cannot go through: said, not "已把…记入报告".
-    setAnnouncement(state.syncConflict ? unsavedNote : `已把“${label(latest.design.spec!)}”记入报告${yKey !== stepBaseline ? `（Y：${depvarLabel}）` : ""}。`);
+    setAnnouncement(state.syncConflict ? CONFLICT_SAVE_NOTE : `已把“${label(latest.design.spec!)}”记入报告${yKey !== stepBaseline ? `（Y：${depvarLabel}）` : ""}。`);
   };
   const removeFromReport = () => {
     if (!experiment) return;
     focusReportBox();
     const name = label(experiment.spec);
     state.save({ experiment: null });
-    setAnnouncement(state.syncConflict ? unsavedNote : `已把“${name}”从报告移除。`);
+    setAnnouncement(state.syncConflict ? CONFLICT_SAVE_NOTE : `已把“${name}”从报告移除。`);
   };
   const activePreset = options.presets.find((item) => sameSpec(item.spec, spec, options))?.key ?? null;
   const noDesignValue = options.design_values[outcome]?.[yKey] === null;
@@ -491,10 +510,10 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const reportBox = (
       <section className="reg-custom-report" ref={reportBoxRef} tabIndex={-1} aria-label="记入报告（选做）">
         <h4>记入报告（选做）</h4>
-        {reportUnsaved && <p className="reg-rerun-warning" role="alert">{unsavedNote}</p>}
+        {(reportUnsaved || reportStale) && <p className="reg-rerun-warning" role="alert">{unsavedNote}</p>}
         {experiment
           ? (
-            <p className={`reg-custom-report-chip${reportUnsaved ? " reg-custom-report-chip-unsaved" : ""}`} role="note">
+            <p className={`reg-custom-report-chip${reportUnsaved || reportStale ? " reg-custom-report-chip-unsaved" : ""}`} role="note">
               <span>{reportedWord}：<b>{label(experiment.spec)}</b>（{specSummary(experiment.spec, options)}{experimentY !== stepBaseline || experimentY !== yKey ? `；Y：${yLabel(experimentY)}` : ""}）</span>
               <span aria-hidden="true"> · </span>
               <button type="button" className="link-button danger" onClick={removeFromReport}>从报告移除</button>
@@ -607,7 +626,14 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
           {retryWait > 0 && <span className="muted reg-custom-wait">新的设定 {retryWait} 秒后可以计算</span>}
         </div>
       </details>
-      {error && <div className="error-box async-error" role="alert">{error}</div>}
+      {/* The countdown sits with the message that asks to wait for it (the form beside it may be folded). */}
+      {error && (
+        <div className="error-box async-error">
+          <span role="alert">{error}</span>
+          {/* Outside the alert, so the countdown is not read out again every second. */}
+          {error === rateLimitMessage.current && retryWait > 0 && <span className="reg-custom-wait-inline"> 还需等 {retryWait} 秒。</span>}
+        </div>
+      )}
       <div ref={statusRef} tabIndex={-1} className={`reg-custom-status reg-custom-status-${status.kind}`} role="status" aria-live="polite" aria-busy={status.kind === "busy" || undefined}>
         <span>{status.text}</span>
         {status.kind === "stale" && !noX && !customOpen && (
@@ -685,7 +711,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
           })}
         </ul>
         {samplesDiffer(columns) && <p className="reg-boundary" role="note">{options.sample_differs_note}</p>}
-        {columns.some((column) => canonicalSpec(column.spec, options).x_lags.join(",") === "0") && (
+        {columns.some((column) => canonicalSpec(column.spec, options).x_lags.length === 1) && (
           <p className="reg-boundary" role="note">{options.current_x_only_note}</p>
         )}
       </div>
@@ -700,7 +726,11 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         </label>
         <p><b>{detailColumns[shownDetail].name}</b>：{specSummary(detailColumns[shownDetail].spec, options)}</p>
         {stale && <p className="reg-stale-note">当前设定待重算；以下数字仅对应上方选中的结果及其设定。</p>}
-        <ColumnDetails column={detailColumns[shownDetail]} options={options} perPoint={perPoint} />
+        <ColumnDetails column={detailColumns[shownDetail]} options={options} perPoint={perPoint} digits={(() => {
+          const { snapshot } = detailColumns[shownDetail];
+          const terms = [...snapshot.result.coefs.filter((item) => Object.values(X_COLUMNS).includes(item.name)), ...(snapshot.result.cumulative ? [snapshot.result.cumulative] : [])];
+          return terms.length ? Math.max(...terms.map((term) => perPointDigits(outcome, term, snapshot))) : undefined;
+        })()} />
         {detailColumns[shownDetail].snapshot.result.suppressed && <p className="reg-stale-note">{options.suppressed_note}</p>}
         {omittedSummary(detailColumns[shownDetail].snapshot, options).map((note) => <p className="muted" key={note}>{note}</p>)}
         <p className="muted">系数按 X 以份额计（1 = 100 个百分点）；最后一列换算为 X 每高 1 个百分点。X 各项合计覆盖：{xSpanLabel(detailColumns[shownDetail].spec)}；括号内为标准误，星号含义见表下注释。{detailColumns[shownDetail].spec.fixed_effects.length ? "带固定效应的模型没有常数项：各单位和各年的截距已被固定效应吸收。" : ""}</p>
@@ -717,8 +747,8 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
           <dt>FE</dt><dd>固定效应：每个国家×行业（或国家、行业、年份）一个截距，扣掉它自己的平均水平。</dd>
           <dt>括号里的数、星号</dt><dd>括号里是标准误，表示估计值的不确定程度；星号越多，越难用偶然波动解释（*** p&lt;0.01，** p&lt;0.05，* p&lt;0.1）。</dd>
           <dt>R²、调整 R²、组内 R²</dt><dd>模型能解释 Y 变化的比例；组内 R² 只看扣掉固定效应之后的那部分变化。</dd>
-          <dt>F、Prob &gt; F</dt><dd>检验除常数项外的各项是否全部为 0；Prob &gt; F 越小，越不像全为 0。</dd>
-          <dt>Root MSE</dt><dd>模型没有解释的部分（残差）的典型大小，单位与 Y 相同。</dd>
+          <dt>F、Prob &gt; F</dt><dd>检验 X 和控制变量的系数（不含固定效应和常数项）是否全部为 0；Prob &gt; F 越小，越不像全为 0。</dd>
+          <dt>Root MSE</dt><dd>模型没有解释的部分（残差）的典型大小，按 Y 的原始数值计：份额类 Y 以份额计（0.0049 即 0.49 个百分点）。</dd>
         </dl>
       </details>
     </div>

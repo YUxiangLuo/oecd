@@ -193,6 +193,9 @@ export function ReportedExperiments({ getStep, onNavigateStep }: {
                   const sum = xSum(experiment.snapshot, experiment.spec);
                   const sameY = !experiment.baseline || experiment.baseline === run?.design?.baseline;
                   const stepDefault = sameY && run?.design && run.result ? snapshotOf({ design: run.design, result: run.result }) : null;
+                  // The default model's sample is the same for every Y of the family (one panel, one model): the
+                  // step's saved run gives it on another Y too.
+                  const defaultSample = run?.design && run.result ? snapshotOf({ design: run.design, result: run.result }).result : null;
                   const estimate = !sameY ? overview?.outcomes[outcome]?.find((item) => item.key === experiment.baseline) : null;
                   const defaultSource: PerPointSource | null = stepDefault ?? (estimate ? {
                     depvar_kind: estimate.kind,
@@ -217,11 +220,11 @@ export function ReportedExperiments({ getStep, onNavigateStep }: {
                       <td>
                         {sum ? `${perPointReading(outcome, sum, experiment.snapshot, digits)}（${xSpanLabel(experiment.spec)}）` : "—"}
                         {/* The writing prompt asks whether the samples are the same: each number names its sample. */}
-                        <br /><small className="muted">{sampleText(experiment.snapshot.result)}{stepDefault && sampleText(stepDefault.result) !== sampleText(experiment.snapshot.result) ? "（与默认模型不同）" : ""}</small>
+                        <br /><small className="muted">{sampleText(experiment.snapshot.result)}{defaultSample && sampleText(defaultSample) !== sampleText(experiment.snapshot.result) ? "（与默认模型不同）" : ""}</small>
                       </td>
                       <td>
                         {defaultSum && defaultSource ? perPointReading(outcome, defaultSum, defaultSource, digits) : !sameY && overviewQuery.status === "loading" ? "…" : "—"}
-                        {stepDefault && <><br /><small className="muted">{sampleText(stepDefault.result)}</small></>}
+                        {defaultSample && <><br /><small className="muted">{sampleText(defaultSample)}</small></>}
                       </td>
                     </tr>
                   );
@@ -266,7 +269,7 @@ export function decompositionParts(
   const counted = unit.startsWith("个") ? unit : `个${unit}`;
   const amount = (value: number) => `${(value * scale).toFixed(digits)} ${counted}`;
   // Each part with its unit, as the total: a bare "−1.6" read as a number of nothing.
-  const signedAmount = (value: number) => `${value >= 0 ? "+" : "−"}${Math.abs(value * scale).toFixed(digits)} ${counted}`;
+  const signedAmount = (value: number) => `${value >= 0 ? "+" : "-"}${Math.abs(value * scale).toFixed(digits)} ${counted}`;
   const observed = decomposition.observed;
   const direction = observed < 0 ? "低" : "高";
   // "与 GDP 对数同步" keeps a space before a Latin name, "与汇率变动同步" none.
@@ -280,7 +283,9 @@ export function decompositionParts(
     lead: `第一批被加税国家 ${decomposition.year} 年的${metric}，比加税前（${decomposition.pre_years.join("、")} 年平均）${direction} ${amount(Math.abs(observed))}。按默认模型（见下方）的估计，这个总变化等于下面各项之和：`,
     parts,
     // One point a sentence: what the regression's result is of the split, and why the example's number differs.
-    tail: "回归结论只对应第一项：它等于默认模型的系数 × 第一批国家 X 的平均变化。结果卡里的例子换算用的是例子自己的 X，数值可能大得多。",
+    tail: `回归结论只对应第一项：它约等于两年累计的系数 × 第一批国家 ${decomposition.year} 年的平均 X${decomposition.x_mean != null
+      ? `（${(decomposition.x_mean * 100).toFixed(1)} 个百分点，按全部行业平均，非货物行业的 X 为 0，所以比步骤 10 的货物行业平均小）`
+      : ""}。结果卡里的例子换算用的是例子自己的 X，数值可能大得多。`,
   };
 }
 

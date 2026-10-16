@@ -793,6 +793,8 @@ def test_first_wave_decomposition_splits_the_chart_change_by_the_fitted_coeffici
         for column in (X_LAG_COLUMNS[0], X_LAG_COLUMNS[1])
     )
     assert split["terms"][0]["change"] == pytest.approx(x_part)
+    # The first wave's mean X in the last year, over every industry, which the page multiplies out.
+    assert split["x_mean"] == pytest.approx(first[first.year.eq(2020)][X_LAG_COLUMNS[0]].mean())
     assert split["observed"] == pytest.approx(sum(item["change"] for item in split["terms"]) + split["remainder"])
     # A panel without the wave column (another course's fixture) has no decomposition, and no error.
     assert first_wave_decomposition(panel.drop(columns=[WAVE_COLUMN]), Y_COLUMNS["trade"], coefs) is None

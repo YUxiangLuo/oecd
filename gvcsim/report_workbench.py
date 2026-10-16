@@ -290,7 +290,7 @@ def _per_point_rows(columns: list[dict[str, Any]]) -> list[str]:
         return []
     design = first["run"]["design"]
     kind = _depvar_kind(str(design.get("outcome", "")), design)
-    digits = estimate_digits(kind, *_per_point(kind, first["run"]["result"], cast(dict[str, Any], x_sum(first))))
+    digits = _shared_digits(columns, kind)
     cells = []
     for column in columns:
         total = x_sum(column)
@@ -301,6 +301,29 @@ def _per_point_rows(columns: list[dict[str, Any]]) -> list[str]:
         span = _x_span(column["spec"])
         cells.append(f"{with_count_unit(_signed(value, digits), kind)}（{span}）")
     return [f"| 合计：X 每高 1 个百分点 | {' | '.join(cells)} |"]
+
+
+def _shared_digits(columns: list[dict[str, Any]], kind: str) -> int:
+    """The page's ``sharedPerPointDigits``: the first column's decimals, plus one (at most two) while two different
+    X-terms sums would read alike."""
+    values = []
+    for column in columns:
+        run = column["run"]
+        total = _x_sum(run["result"], column["spec"]) if isinstance(run, dict) else None
+        if total is not None and isinstance(total.get("coef"), (int, float)):
+            values.append(_per_point(kind, run["result"], total))
+    if not values:
+        return 0
+    base = estimate_digits(kind, *values[0])
+    for digits in (base, base + 1):
+        shown = [_signed(value, digits) for value, _ in values]
+        if not any(
+            values[i][0] != values[j][0] and shown[i] == shown[j]
+            for i in range(len(values))
+            for j in range(i + 1, len(values))
+        ):
+            return digits
+    return base + 2
 
 
 def _design_value_rows(columns: list[dict[str, Any]]) -> list[str]:
@@ -325,7 +348,7 @@ def _design_value_rows(columns: list[dict[str, Any]]) -> list[str]:
     if beta == 0:
         return ["| 课程设定值 | " + " | ".join("设定为 0（与 X 无关）" for _ in columns) + " |"]
     scale = 1.0 if kind == "share" else 0.01
-    digits = estimate_digits(kind, *_per_point(kind, first["run"]["result"], cast(dict[str, Any], x_sum(first))))
+    digits = _shared_digits(columns, kind)
     target = with_count_unit(_signed(beta * scale, digits), kind)
     cells = []
     for column in columns:
@@ -336,7 +359,9 @@ def _design_value_rows(columns: list[dict[str, Any]]) -> list[str]:
         if not _covers_design_span(column["spec"]):
             cells.append(f"{target}（两年累计）；本列跨度不同，不计偏差")
             continue
-        cells.append(f"{target}；{_deviation_text(design_deviation(float(total['coef']), beta))}")
+        # Between the numbers as shown (the page's shownCoefficient), so equal readings give equal deviations.
+        shown = round(float(total["coef"]) * scale, digits) / scale
+        cells.append(f"{target}；{_deviation_text(design_deviation(shown, round(beta * scale, digits) / scale))}")
     return [f"| 课程设定值（X 每高 1 个百分点） | {' | '.join(cells)} |"]
 
 
@@ -514,7 +539,7 @@ def custom_model_sections(tables: list[dict[str, Any]]) -> list[str]:
         samples = {(result.get("n_obs"), str((result.get("sample_flow") or {}).get("years"))) for result in computed}
         if len(samples) > 1:
             lines.append(f"- {workbench.SAMPLE_DIFFERS_NOTE}")
-        if any(tuple(column["spec"].canonical().x_lags) == (0,) for column in columns):
+        if any(len(column["spec"].canonical().x_lags) == 1 for column in columns):
             lines.append(f"- {workbench.CURRENT_X_ONLY_NOTE}")
         lines += ["", _escape(workbench.FOOTNOTE), ""]
     return lines

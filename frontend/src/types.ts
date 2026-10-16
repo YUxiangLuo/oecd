@@ -862,6 +862,8 @@ export interface FirstWaveDecomposition {
   pre_years: number[];
   /** Mean Y of the first-wave rows in `year` minus their mean over `pre_years`, in the Y's raw unit. */
   observed: number;
+  /** The first wave's mean X in `year` over every industry (X = 0 before the tariff and in non-goods industries). */
+  x_mean: number | null;
   /** Each regressor's part: coefficient × the same change in that regressor (the X terms summed as "x_terms"). */
   terms: { name: string; label: string; change: number }[];
   /** What the fixed effects and residual carry: the year changes common to every group, and noise. */

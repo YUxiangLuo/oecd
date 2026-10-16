@@ -195,7 +195,8 @@ def test_hints_guide_without_giving_the_answer_away_round_27():
     x_hint = quizzes.HINTS["s10-x-definition-v8"]
     # No formula to copy, and the page's word for the yearly readouts.
     assert "w × τ" not in x_hint and "相乘" not in x_hint
-    assert "逐年表" not in x_hint and "逐年读数" in x_hint
+    # Named as the fold on the page ("逐年表：每年的 w、τ、X、L1.X").
+    assert "逐年表" in x_hint and "逐年读数" not in x_hint
     compare_hint = quizzes.HINTS["s13-compare"]
     assert "单位不同的数能直接比较大小吗" not in compare_hint and "标准差" in compare_hint
     assert [q["correct"] for q in quizzes.STEP_QUIZZES[10]] == ["a", "b", "c"]

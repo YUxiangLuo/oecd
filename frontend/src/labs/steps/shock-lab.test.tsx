@@ -183,9 +183,9 @@ test("step 10 can follow a single taxed country and records it alone", async () 
   expect(jump[1][0]).toBe(marker);
   expect(jump[2][0]).toBe(marker);
   expect(jump[2][1]).toBeLessThan(jump[1][1]);
-  // The "2018 年起加税" label sits left of the marker, in the empty pre-tariff corner, clear of the jump.
+  // The "2018 年第一批加税" label (named as on the exchange-rate chart) sits left of the marker, in the empty pre-tariff corner, clear of the jump.
   const markLabel = svg.querySelector('[data-mark-year="2018"] text')!;
-  expect(markLabel.textContent).toBe("2018 年起加税");
+  expect(markLabel.textContent).toBe("2018 年第一批加税");
   expect(markLabel.getAttribute("text-anchor")).toBe("end");
   expect(Number(markLabel.getAttribute("x"))).toBeLessThan(marker - 8);
   // Halfway up, not at the top where the jump to the top of the axis met it.
@@ -487,7 +487,7 @@ test("teaching data v10: the policy line and the rate tile name the two waves, w
   render(<ShockLab meta={meta} step={step} state={tenState(undefined)} />);
   await waitFor(() => expect(document.querySelector(".teaching-tiles")).not.toBeNull());
   expect(document.querySelector(".teaching-scenario")!.textContent).toBe(
-    "名单和批次由 ICIO 数据按 2016 年对美货物顺差确定，不是随机抽取。服务、电力、建筑等非货物行业不加税。美国是加税方，不在回归样本中。",
+    "名单和批次由 ICIO 数据按 2016 年对美货物顺差确定，不是随机抽取。货物按 ICIO 行业代码 A–C 划分（采矿支持服务 B09 属采矿业，也加税）；电力、建筑和其余服务业不加税。美国是加税方，不在回归样本中。",
   );
   // One tile a wave, with its start and its surplus band, then the untaxed and the rate.
   expect([...document.querySelectorAll(".teaching-tiles li")].map((tile) => tile.textContent)).toEqual([
@@ -518,7 +518,7 @@ test("step 10 reads top to bottom: the tariff, X on one example, the controls, t
   expect(tiles).toEqual(["3 国被加税，2018 年起（对美货物顺差 ≥ 10 亿美元）", "2 国未被加税，X 始终为 0", "25%只对货物（农业、采矿业、制造业）征收，加税前为 0"]);
   expect(tariff.querySelector(".teaching-tiles li.imposer")).toBeNull();
   expect(tariff.querySelector(".teaching-scenario")!.textContent).toBe(
-    "名单由 ICIO 数据按 2016 年对美货物顺差确定，不是随机抽取。服务、电力、建筑等非货物行业不加税。美国是加税方，不在回归样本中。",
+    "名单由 ICIO 数据按 2016 年对美货物顺差确定，不是随机抽取。货物按 ICIO 行业代码 A–C 划分（采矿支持服务 B09 属采矿业，也加税）；电力、建筑和其余服务业不加税。美国是加税方，不在回归样本中。",
   );
   expect(tariff.querySelector(".teaching-tiles")!.compareDocumentPosition(tariff.querySelector(".teaching-scenario")!)
     & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -1004,7 +1004,35 @@ test("teaching data v10: a service example of a second-wave country marks that c
   await waitFor(() => expect(document.querySelector("[data-mark-year]")).not.toBeNull());
   // Not the first wave's 2018: CRI's own tariff began in 2019, and on goods only.
   expect(document.querySelector('[data-mark-year="2018"]')).toBeNull();
-  expect(document.querySelector('[data-mark-year="2019"] text')!.textContent).toBe("2019 年起对货物加税");
+  expect(document.querySelector('[data-mark-year="2019"] text')!.textContent).toBe("2019 年第二批对货物加税");
+  groups.mockRestore();
+  series.mockRestore();
+  cleanup();
+});
+
+test("a first-wave example beside a second-wave one: the exchange-rate chart marks both waves, as the X chart", async () => {
+  const waveOf = { CAN: 1, CRI: 2 } as Record<string, number>;
+  countriesSpy.mockResolvedValue({
+    ...countriesOverview,
+    policy_years: [2018, 2019],
+    waves: [
+      { wave: 1, start_year: 2018, min_million_usd: 10000, countries: 1 },
+      { wave: 2, start_year: 2019, min_million_usd: 1000, countries: 1 },
+    ],
+    countries: countriesOverview.countries.map((row) => ({
+      ...row, taxed: row.country in waveOf, wave: waveOf[row.country] ?? 0, start_year: { 1: 2018, 2: 2019 }[waveOf[row.country] ?? 0] ?? null,
+    })),
+  });
+  const meta: Meta = { years: tenYears, countries: ["CAN", "CRI", "USA"], sectors: ["C29"] };
+  const groups = tenGroups();
+  const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.5, true)));
+  render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["CAN", "CRI"], teaching_industry: "C29", teaching_example_chosen: true })} />);
+  const controls = await waitFor(() => {
+    const section = [...document.querySelectorAll("section")].find((node) => node.querySelector("h3")?.textContent?.startsWith("回归还控制"));
+    expect(section?.querySelector("[data-mark-year]")).not.toBeNull();
+    return section!;
+  });
+  expect([...controls.querySelectorAll("[data-mark-year] text")].map((node) => node.textContent)).toEqual(["2018 年第一批加税", "2019 年第二批加税"]);
   groups.mockRestore();
   series.mockRestore();
   cleanup();

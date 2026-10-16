@@ -1,7 +1,7 @@
 /** The step's result card: the headline sentence, its interval in words, the step 10 example's conversion and the limits. */
 import { groupedFixed, percentagePoints } from "../format";
 import { GENERATED_Y_DISCLOSURE, lessonFor } from "../regression-lessons";
-import { coversDesignSpan, designDeviation, designDeviationText, perPointDigits, perPointReading, xSpanLabel } from "../regression-workbench-table";
+import { coversDesignSpan, designDeviation, designDeviationText, shownCoefficient, perPointDigits, perPointReading, xSpanLabel } from "../regression-workbench-table";
 import {
   buildRegressionVerdict,
   differenceWords,
@@ -132,7 +132,7 @@ export function RegressionResultCard({ outcome, response, examples = [], example
       {!standardized && verdict.coefficient && !suppressed && (() => {
         const sd = standardizedEffect(verdict.coefficient.coef, response.result.depvar_within_std);
         return sd == null ? null : (
-          <p className="muted reg-sd-note">换算成标准差：幅度约 {(Math.abs(sd) < 0.0005 ? "不到 0.001" : Math.abs(sd).toFixed(standardizedDigits(sd, null)))} 个标准差（步骤 15 用它并列比较四步；{SD_DEFINITION}）。</p>
+          <p className="muted reg-sd-note">换算成标准差：这 {unsignedEffect}约等于 {(Math.abs(sd) < 0.0005 ? "不到 0.001" : Math.abs(sd).toFixed(standardizedDigits(sd, null)))} 个标准差。{SD_DEFINITION}；步骤 15 用它并列比较单位不同的四步。</p>
         );
       })()}
       {verdict.coefficient && !suppressed && response.model_snapshot && "beta" in response.model_snapshot && (
@@ -147,7 +147,8 @@ export function RegressionResultCard({ outcome, response, examples = [], example
           const noConversion = converted.length === 0;
           const unexposedTaxed = examples.some((example) => !example.imposer && example.x <= 0 && (example.tau ?? 0) > 0);
           const zeroNote = noConversion ? "" : "，X = 0 → 没有与 X 相关的差异";
-          return <li className="reg-example-effect">换算到{!exampleSaved ? "步骤 10 的默认例子（步骤 10 还没有保存你的例子）" : exampleChosen ? "你在步骤 10 选的例子" : "步骤 10 的默认例子"}{exampleYear ? `（${exampleYear} 年的 X）` : ""}：<ul className="reg-example-list">{examples.map((example) => {
+          return <li className="reg-example-effect">换算到{exampleChosen && exampleSaved ? "你在步骤 10 选的例子" : "步骤 10 的默认例子"}{/* One bracket: what is not saved yet, then the year. */
+            `（${[!exampleSaved ? "步骤 10 还没有保存你的例子" : "", exampleYear ? `用 ${exampleYear} 年的 X` : ""].filter(Boolean).join("；")}）`.replace("（）", "")}：<ul className="reg-example-list">{examples.map((example) => {
             const coef = verdict.coefficient!.coef;
             // An association, not a tariff effect: the difference in Y that goes with the example's X. With X = 0
             // the estimate implies no X-related difference (Y still moves with the shared yearly changes).
@@ -208,7 +209,7 @@ export function designValueSentence(outcome: RegressionOutcome, response: Pick<R
     return `课程数据设定的两年累计为 ${target}；这个模型算出 ${estimate}（${xSpanLabel({ x_lags: lags })}），跨度不同，不是同一个估计量，不与设定值比较。`;
   }
   const covered = coefficient.ci_low != null && coefficient.ci_high != null && coefficient.ci_low <= beta && beta <= coefficient.ci_high;
-  const deviation = designDeviation(coefficient.coef, beta);
+  const deviation = designDeviation(shownCoefficient(coefficient.coef, source.depvar_kind, digits), shownCoefficient(beta, source.depvar_kind, digits));
   const span = lags == null || (lags.length === 2 && lags.includes(0) && lags.includes(1)) ? "两年累计" : "X 各项合计";
   return `课程数据设定的${span}为 ${target}，你算出 ${estimate}，区间${covered ? "包含" : "不包含"}设定值（${designDeviationText(deviation)}）。`;
 }
@@ -220,6 +221,7 @@ export function designValueSentence(outcome: RegressionOutcome, response: Pick<R
 export function lagSplit(outcome: RegressionOutcome, response: Pick<RegressionResponse, "design" | "result">): string | null {
   const parts = lagSplitParts(outcome, response);
   // The model box above the run button says what the two terms are; here only the split.
-  return parts ? `其中当年 ${parts[0]}，次年再 ${parts[1]}。` : null;
+  // "累计" and "平均" in the headline say two things: the two years added up, each an average over the records.
+  return parts ? `其中当年 ${parts[0]}，次年再 ${parts[1]}，两者相加就是两年累计；“平均”指对所有国家×行业取平均。` : null;
 }
 

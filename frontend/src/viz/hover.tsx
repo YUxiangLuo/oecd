@@ -86,8 +86,15 @@ export function useHoverTip() {
   useEffect(() => {
     if (!shown) return;
     const dismiss = (event: KeyboardEvent) => { if (event.key === "Escape") setTip(null); };
+    // A window resize moves the chart under the readout's pixel position: it would sit off the chart (and widen
+    // the page), so it closes; the next pointer move or key shows it again in place.
+    const resize = () => setTip(null);
     document.addEventListener("keydown", dismiss);
-    return () => document.removeEventListener("keydown", dismiss);
+    window.addEventListener("resize", resize);
+    return () => {
+      document.removeEventListener("keydown", dismiss);
+      window.removeEventListener("resize", resize);
+    };
   }, [shown]);
   const Tip: ReactNode = (
     <div

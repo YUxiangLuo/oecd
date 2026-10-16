@@ -69,7 +69,7 @@ export function pendingStepTenExample(
   const key = (item: { first: string; second?: string; industry: string }) => [item.first, item.second || "", item.industry];
   if (sameJsonValue(key(browsed), key(recorded))) return null;
   const name = `${countryLabel(browsed.first)} · ${sectorLabel(browsed.industry)}${browsed.second ? `（对比 ${countryLabel(browsed.second)}）` : ""}`;
-  return `你在步骤 10 最后选的例子（${name}）还没有记录，这里仍按已记录的例子换算。回到步骤 10 等数据加载完，会自动记录（美国等不能作例子的选择除外）。`;
+  return `你在步骤 10 最后选的例子（${name}）还没有记录，这里仍按已记录的例子换算。回到步骤 10 等数据加载完，会自动记录；美国、或不在回归样本里的国家和行业不能作例子，步骤 10 会说明原因。`;
 }
 
 export function RegressionRunLab({ step, meta, state, getStep, reportCustomResults, reportOutdated = false, quiz }: {

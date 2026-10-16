@@ -12,6 +12,9 @@ export const MATERIAL_STATE_LABELS: Record<MaterialState, string> = { recorded: 
 /** A recorded material that has not reached the server yet: not "已记录" until it is saved. */
 export const MATERIAL_UNSAVED_LABEL = "未保存";
 export const MATERIAL_CONFLICT_NOTE = "本步材料没有保存：你的账号在别处保存了更新的记录，请按页面顶部的说明处理。";
+/** Another tab saved a newer record while this step's own material is unchanged here: what it shows may be old. */
+export const MATERIAL_STALE_LABEL = "待同步";
+export const MATERIAL_STALE_NOTE = "你的账号在别处保存了更新的记录，这里显示的可能不是最新的材料；请按页面顶部的说明处理。";
 /** How the automatic steps say it (1–5, 10, 11–14): no button, the record follows the choice. */
 export const AUTO_RECORD_HOW = "随你的选择自动记录，无需另外保存。";
 
@@ -42,19 +45,21 @@ export function MaterialCard({ state, summary, how, action, check, extra, locked
   // Recorded on this page but not saved (another tab saved first, or the network failed): not shown as recorded, and
   // the step's "how" line ("当前例子就是已记录的材料…") is left out; the sync line below says what to do.
   const unsaved = Boolean(syncError) && state === "recorded";
+  // A conflict caused by another save (a draft, another step): this card's record may be the old one.
+  const stale = !syncError && syncConflict;
   return (
-    <section id={id} ref={cardRef} tabIndex={-1} className={`material-card material-card--${unsaved ? "missing" : state}`} aria-label={MATERIAL_CARD_TITLE}>
+    <section id={id} ref={cardRef} tabIndex={-1} className={`material-card material-card--${unsaved || stale ? "missing" : state}`} aria-label={MATERIAL_CARD_TITLE}>
       <div className="material-card-head">
         <b>{MATERIAL_CARD_TITLE}</b>
-        {unsaved
-          ? <span className="material-chip material-chip--missing">{MATERIAL_UNSAVED_LABEL}</span>
+        {unsaved || stale
+          ? <span className="material-chip material-chip--missing">{stale ? MATERIAL_STALE_LABEL : MATERIAL_UNSAVED_LABEL}</span>
           : <span className={`material-chip material-chip--${state}`}>{MATERIAL_STATE_LABELS[state]}</span>}
       </div>
       <p className="material-card-summary" role="status">{summary}</p>
       {extra && <p className="material-card-extra">{extra}</p>}
-      {((how && !unsaved) || locked || rechosen) && (
+      {((how && !unsaved && !stale) || locked || rechosen) && (
         <p className="muted material-card-how">
-          {unsaved ? null : how}{locked ? ` ${MATERIAL_LOCKED_NOTE}` : ""}{rechosen ? MATERIAL_RECHOSEN_NEXT : ""}
+          {unsaved || stale ? null : how}{locked ? ` ${MATERIAL_LOCKED_NOTE}` : ""}{rechosen ? MATERIAL_RECHOSEN_NEXT : ""}
         </p>
       )}
       {action && (
@@ -72,6 +77,7 @@ export function MaterialCard({ state, summary, how, action, check, extra, locked
         ? syncConflict
           ? <p role="alert" className="material-card-sync">{MATERIAL_CONFLICT_NOTE}</p>
           : <p role="alert" className="material-card-sync">材料还没保存成功，请重试。{onRetrySync && <button type="button" className="secondary" onClick={onRetrySync}>重试同步</button>}</p>
+        : stale ? <p role="alert" className="material-card-sync">{MATERIAL_STALE_NOTE}</p>
         : syncing && <p className="muted material-card-sync" role="status">正在同步实验记录…</p>}
     </section>
   );

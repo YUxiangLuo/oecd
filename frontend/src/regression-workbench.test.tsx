@@ -5,7 +5,7 @@ import { api, ApiError } from "./api";
 import { ColumnDetails, experimentReportChanged, ModelComparisonChart, RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
 import {
   canonicalSpec, coefficientRows, comparisonCsv, designDeviation, designDeviationText, designValueRow, effectiveEffects, equationPreview, experimentLabel, includedBy, omittedSummary, perPointReading,
-  perPointRow, samplesDiffer, shownModelLabel, chartModelLabel, significanceStars, snapshotOf, specSummary, summaryRows, termLabel,
+  perPointRow, samplesDiffer, shownCoefficient, shownModelLabel, chartModelLabel, significanceStars, snapshotOf, specSummary, summaryRows, termLabel,
   type TableColumn,
 } from "./regression-workbench-table";
 import optionsFixture from "./regression-workbench-options.fixture.json";
@@ -91,11 +91,22 @@ describe("model wording (the server's ModelSpec.summary and equation)", () => {
   });
 });
 
+describe("design deviations", () => {
+  test("are taken between the numbers as shown, so equal readings give equal percentages", () => {
+    // Step 13: -1.8275 and -1.8266 both read -0.0183 per point against -0.0180; unrounded they say 2% and 1%.
+    const [a, b] = [-1.8275, -1.8266].map((coef) => designDeviationText(designDeviation(shownCoefficient(coef, "length", 4), shownCoefficient(-1.8, "length", 4))));
+    expect(a).toBe(b);
+    expect(shownCoefficient(-0.5518, "share", 2)).toBe(-0.55);
+  });
+});
+
 describe("experiment labels", () => {
   test("the comparison chart shortens a long custom name to its count of changes; short names stay whole", () => {
     expect(chartModelLabel("去掉汇率变动")).toBe("去掉汇率变动");
     expect(chartModelLabel("自定义（去掉汇率变动；加 L2.X）")).toBe("自定义（去掉汇率变动；加 L2.X）");
     expect(chartModelLabel("自定义（去掉 L1.X；去掉汇率变动；去掉 GDP 对数；去掉贸易开放度；固定效应：年份 FE）")).toBe("自定义（5 处改动）");
+    // One change says more in full than as "1 处改动".
+    expect(chartModelLabel("自定义（固定效应：国家×行业 + 国家×年份 FE）")).toBe("自定义（固定效应：国家×行业 + 国家×年份 FE）");
   });
 
   test("on the page a custom model says what it changes, so two of them are told apart", () => {
@@ -205,7 +216,7 @@ describe("tables", () => {
     expect(summaryRows([column], options).find((row) => row.key === "f")?.cells).toEqual(["—"]);
   });
 
-  test("the X terms' sum reads per percentage point at the first column's decimals, saying which years it covers", () => {
+  test("the X terms' sum reads per percentage point at the first column's decimals (one more where two would read alike), saying which years it covers", () => {
     const row = perPointRow(columns, "trade")!;
     expect(row.label).toBe("合计：X 每高 1 个百分点");
     expect(row.cells).toEqual(["-0.55 个百分点（两年累计）", "-0.70 个百分点（两年累计）"]);
@@ -221,7 +232,11 @@ describe("tables", () => {
       { name: "b", spec: { ...DEFAULT, x_lags: [0] }, snapshot: snapshotOf(xOnly) },
       { name: "c", spec: { ...DEFAULT, x_lags: [0, 1, 2] }, snapshot: snapshotOf(lag2) },
     ], "trade")!;
-    expect(mixed.cells).toEqual(["-0.55 个百分点（两年累计）", "-0.55 个百分点（两年累计）", "-0.46 个百分点（仅当期 X）", "-0.54 个百分点（三年累计）"]);
+    // -0.5504 and -0.5544 would both read -0.55: one more decimal for every column, so the two differ.
+    expect(mixed.cells).toEqual(["-0.550 个百分点（两年累计）", "-0.554 个百分点（两年累计）", "-0.461 个百分点（仅当期 X）", "-0.540 个百分点（三年累计）"]);
+    // Readings that already differ keep the first column's decimals.
+    expect(perPointRow([columns[0], { name: "b", spec: { ...DEFAULT, x_lags: [0] }, snapshot: snapshotOf(xOnly) }], "trade")!.cells)
+      .toEqual(["-0.55 个百分点（两年累计）", "-0.46 个百分点（仅当期 X）"]);
     // L1.X dropped from a two-term model: no sum, so the remaining X term is not printed as 两年累计.
     const dropped = response(NO_RATE, { teaching_tariff_exposure: -0.46 }, {
       cumulative: null, omitted: [{ name: "teaching_tariff_exposure_lag1", reason: "collinear", by: null }],
@@ -315,7 +330,7 @@ const BASELINES: TeachingBaselineOption[] = [
   { key: "DVAex_share", label: "国内增加值出口占比", kind: "share", unit: "", default: false, column: "DVAex_share", source: "" },
 ];
 
-function Harness({ initial, onSave, onView, locked = false, defaultResponse = DEFAULT_RUN, reported, outdated, baselines, conflict = false }: {
+function Harness({ initial, onSave, onView, locked = false, defaultResponse = DEFAULT_RUN, reported, outdated, baselines, conflict = false, staleConflict = false }: {
   initial?: WorkbenchStepState; onSave?: (patch: Partial<WorkbenchStepState>) => void; locked?: boolean;
   baselines?: TeachingBaselineOption[];
   onView?: (patch: Partial<WorkbenchStepState>) => void;
@@ -326,6 +341,8 @@ function Harness({ initial, onSave, onView, locked = false, defaultResponse = DE
   defaultResponse?: RegressionResponse;
   /** Another tab saved a newer record: this step's material is not saved. */
   conflict?: boolean;
+  /** Another tab saved a newer record, met by another save (a draft): this step's material is unchanged here. */
+  staleConflict?: boolean;
 }) {
   const [data, setData] = useState<WorkbenchStepState>(initial ?? {});
   const state: StepStateApi<WorkbenchStepState> = {
@@ -333,7 +350,7 @@ function Harness({ initial, onSave, onView, locked = false, defaultResponse = DE
     save: (patch) => { onSave?.(patch); setData((current) => ({ ...current, ...patch })); },
     saveView: (patch) => { onView?.(patch); setData((current) => ({ ...current, ...patch })); },
     complete: false, syncing: false, syncError: conflict ? "冲突" : null, syncNow: () => {}, materialLocked: locked,
-    materialSyncError: conflict ? "冲突" : null, syncConflict: conflict,
+    materialSyncError: conflict ? "冲突" : null, syncConflict: conflict || staleConflict,
   };
   return <RegressionModelWorkbench stepNumber={11} outcome="trade" defaultResponse={defaultResponse} baselines={baselines} state={state}
     reportCustomResults={reported as never} reportOutdated={outdated} />;
@@ -447,6 +464,15 @@ describe("the workbench", () => {
     // A change made now is an ordinary uncomputed setting.
     fireEvent.click(checkbox(/^L2\.X/));
     expect(statusBar()).toBe("勾选框里的设定还没有计算。下面仍只有默认模型。");
+  });
+
+  test("a conflict met by another save says the reported model may be out of date", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    spyOn(api, "runRegression").mockResolvedValue(NO_RATE_RUN as never);
+    render(<Harness staleConflict initial={{ experiment: experimentOf(NO_RATE, NO_RATE_RUN) }} />);
+    await screen.findByRole("group", { name: "预设实验" });
+    expect(tableHeaders()).toEqual(["变量", "默认模型", "已记入报告（可能已过期）：去掉汇率变动"]);
+    expect(screen.getByRole("alert").textContent).toContain("这里显示的可能不是报告里现在的模型");
   });
 
   test("the status line's 计算当前设定 hands the focus to the status line when it leaves", async () => {
@@ -600,7 +626,7 @@ describe("the workbench", () => {
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^只放当期 X/ })); });
     await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "本次：只放当期 X（去掉 L1.X）"]));
     expect(document.querySelector(".reg-custom-point-row")?.textContent).toContain("（仅当期 X）");
-    expect(document.body.textContent).toContain("只放当期 X 的列：X 的系数会吸收一部分与上一年 X 相关的变化");
+    expect(document.body.textContent).toContain("只放一项 X 的列（仅当期 X、仅 L1.X 等）：这一项的系数会吸收另一项的一部分关联");
   });
 
   test("the custom form sends the canonical spec; the computed model can be put into the report, replaced and removed", async () => {
@@ -766,6 +792,8 @@ describe("the open workbench", () => {
     expect(alert.textContent).toBe("计算太频繁：每分钟最多算 20 个新模型，新的设定请等倒计时结束；仍在服务器缓存中的设定不计次，现在就能算。");
     expect(alert.textContent).not.toContain("没有算出结果");
     expect(document.querySelector(".reg-custom-wait")?.textContent).toMatch(/^新的设定 \d 秒后可以计算$/);
+    // Beside the message too, which shows with the form folded (outside the alert, not re-read every second).
+    expect(document.querySelector(".async-error .reg-custom-wait-inline")?.textContent).toMatch(/^ 还需等 \d 秒。$/);
     // Changing the form during the wait keeps the message next to the countdown.
     fireEvent.click(checkbox(/^增加值总额对数/));
     expect(screen.getByRole("alert").textContent).toContain("计算太频繁");

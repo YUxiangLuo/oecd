@@ -643,16 +643,24 @@ export function IndicatorTrendChart({
         ))}
         {(Array.isArray(markYear) ? markYear : markYear ? [markYear] : [])
           .filter((mark) => years.includes(mark.year) && mark.year > years[0])
-          .map((mark, index) => (
-            <g key={mark.year} data-mark-year={mark.year} pointerEvents="none">
-              {/* On the tariff's year, as every chart of steps 10–14 marks it (a stepped series rises there). A
-                  plain line chart (the exchange rate) puts the label at the top, clear of the lines. The label is
-                  drawn after the series, with a white outline, so it stays readable. */}
-              <line x1={x(mark.year)} x2={x(mark.year)} y1={34} y2={250} stroke="#4b5563" strokeDasharray="5 4" />
-              <text x={x(mark.year) - 10} y={stepped ? (index === 0 ? 149 : 228) : 48 + index * 16} textAnchor="end" fontSize={12} fill="#374151"
-                stroke="#fff" strokeWidth={3} strokeLinejoin="round" paintOrder="stroke">{mark.label}</text>
-            </g>
-          ))}
+          .map((mark, index) => {
+            // A plain line chart (the exchange rate) puts the label at the top, clear of the lines; when a point sits
+            // under it there (COL's 2019 high), at the bottom instead.
+            const right = x(mark.year) - 10, left = right - mark.label.length * 12;
+            const top = 48 + index * 16;
+            const covered = series.some((points) => points.some((point) => point.value !== null
+              && x(point.year) >= left - 6 && x(point.year) <= right + 16 && Math.abs(y(point.value) - (top - 4)) < 14));
+            const labelY = stepped ? (index === 0 ? 149 : 228) : covered ? 240 - index * 16 : top;
+            return (
+              <g key={mark.year} data-mark-year={mark.year} pointerEvents="none">
+                {/* On the tariff's year, as every chart of steps 10–14 marks it (a stepped series rises there). The
+                    label is drawn after the series, with a white outline, so it stays readable. */}
+                <line x1={x(mark.year)} x2={x(mark.year)} y1={34} y2={250} stroke="#4b5563" strokeDasharray="5 4" />
+                <text x={right} y={labelY} textAnchor="end" fontSize={12} fill="#374151"
+                  stroke="#fff" strokeWidth={3} strokeLinejoin="round" paintOrder="stroke">{mark.label}</text>
+              </g>
+            );
+          })}
         {activeYear !== null && (
           <line data-crosshair x1={x(activeYear)} x2={x(activeYear)} y1={40} y2={252} stroke="#1b1f2b" strokeDasharray="3 3" pointerEvents="none" />
         )}
