@@ -228,6 +228,14 @@ describe("tables", () => {
     });
     expect(perPointRow([columns[0], { name: "d", spec: NO_RATE, snapshot: snapshotOf(dropped) }], "trade")!.cells)
       .toEqual(["-0.55 个百分点（两年累计）", ""]);
+    // The X-terms sum row: a one-term model shows that term (not "—" above a number); the dropped one stays empty.
+    const sums = coefficientRows([
+      columns[0],
+      { name: "b", spec: { ...DEFAULT, x_lags: [0] }, snapshot: snapshotOf(xOnly) },
+      { name: "d", spec: NO_RATE, snapshot: snapshotOf(dropped) },
+    ], options).find((row) => row.key === "cumulative")!;
+    expect(sums.cells[1]).toEqual({ coef: "-0.4614***", se: expect.any(String) });
+    expect(sums.cells[2]).toBeNull();
   });
 
   test("in the CSV the per-point row sits under the X-terms sum, before a constant, as on the page", () => {
@@ -237,6 +245,9 @@ describe("tables", () => {
     const labels = csv.slice(1).split("\r\n").map((line) => line.split(",")[0]);
     expect(labels.indexOf("合计：X 每高 1 个百分点")).toBe(labels.indexOf("X 各项合计") + 2);
     expect(labels.indexOf("常数项")).toBeGreaterThan(labels.indexOf("合计：X 每高 1 个百分点"));
+    // A term the second model leaves out reads "—", as on the page, not an empty cell.
+    const rate = csv.split("\r\n").find((line) => line.startsWith("汇率变动,"))!;
+    expect(rate.split(",")[2]).toBe("—");
   });
 
   test("a wide table scrolls inside its own region: the workbench's grid items may shrink", async () => {

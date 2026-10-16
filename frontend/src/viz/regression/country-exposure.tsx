@@ -137,6 +137,21 @@ export function CountryExposureChart({ data, limit }: {
   const nodeRefs = useRef<(Element & { focus: () => void } | null)[]>([]);
   const tableRef = useRef<HTMLDetailsElement>(null);
   const [expanded, setExpanded] = useState(false);
+  // The button moves down by the length of the list it opened: after a click it is scrolled back into view, so the
+  // focus on it stays visible (it ended about 150 px below a 900 px window).
+  const expandRef = useRef<HTMLButtonElement | null>(null);
+  const toggled = useRef(false);
+  useEffect(() => {
+    const button = expandRef.current;
+    if (!toggled.current || !button) return;
+    toggled.current = false;
+    const scroller = button.closest<HTMLElement>(".content");
+    const area = scroller ? scroller.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+    const box = button.getBoundingClientRect();
+    // Opening pushes it below the window; closing can lift it above.
+    const delta = box.bottom + 16 > area.bottom ? box.bottom + 16 - area.bottom : box.top - 16 < area.top ? box.top - 16 - area.top : 0;
+    if (delta) (scroller ?? document.documentElement).scrollBy({ top: delta });
+  }, [expanded]);
   const allTaxed = data.countries.filter((row) => row.taxed);
   const limited = limit != null && limit > 0 && allTaxed.length > limit && !expanded;
   const taxed = limited ? allTaxed.slice(0, limit) : allTaxed;
@@ -257,7 +272,8 @@ export function CountryExposureChart({ data, limit }: {
       </div>
       {taxed.length > 0 && (
         <div ref={measure}>
-        <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={summary} style={{ display: "block", width: "100%", maxWidth: width, height: "auto" }}>
+        {/* A group, not an image: its bars are focusable, and children of role=img are read as decoration. */}
+        <svg viewBox={`0 0 ${width} ${height}`} role="group" aria-label={summary} style={{ display: "block", width: "100%", maxWidth: width, height: "auto" }}>
           {axis}
           {bars}
           <text x={labelW + barW / 2} y={height - 4} textAnchor="middle" fontSize={10.5} fill="#5f6677">{axisTitle}</text>
@@ -265,8 +281,8 @@ export function CountryExposureChart({ data, limit }: {
         </div>
       )}
       {limit != null && limit > 0 && allTaxed.length > limit && (
-        <button type="button" className="secondary country-exposure-expand" aria-expanded={expanded}
-          onClick={() => setExpanded((value) => !value)}>
+        <button type="button" ref={expandRef} className="secondary country-exposure-expand" aria-expanded={expanded}
+          onClick={() => { toggled.current = true; setExpanded((value) => !value); }}>
           {expanded ? `只看 X 最高的 ${limit} 国` : `展开全部 ${allTaxed.length} 个被加税国家`}
         </button>
       )}
@@ -294,7 +310,7 @@ export function CountryExposureChart({ data, limit }: {
 
         <ScrollableRegion className="table-wrap bounded-data-table" label={`${data.countries.length} 国读数表，可滚动`}>
           <table className="data-table">
-            <thead><tr><th>国家</th><th className="text-col">是否被加税</th><th>{data.year} 年各货物行业平均 X（个百分点）</th><th>X &gt; 0 的行业</th>{showBalance && <th>{ruleYear(rule)}对美货物顺差（负数为逆差）</th>}</tr></thead>
+            <thead><tr><th scope="col">国家</th><th scope="col" className="text-col">是否被加税</th><th scope="col">{data.year} 年各货物行业平均 X（个百分点）</th><th scope="col">X &gt; 0 的行业</th>{showBalance && <th scope="col">{ruleYear(rule)}对美货物顺差（负数为逆差）</th>}</tr></thead>
             <tbody>{data.countries.map((row) => <tr key={row.country}>
               <td>{countryLabel(row.country)}</td><td className="text-col">{row.taxed ? (waveText(row) ? `被加税（${waveText(row)}）` : "被加税") : "未被加税"}</td>
               <td>{points(row.mean_exposure)}</td><td>{row.exposed_industries}/{row.industries}</td>

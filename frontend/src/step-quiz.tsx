@@ -230,7 +230,9 @@ function QuizPanelBody({
       {/* One region, mounted before any result, so screen readers announce each grading (regions created
           together with their text are often skipped). The per-question feedback is read in place. */}
       <span className="sr-only" role="status" aria-live="polite">
-        {feedback.length
+        {/* Only a whole grading is read: once an answer is changed its feedback is gone, and "2 / 3" would count the
+            ungraded question as wrong and tell the change is right or wrong before it is checked. */}
+        {feedback.length === quiz.questions.length
           // The helper next to the button ("提交后立即显示逐题反馈") is not repeated; a saving or done state is.
           ? `判定结果：${feedback.filter((item) => item.correct).length} / ${quiz.questions.length} 题正确。${locallyPassed || complete ? completionMessage : ""}`
           : ""}

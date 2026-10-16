@@ -39,19 +39,22 @@ export function MaterialCard({ state, summary, how, action, check, extra, locked
   id?: string;
   cardRef?: (node: HTMLElement | null) => void;
 }) {
+  // Recorded on this page but not saved (another tab saved first, or the network failed): not shown as recorded, and
+  // the step's "how" line ("当前例子就是已记录的材料…") is left out; the sync line below says what to do.
+  const unsaved = Boolean(syncError) && state === "recorded";
   return (
-    <section id={id} ref={cardRef} tabIndex={-1} className={`material-card material-card--${state}`} aria-label={MATERIAL_CARD_TITLE}>
+    <section id={id} ref={cardRef} tabIndex={-1} className={`material-card material-card--${unsaved ? "missing" : state}`} aria-label={MATERIAL_CARD_TITLE}>
       <div className="material-card-head">
         <b>{MATERIAL_CARD_TITLE}</b>
-        {syncError && state === "recorded"
+        {unsaved
           ? <span className="material-chip material-chip--missing">{MATERIAL_UNSAVED_LABEL}</span>
           : <span className={`material-chip material-chip--${state}`}>{MATERIAL_STATE_LABELS[state]}</span>}
       </div>
       <p className="material-card-summary" role="status">{summary}</p>
       {extra && <p className="material-card-extra">{extra}</p>}
-      {(how || locked || rechosen) && (
+      {((how && !unsaved) || locked || rechosen) && (
         <p className="muted material-card-how">
-          {how}{locked ? ` ${MATERIAL_LOCKED_NOTE}` : ""}{rechosen ? MATERIAL_RECHOSEN_NEXT : ""}
+          {unsaved ? null : how}{locked ? ` ${MATERIAL_LOCKED_NOTE}` : ""}{rechosen ? MATERIAL_RECHOSEN_NEXT : ""}
         </p>
       )}
       {action && (

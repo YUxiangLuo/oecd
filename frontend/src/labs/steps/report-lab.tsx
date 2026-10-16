@@ -276,7 +276,9 @@ export function RecordedMaterials({ steps, getStep, blocked, onNavigateStep }: {
       : step.n >= 6 && step.n <= 8 ? recordedVizMaterialLabel(data)
       : typeof data?.material_label === "string" ? data.material_label : null;
     const recorded = missing.length === 0 && Boolean(data && Object.keys(data).some((key) => ["observation", "observations", "teaching_observation", "run"].includes(key)));
-    return { step, label, missing, recorded };
+    // Steps 11–14: the model experiment the card lists on its second line, so the row says what the card says.
+    const experiment = step.n >= 11 && step.n <= 14 && data?.experiment ? "另记入报告的模型实验：1 个（选做），见下方“你的模型实验”。" : null;
+    return { step, label, missing, recorded, experiment };
   });
   if (!rows.length) return null;
   return (
@@ -288,11 +290,14 @@ export function RecordedMaterials({ steps, getStep, blocked, onNavigateStep }: {
       <table>
         <thead><tr><th scope="col">步骤</th><th scope="col">状态</th><th scope="col">记录的材料</th></tr></thead>
         <tbody>
-          {rows.map(({ step, label, missing, recorded }) => (
+          {rows.map(({ step, label, missing, recorded, experiment }) => (
             <tr key={step.n}>
               <td><button type="button" className="gate-link" onClick={() => activateReportMaterialDestination(step.n, onNavigateStep)}>步骤 {step.n} · {step.title}</button></td>
               <td><span className={`material-chip material-chip--${recorded ? "recorded" : "missing"}`}>{recorded ? "已记录" : "未记录"}</span></td>
-              <td>{recorded ? (label ?? "已记录（旧记录，到本步查看）") : missing.length ? missing.join("；") : "尚未记录"}</td>
+              <td>
+                {recorded ? (label ?? "已记录（旧记录，到本步查看）") : missing.length ? missing.join("；") : "尚未记录"}
+                {experiment && <><br /><small className="muted">{experiment}</small></>}
+              </td>
             </tr>
           ))}
         </tbody>

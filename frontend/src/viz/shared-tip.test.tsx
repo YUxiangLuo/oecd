@@ -67,6 +67,8 @@ test("a hidden tip is hidden from screen readers and emptied; a focus tip surviv
   expect(tip.getAttribute("aria-hidden")).toBe("true");
   await new Promise((resolve) => setTimeout(resolve, 200));
   expect(tip.textContent).toBe("");
+  // Back in the corner, so its old place does not widen the page.
+  expect([tip.style.left, tip.style.top]).toEqual(["0px", "0px"]);
   // Tab onto the bar: the browser scrolls it into view right away, and the tip stays.
   fireEvent.focus(mark);
   fireEvent.scroll(view.getByTestId("scroll"));

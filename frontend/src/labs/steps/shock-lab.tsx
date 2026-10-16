@@ -48,7 +48,7 @@ const WAVE_NAMES: Record<number, string> = { 1: "第一批", 2: "第二批" };
  * one taxed and one untaxed → the gap is the taxed country's X; both taxed → the gap comes from their
  * different export dependence w under the same tariff; both untaxed → there is no gap.
  */
-export function stepTenGapNote(taxed: boolean[], exposed: boolean[] = taxed, imposer: boolean[] = []): string | undefined {
+export function stepTenGapNote(taxed: boolean[], exposed: boolean[] = taxed, imposer: boolean[] = [], starts: (number | null | undefined)[] = []): string | undefined {
   if (taxed.length !== 2) return undefined;
   // The imposing country's X is 0 only by definition and it is not in the regression sample: no tariff gap to read.
   if (imposer.some(Boolean)) return "美国的 X 记为 0 只是定义（它是加征关税的一方，不在回归样本中），这不是回归要比较的被加税与未被加税国家之差";
@@ -62,6 +62,12 @@ export function stepTenGapNote(taxed: boolean[], exposed: boolean[] = taxed, imp
     return taxed.some(Boolean)
       ? "两国的 X 都为 0：被加税的国家该行业不向美国出口（w = 0），没有差距"
       : "两国都未被加税：X 一直为 0，没有差距";
+  }
+  // Taxed in different waves: until the later one starts, the gap is the earlier one's X; only afterwards does it
+  // come from w (CHN 2018 against COL 2019: the 2018 gap, then a narrower one of the other sign).
+  const [early, late] = [Math.min(starts[0] ?? Infinity, starts[1] ?? Infinity), Math.max(starts[0] ?? -Infinity, starts[1] ?? -Infinity)];
+  if (Number.isFinite(early) && Number.isFinite(late) && early !== late) {
+    return `两国加税年份不同（${early} 年、${late} 年起）：${late} 年以前的差距来自加税早晚，之后来自对美出口份额 w 的不同；缺少未被加税的对照`;
   }
   return "两国都被加税（税率相同）：差距来自对美出口份额 w 的不同；缺少未被加税的对照";
 }
@@ -542,6 +548,7 @@ export function ShockLab({ meta, step: _step, state }: {
               lastRows.map((row) => row.teaching_tariff_rate_tau > 0),
               lastRows.map((row) => row.teaching_tariff_exposure > 0),
               lastRows.map((row) => isImposer(row.country)),
+              lastRows.map((row) => overview?.countries.find((item) => item.country === row.country)?.start_year),
             )}
           digits={chartDigits}
           countryDigits={countryDigits}
@@ -549,7 +556,7 @@ export function ShockLab({ meta, step: _step, state }: {
         <details className="teaching-year-details">
           <summary>逐年表：每年的 w、τ、X、L1.X</summary>
           <ScrollableRegion className="table-wrap bounded-data-table" label="所选例子的逐年变量表">
-            <table className="data-table teaching-year-table"><thead><tr><th>国家</th><th>年份</th><th>对美出口份额 w</th><th>加征税率 τ</th><th>关税暴露 X = w × τ</th><th>上一年的 X（L1.X）</th></tr></thead>
+            <table className="data-table teaching-year-table"><thead><tr><th scope="col">国家</th><th scope="col">年份</th><th scope="col">对美出口份额 w</th><th scope="col">加征税率 τ</th><th scope="col">关税暴露 X = w × τ</th><th scope="col">上一年的 X（L1.X）</th></tr></thead>
               {/* Country A first, then B (the rows arrive in alphabetical order). */}
               <tbody>{[...rows].sort((a, b) => shownCountries.indexOf(a.country) - shownCountries.indexOf(b.country) || a.year - b.year).map((row) => {
                 // w is fixed at its first-year value, so every year of a unit shows it at the same digits: those its
@@ -584,8 +591,10 @@ export function ShockLab({ meta, step: _step, state }: {
         extra={`步骤 11–14 会把回归结果换算到这个例子上；例子只用来展示，不改变回归样本。${recordedX === 0
           ? "这个例子的 X 为 0，换算结果也会是 0；想看到不为 0 的换算，选被加税国家的货物行业（如加拿大的汽车行业）。"
           // Steps 11–14 convert every country of the example: "close to 0" only when the largest X is tiny, read off
-          // the countries on screen, so only while they are the recorded example (the record keeps one country's X).
-          : recordedX != null && savedExample && Math.max(recordedX, ...lastRows.map((row) => row.teaching_tariff_exposure)) * 100 < 0.01
+          // the countries on screen while they are the recorded example; otherwise only a one-country record, whose X
+          // is the one kept, can tell.
+          : recordedX != null && (savedExample ? Math.max(recordedX, ...lastRows.map((row) => row.teaching_tariff_exposure))
+            : savedCompared.length === 1 ? recordedX : Infinity) * 100 < 0.01
             ? "这个例子的 X 极小（小于 0.01 个百分点），换算结果会接近 0。" : ""}`}
         locked={state.materialLocked}
         rechosen={rechosen}

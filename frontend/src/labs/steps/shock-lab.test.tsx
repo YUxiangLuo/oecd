@@ -200,6 +200,9 @@ test("step 10 can follow a single taxed country and records it alone", async () 
 test("the step 10 gap note matches whether the two countries were taxed", () => {
   expect(stepTenGapNote([true, false])).toContain("两国差距的大小等于美国加税后被加税国家的 X");
   expect(stepTenGapNote([true, true])).toContain("差距来自对美出口份额 w 的不同");
+  // Two waves: the gap before the later wave starts is the earlier wave's X.
+  expect(stepTenGapNote([true, true], [true, true], [], [2018, 2019])).toBe("两国加税年份不同（2018 年、2019 年起）：2019 年以前的差距来自加税早晚，之后来自对美出口份额 w 的不同；缺少未被加税的对照");
+  expect(stepTenGapNote([true, true], [true, true], [], [2018, 2018])).toContain("两国都被加税（税率相同）");
   expect(stepTenGapNote([false, false])).toContain("没有差距");
   // The untaxed country as the example (gap negative) reads the same: the size of the gap, not its sign.
   expect(stepTenGapNote([false, true])).toBe(stepTenGapNote([true, false]));
@@ -720,7 +723,7 @@ test("a small X reads with the digits that check, in the example's X = w × τ l
   expect(chn).toContain("被加税：2020 年 X = 0.10% × 25% = 0.025 个百分点");
   expect(cri).toContain("未被加税：2020 年 X = 30.00% × 0% = 0 个百分点");
   await waitFor(() => expect(document.querySelector(".comparison-summary")).not.toBeNull());
-  expect(document.querySelectorAll(".comparison-summary > div")[0].textContent).toContain("0.000 → 0.025");
+  expect(document.querySelectorAll(".comparison-summary > div")[0].textContent).toContain("0 → 0.025");
   expect(document.body.textContent).not.toContain("= 0.02 个百分点");
   groups.mockRestore();
   series.mockRestore();
@@ -793,7 +796,7 @@ test("ISR · D outside the sample while ISR · S is recorded: one note, and the 
   cleanup();
 });
 
-test("each country's trend card reads X at its own digits; the marker sits between 2017 and 2018", async () => {
+test("each country's trend card reads X at its own digits; the marker sits on 2018, the tariff's year", async () => {
   const meta: Meta = { years: tenYears, countries: ["CAN", "CHN"], sectors: ["C29"] };
   const groups = tenGroups();
   // CAN reads 23.25 (two decimals); CHN's tiny w needs three ("0.025").
@@ -802,9 +805,9 @@ test("each country's trend card reads X at its own digits; the marker sits betwe
   await waitFor(() => expect(document.querySelector(".comparison-summary")).not.toBeNull());
   const cards = [...document.querySelectorAll(".comparison-summary > div")].map((card) => card.textContent);
   expect(cards[0]).toContain("+23.25 个百分点");
-  expect(cards[0]).toContain("0.00 → 23.25");
+  expect(cards[0]).toContain("0 → 23.25");
   expect(cards[0]).not.toContain("23.250");
-  expect(cards[1]).toContain("0.000 → 0.025");
+  expect(cards[1]).toContain("0 → 0.025");
   // The lines above the cards read X at the same digits.
   const [can, chn] = summaryLines();
   expect(can).toContain("= 93.00% × 25% = 23.25 个百分点");
@@ -812,9 +815,8 @@ test("each country's trend card reads X at its own digits; the marker sits betwe
   const svg = document.querySelector('[data-mark-year="2018"]')!.closest("svg")!;
   const marker = Number(svg.querySelector('[data-mark-year="2018"] line')!.getAttribute("x1"));
   const dots = [...svg.querySelectorAll('[data-series-group="CAN"] circle')].map((dot) => Number(dot.getAttribute("cx")));
-  expect(marker).toBeGreaterThan(dots[1]);
-  expect(marker).toBeLessThan(dots[2]);
-  expect(marker).toBeCloseTo((dots[1] + dots[2]) / 2);
+  // On the tariff's year, as the exchange-rate chart and steps 11–14 mark it.
+  expect(marker).toBe(dots[2]);
   // The tariff tile names the year τ (and so X) rises from 0; the definition says it is 0 before.
   expect(document.querySelector(".teaching-tiles li.taxed")!.textContent).toContain("2018 年起");
   expect(document.querySelector(".teaching-definitions")!.textContent).toContain("美国加征的税率；加税前、未被加税的国家和非货物行业都是 0");

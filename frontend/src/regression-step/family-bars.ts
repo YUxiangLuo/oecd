@@ -136,7 +136,7 @@ export function forwardShareIdentity(items: TeachingEstimate[]): string | null {
 /** Step 11's two shares: the course data make 国内增加值出口占比 = 1 − 外国增加值项占比 − the small rest. */
 export function tradeShareIdentity(items: TeachingEstimate[]): string | null {
   return ["FVA_share", "DVAex_share"].every((key) => items.some((item) => item.key === key))
-    ? "课程数据里，国内增加值出口占比 = 1 − 外国增加值项占比 − 其余小项（重复计算等），所以这两条大小相近、方向相反。"
+    ? "课程数据里，国内增加值出口占比 = 100% − 外国增加值项占比 − 其余小项（重复计算等），所以这两条大小相近、方向相反。"
     : null;
 }
 

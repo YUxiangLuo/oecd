@@ -140,7 +140,10 @@ HINTS = (
 FOOTNOTE = (
     "注：括号内为按国家聚类的标准误。*** p<0.01, ** p<0.05, * p<0.1。系数为原单位，X 以份额计（0.25 = 25%），"
     "X 增加 1 个百分点时 Y 的变化 = 系数 × 0.01（份额类 Y 再 × 100，即个百分点）。2018 年以前没有关税，X 的滞后在加税前按 0 处理。"
-    "自由度计入样本内全部固定效应；用其他统计软件的默认设置复算时，标准误可能小约 11%，属于计算口径不同。"
+    # The 11% is the default model's gap (country × industry effects); with fewer effects the gap is smaller (about 1%
+    # with country × year effects alone), so it is not stated as one number for every column.
+    "自由度计入样本内全部固定效应；用其他统计软件的默认设置复算时，含国家×行业固定效应的模型（如默认模型）"
+    "标准误可能小约 11%，其他设定差得少一些，属于计算口径不同。"
 )
 SAMPLE_DIFFERS_NOTE = "这几列的样本不同，差异有一部分来自样本，而不只是设定。"
 # A model with X alone: its coefficient also takes up part of the next-year link (X and L1.X move together), so it is

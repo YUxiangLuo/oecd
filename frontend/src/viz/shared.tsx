@@ -149,6 +149,19 @@ export const joinCountries = (codes: readonly string[]) => codes.map(countryLabe
 export const rowLabel = (r: Row) => (r.industry != null ? sectorLabel(String(r.industry)) : countryLabel(String(r.country)));
 
 /** 暗色悬浮 tooltip(增强通道;全部数值同时可在表格视图获得) */
+/**
+ * Once its fade is over (unless shown again meanwhile), a hidden tip is emptied and moved back to the corner: left at
+ * the last bar's place it kept its width there and widened the page (a 26 px scroll after the window got narrower).
+ */
+function park(box: HTMLDivElement) {
+  window.setTimeout(() => {
+    if (box.style.opacity !== "0") return;
+    box.replaceChildren();
+    box.style.left = "0px";
+    box.style.top = "0px";
+  }, 150);
+}
+
 /** The top of the window area an element can be seen in: its nearest scrolling ancestor's top, or the window's. */
 function visibleTop(element: HTMLElement): number {
   for (let node = element.parentElement; node; node = node.parentElement) {
@@ -169,6 +182,7 @@ export function useTip() {
       if (boxRef.current?.style.opacity !== "1") return;
       boxRef.current.style.opacity = "0";
       boxRef.current.setAttribute("aria-hidden", "true");
+      park(boxRef.current);
       dismissed.current = true;
     };
     // Only the scroll that focus itself causes is let pass: a later key (PageDown, Space) or wheel scroll dismisses
@@ -246,9 +260,7 @@ export function useTip() {
       // Hidden means empty too: no stale reading of another bar (or another Y) stays for a screen reader.
       boxRef.current.style.opacity = "0";
       boxRef.current.setAttribute("aria-hidden", "true");
-      // Emptied once the fade is over, unless another bar showed it again meanwhile.
-      const box = boxRef.current;
-      window.setTimeout(() => { if (box.style.opacity === "0") box.replaceChildren(); }, 150);
+      park(boxRef.current);
     }
     dismissed.current = false;
     pointer.current = null;

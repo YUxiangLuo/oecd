@@ -3085,6 +3085,11 @@ def test_report_appendix_reads_each_x_sum_per_percentage_point():
         "| 合计：X 每高 1 个百分点 | -0.0182 个长度单位（两年累计） | -0.0120 个长度单位（仅当期 X） |  |"
     ]
     assert _per_point_rows([columns[2]]) == []
+    # The X-terms sum row: the one-term model shows its term, as the page does, not an empty cell.
+    from gvcsim.report_workbench import _coefficient_rows
+
+    (total,) = [row for row in _coefficient_rows(columns) if row.startswith("| X 各项合计 |")]
+    assert total.split(" | ")[2].startswith("-1.2000")
 
 
 def test_report_appendix_never_calls_one_coefficient_a_sum():

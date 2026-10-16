@@ -307,7 +307,9 @@ export function ComparisonSummary({
         <div key={country}>
           <span>{countryLabel(country)} · {firstYear}→{lastYear}</span>
           <b>{changeReading(starts[index], ends[index], unit, countryDigits?.[country] ?? digits)}</b>
-          <small>{fixedIndicatorNumber(starts[index], unit, countryDigits?.[country] ?? digits)} → {fixedIndicatorNumber(ends[index], unit, countryDigits?.[country] ?? digits)}</small>
+          {/* An exact zero reads "0" (step 10: X before the tariff), so a card's "0.0000" and the other's "0.00" do
+              not look like two different zeros. */}
+          <small>{starts[index] === 0 ? "0" : fixedIndicatorNumber(starts[index], unit, countryDigits?.[country] ?? digits)} → {ends[index] === 0 ? "0" : fixedIndicatorNumber(ends[index], unit, countryDigits?.[country] ?? digits)}</small>
         </div>
       ))}
       <div>
@@ -600,12 +602,12 @@ export function IndicatorTrendChart({
                   {i > 0 && series[index][i - 1].value !== null && stepped && (
                     <polyline
                       data-series={countries[index]}
-                      // Held until halfway between the years, where the policy line sits, then the new value. A
-                      // comparison country's riser sits a few px to the right, so the first country's riser (same
-                      // x, drawn on top) does not hide it.
+                      // Held until the new year, where the policy line sits (on the tariff's year, as on every chart
+                      // of steps 10–14), then the new value. A comparison country's riser sits a few px to the
+                      // right, so the first country's riser (same x, drawn on top) does not hide it.
                       points={(() => {
                         const prev = series[index][i - 1];
-                        const riser = x((prev.year + point.year) / 2) + index * 5;
+                        const riser = x(point.year) + index * 5;
                         return `${x(prev.year)},${y(prev.value!)} ${riser},${y(prev.value!)} ${riser},${y(point.value)} ${x(point.year)},${y(point.value)}`;
                       })()}
                       fill="none"
@@ -643,11 +645,11 @@ export function IndicatorTrendChart({
           .filter((mark) => years.includes(mark.year) && mark.year > years[0])
           .map((mark, index) => (
             <g key={mark.year} data-mark-year={mark.year} pointerEvents="none">
-              {/* A stepped series changes halfway between years, where its riser sits; a plain line chart (the
-                  exchange rate) marks the year itself, with the label at the top, clear of the lines. The label
-                  is drawn after the series, with a white outline, so it stays readable. */}
-              <line x1={x(mark.year - (stepped ? 0.5 : 0))} x2={x(mark.year - (stepped ? 0.5 : 0))} y1={34} y2={250} stroke="#4b5563" strokeDasharray="5 4" />
-              <text x={x(mark.year - (stepped ? 0.5 : 0)) - 10} y={stepped ? (index === 0 ? 149 : 228) : 48 + index * 16} textAnchor="end" fontSize={12} fill="#374151"
+              {/* On the tariff's year, as every chart of steps 10–14 marks it (a stepped series rises there). A
+                  plain line chart (the exchange rate) puts the label at the top, clear of the lines. The label is
+                  drawn after the series, with a white outline, so it stays readable. */}
+              <line x1={x(mark.year)} x2={x(mark.year)} y1={34} y2={250} stroke="#4b5563" strokeDasharray="5 4" />
+              <text x={x(mark.year) - 10} y={stepped ? (index === 0 ? 149 : 228) : 48 + index * 16} textAnchor="end" fontSize={12} fill="#374151"
                 stroke="#fff" strokeWidth={3} strokeLinejoin="round" paintOrder="stroke">{mark.label}</text>
             </g>
           ))}

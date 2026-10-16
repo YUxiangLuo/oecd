@@ -650,7 +650,9 @@ fieldset.reg-custom-form:disabled { opacity: .6; }
 .reg-custom-tries ol { margin: 6px 0 0; padding-left: 20px; line-height: 1.7; }
 .reg-custom-compare-table th.reg-custom-current, .reg-custom-compare-table td.reg-custom-current { background: #fff8e1; }
 .reg-custom-point-row > * { border-top: 1px dashed #c9cde0; font-weight: 650; }
-.reg-custom-detail-pick { display: inline-flex; gap: 6px; align-items: center; margin: 8px 0; font-size: 12.5px; }
+.reg-custom-detail-pick { display: flex; gap: 6px; align-items: center; max-width: 100%; margin: 8px 0; font-size: 12.5px; white-space: nowrap; }
+/* A long model name fits the card: the select shrinks and ends with an ellipsis, the label "查看" stays on one line. */
+.reg-custom-detail-pick select { min-width: 0; max-width: 100%; text-overflow: ellipsis; }
 
 /* Steps 10–14 simplification (phase 1): folded secondary content, the workbench as a closed card after the quiz. */
 .reg-model-terms { margin: 8px 0 4px; font-size: 12px; }
@@ -661,8 +663,8 @@ fieldset.reg-custom-form:disabled { opacity: .6; }
 details.reg-custom-section > summary { display: grid; gap: 4px; cursor: pointer; list-style: none; }
 details.reg-custom-section > summary::-webkit-details-marker { display: none; }
 details.reg-custom-section > summary .reg-custom-title { color: #1b1f2b; font-size: 17px; font-weight: 700; line-height: 1.45; }
-details.reg-custom-section > summary .reg-custom-title::before { content: "▸ "; color: #4b47e0; }
-details.reg-custom-section[open] > summary .reg-custom-title::before { content: "▾ "; }
+details.reg-custom-section > summary .reg-custom-title::before { content: "▸ " / ""; color: #4b47e0; }
+details.reg-custom-section[open] > summary .reg-custom-title::before { content: "▾ " / ""; }
 details.reg-custom-section[open] > summary { margin-bottom: 12px; }
 details.reg-custom-section > summary:focus-visible { outline: 2px solid #4b47e0; outline-offset: 4px; border-radius: 6px; }
 .teaching-definitions { display: grid; gap: 4px; margin: 10px 0 6px; padding: 10px 12px; border: 1px solid #dcdff0; border-radius: 9px; background: #f8f8ff; color: #3f4759; font-size: 12.5px; line-height: 1.6; }
@@ -764,3 +766,5 @@ dl.teaching-definitions dd { margin: 0; }
 .reg-custom-compare-table .reg-custom-point-row td, .reg-custom-compare-table .reg-custom-design-row td { white-space: normal; min-width: 8em; }
 /* A preset computed in this visit keeps its total on the button, for the next preset's comparison question. */
 .reg-preset .reg-preset-total { display: block; margin-top: 3px; color: #1b4d7a; font-weight: 600; }
+/* Headers may wrap, so a table that is a few px too wide at 1000–1100 px does not get a scroll bar for them. */
+.teaching-year-table thead th, .reg-custom-table:not(.reg-custom-compare-table) thead th { white-space: normal; }

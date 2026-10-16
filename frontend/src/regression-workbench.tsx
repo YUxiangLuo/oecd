@@ -116,7 +116,7 @@ function ModelForm({ options, spec, onChange, disabled = false }: {
         {options.x_lags.map((item) => (
           <label key={item.lag} className="reg-custom-choice">
             <input type="checkbox" checked={spec.x_lags.includes(item.lag)} onChange={() => toggleLag(item.lag)} />
-            <span><b>{item.label}</b><small>{item.description}</small></span>
+            <span><b>{item.label}</b><span className="sr-only">，</span><small>{item.description}</small></span>
           </label>
         ))}
         <p className="muted reg-custom-note">{options.x_lag_note}</p>
@@ -129,7 +129,7 @@ function ModelForm({ options, spec, onChange, disabled = false }: {
             <div key={item.name} className="reg-custom-control">
               <label className="reg-custom-choice">
                 <input type="checkbox" checked={Boolean(chosen)} onChange={() => toggleControl(item.name)} />
-                <span><b>{item.label}</b><small>{item.definition} · {item.source}</small></span>
+                <span><b>{item.label}</b><span className="sr-only">，</span><small>{item.definition} · {item.source}</small></span>
               </label>
               {chosen && (
                 <select aria-label={`${item.label}的期数`} value={chosen.lag} onChange={(event) => setControlLag(item.name, Number(event.target.value))}>
@@ -154,7 +154,7 @@ function ModelForm({ options, spec, onChange, disabled = false }: {
                 disabled={parent != null}
                 onChange={() => toggleEffect(item.key)}
               />
-              <span><b>{item.label}</b><small>{parent ? `已包含在${parent}${/[A-Za-z]$/.test(parent) ? " " : ""}中` : item.description}</small></span>
+              <span><b>{item.label}</b><span className="sr-only">，</span><small>{parent ? `已包含在${parent}${/[A-Za-z]$/.test(parent) ? " " : ""}中` : item.description}</small></span>
             </label>
           );
         })}
@@ -184,19 +184,20 @@ export function ColumnDetails({ column, options, perPoint }: {
   return (
     <ScrollableRegion className="table-wrap" label={`${column.name}的完整数字，可横向滚动`}>
       <table className="data-table reg-custom-table">
-        <thead><tr><th>变量</th><th>系数</th><th>标准误</th><th>t 值</th><th>p 值</th><th>显著性</th><th>95% 区间</th><th>X 每高 1 个百分点</th></tr></thead>
+        <thead><tr><th scope="col">变量</th><th scope="col">系数</th><th scope="col">标准误</th><th scope="col">t 值</th><th scope="col">p 值</th><th scope="col">显著性</th><th scope="col">95% 区间</th><th scope="col">X 每高 1 个百分点</th></tr></thead>
         <tbody>
           {rows.map((coef) => (
             <tr key={coef.name}>
-              <td>{termLabel(coef.name, options)}</td>
+              <th scope="row">{termLabel(coef.name, options)}</th>
               <td>{fixed4(coef.coef)}</td>
               <td>{result.suppressed ? "—" : `(${fixed4(coef.se)})`}</td>
               <td>{result.suppressed || coef.t == null ? "—" : groupedFixed(coef.t, 2)}</td>
               <td>{result.suppressed ? "—" : formatPValue(coef.p)}</td>
               <td>{result.suppressed ? "—" : significanceStars(coef.p) || "—"}</td>
               <td>{result.suppressed || coef.ci_low == null || coef.ci_high == null ? "—" : `[${fixed4(coef.ci_low)}, ${fixed4(coef.ci_high)}]`}</td>
-              {/* The page's reading, for the X terms' sum (or the single X term) only. */}
-              <td>{coef.name === "cumulative" || (xTerms === 1 && Object.values(X_COLUMNS).includes(coef.name)) ? perPoint(coef, column.snapshot) : "—"}</td>
+              {/* The page's reading for each X term and their sum (the result card's 当年 / 次年 split); a control
+                  is not "per point of X". */}
+              <td>{coef.name === "cumulative" || Object.values(X_COLUMNS).includes(coef.name) ? perPoint(coef, column.snapshot) : "—"}</td>
             </tr>
           ))}
         </tbody>
@@ -208,6 +209,9 @@ export function ColumnDetails({ column, options, perPoint }: {
 export function ModelComparisonChart({ columns, outcome }: { columns: TableColumn[]; outcome: RegressionOutcome }) {
   const rows: DivergingBarRow[] = [];
   const notes: string[] = [];
+  // Every row at the first column's decimals, as the table's "合计" row (+0.08 there was +0.084 here).
+  const first = columns.find((column) => xSum(column.snapshot, column.spec));
+  const sharedDigits = first ? perPointDigits(outcome, xSum(first.snapshot, first.spec)!, first.snapshot) : undefined;
   for (const [index, column] of columns.entries()) {
     const stat = xSum(column.snapshot, column.spec);
     const result = column.snapshot.result;
@@ -218,7 +222,7 @@ export function ModelComparisonChart({ columns, outcome }: { columns: TableColum
     }
     const scale = column.snapshot.depvar_kind === "share" ? 1 : 0.01;
     // The interval ends at the estimate's own decimals (not each end's own, which printed 5–7 digits).
-    const digits = perPointDigits(outcome, stat, column.snapshot);
+    const digits = sharedDigits ?? perPointDigits(outcome, stat, column.snapshot);
     const end = (coef: number) => perPointReading(outcome, { ...stat, coef }, column.snapshot, digits);
     const interval = `${end(stat.ci_low)} 至 ${end(stat.ci_high)}`;
     const reading = perPointReading(outcome, stat, column.snapshot, digits);
@@ -230,7 +234,8 @@ export function ModelComparisonChart({ columns, outcome }: { columns: TableColum
       valueLabel: reading,
       // The tooltip names the row "95% 区间" itself.
       intervalLabel: interval,
-      spokenLabel: `${reading}，95% 区间：${interval}，${xSpanLabel(column.spec)}`,
+      // A shortened row name ("自定义（9 处改动）") is read with the model in full.
+      spokenLabel: `${reading}，95% 区间：${interval}，${xSpanLabel(column.spec)}${column.chartName && column.chartName !== column.name ? `；完整设定：${column.name}` : ""}`,
     });
   }
   return <section aria-label="同一因变量的模型比较">
@@ -484,14 +489,22 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
             </p>
           )
           : <p className="muted reg-custom-report-none">{latest ? "报告附录会把它和默认模型并列；每步最多记入一个模型。" : "算出一个模型后，可以把它记入报告附录，和默认模型并列（每步最多一个）。"}</p>}
-        {latest && !latestIsReported && (
-          <button type="button" className="primary" onClick={putInReport}>
-            {/* A long custom name is shortened as in the chart; the column above it carries the full name. */}
-            {experiment
-              ? `用“${chartModelLabel(label(latest.design.spec!))}”${yKey !== experimentY ? `（Y：${depvarLabel}）` : ""}替换记入报告的模型`
-              : `把“${chartModelLabel(label(latest.design.spec!))}”记入报告`}
-          </button>
-        )}
+        {latest && !latestIsReported && (() => {
+          // A shortened name on the button: the two models in full on hover and for screen readers.
+          const shortened = chartModelLabel(label(latest.design.spec!)) !== label(latest.design.spec!)
+            || Boolean(experiment && chartModelLabel(label(experiment.spec)) !== label(experiment.spec));
+          const full = `本次的模型：${label(latest.design.spec!)}${experiment ? `；已记入报告的模型：${label(experiment.spec)}` : ""}`;
+          return <>
+            {shortened && <span id={`reg-report-models-${stepNumber}`} className="sr-only">{full}</span>}
+            <button type="button" className="primary" onClick={putInReport} title={shortened ? full : undefined}
+              aria-describedby={shortened ? `reg-report-models-${stepNumber}` : undefined}>
+              {/* A long custom name is shortened as in the chart; the column above it carries the full name. */}
+              {experiment
+                ? `用“${chartModelLabel(label(latest.design.spec!))}”${yKey !== experimentY ? `（Y：${depvarLabel}）` : ""}替换记入报告的模型`
+                : `把“${chartModelLabel(label(latest.design.spec!))}”记入报告`}
+            </button>
+          </>;
+        })()}
         {state.materialLocked && !reportChanged && (
           <p className="reg-rerun-warning" role="note"><b>报告已提交</b>记入、替换或移除模型都会改变报告；之后要到步骤 15 更新报告并重新提交，如已评分，评分和评语会被清除。</p>
         )}
@@ -545,7 +558,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       </p>
       {yError && <div className="error-box async-error" role="alert">{yError}<button type="button" className="secondary" onClick={() => changeY(stepBaseline)}>改回本步的 Y</button></div>}
       <div className="reg-custom-presets" role="group" aria-label="预设实验">
-        <h4 className="reg-custom-way">方式一：点一个预设实验<small>每个只改默认模型的一处，点了就计算</small></h4>
+        <h4 className="reg-custom-way">方式一：点一个预设实验<span className="sr-only">，</span><small>每个只改默认模型的一处，点了就计算</small></h4>
         {(["core", "advanced"] as const).map((tier) => {
           const items = options.presets.filter((item) => (item.tier ?? "core") === tier);
           if (!items.length) return null;
@@ -557,7 +570,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
                   <li key={item.key}>
                     <button type="button" className="reg-preset" aria-pressed={Boolean(latest) && activePreset === item.key} aria-disabled={!defaultForY || running || undefined}
                       onClick={() => { if (defaultForY && !running) runPreset(item.spec); }}>
-                      <b>{item.label}</b><small>{(item.key === "no_exchange_rate" || item.key === "separate_effects") && (noDesignValue || zeroDesignValue)
+                      <b>{item.label}</b><span className="sr-only">，</span><small>{(item.key === "no_exchange_rate" || item.key === "separate_effects") && (noDesignValue || zeroDesignValue)
                         ? noDesignValue ? "与同一 Y 的默认模型相比，X 各项合计和区间怎样变化？" : "X 各项合计的区间还包含 0 吗？"
                         : item.question}</small>
                       {presetTotals[`${yKey}:${item.key}`] && <small className="reg-preset-total">本次打开后算过：合计 {presetTotals[`${yKey}:${item.key}`]}</small>}
@@ -570,7 +583,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         })}
       </div>
       <details className="reg-custom-details reg-custom-form-details" open={customOpen} onToggle={(event) => setCustomOpen(event.currentTarget.open)}>
-        <summary>方式二：自己改设定<small>X 的滞后、控制变量、固定效应；改完点“计算这个模型”</small></summary>
+        <summary>方式二：自己改设定<span className="sr-only">，</span><small>X 的滞后、控制变量、固定效应；改完点“计算这个模型”</small></summary>
         <p className="reg-custom-start">勾选框里是要计算的设定：<b>{label(spec)}</b>（{inStep ? "结果已在下面" : restoredDraft ? "上次离开时的设定，结果不保留，需重新计算" : "还没有计算"}）。在它的基础上改，改完点“计算这个模型”。</p>
         <ModelForm options={options} spec={spec} onChange={changeSpec} disabled={running} />
         {noX ? <p className="reg-custom-note">至少选一项关税暴露 X。</p> : <p className="reg-custom-equation">{equationPreview(spec, options)}</p>}

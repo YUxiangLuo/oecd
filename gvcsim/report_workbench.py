@@ -213,7 +213,7 @@ def _coefficient_rows(columns: list[dict[str, Any]]) -> list[str]:
             if not isinstance(run, dict):
                 values.append("")
                 continue
-            coefficient, omitted = pick(run["result"])
+            coefficient, omitted = pick(run["result"], column["spec"])
             if coefficient is None:
                 values.append("（省略）" if omitted else "")
                 continue
@@ -227,18 +227,28 @@ def _coefficient_rows(columns: list[dict[str, Any]]) -> list[str]:
 
     for name in names:
 
-        def pick(result: dict[str, Any], name: str = name) -> tuple[dict[str, Any] | None, bool]:
+        def pick(result: dict[str, Any], _spec: ModelSpec, name: str = name) -> tuple[dict[str, Any] | None, bool]:
             found = next((item for item in result.get("coefs", []) if item.get("name") == name), None)
             return found, any(item.get("name") == name for item in result.get("omitted", []))
 
         rows.append(f"| {_TERM_LABELS.get(name, _safe(name))} | {cells(pick)} |")
     if any(isinstance(column["run"], dict) and _x_terms(column["run"]["result"]) > 1 for column in columns):
-        total_cells = cells(lambda result: (result.get("cumulative") if _x_terms(result) > 1 else None, False))
+        # A one-term model's sum is that term (as the page shows it); a model whose second term was dropped has none.
+        total_cells = cells(
+            lambda result, spec: (
+                result.get("cumulative")
+                if _x_terms(result) > 1
+                else _x_sum(result, spec)
+                if len(spec.x_lags) == 1
+                else None,
+                False,
+            )
+        )
         rows.append(f"| X 各项合计 | {total_cells} |")
     rows += _per_point_rows(columns)
     rows += _design_value_rows(columns)
     if any(isinstance(column["run"], dict) and column["run"]["result"].get("constant") for column in columns):
-        rows.append(f"| 常数项 | {cells(lambda result: (result.get('constant'), False))} |")
+        rows.append(f"| 常数项 | {cells(lambda result, _spec: (result.get('constant'), False))} |")
     return rows
 
 

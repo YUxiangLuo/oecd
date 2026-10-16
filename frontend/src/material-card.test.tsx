@@ -48,11 +48,16 @@ test("an unsaved material is not called recorded; a conflict says where to act i
   expect(card.querySelector(".material-chip")?.textContent).toBe("未保存");
   fireEvent.click(screen.getByRole("button", { name: "重试同步" }));
   expect(retries).toBe(1);
-  view.rerender(<MaterialCard state="recorded" summary="JPN 9.891%" syncError="冲突" syncConflict onRetrySync={() => { retries += 1; }} />);
+  view.rerender(<MaterialCard state="recorded" summary="JPN 9.891%" how="当前例子就是已记录的材料；换国家或行业后自动更新。" syncError="冲突" syncConflict onRetrySync={() => { retries += 1; }} />);
   expect(screen.getByRole("alert").textContent).toBe(MATERIAL_CONFLICT_NOTE);
+  // Neither the "already recorded" line nor the recorded colour while it is not saved.
+  expect(card.querySelector(".material-card-how")).toBeNull();
+  expect(card.className).toContain("material-card--missing");
   expect(screen.queryByRole("button", { name: "重试同步" })).toBeNull();
   // Without an error for this step (another step's edit failed), the card reads as recorded.
-  view.rerender(<MaterialCard state="recorded" summary="JPN 9.891%" syncError={null} />);
+  view.rerender(<MaterialCard state="recorded" summary="JPN 9.891%" how="当前例子就是已记录的材料；换国家或行业后自动更新。" syncError={null} />);
   expect(card.querySelector(".material-chip")?.textContent).toBe("已记录");
+  expect(card.querySelector(".material-card-how")?.textContent).toContain("已记录的材料");
+  expect(card.className).toContain("material-card--recorded");
   expect(screen.queryByRole("alert")).toBeNull();
 });

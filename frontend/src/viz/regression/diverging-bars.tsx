@@ -390,7 +390,8 @@ export function DivergingBarChart({
               {...(interactive ? {
                 role: "button",
                 tabIndex: index === tabRow ? 0 : -1,
-                "aria-pressed": Boolean(row.selected),
+                // Not a toggle: the saved Y is said in the name ("…，已保存"), a "未按下" before it confused a
+                // previewed bar with the saved one.
                 "aria-disabled": disabled || undefined,
                 "aria-label": spoken(row),
                 onClick: () => select(row),

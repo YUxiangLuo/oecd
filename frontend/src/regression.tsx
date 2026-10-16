@@ -369,7 +369,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
         <details className="reg-run-card reg-custom-section" id="regression-model" open={workbenchOpen}
           onToggle={(event) => setWorkbenchOpen(event.currentTarget.open)}>
           <summary ref={workbenchSummaryRef}>
-            <span className="reg-section-step">改模型、对比（选做）</span>
+            <span className="reg-section-step">改模型、对比（选做）</span><span className="sr-only">，</span>
             <span className="reg-custom-title">换一种模型试试：每次改一处，和默认模型比较</span>
           </summary>
           {workbenchOpen && (

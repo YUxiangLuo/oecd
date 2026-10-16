@@ -48,7 +48,7 @@ test("the industry note counts taxed industries and says when some have X = 0", 
 test("taxed bars are sorted, orange and scaled; untaxed countries form one group at 0; the imposer is not drawn", () => {
   try {
     render(<CountryExposureChart data={countriesFixture} />);
-    const svg = screen.getByRole("img");
+    const svg = document.querySelector<SVGSVGElement>("svg[role=group]")!;
     expect(svg.getAttribute("aria-label")).toBe(
       "5 个被加税国家的关税暴露 X（2020 年各货物行业平均，个百分点），从高到低：最高 CAN 加拿大 14.30，最低 LUX 卢森堡 0.51；另有 3 国未被加税，X = 0",
     );
@@ -88,7 +88,7 @@ test("taxed bars are sorted, orange and scaled; untaxed countries form one group
 test("one column of taxed bars and no example marks: no A/B badges, highlight, example legend or selected chip", () => {
   try {
     render(<CountryExposureChart data={countriesFixture} />);
-    const svg = screen.getByRole("img");
+    const svg = document.querySelector<SVGSVGElement>("svg[role=group]")!;
     const bars = [...svg.querySelectorAll("g.country-exposure-bar")];
     // Every row's hit target starts at the left edge and every bar at the same x: one column, one row a country.
     expect(bars.map((bar) => bar.querySelectorAll("rect")[0].getAttribute("x"))).toEqual(["0", "0", "0", "0", "0"]);
@@ -230,7 +230,7 @@ test("44 taxed countries form one column of 44 rows, every value label inside th
   };
   try {
     render(<CountryExposureChart data={many} />);
-    const svg = screen.getByRole("img");
+    const svg = document.querySelector<SVGSVGElement>("svg[role=group]")!;
     const [, , width, height] = svg.getAttribute("viewBox")!.split(" ").map(Number);
     expect(width).toBe(600);
     // One 15-unit row a country, plus the top padding and the axis.

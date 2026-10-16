@@ -155,9 +155,10 @@ describe("simple regression workbench", () => {
     expect(material.querySelector(".material-card-how")?.textContent).toBe("计算后自动保存，无需另外操作。");
     expect(material.compareDocumentPosition(document.querySelector(".verdict-card")!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     expect(material.compareDocumentPosition(document.querySelector("details.reg-custom-section")!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
-    const pressed = screen.getAllByRole("button", { pressed: true });
-    expect(pressed).toHaveLength(1);
-    expect(pressed[0].getAttribute("aria-label")).toBe(`${FVA_BAR}，已保存`);
+    // The saved Y is said in its bar's name (the bars are not toggles).
+    const saved = screen.getAllByRole("button").filter((node) => node.getAttribute("aria-label")?.endsWith("，已保存"));
+    expect(saved).toHaveLength(1);
+    expect(saved[0].getAttribute("aria-label")).toBe(`${FVA_BAR}，已保存`);
     // The saved bar's label is the headline's number.
     expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("外国增加值项占比平均低 0.55 个百分点");
     // The result card opens with the generated-data disclosure, before the headline.
@@ -173,7 +174,7 @@ describe("simple regression workbench", () => {
     // Folded: the chart's per-year table and how to read it, the model's terms (open on step 11) and data facts,
     // then the whole change-the-model card.
     await waitFor(() => expect([...document.querySelectorAll("details > summary")].map((node) => node.textContent))
-      .toEqual(["各组逐年读数", "这张图怎么读", "公式里各项的意思", "数据、样本和区间的算法", "改模型、对比（选做）换一种模型试试：每次改一处，和默认模型比较"]));
+      .toEqual(["各组逐年读数", "这张图怎么读", "公式里各项的意思", "数据、样本和区间的算法", "改模型、对比（选做），换一种模型试试：每次改一处，和默认模型比较"]));
     expect(document.querySelector(".reg-model-terms")!.hasAttribute("open")).toBe(true);
     // Another bar: its reading under the bars, no run, no save, and the headline stays the default Y.
     fireEvent.click(screen.getByRole("button", { name: DVA_BAR }));
@@ -182,9 +183,9 @@ describe("simple regression workbench", () => {
     expect(run).toHaveBeenCalledTimes(1);
     expect(saves).toHaveLength(1);
     expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("外国增加值项占比平均低 0.55 个百分点");
-    expect(screen.getByRole("button", { pressed: true }).getAttribute("aria-label")).toBe(`${FVA_BAR}，已保存`);
+    expect(screen.getByRole("button", { name: `${FVA_BAR}，已保存` })).toBeTruthy();
     // The saved bar withdraws the preview.
-    fireEvent.click(screen.getByRole("button", { pressed: true }));
+    fireEvent.click(screen.getByRole("button", { name: `${FVA_BAR}，已保存` }));
     expect(document.querySelector(".reg-bar-preview")).toBeNull();
     expect(run).toHaveBeenCalledTimes(1);
   });
@@ -407,7 +408,7 @@ describe("simple regression workbench", () => {
   test("step 11: one line says the domestic and foreign value-added shares move about opposite", () => {
     const fva = estimate("FVA_share", "外国增加值项占比", 0.20, 0.18, 0.22, { default: true });
     const dva = estimate("DVAex_share", "国内增加值出口占比", -0.19, -0.21, -0.17);
-    expect(tradeShareIdentity([fva, dva])).toBe("课程数据里，国内增加值出口占比 = 1 − 外国增加值项占比 − 其余小项（重复计算等），所以这两条大小相近、方向相反。");
+    expect(tradeShareIdentity([fva, dva])).toBe("课程数据里，国内增加值出口占比 = 100% − 外国增加值项占比 − 其余小项（重复计算等），所以这两条大小相近、方向相反。");
     expect(tradeShareIdentity([fva])).toBeNull();
   });
 

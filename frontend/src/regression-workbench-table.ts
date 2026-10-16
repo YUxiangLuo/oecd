@@ -193,7 +193,10 @@ export function coefficientRows(columns: TableColumn[], options: WorkbenchOption
     rows.push({
       key: "cumulative",
       label: termLabel("cumulative", options),
-      cells: columns.map(({ snapshot }) => (xTerms(snapshot) > 1 ? cell(snapshot.result.cumulative, snapshot.result.suppressed) : null)),
+      // A model of one X term: its sum is that term (the row below reads it per point), not "—" beside a number. A
+      // model whose second X term was dropped keeps "—": the term left is not the sum it would be read as.
+      cells: columns.map(({ snapshot, spec }) => (xTerms(snapshot) > 1 ? cell(snapshot.result.cumulative, snapshot.result.suppressed)
+        : spec.x_lags.length === 1 ? cell(xSum(snapshot, spec), snapshot.result.suppressed) : null)),
     });
   }
   if (columns.some(({ snapshot }) => snapshot.result.constant)) {
@@ -445,11 +448,20 @@ export function comparisonCsv(
       if (design) lines.push([design.label, ...design.cells]);
       continue;
     }
-    lines.push([row.label, ...row.cells.map((item) => (item === "omitted" ? "（省略）" : item?.coef ?? ""))]);
-    lines.push(["标准误", ...row.cells.map((item) => (item && item !== "omitted" ? item.se.replace(/^\((.*)\)$/, "$1") : ""))]);
+    // "—" where a model has no such term, as the page shows it (an empty cell read as a missing number).
+    lines.push([row.label, ...row.cells.map((item) => (item === "omitted" ? "（省略）" : item?.coef ?? "—"))]);
+    lines.push(["标准误", ...row.cells.map((item) => (item && item !== "omitted" ? item.se.replace(/^\((.*)\)$/, "$1") : "—"))]);
   }
   for (const row of summaryRows(columns, options)) lines.push([row.label, ...row.cells]);
-  lines.push(["设定", ...columns.map((column) => specSummary(column.spec, options))]);
+  // As under the page's table: each model's settings with what was left out and why, and the notes that apply.
+  lines.push(["设定", ...columns.map((column) => {
+    const omitted = omittedSummary(column.snapshot, options);
+    return `${specSummary(column.spec, options)}${omitted.length ? `；已省略（${omitted.join("；")}）` : ""}`;
+  })]);
+  if (samplesDiffer(columns)) lines.push([options.sample_differs_note]);
+  if (options.current_x_only_note && columns.some((column) => canonicalSpec(column.spec, options).x_lags.join(",") === "0")) {
+    lines.push([options.current_x_only_note]);
+  }
   lines.push([options.footnote.replace("括号内为按国家聚类的标准误", "“标准误”一行为按国家聚类的标准误")]);
   return `\ufeff${lines.map((line) => line.map(csvField).join(",")).join("\r\n")}\r\n`;
 }

@@ -256,7 +256,9 @@ describe("DivergingBarChart", () => {
     expect(svg.getAttribute("role")).toBe("group");
     const bars = [...container.querySelectorAll<SVGGElement>('[role="button"]')];
     expect(bars.map((bar) => bar.getAttribute("tabindex"))).toEqual(["0", "-1"]);
-    expect(bars[0].getAttribute("aria-pressed")).toBe("true");
+    // The saved Y is said in its name, not as a pressed toggle.
+    expect(bars[0].hasAttribute("aria-pressed")).toBe(false);
+    expect(bars[0].getAttribute("aria-label")).toMatch(/，已保存$/);
     expect(bars[1].getAttribute("aria-label")).toBe("国内增加值出口占比：+0.56 个百分点，95% 区间 [+0.54, +0.58]");
     bars[0].focus();
     fireEvent.keyDown(bars[0], { key: "ArrowDown" });

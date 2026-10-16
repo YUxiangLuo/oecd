@@ -168,6 +168,8 @@ test("editing one answer retains feedback for the unedited question", async () =
     expect(screen.queryByText(/请调整第一题/)).toBeNull();
     expect(screen.getByText(/第二题反馈应保留/)).not.toBeNull();
     expect(container.querySelectorAll(".quiz-feedback")).toHaveLength(1);
+    // Nothing is read until the changed answer is checked: "1 / 2" would call it wrong before it is graded.
+    expect(container.querySelector(".sr-only[role='status']")!.textContent).toBe("");
   } finally { api.classroom.submitQuiz = original; }
 });
 

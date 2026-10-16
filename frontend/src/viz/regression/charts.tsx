@@ -78,7 +78,9 @@ export function GroupChangeChart({
   const y = (value: number) => padT + ((extent - value) / (2 * extent)) * (height - padT - padB);
   const path = (series: { year: number; change: number }[]) => series
     .map((point, index) => `${index ? "L" : "M"}${x(point.year)},${y(point.change * scale)}`).join(" ");
-  const markerX = (year: number) => (x(year - 1) + x(year)) / 2;
+  // On the wave's first taxed year, as every chart of steps 10–14 marks a tariff (halfway before it read as the year
+  // before).
+  const markerX = (year: number) => x(year);
   const firstPolicy = markers[0]?.year ?? years[1];
   const baseline = years.length && firstPolicy != null
     ? `相对 ${years[0]}–${firstPolicy - 1} 年平均水平的变化`
