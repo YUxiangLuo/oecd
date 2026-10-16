@@ -3090,6 +3090,9 @@ def test_report_appendix_reads_each_x_sum_per_percentage_point():
 
     (total,) = [row for row in _coefficient_rows(columns) if row.startswith("| X 各项合计 |")]
     assert total.split(" | ")[2].startswith("-1.2000")
+    # A term the model leaves out reads "—", as on the page, not an empty cell.
+    (lag_row,) = [row for row in _coefficient_rows(columns) if row.startswith("| L1.X |")]
+    assert lag_row.split(" | ")[2] == "—"
 
 
 def test_report_appendix_never_calls_one_coefficient_a_sum():

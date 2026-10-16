@@ -14,6 +14,8 @@ import {
   headlineCoefficient,
   lagSplitParts,
   SD_DEFINITION,
+  standardizedDigits,
+  standardizedEffect,
 } from "./regression-verdict";
 import { api } from "./api";
 import { useAsync } from "./labs";
@@ -132,7 +134,7 @@ export function RegressionEvidenceMatrix({
       <div className="table-wrap" role="region" aria-label="四步结果汇总表，可横向滚动" tabIndex={0}>
         <table className="data-table reg-evidence-table">
           <thead>
-            <tr><th>步骤</th><th>指标类型</th><th>方向</th><th>X 每高 1 个百分点，Y 两年累计平均相差</th><th>其中当年 / 次年</th><th>95% 区间</th><th>解释限制</th></tr>
+            <tr><th scope="col">步骤</th><th scope="col">指标类型</th><th scope="col">方向</th><th scope="col">X 每高 1 个百分点，Y 两年累计平均相差</th><th scope="col">其中当年 / 次年</th><th scope="col">95% 区间</th><th scope="col">解释限制</th></tr>
           </thead>
           <tbody>
             {REGRESSION_FAMILIES.map((item) => {
@@ -144,7 +146,7 @@ export function RegressionEvidenceMatrix({
                   <th scope="row">{item.step}</th>
                   <td><b>{item.family}</b><span>{lesson.shortMetric}</span></td>
                   <td>{verdict ? (verdict.coefficient ? familyDirectionLabel(verdict.state) : "没算出估计值") : "还没计算"}</td>
-                  <td><b>{verdict?.effectBrief ?? "—"}</b></td>
+                  <td><b>{verdict?.effectBrief ?? "—"}</b>{shareSize(item.outcome, verdict, familyRun(item.outcome, getStep))}</td>
                   <td>{lagParts(item.outcome, familyRun(item.outcome, getStep))}</td>
                   <td>{verdict?.interval ?? "—"}</td>
                   <td>{lesson.dontClaim}</td>
@@ -185,7 +187,7 @@ export function ReportedExperiments({ getStep, onNavigateStep }: {
         : (
           <div className="table-wrap" role="region" aria-label="记入报告的模型实验，可横向滚动" tabIndex={0}>
             <table className="data-table reg-reported-table">
-              <thead><tr><th>步骤</th><th>改动</th><th>设定</th><th>X 各项合计（X 每高 1 个百分点）</th><th>同一 Y 的默认模型（两年累计）</th></tr></thead>
+              <thead><tr><th scope="col">步骤</th><th scope="col">改动</th><th scope="col">设定</th><th scope="col">X 各项合计（X 每高 1 个百分点）</th><th scope="col">同一 Y 的默认模型（两年累计）</th></tr></thead>
               <tbody>
                 {rows.map(({ step, family, outcome, experiment, run }) => {
                   const sum = xSum(experiment.snapshot, experiment.spec);
@@ -232,6 +234,20 @@ export function ReportedExperiments({ getStep, onNavigateStep }: {
   );
 }
 
+
+/**
+ * A share Y's size in standard deviations ("（幅度约 0.37 个标准差）"), which the table's note promises in brackets
+ * and steps 13–14 carry in their reading already; empty otherwise.
+ */
+function shareSize(
+  outcome: RegressionOutcome,
+  verdict: ReturnType<typeof familyVerdict>,
+  run: ReturnType<typeof familyRun>,
+): string {
+  if (!verdict?.coefficient || !run?.design || depvarKind(outcome, run.design) !== "share" || verdict.state === "suppressed") return "";
+  const sd = standardizedEffect(verdict.coefficient.coef, run.result?.depvar_within_std);
+  return sd == null ? "" : `（幅度约 ${(Math.abs(sd) < 0.0005 ? "不到 0.001" : Math.abs(sd).toFixed(standardizedDigits(sd, null)))} 个标准差）`;
+}
 
 /** "样本 N = 12,800，2017–2020": a model's sample, as the workbench table gives it. */
 function sampleText(result: { n_obs: number; years: [number, number] | null }): string {

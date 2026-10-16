@@ -524,14 +524,15 @@ function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coef
 }
 
 /** Wrap a row label into lines of at most `max` units (the long Chinese Y names never get clipped). */
-function wrapLabel(text: string, size: number, max: number): string[] {
+export function wrapLabel(text: string, size: number, max: number): string[] {
   const lines: string[] = [];
   let line = "";
-  for (const char of text) {
-    if (line && textWidth(line + char, size) > max) {
+  // A Latin run ("L2.X", "GDP", "FDI") stays on one line; Chinese breaks between any two characters.
+  for (const piece of text.match(/[A-Za-z0-9.]+|[\s\S]/gu) ?? []) {
+    if (line && textWidth(line + piece, size) > max) {
       lines.push(line.trimEnd());
-      line = char === " " ? "" : char;
-    } else line += char;
+      line = piece === " " ? "" : piece;
+    } else line += piece;
   }
   return line ? [...lines, line] : lines;
 }

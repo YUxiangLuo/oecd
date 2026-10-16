@@ -215,7 +215,8 @@ def _coefficient_rows(columns: list[dict[str, Any]]) -> list[str]:
                 continue
             coefficient, omitted = pick(run["result"], column["spec"])
             if coefficient is None:
-                values.append("（省略）" if omitted else "")
+                # "—" where the model has no such term, as the page's table (an empty cell read as a missing number).
+                values.append("（省略）" if omitted else "—")
                 continue
             stars = "" if _suppressed(run["result"]) else str(coefficient.get("stars") or "")
             # Inline code renders on its own line in report table cells, without permitting raw HTML.

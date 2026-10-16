@@ -78,7 +78,7 @@ describe("student-first regression reading", () => {
     expect(html).toContain("-0.020 个百分点");
     expect(html).not.toContain("</b><span>百分点</span>");
     // The column names the association, as the step pages do.
-    expect(html).toContain("<th>X 每高 1 个百分点，Y 两年累计平均相差</th><th>其中当年 / 次年</th>");
+    expect(html).toContain('<th scope="col">X 每高 1 个百分点，Y 两年累计平均相差</th><th scope="col">其中当年 / 次年</th>');
   });
 
   test("a saved run of the course model shows its cumulative relation and its split over the two years", () => {
@@ -94,7 +94,8 @@ describe("student-first regression reading", () => {
     }));
     const dom = new DOMParser().parseFromString(html, "text/html");
     const cells = [...[...dom.querySelectorAll("tbody tr")][0].querySelectorAll("td")].map((cell) => cell.textContent);
-    expect(cells[2]).toBe("-0.55 个百分点");
+    // A share reads in points, with its size in standard deviations as the note above the table promises.
+    expect(cells[2]).toBe("-0.55 个百分点（幅度约 0.003 个标准差）");
     expect(cells[3]).toBe("-0.33 个百分点 / -0.22 个百分点");
     expect(cells[4]).toBe("[-0.57, -0.53] 个百分点");
   });
@@ -113,7 +114,7 @@ describe("student-first regression reading", () => {
     const cells = [...row.querySelectorAll("td")].map((cell) => cell.textContent);
     expect(cells[0]).toContain("后向复杂 GVC 生产份额");
     expect(cells[1]).toBe("方向不确定");
-    expect(cells[2]).toBe("+0.30 个百分点");
+    expect(cells[2]).toBe("+0.30 个百分点（幅度约 0.002 个标准差）");
     // A single-X run has no year split.
     expect(cells[3]).toBe("—");
     expect(cells[4]).toBe("[-1.20, +1.80] 个百分点");

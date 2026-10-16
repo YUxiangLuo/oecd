@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { cleanup, render as renderDom } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { closeBoldBeforeCjkPunctuation, parseReportChart, REPORT_CHART_MAX_WIDTH, ReportMarkdown } from "./report-renderer";
+import { closeBoldBeforeCjkPunctuation, parseReportChart, REPORT_CHART_MAX_WIDTH, ReportMarkdown, wrapLabel } from "./report-renderer";
 import { layoutDivergingBars, MIN_WIDTH } from "./viz/regression/diverging-bars";
 import { NEGATIVE, POSITIVE, UNCERTAIN, ZERO_LINE } from "./viz/regression/palette";
 
@@ -737,5 +737,14 @@ test("report charts stop growing at a width where their text is not larger than 
     const svg = element.querySelector<SVGSVGElement>("figure svg");
     expect(svg?.getAttribute("style")).toContain("max-width:624px");
     expect(svg?.getAttribute("style")).toContain("width:100%");
+  }
+});
+
+test("a chart label wraps between Chinese characters but never inside a Latin run such as L2.X", () => {
+  const label = "本次：自定义（去掉汇率变动；加 L2.X；加人口增长率）";
+  for (const width of [60, 80, 100, 120, 140, 160, 186]) {
+    const lines = wrapLabel(label, 14, width);
+    expect(lines.join("").replace(/\s/g, "")).toBe(label.replace(/\s/g, ""));
+    expect(lines.some((line) => /L2\.X/.test(line))).toBe(true);
   }
 });

@@ -580,7 +580,9 @@ export function ShockLab({ meta, step: _step, state }: {
         state={recordedExample ? "recorded" : "missing"}
         summary={recordedExample ? recordedShockMaterialLabel(state.data, overview) ?? recordedExample : "尚未记录：关税数据加载后自动记录当前例子。"}
         how={!recordedExample ? AUTO_RECORD_HOW
-          : !panel ? "已记录的例子保持不变。"
+          // A new example's data on the way: it is recorded once they arrive (not "kept as it is"); a failed load or
+          // a submitted report keeps the record.
+          : !panel ? (query.status === "loading" && !state.materialLocked ? "正在读取新例子的数据，读完后自动记录。" : "已记录的例子保持不变。")
           : !complete ? (savedExample
             // An older record the page can no longer use (its comparison is the USA): the same selection, not another.
             ? "这就是已记录的例子，但其中有国家不能用作例子或对照（原因见上方提示），所以下面不显示趋势；报告材料保持不变。"

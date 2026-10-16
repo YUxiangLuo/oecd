@@ -137,7 +137,7 @@ export function RegressionResultCard({ outcome, response, examples = [], example
       {!standardized && verdict.coefficient && !suppressed && (() => {
         const sd = standardizedEffect(verdict.coefficient.coef, response.result.depvar_within_std);
         return sd == null ? null : (
-          <p className="muted reg-sd-note">换算成标准差：幅度约 {Math.abs(sd).toFixed(standardizedDigits(sd, null))} 个标准差（步骤 15 用它并列比较四步；{SD_DEFINITION}）。</p>
+          <p className="muted reg-sd-note">换算成标准差：幅度约 {(Math.abs(sd) < 0.0005 ? "不到 0.001" : Math.abs(sd).toFixed(standardizedDigits(sd, null)))} 个标准差（步骤 15 用它并列比较四步；{SD_DEFINITION}）。</p>
         );
       })()}
       {verdict.coefficient && !suppressed && response.model_snapshot && "beta" in response.model_snapshot && (

@@ -393,6 +393,8 @@
 .country-exposure-table { margin-top: 10px; }
 .country-exposure-table > summary { cursor: pointer; color: #4b47e0; font-size: 11.5px; font-weight: 700; }
 .country-exposure-table > .table-wrap { margin-top: 6px; }
+/* Its long headers ("2020 年各货物行业平均 X（个百分点）") wrap, so the table fits the 1200 px content width. */
+.country-exposure-table thead th { white-space: normal; }
 /* Step 10: the three variables of steps 11–14, each with where it comes from. */
 .teaching-variables { display: grid; gap: 8px; margin: 10px 0 12px; }
 .teaching-variables > div { padding: 9px 12px; border: 1px solid #dcdff0; border-radius: 9px; background: #f8f8ff; }
@@ -616,7 +618,8 @@ fieldset.reg-custom-form:disabled { opacity: .6; }
 .reg-custom-saved-table td:nth-child(2) { min-width: 12em; max-width: 24em; }
 .reg-custom-compare-table thead th:not(:first-child) { white-space: normal; overflow-wrap: anywhere; min-width: 10em; max-width: 20em; }
 .reg-custom-compare-table .reg-custom-summary-start ~ tr td { white-space: normal; }
-.reg-reported-table { table-layout: fixed; min-width: 850px; }
+/* Fits the 824 px content at 1200 px (the advised width) without a scroll bar; narrower windows scroll. */
+.reg-reported-table { table-layout: fixed; min-width: 780px; }
 .reg-reported-table th:nth-child(1), .reg-reported-table td:nth-child(1) {
   position: sticky; left: 0; z-index: 1; background: #fff; width: 128px; box-sizing: border-box;
 }
@@ -628,7 +631,8 @@ fieldset.reg-custom-form:disabled { opacity: .6; }
 .reg-reported-table th, .reg-reported-table td { white-space: normal; overflow-wrap: anywhere; }
 .reg-reported-table th:nth-child(3), .reg-reported-table td:nth-child(3) { width: 200px; }
 /* Names and settings are text: left-aligned, so a wrapped name reads as a line, not ragged on the right. */
-.reg-reported-table td:nth-child(2), .reg-reported-table td:nth-child(3) { text-align: left; }
+.reg-reported-table th:nth-child(2), .reg-reported-table td:nth-child(2),
+.reg-reported-table th:nth-child(3), .reg-reported-table td:nth-child(3) { text-align: left; }
 .reg-custom-rename { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .reg-custom-row-actions { white-space: nowrap; }
 .reg-custom .link-button { min-height: 24px; padding: 3px 6px; border: 0; background: none; color: #4b47e0; font-size: 12px; cursor: pointer; text-decoration: underline; }
@@ -768,3 +772,6 @@ dl.teaching-definitions dd { margin: 0; }
 .reg-preset .reg-preset-total { display: block; margin-top: 3px; color: #1b4d7a; font-weight: 600; }
 /* Headers may wrap, so a table that is a few px too wide at 1000–1100 px does not get a scroll bar for them. */
 .teaching-year-table thead th, .reg-custom-table:not(.reg-custom-compare-table) thead th { white-space: normal; }
+/* The model in the box was not saved (a conflict or a failed save): amber, as the material card's "未保存". */
+.reg-custom-report-chip.reg-custom-report-chip-unsaved { background: #fff4d8; border-color: #ecd28f; color: #7a5200; }
+.reg-custom-status:focus-visible { outline: 2px solid #4b47e0; outline-offset: 2px; }

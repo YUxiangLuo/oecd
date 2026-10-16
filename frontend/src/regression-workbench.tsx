@@ -234,7 +234,8 @@ export function ModelComparisonChart({ columns, outcome }: { columns: TableColum
       valueLabel: reading,
       // The tooltip names the row "95% 区间" itself.
       intervalLabel: interval,
-      // A shortened row name ("自定义（9 处改动）") is read with the model in full.
+      // A shortened row name ("自定义（9 处改动）"): the model in full in the tooltip and when read aloud.
+      ...(column.chartName && column.chartName !== column.name ? { note: `完整设定：${column.name}` } : {}),
       spokenLabel: `${reading}，95% 区间：${interval}，${xSpanLabel(column.spec)}${column.chartName && column.chartName !== column.name ? `；完整设定：${column.name}` : ""}`,
     });
   }
@@ -265,6 +266,13 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const optionsQuery = useAsync<WorkbenchOptions>(() => api.regressionOptions(), ["regression-options"]);
   const options = optionsQuery.status === "success" ? optionsQuery.data ?? null : null;
   const experiment = state.data?.experiment ?? null;
+  // This step's material did not reach the server (another tab saved first, or the network failed): the model in the
+  // box is this page's choice, not yet the report's, so it is not called "已记入报告".
+  const reportUnsaved = Boolean(state.materialSyncError);
+  const reportedWord = reportUnsaved ? "记入报告（未保存）" : "已记入报告";
+  const unsavedNote = state.syncConflict
+    ? "这次改动没有保存：你的账号在别处保存了更新的记录，请按页面顶部的说明处理。"
+    : "这次改动还没有保存成功，请稍后重试同步。";
   const draft = state.data?.custom_draft ?? {};
   const stepBaseline = defaultResponse.design.baseline ?? "";
   // The Y the models are run on: the step's Y unless the student chose another of the family. The first column is
@@ -338,6 +346,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const controller = useRef<AbortController | null>(null);
   // Every hook stays above the early returns below (the options load after the first render).
   const reportBoxRef = useRef<HTMLElement | null>(null);
+  const statusRef = useRef<HTMLDivElement | null>(null);
   // Leaving the step (or the page) stops a calculation still running; its answer would land nowhere.
   useEffect(() => () => controller.current?.abort(), []);
 
@@ -431,12 +440,12 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const columns: TableColumn[] = defaultForY ? [
     { name: DEFAULT_COLUMN, spec: options.default_spec, snapshot: snapshotOf(defaultForY) },
     ...(shown ? [{
-      name: `${shownIsReported ? "已记入报告" : current ? "本次" : "上次计算"}：${label(shown.design.spec!)}`,
-      chartName: `${shownIsReported ? "已记入报告" : current ? "本次" : "上次计算"}：${chartModelLabel(label(shown.design.spec!))}`,
+      name: `${shownIsReported ? reportedWord : current ? "本次" : "上次计算"}：${label(shown.design.spec!)}`,
+      chartName: `${shownIsReported ? reportedWord : current ? "本次" : "上次计算"}：${chartModelLabel(label(shown.design.spec!))}`,
       spec: shown.design.spec!, snapshot: snapshotOf(shown), reported: shownIsReported,
     }] : []),
     ...(experiment && experimentY === yKey && !shownIsReported ? [{
-      name: `已记入报告：${label(experiment.spec)}`, chartName: `已记入报告：${chartModelLabel(label(experiment.spec))}`,
+      name: `${reportedWord}：${label(experiment.spec)}`, chartName: `${reportedWord}：${chartModelLabel(label(experiment.spec))}`,
       spec: experiment.spec, snapshot: experiment.snapshot, reported: true,
     }] : []),
   ] : [];
@@ -461,14 +470,15 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       spec: latest.design.spec!, ...(yKey !== stepBaseline ? { baseline: yKey } : {}),
       saved_at: new Date().toISOString(), snapshot: snapshotOf(latest),
     } });
-    setAnnouncement(`已把“${label(latest.design.spec!)}”记入报告${yKey !== stepBaseline ? `（Y：${depvarLabel}）` : ""}。`);
+    // With another tab's newer record on the server this save cannot go through: said, not "已把…记入报告".
+    setAnnouncement(state.syncConflict ? unsavedNote : `已把“${label(latest.design.spec!)}”记入报告${yKey !== stepBaseline ? `（Y：${depvarLabel}）` : ""}。`);
   };
   const removeFromReport = () => {
     if (!experiment) return;
     focusReportBox();
     const name = label(experiment.spec);
     state.save({ experiment: null });
-    setAnnouncement(`已把“${name}”从报告移除。`);
+    setAnnouncement(state.syncConflict ? unsavedNote : `已把“${name}”从报告移除。`);
   };
   const activePreset = options.presets.find((item) => sameSpec(item.spec, spec, options))?.key ?? null;
   const noDesignValue = options.design_values?.[outcome]?.[yKey] === null;
@@ -480,10 +490,11 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const reportBox = (
       <section className="reg-custom-report" ref={reportBoxRef} tabIndex={-1} aria-label="记入报告（选做）">
         <h4>记入报告（选做）</h4>
+        {reportUnsaved && <p className="reg-rerun-warning" role="alert">{unsavedNote}</p>}
         {experiment
           ? (
-            <p className="reg-custom-report-chip" role="note">
-              <span>已记入报告：<b>{label(experiment.spec)}</b>（{specSummary(experiment.spec, options)}{experimentY !== stepBaseline || experimentY !== yKey ? `；Y：${yLabel(experimentY)}` : ""}）</span>
+            <p className={`reg-custom-report-chip${reportUnsaved ? " reg-custom-report-chip-unsaved" : ""}`} role="note">
+              <span>{reportedWord}：<b>{label(experiment.spec)}</b>（{specSummary(experiment.spec, options)}{experimentY !== stepBaseline || experimentY !== yKey ? `；Y：${yLabel(experimentY)}` : ""}）</span>
               <span aria-hidden="true"> · </span>
               <button type="button" className="link-button danger" onClick={removeFromReport}>从报告移除</button>
             </p>
@@ -526,7 +537,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   // not "never computed", only not computed in this visit.
   const restoredDraft = !inStep && !computed && localSpec === null && Boolean(draft.spec);
   // The other columns by their models: "“去掉汇率变动”", "已记入报告的“自定义：加 L2.X”".
-  const otherColumns = columns.slice(1).map((column) => `${column.reported ? "已记入报告的" : ""}“${chartModelLabel(label(column.spec))}”`);
+  const otherColumns = columns.slice(1).map((column) => `${column.reported ? `${reportedWord}的` : ""}“${chartModelLabel(label(column.spec))}”`);
   const status: { kind: "busy" | "stale" | "done" | "idle"; text: string } = running
     ? { kind: "busy", text: `正在计算“${label(runningSpec ?? spec)}”…` }
     : loadingY ? { kind: "busy", text: `正在取“${depvarLabel}”的默认模型…` }
@@ -538,7 +549,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         ? `下面仍是之前的结果：默认模型、${otherColumns.join("、")}。`
         : "下面仍只有默认模型。"}` }
     : latest ? { kind: "done", text: `下面比较：默认模型 和 “${label(latest.design.spec!)}”（已算好）${otherColumns.length > 1 ? `；另有${otherColumns.slice(1).join("、")}` : ""}。` }
-    : !defaultSettings ? { kind: "done", text: `勾选框里是已记入报告的“${label(spec)}”，结果就在下面它的那一列。` }
+    : !defaultSettings ? { kind: "done", text: `勾选框里是${reportedWord}的“${label(spec)}”，结果就在下面它的那一列。` }
     : otherColumns.length ? { kind: "idle", text: `勾选框里是默认模型（第一列）。下面另有${otherColumns.join("、")}；点一个预设实验，或改设定后计算，可再比较一个模型。` }
     : { kind: "idle", text: `下面是“${depvarLabel}”的默认模型。点一个预设实验，或改设定后计算，旁边会多出一列用来比较。` };
 
@@ -596,10 +607,15 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         </div>
       </details>
       {error && <div className="error-box async-error" role="alert">{error}</div>}
-      <div className={`reg-custom-status reg-custom-status-${status.kind}`} role="status" aria-live="polite" aria-busy={status.kind === "busy" || undefined}>
+      <div ref={statusRef} tabIndex={-1} className={`reg-custom-status reg-custom-status-${status.kind}`} role="status" aria-live="polite" aria-busy={status.kind === "busy" || undefined}>
         <span>{status.text}</span>
         {status.kind === "stale" && !noX && !customOpen && (
-          <button type="button" className="primary" aria-disabled={!defaultForY || running || undefined} onClick={() => void run(spec)}>计算当前设定</button>
+          <button type="button" className="primary" aria-disabled={!defaultForY || running || undefined} onClick={(event) => {
+            // The button leaves with the "uncomputed" state it belongs to: focus goes to the status line, which then
+            // says the model is being computed, instead of being lost to the page.
+            if (document.activeElement === event.currentTarget) statusRef.current?.focus({ preventScroll: true });
+            void run(spec);
+          }}>计算当前设定</button>
         )}
       </div>
       <span className="sr-only" role="status">{announcement}</span>
@@ -617,7 +633,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
         <h4>回归结果表（因变量：{depvarLabel}）</h4>
         <ScrollableRegion className="table-wrap" label="回归结果表，可横向滚动">
           <table className={`data-table reg-custom-table reg-custom-compare-table${columns.length === 1 ? " reg-custom-table-single" : ""}`}>
-            <thead><tr><th>变量</th>{columns.map((column, index) => <th key={index} scope="col" className={cellClass(index)}>{column.name}</th>)}</tr></thead>
+            <thead><tr><th scope="col">变量</th>{columns.map((column, index) => <th key={index} scope="col" className={cellClass(index)}>{column.name}</th>)}</tr></thead>
             <tbody>
               {coefficients.filter((row) => row.key !== "_constant").map((row) => (
                 <tr key={row.key}>

@@ -315,7 +315,7 @@ const BASELINES: TeachingBaselineOption[] = [
   { key: "DVAex_share", label: "国内增加值出口占比", kind: "share", unit: "", default: false, column: "DVAex_share", source: "" },
 ];
 
-function Harness({ initial, onSave, onView, locked = false, defaultResponse = DEFAULT_RUN, reported, outdated, baselines }: {
+function Harness({ initial, onSave, onView, locked = false, defaultResponse = DEFAULT_RUN, reported, outdated, baselines, conflict = false }: {
   initial?: WorkbenchStepState; onSave?: (patch: Partial<WorkbenchStepState>) => void; locked?: boolean;
   baselines?: TeachingBaselineOption[];
   onView?: (patch: Partial<WorkbenchStepState>) => void;
@@ -324,13 +324,16 @@ function Harness({ initial, onSave, onView, locked = false, defaultResponse = DE
   outdated?: boolean;
   /** The step's saved default run (a bar click on the step can change its Y). */
   defaultResponse?: RegressionResponse;
+  /** Another tab saved a newer record: this step's material is not saved. */
+  conflict?: boolean;
 }) {
   const [data, setData] = useState<WorkbenchStepState>(initial ?? {});
   const state: StepStateApi<WorkbenchStepState> = {
     data,
     save: (patch) => { onSave?.(patch); setData((current) => ({ ...current, ...patch })); },
     saveView: (patch) => { onView?.(patch); setData((current) => ({ ...current, ...patch })); },
-    complete: false, syncing: false, syncError: null, syncNow: () => {}, materialLocked: locked,
+    complete: false, syncing: false, syncError: conflict ? "冲突" : null, syncNow: () => {}, materialLocked: locked,
+    materialSyncError: conflict ? "冲突" : null, syncConflict: conflict,
   };
   return <RegressionModelWorkbench stepNumber={11} outcome="trade" defaultResponse={defaultResponse} baselines={baselines} state={state}
     reportCustomResults={reported as never} reportOutdated={outdated} />;
@@ -444,6 +447,31 @@ describe("the workbench", () => {
     // A change made now is an ordinary uncomputed setting.
     fireEvent.click(checkbox(/^L2\.X/));
     expect(statusBar()).toBe("勾选框里的设定还没有计算。下面仍只有默认模型。");
+  });
+
+  test("the status line's 计算当前设定 hands the focus to the status line when it leaves", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    spyOn(api, "runRegression").mockResolvedValue(NO_RATE_RUN as never);
+    render(<Harness initial={{ custom_draft: { spec: NO_RATE } }} />);
+    await screen.findByRole("group", { name: "预设实验" });
+    const compute = screen.getByRole("button", { name: "计算当前设定" });
+    compute.focus();
+    await act(async () => { fireEvent.click(compute); });
+    await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "本次：去掉汇率变动"]));
+    expect(screen.queryByRole("button", { name: "计算当前设定" })).toBeNull();
+    expect(document.activeElement).toBe(document.querySelector(".reg-custom-status"));
+  });
+
+  test("while this step's material is not saved (another tab saved first), the model in the box is not called 已记入报告", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    spyOn(api, "runRegression").mockResolvedValue(NO_RATE_RUN as never);
+    render(<Harness conflict initial={{ experiment: experimentOf(NO_RATE, NO_RATE_RUN) }} />);
+    await screen.findByRole("group", { name: "预设实验" });
+    expect(tableHeaders()).toEqual(["变量", "默认模型", "记入报告（未保存）：去掉汇率变动"]);
+    const box = screen.getByRole("region", { name: "记入报告（选做）" });
+    expect(box.querySelector(".reg-custom-report-chip")?.textContent).toContain("记入报告（未保存）：去掉汇率变动");
+    expect(box.querySelector(".reg-custom-report-chip")?.textContent).not.toContain("已记入报告");
+    expect(screen.getByRole("alert").textContent).toBe("这次改动没有保存：你的账号在别处保存了更新的记录，请按页面顶部的说明处理。");
   });
 
   test("back on the page with the reported model in the form, its column is said to be that model, not uncomputed", async () => {
