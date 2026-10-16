@@ -118,6 +118,43 @@ function seqColor(value: number, max: number) {
   return SEQ[idx];
 }
 
+/** Room left between two regions' rings: the largest node (radius 14.5) next to the largest click target (20.5). */
+export const REGION_RING_GAP = 40;
+/** Kept between a ring and the canvas edge, for the outermost node and its label. */
+const REGION_CANVAS_MARGIN = 24;
+
+/**
+ * Pushes region anchors apart until no two rings come closer than REGION_RING_GAP, keeping every ring on the canvas.
+ * On the default ellipse, Europe's 35-country ring and South/Southeast Asia's sit 170 apart with radii adding to
+ * 164, so clicking KHM's centre selected IRL.
+ */
+export function separateRegionRings(anchors: { x: number; y: number; ring: number; used: boolean }[], width: number, height: number) {
+  const clamp = (anchor: (typeof anchors)[number]) => {
+    const margin = anchor.ring + REGION_CANVAS_MARGIN;
+    anchor.x = Math.min(width - margin, Math.max(margin, anchor.x));
+    anchor.y = Math.min(height - margin, Math.max(margin, anchor.y));
+  };
+  for (let pass = 0; pass < 50; pass++) {
+    let moved = false;
+    for (let i = 0; i < anchors.length; i++) {
+      for (let j = i + 1; j < anchors.length; j++) {
+        const first = anchors[i], second = anchors[j];
+        if (!first.used || !second.used) continue;
+        const dx = second.x - first.x, dy = second.y - first.y;
+        const distance = Math.hypot(dx, dy) || 1e-6;
+        const shortfall = first.ring + second.ring + REGION_RING_GAP - distance;
+        if (shortfall <= 0.01) continue;
+        const ux = dx / distance, uy = dy / distance, half = shortfall / 2 + 0.01;
+        first.x -= ux * half; first.y -= uy * half;
+        second.x += ux * half; second.y += uy * half;
+        clamp(first); clamp(second);
+        moved = true;
+      }
+    }
+    if (!moved) return;
+  }
+}
+
 /** Quantitative domains use only nodes that are finite for every currently encoded channel. */
 export function networkNodeEncodingModel(
   nodes: readonly NetworkData["nodes"][number][],
@@ -254,11 +291,15 @@ export function NetworkViz({
         - (metrics.gvc_production_share[a] ?? Number.NEGATIVE_INFINITY)));
 
     // 每个区域一个锚点,成员沿环排布;记录“朝外”单位向量供标签放射避让
+    const anchors = byRegion.map((list, i) => {
+      const a = -Math.PI / 2 + (i * 2 * Math.PI) / REGIONS.length;
+      const ring = list.length > 1 ? Math.min(108, 16 + list.length * 3.1) : 0;
+      return { a, x: cx + Math.cos(a) * 300, y: cy + Math.sin(a) * 170, ring, used: list.length > 0 };
+    });
+    separateRegionRings(anchors, W, H);
     const pos: Record<string, { x: number; y: number; ox: number; oy: number }> = {};
     byRegion.forEach((list, i) => {
-      const a = -Math.PI / 2 + (i * 2 * Math.PI) / REGIONS.length;
-      const ax = cx + Math.cos(a) * 300, ay = cy + Math.sin(a) * 170;
-      const ring = Math.min(108, 16 + list.length * 3.1);
+      const { a, x: ax, y: ay, ring } = anchors[i];
       list.forEach((c, j) => {
         const t = (j / Math.max(1, list.length)) * 2 * Math.PI - Math.PI / 2;
         const inner = list.length > 18 && j % 2 === 1;

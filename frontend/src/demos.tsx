@@ -110,24 +110,26 @@ export const DECOMP: Record<number, DecompCfg> = {
       { key: "PLv_RT", label: "传统贸易加权贡献", short: "传统贸易", color: COMPONENT_COLORS.traditional, desc: "传统贸易这一段的长度 × 它的增加值份额，就是这一段对总长度的贡献。", weightKey: "2_VA_RT" },
       { key: "PLv_GVC", label: "GVC 加权贡献", short: "GVC", color: COMPONENT_COLORS.gvc, desc: "GVC 这一段的长度 × 它的增加值份额，就是这一段对总长度的贡献；段长度和贡献不是同一个数。", weightKey: "3_VA_GVC" },
     ],
-    note: (r) => `${forwardSegmentLengths(r)}（上表是这些长度乘以增加值份额后的贡献）。`,
+    note: (r) => `${segmentLengths(r)}（上表是这些长度乘以增加值份额后的贡献）。`,
   },
 };
 
 const FORWARD_SEGMENTS = [["PLv_D", "1_VA_D", "纯国内"], ["PLv_RT", "2_VA_RT", "传统贸易"], ["PLv_GVC", "3_VA_GVC", "GVC"]] as const;
+const BACKWARD_SEGMENTS = [["PLy_D", "1_FGY_D", "纯国内"], ["PLy_RT", "2_FGY_RT", "传统贸易"], ["PLy_GVC", "3_FGY_GVC", "GVC"]] as const;
 
 /** Step 4: some forward segment has a length, even where SVA ≤ 0 leaves the share-weighted split undefined. */
 export const hasForwardSegmentLength = (r: Row) => FORWARD_SEGMENTS.some(([lengthKey]) => finiteNumber(r[lengthKey]) != null);
+const hasBackwardSegmentLength = (r: Row) => BACKWARD_SEGMENTS.some(([lengthKey]) => finiteNumber(r[lengthKey]) != null);
 
-/** Step 4: "前向各段长度：纯国内 …、传统贸易 …、GVC …". */
-export function forwardSegmentLengths(r: Row): string {
-  const keys = FORWARD_SEGMENTS;
+/** Step 4: "前向各段长度：纯国内 …、传统贸易 …、GVC …" (backward: "后向各段长度：…"). */
+export function segmentLengths(r: Row, direction: "前向" | "后向" = "前向"): string {
+  const keys = direction === "前向" ? FORWARD_SEGMENTS : BACKWARD_SEGMENTS;
   const segment = (lengthKey: string, weightKey: string) => {
     const length = finiteNumber(r[lengthKey]);
     if (length != null) return length.toFixed(3);
     return finiteNumber(r[weightKey]) === 0 ? "—（无此类活动）" : "—";
   };
-  return `前向各段长度：${keys.map(([lengthKey, weightKey, name]) => `${name} ${segment(lengthKey, weightKey)}`).join("、")}`;
+  return `${direction}各段长度：${keys.map(([lengthKey, weightKey, name]) => `${name} ${segment(lengthKey, weightKey)}`).join("、")}`;
 }
 
 /** A negative part keeps its own colour (so parts stay distinguishable) striped with the negative red. */
@@ -397,7 +399,8 @@ export function IndicatorCalculationDisclosure({ step, row, decimals }: { step: 
       <div className="icd-calc">
         = {disclosureLength(forward)} / {disclosureLength(backward)} = <b>{position == null ? positionGap : stripNegativeZero(position.toFixed(3))}</b>
       </div>
-      <p>这里比较前向与后向的 GVC 段长度。上方 PLv 恒等式中的每一项是“增加值份额 × 段长度”的加权贡献，不是段长度本身。</p>
+      <p>这里比较前向与后向的 GVC 段长度（分母就是“后向各段长度”里的 GVC 段）。上方 PLv 恒等式中的每一项是“增加值份额 × 段长度”的加权贡献，不是段长度本身。</p>
+      <p>读法：GVCPs 大于 1 表示前向段更长，相对更靠上游（更靠近原料、零部件这一端）；小于 1 表示相对更靠下游。</p>
     </section>
   );
 }
@@ -564,7 +567,7 @@ function MiniBackwardBar({ row }: { row: Row }) {
         <div>PLy = {model.total == null ? "—（无法计算）" : fmt(model.total, "number")}；GVCPs = {position?.toFixed(3) ?? "—（无法计算）"}</div>
         <div>{PLY_DECOMP.parts.map((part, index) => (
           <span key={part.key} style={{ marginRight: 10 }}>
-            {part.label}：{model.contributions[index] == null ? "—" : fmt(model.contributions[index]!, "number")}
+            {part.label}贡献：{model.contributions[index] == null ? "—" : fmt(model.contributions[index]!, "number")}
           </span>
         ))}</div>
       </div>
@@ -581,7 +584,7 @@ function MiniBackwardBar({ row }: { row: Row }) {
       <div style={{ position: "relative", height: 12, background: "#eceef4", borderRadius: 5, overflow: "hidden" }}>
         {domain.negative > 0 && <span aria-hidden="true" style={{ position: "absolute", zIndex: 3, left: `${layout.zeroPct}%`, top: 0, bottom: 0, borderLeft: "2px solid #4b5263" }} />}
         {PLY_DECOMP.parts.map((part, index) => (
-          <span key={part.key} title={`${part.label}：${fmt(model.values![index], "number")}`}
+          <span key={part.key} title={`${part.label}贡献：${fmt(model.values![index], "number")}`}
             style={{ position: "absolute", top: 0, bottom: 0, left: `${layout.segments[index].leftPct}%`, width: `${layout.segments[index].widthPct}%`, background: layout.segments[index].negative ? negativeFill(part.color) : part.color }} />
         ))}
       </div>
@@ -589,10 +592,11 @@ function MiniBackwardBar({ row }: { row: Row }) {
         {PLY_DECOMP.parts.map((part, index) => (
           <span key={part.key} style={{ marginRight: 10 }}>
             <span className="dt-swatch" aria-hidden="true" style={{ background: model.values![index] < 0 ? negativeFill(part.color) : part.color }} />
-            {part.label}：{fmt(model.values![index], "number")}
+            {part.label}贡献：{fmt(model.values![index], "number")}
           </span>
         ))}
       </div>
+      {hasBackwardSegmentLength(row) && <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>{segmentLengths(row, "后向")}（上面是这些长度乘以最终产品份额后的贡献）。</div>}
       {domain.negative > 0 && <p className="decomp-table-note">负贡献为抵减项，用斜纹表示并位于零轴左侧；正贡献位于右侧，各段按带符号数值相加得到 PLy，不是都为正的份额。</p>}
       <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>
         {/* Name what the sum is checked against: the PLy computed directly, shown at the right of the heading. */}
@@ -801,7 +805,7 @@ export function DecompositionDemo({
           />
           {/* The segment lengths come straight from the input-output relations and need no share (ITA·C19 2020). */}
           {step === 6 && hasForwardSegmentLength(row) && (
-            <div className="decomp-note">{forwardSegmentLengths(row)}（段长度不需要份额，仍可读）。</div>
+            <div className="decomp-note">{segmentLengths(row)}（段长度不需要份额，仍可读）。</div>
           )}
           {step === 6 && <MiniBackwardBar row={row} />}
           {step === 6 && <IndicatorCalculationDisclosure step={step} row={row} />}

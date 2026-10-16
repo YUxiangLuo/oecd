@@ -351,7 +351,8 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
         extra={result ? (experimentLine ?? "记入报告的模型实验：无（选做，在下方“改模型、对比”里算出一个模型后点“也记入报告”）。") : null}
         how={result ? "点“计算”后自动保存本步默认 Y 的默认模型结果；重新计算得到相同的数字。" : undefined}
         syncing={state.syncing}
-        syncError={state.syncError}
+        syncError={state.materialSyncError ?? null}
+        syncConflict={state.syncConflict}
         onRetrySync={state.syncNow}
       />
 

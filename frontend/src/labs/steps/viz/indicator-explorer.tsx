@@ -1317,7 +1317,8 @@ export function IndicatorExplorer({
           : { label: state.materialLocked && saved.length ? REPLACE_MATERIAL_ACTION : RECORD_CHART_ACTION, onClick: () => { setRechosen(Boolean(state.materialLocked)); recordCurrent(); } }}
         check={saved.length ? { label: `核对已记录的读数 · ${saved.length} 条`, content: table(saved) } : null}
         syncing={state.syncing}
-        syncError={state.syncError}
+        syncError={state.materialSyncError ?? null}
+        syncConflict={state.syncConflict}
         onRetrySync={state.syncNow}
       />
     </section>

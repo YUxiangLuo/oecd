@@ -1,7 +1,7 @@
 /** The step's result card: the headline sentence, its interval in words, the step 10 example's conversion and the limits. */
 import { groupedFixed, percentagePoints } from "../format";
 import { GENERATED_Y_DISCLOSURE, lessonFor } from "../regression-lessons";
-import { designDeviation, perPointDigits, perPointReading } from "../regression-workbench-table";
+import { coversDesignSpan, designDeviation, perPointDigits, perPointReading, xSpanLabel } from "../regression-workbench-table";
 import {
   buildRegressionVerdict,
   differenceWords,
@@ -194,9 +194,12 @@ export function designValueSentence(outcome: RegressionOutcome, response: Pick<R
   const digits = perPointDigits(outcome, coefficient, { depvar_kind: source.depvar_kind, result: { suppressed: false } });
   const target = perPointReading(outcome, { coef: beta, ci_low: null, ci_high: null }, source, digits);
   const estimate = perPointReading(outcome, coefficient, source, digits);
+  const lags = response.design.spec?.x_lags;
+  if (lags != null && !coversDesignSpan({ x_lags: lags })) {
+    return `课程数据设定的两年累计为 ${target}；这个模型算出 ${estimate}（${xSpanLabel({ x_lags: lags })}），跨度不同，不是同一个估计量，不与设定值比较。`;
+  }
   const covered = coefficient.ci_low != null && coefficient.ci_high != null && coefficient.ci_low <= beta && beta <= coefficient.ci_high;
   const deviation = designDeviation(coefficient.coef, beta);
-  const lags = response.design.spec?.x_lags;
   const span = lags == null || (lags.length === 2 && lags.includes(0) && lags.includes(1)) ? "两年累计" : "X 各项合计";
   return `课程数据设定的${span}为 ${target}，你算出 ${estimate}，区间${covered ? "包含" : "不包含"}设定值（估计偏差 ${deviation > 0 ? "+" : ""}${Math.round(deviation * 100)}%）。`;
 }

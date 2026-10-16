@@ -154,7 +154,8 @@ export function AutoMaterialStatus({ state, schema, metric, current, record: _re
       rechosen={rechosen && current}
       action={state.materialLocked && _record ? { label: MATERIAL_LOCKED_ACTION.replace("当前图表", "当前选择"), onClick: () => { setRechosen(true); _record(); } } : null}
       syncing={state.syncing}
-      syncError={state.syncError}
+      syncError={state.materialSyncError ?? null}
+        syncConflict={state.syncConflict}
       onRetrySync={state.syncNow}
     />
   </>;

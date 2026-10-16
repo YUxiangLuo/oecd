@@ -309,8 +309,18 @@ export function designDeviation(estimate: number, design: number): number {
 }
 
 /**
+ * Whether a model's X terms add up to what the design value is: the two-year total needs both X and L1.X (L2.X is
+ * set to 0 by design, so adding it keeps the comparison). Another span is not the same estimand (the server's
+ * report_workbench._covers_design_span).
+ */
+export function coversDesignSpan(spec: Pick<ModelSpec, "x_lags">): boolean {
+  return spec.x_lags.includes(0) && spec.x_lags.includes(1);
+}
+
+/**
  * "课程设定值": the two-year total the course data were built around, read per percentage point like the row above,
- * and how far each column's X-terms sum is from it. Null when the server sent no design value for this Y.
+ * and how far each column's X-terms sum is from it; a column whose X terms span other years is not compared.
+ * Null when the server sent no design value for this Y.
  */
 export function designValueRow(columns: TableColumn[], outcome: RegressionOutcome, baseline: string, options: WorkbenchOptions): SummaryRow | null {
   const design = options.design_values?.[outcome]?.[baseline];
@@ -327,6 +337,7 @@ export function designValueRow(columns: TableColumn[], outcome: RegressionOutcom
     cells: columns.map(({ spec, snapshot }) => {
       const sum = xSum(snapshot, spec);
       if (!sum) return "";
+      if (!coversDesignSpan(spec)) return `${target}（两年累计）；本列跨度不同，不计偏差`;
       const deviation = designDeviation(sum.coef, design);
       return `${target}；估计偏差 ${deviation > 0 ? "+" : ""}${Math.round(deviation * 100)}%`;
     }),

@@ -31,7 +31,7 @@ export function networkTrendPoints(rows: Row[], years: number[], countries: stri
   }));
 }
 
-export function NetworkTrend({ meta, schema, initialCountry, initialCountries = [], initialBrowse, onBrowse, carriedNote = null, observations = [], savedLabel, syncing = false, syncError = null, onRetrySync, onRecord, locked = false, extraLenses = [], renderExtra, renderTable }: {
+export function NetworkTrend({ meta, schema, initialCountry, initialCountries = [], initialBrowse, onBrowse, carriedNote = null, observations = [], savedLabel, syncing = false, syncError = null, syncConflict = false, onRetrySync, onRecord, locked = false, extraLenses = [], renderExtra, renderTable }: {
   meta: Meta;
   schema?: IndicatorSchema | null;
   initialCountry: string;
@@ -46,6 +46,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   observations?: VizObservation[];
   syncing?: boolean;
   syncError?: string | null;
+  syncConflict?: boolean;
   onRetrySync?: () => void;
   /** Records the chart on screen as the step's material (the student asked: `material_chosen`). */
   onRecord: (countries: string[], observations: VizObservation[], label: string) => void;
@@ -429,6 +430,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         </table></ScrollableRegion>) } : null}
       syncing={syncing}
       syncError={syncError}
+      syncConflict={syncConflict}
       onRetrySync={onRetrySync}
     />
   </section>;

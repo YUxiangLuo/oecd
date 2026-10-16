@@ -351,6 +351,18 @@ def test_grading_does_not_count_as_student_activity(teaching_db):
     assert db.list_students("teacher")[0]["last_valid_activity"] == before
 
 
+def test_records_saved_by_logging_in_do_not_count_as_student_activity(teaching_db):
+    """Step 1 saves its largest cell on the first visit; the student has not started until they do something."""
+    viewed = empty_session()
+    viewed["steps"]["1"] = make_record({"observation": {"row": "CHN_C27", "column": "USA_F", "auto": True}})
+    db.save_session("student", viewed)
+    assert db.list_students("teacher")[0]["last_valid_activity"] is None
+    chosen = empty_session()
+    chosen["steps"]["1"] = make_record({"observation": {"row": "CHN_A01_02", "column": "USA_F"}})
+    saved = db.save_session("student", chosen)
+    assert db.list_students("teacher")[0]["last_valid_activity"] == saved["updated_at"]
+
+
 def test_academic_terms_classes_and_enrollments_group_students_without_changing_work(teaching_db):
     term = db.create_term("2026 秋", "teacher")
     first_class = db.create_class_group(term["id"], "国际商务 1 班", "teacher")
@@ -418,7 +430,7 @@ def test_teacher_progress_counts_step_15_only_for_a_handed_in_report(teaching_db
 
     empty = {"steps": {}}
     report = {
-        "provenance": {"report_fingerprint": records.report_fingerprint(empty)},
+        "provenance": {"report_inputs_fingerprint": records.report_fingerprint(empty)},
         "state": "draft",
         "generated_at": None,
         "submitted_at": None,
@@ -437,7 +449,7 @@ def test_step_15_counts_once_handed_in_and_currentness_is_said_separately():
     from gvcsim.classroom import routes as classroom_routes
 
     session = empty_session()
-    fingerprint = {"report_fingerprint": records.report_fingerprint(session)}
+    fingerprint = {"report_inputs_fingerprint": records.report_fingerprint(session)}
     draft = {"state": "draft", "provenance": fingerprint}
     state = classroom_routes._learning_state(session, report=draft)
     assert 15 not in state["completion"]["completed"] and state["report_current"] is True

@@ -42,6 +42,15 @@ test("validation locates duplicate options and missing answer; type change requi
     fireEvent.click(screen.getByRole("button", { name: "保存并生效" }));
     expect(screen.getByRole("alert").textContent).toContain("不能重复");
     expect(document.activeElement).toBe(screen.getByLabelText("选项 2"));
+    // The field is marked and described by the message right under it (focus scrolls there, so it is in view);
+    // beside the save button a line says why nothing was saved.
+    expect(screen.getByLabelText("选项 2").getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByLabelText("选项 2").getAttribute("aria-describedby")).toBe(screen.getByRole("alert").id);
+    expect(screen.getByLabelText("选项 2").closest(".teacher-quiz-option")?.nextElementSibling).toBe(screen.getByRole("alert"));
+    expect(document.querySelector(".quiz-save-blocked")?.textContent).toBe("没有保存：请先修改上方标红的内容。");
+    fireEvent.change(screen.getByLabelText("选项 2"), { target: { value: "丙" } });
+    expect(screen.getByLabelText("选项 2").getAttribute("aria-invalid")).toBeNull();
+    fireEvent.change(screen.getByLabelText("选项 2"), { target: { value: "甲" } });
     fireEvent.change(screen.getByLabelText("题型"), { target: { value: "true_false" } });
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
     expect((screen.getByLabelText("题型") as HTMLSelectElement).value).toBe("single_choice");
@@ -111,5 +120,40 @@ test("saving locks editing and step navigation; a 422 keeps input and allows ret
     expect(screen.getByRole("alert").textContent).toContain("题干不符合要求");
     expect((prompt as HTMLTextAreaElement).value).toBe("待保存");
     expect((screen.getByRole("button", { name: "保存并生效" }) as HTMLButtonElement).disabled).toBe(false);
+  } finally { load.mockRestore(); save.mockRestore(); }
+});
+
+test("restoring defaults on a step that already holds them is no edit, whatever order the stored keys come in", async () => {
+  const stored = bank();
+  // The server's stored questions spell their keys in another order than the defaults.
+  const { id, kind, prompt, options, correct, hint, explanation } = structuredClone(question);
+  stored.steps[0].questions = [{ correct, explanation, hint, id, kind, options, prompt } as TeacherQuizQuestion];
+  stored.steps[0].defaults = [{ id, prompt, options, kind, correct, hint, explanation }];
+  stored.steps[0].is_default = true;
+  const load = spyOn(api.classroom, "quizBank").mockResolvedValue(stored);
+  try {
+    render(<TeacherReviewGuardProvider><QuizzesTab /></TeacherReviewGuardProvider>);
+    await screen.findByLabelText("题干（最多 500 字）");
+    fireEvent.click(screen.getByRole("button", { name: "恢复默认" }));
+    expect((screen.getByRole("button", { name: "保存并生效" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("本步当前就是默认题目，无需保存。")).toBeTruthy();
+  } finally { load.mockRestore(); }
+});
+
+test("after a failed check, a later server error is shown even when the marked question was deleted", async () => {
+  const twoQuestions = bank();
+  twoQuestions.steps[0].questions = [structuredClone(question), { ...structuredClone(question), id: "q2", prompt: "第二题" }];
+  const load = spyOn(api.classroom, "quizBank").mockResolvedValue(twoQuestions);
+  const save = spyOn(api.classroom, "saveQuizStep").mockRejectedValue(new ApiError(422, "题目 ID 必须全局唯一", ""));
+  try {
+    render(<TeacherReviewGuardProvider><QuizzesTab /></TeacherReviewGuardProvider>);
+    const second = within(await screen.findByRole("region", { name: "第 2 题" }));
+    fireEvent.change(second.getByLabelText("题干（最多 500 字）"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存并生效" }));
+    expect(document.querySelector(".quiz-save-blocked")).not.toBeNull();
+    fireEvent.click(second.getByRole("button", { name: "删除题目" }));
+    pressSave();
+    expect((await screen.findByRole("alert")).textContent).toContain("题目 ID 必须全局唯一");
+    expect(document.querySelector(".quiz-save-blocked")).toBeNull();
   } finally { load.mockRestore(); save.mockRestore(); }
 });

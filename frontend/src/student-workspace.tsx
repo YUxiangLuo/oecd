@@ -34,6 +34,7 @@ import { sameJsonValue } from "./session-store";
 import { showToast } from "./toast";
 
 export const RESTORED_EDITS_TOAST = "已恢复上次未保存的修改";
+export const STUDENT_INITIAL_PASSWORD_HINT = "你还在使用老师发给你的初始密码。为保护你的实验记录和报告，请改成只有你知道的密码（至少 12 个字符）。";
 
 /** Edits kept when the login expired were put back on the saved record: say so once per restore (a remount of
  *  the workspace with the same count does not repeat it). */
@@ -336,6 +337,10 @@ export function StudentWorkspace({
 
           <div className="workarea">
             <SyncProblemBanner problem={syncProblem} />
+            {user.initial_password && <div className="tipbox student-first-step" role="note">
+              <span>{STUDENT_INITIAL_PASSWORD_HINT}</span>
+              <button type="button" className="secondary" onClick={onRequestPasswordChange}>立即修改密码</button>
+            </div>}
             <StepHeader
               step={step}
               previous={prevStep}

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { api, isApiErrorStatus } from "../api";
+import { sameJsonValue } from "../session-store";
 import type { TeacherQuizBank, TeacherQuizQuestion } from "../types";
 import { userFacingRequestError } from "../user-facing-error";
 import { useTeacherReviewGuard } from "./review-guard";
@@ -32,6 +33,8 @@ function validate(questions: TeacherQuizQuestion[]): Issue | null {
   return null;
 }
 
+const QUIZ_ERROR_ID = "teacher-quiz-error";
+
 export function QuizzesTab() {
   const [bank, setBank] = useState<TeacherQuizBank | null>(null);
   const [step, setStep] = useState(1);
@@ -40,12 +43,15 @@ export function QuizzesTab() {
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
   const [notice, setNotice] = useState("");
+  /** The field a failed check pointed at: marked invalid and described by the message beside the save button. */
+  const [invalidField, setInvalidField] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<{ title: string; message: string; run: () => void } | null>(null);
   const form = useRef<HTMLFieldSetElement>(null);
   const busy = useRef(false);
   const guard = useTeacherReviewGuard();
   const current = bank?.steps.find((s) => s.step === step);
-  const dirty = !!current && JSON.stringify(draft) !== JSON.stringify(current.questions);
+  // Stored questions come back with their keys in another order than the defaults: compare content, not spelling.
+  const dirty = !!current && !sameJsonValue(draft, current.questions);
   // Share dirty and in-flight state with dashboard navigation and beforeunload.
   useEffect(() => { guard.publish({ dirty, saving, message: LEAVE }); }, [guard, dirty, saving]);
   useEffect(() => () => guard.clear(), [guard]);
@@ -68,8 +74,17 @@ export function QuizzesTab() {
 
   const update = (id: string, patch: Partial<TeacherQuizQuestion>) => {
     setDraft((qs) => qs.map((q) => q.id === id ? { ...q, ...patch } : q));
-    setError(null); setNotice("");
+    setError(null); setNotice(""); setInvalidField(null);
   };
+  const fieldProps = (field: string) => ({
+    "data-field": field,
+    "aria-invalid": invalidField === field || undefined,
+    "aria-describedby": invalidField === field && error ? QUIZ_ERROR_ID : undefined,
+  });
+  /** The message of a failed check, right under the field it points at (the save button can be far below). */
+  const fieldError = (field: string) => invalidField === field && error
+    ? <p id={QUIZ_ERROR_ID} className="quiz-field-error" role="alert">{error}</p>
+    : null;
   const save = async () => {
     if (busy.current || !current) return;
     busy.current = true; setSaving(true);
@@ -88,10 +103,13 @@ export function QuizzesTab() {
     const issue = validate(draft);
     if (issue) {
       setError(issue.message);
+      setInvalidField(issue.field);
       const field = Array.from(form.current?.querySelectorAll<HTMLElement>("[data-field]") ?? []).find((element) => element.dataset.field === issue.field);
-      field?.focus(); field?.scrollIntoView?.({ block: "nearest" });
+      field?.focus(); field?.scrollIntoView?.({ block: "center" });
       return;
     }
+    // A field marked by an earlier check may be gone (its question deleted): a later server error must show itself.
+    setInvalidField(null);
     setConfirmation({ title: "保存并生效", message: IMPACT, run: () => { void save(); } });
   };
   if (!bank) return error ? <LoadFailure what="理解题" error={error} onRetry={() => { void load(); }} /> : <p role="status">正在加载理解题…</p>;
@@ -99,15 +117,12 @@ export function QuizzesTab() {
     <p className="tipbox">步骤 1–14 为系统统一题库，不按班级配置。每步 1–3 道判断题或单选题。{IMPACT.split("确定保存吗？")[0]}恢复默认仅加载本地编辑草稿，仍需点击保存并生效。</p>
     <div className="toolbar" aria-label="理解题步骤列表">
       {bank.steps.filter((s) => s.step >= 1 && s.step <= 14).map((s) => <button key={s.step} disabled={saving} aria-current={step === s.step ? "step" : undefined}
-        onClick={() => { if (s.step !== step) guard.attempt(() => { setStep(s.step); setDraft(structuredClone(s.questions)); setConflict(false); setError(null); setNotice(""); }); }}>
+        onClick={() => { if (s.step !== step) guard.attempt(() => { setStep(s.step); setDraft(structuredClone(s.questions)); setConflict(false); setError(null); setNotice(""); setInvalidField(null); }); }}>
         {s.step}. {s.title} · {s.questions.length} 题 · {s.is_default ? "默认" : "已自定义"}
       </button>)}
     </div>
     <h3>步骤 {step} · {current?.title}</h3>
     <p>版本 {current?.version} · {current?.updated_at ? `${current.updated_at} / ${current.updated_by ?? "教师"}` : "默认题库"}</p>
-    {error && <div className="error-box" role="alert">{error}</div>}
-    {notice && <p role="status">{notice}</p>}
-    {conflict && <p>版本冲突，编辑内容已保留。<button disabled={saving} onClick={() => setConfirmation({ title: "载入最新题库", message: "载入最新将丢弃当前编辑内容，确定继续吗？", run: () => { void load(); } })}>载入最新</button></p>}
     <fieldset ref={form} disabled={saving} className="quiz-editor">
       <legend className="sr-only">理解题编辑</legend>
       {draft.map((q, i) => <section key={q.id} className="teacher-quiz-card" aria-label={`第 ${i + 1} 题`}>
@@ -120,24 +135,37 @@ export function QuizzesTab() {
           const kind = e.target.value as TeacherQuizQuestion["kind"];
           setConfirmation({ title: "切换题型", message: "切换将清空旧选项和正确答案，确定继续吗？", run: () => update(q.id, { kind, options: kind === "true_false" ? booleanOptions() : choiceOptions(), correct: "" }) });
         }}><option value="single_choice">单选题</option><option value="true_false">判断题</option></select></label>
-        <label>题干（最多 500 字）<textarea data-field={`${q.id}-prompt`} value={q.prompt} onChange={(e) => update(q.id, { prompt: e.target.value })} /></label>
-        {q.options.map((o, oi) => <div key={o.id} className="teacher-quiz-option">
-          <label>选项 {oi + 1}<input data-field={`${q.id}-${o.id}`} value={o.label} readOnly={q.kind === "true_false"} onChange={(e) => update(q.id, { options: q.options.map((v) => v.id === o.id ? { ...v, label: e.target.value } : v) })} /></label>
+        <label>题干（最多 500 字）<textarea {...fieldProps(`${q.id}-prompt`)} value={q.prompt} onChange={(e) => update(q.id, { prompt: e.target.value })} /></label>
+        {fieldError(`${q.id}-prompt`)}
+        {q.options.map((o, oi) => <Fragment key={o.id}><div className="teacher-quiz-option">
+          <label>选项 {oi + 1}<input {...fieldProps(`${q.id}-${o.id}`)} value={o.label} readOnly={q.kind === "true_false"} onChange={(e) => update(q.id, { options: q.options.map((v) => v.id === o.id ? { ...v, label: e.target.value } : v) })} /></label>
           {q.kind === "single_choice" && <button disabled={q.options.length <= 2} onClick={() => update(q.id, { options: q.options.filter((v) => v.id !== o.id), correct: q.correct === o.id ? "" : q.correct })}>删除选项 {oi + 1}</button>}
-        </div>)}
+        </div>{fieldError(`${q.id}-${o.id}`)}</Fragment>)}
         {q.kind === "single_choice" && <button disabled={q.options.length >= 4} onClick={() => {
           const id = ["a", "b", "c", "d"].find((v) => !q.options.some((o) => o.id === v))!;
           update(q.id, { options: [...q.options, { id, label: "" }] });
         }}>添加选项</button>}
-        <label>正确答案<select data-field={`${q.id}-correct`} value={q.correct} onChange={(e) => update(q.id, { correct: e.target.value })}>
+        <label>正确答案<select {...fieldProps(`${q.id}-correct`)} value={q.correct} onChange={(e) => update(q.id, { correct: e.target.value })}>
           <option value="">请选择</option>{q.options.map((o, oi) => <option key={o.id} value={o.id}>{oi + 1}. {o.label}</option>)}
         </select></label>
-        <label>提示（最多 1000 字）<textarea data-field={`${q.id}-hint`} value={q.hint} onChange={(e) => update(q.id, { hint: e.target.value })} /></label>
-        <label>解析（最多 1000 字）<textarea data-field={`${q.id}-explanation`} value={q.explanation} onChange={(e) => update(q.id, { explanation: e.target.value })} /></label>
+        {fieldError(`${q.id}-correct`)}
+        <label>提示（最多 1000 字）<textarea {...fieldProps(`${q.id}-hint`)} value={q.hint} onChange={(e) => update(q.id, { hint: e.target.value })} /></label>
+        {fieldError(`${q.id}-hint`)}
+        <label>解析（最多 1000 字）<textarea {...fieldProps(`${q.id}-explanation`)} value={q.explanation} onChange={(e) => update(q.id, { explanation: e.target.value })} /></label>
+        {fieldError(`${q.id}-explanation`)}
       </section>)}
+      {error && !conflict && (invalidField
+        ? <p className="quiz-save-blocked">没有保存：请先修改上方标红的内容。</p>
+        : <div className="error-box" role="alert">{error}</div>)}
+      {notice && <p role="status">{notice}</p>}
+      {conflict && <p role="alert">版本冲突，编辑内容已保留。需要保留的内容请先复制，再<button disabled={saving} onClick={() => setConfirmation({ title: "载入最新题库", message: "载入最新将丢弃当前编辑内容，确定继续吗？", run: () => { void load(); } })}>载入最新</button></p>}
       <div className="toolbar">
         <button disabled={draft.length >= 3} onClick={() => setDraft((qs) => [...qs, { id: crypto.randomUUID(), kind: "single_choice", prompt: "", options: choiceOptions(), correct: "", hint: "", explanation: "" }])}>添加题目</button>
-        <button onClick={() => { setDraft(structuredClone(current?.defaults ?? [])); setError(null); setNotice("已载入默认草稿，尚未保存。"); }}>恢复默认</button>
+        <button onClick={() => {
+          const defaults = current?.defaults ?? [];
+          setDraft(structuredClone(defaults)); setError(null); setInvalidField(null);
+          setNotice(current && sameJsonValue(defaults, current.questions) ? "本步当前就是默认题目，无需保存。" : "已载入默认草稿，尚未保存。");
+        }}>恢复默认</button>
         <button className="primary" disabled={!dirty || conflict} onClick={requestSave}>{saving ? "正在保存…" : "保存并生效"}</button>
       </div>
     </fieldset>

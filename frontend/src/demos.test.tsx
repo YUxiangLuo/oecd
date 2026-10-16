@@ -267,9 +267,11 @@ describe("step 4: the sum line says ≈ when the shown lengths do not add up to 
       );
       await waitFor(() => expect(view.container.textContent).toContain("后向总生产长度 PLy（从最终产品端回溯）"));
       const text = view.container.textContent ?? "";
-      expect(text).toContain("纯国内段：0.655");
-      expect(text).toContain("传统贸易段：0.375");
-      expect(text).toContain("GVC 段：0.525");
+      // The bar's numbers are contributions (share × length); the segment lengths themselves are listed below them.
+      expect(text).toContain("纯国内段贡献：0.655");
+      expect(text).toContain("传统贸易段贡献：0.375");
+      expect(text).toContain("GVC 段贡献：0.525");
+      expect(text).toContain("后向各段长度：纯国内 1.310、传统贸易 1.500、GVC 2.100（上面是这些长度乘以最终产品份额后的贡献）。");
       expect(text).toContain("各段（最终产品中的份额 × 段长度）之和 = 1.555；等于直接算出的后向总生产长度 PLy（1.555），即 PLy 是三段长度按最终产品份额的加权平均。");
       expect(text).not.toContain("与总量一致");
     } finally {
@@ -287,7 +289,7 @@ test("backward signed contributions have visible values, a zero axis and a signe
   const industry = spyOn(api, "industryIndicatorsAll").mockResolvedValue({ total: 1, page: 1, page_size: 200, rows: [row] });
   try {
     const view = render(<DecompositionDemo step={6} meta={{ years: [2017], countries: ["JPN"], sectors: ["A"], dataset: null }} primaryYear={2017} primaryCountry="JPN" />);
-    await waitFor(() => expect(view.container.textContent).toContain("传统贸易段：-0.500"));
+    await waitFor(() => expect(view.container.textContent).toContain("传统贸易段贡献：-0.500"));
     expect(view.container.textContent).toContain("负贡献为抵减项");
     const heading = [...view.container.querySelectorAll("b")].find(el => el.textContent?.startsWith("后向总生产长度"))!;
     const box = heading.parentElement!.parentElement!;

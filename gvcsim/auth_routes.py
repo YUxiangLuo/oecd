@@ -64,9 +64,11 @@ class PasswordChangeRequest(TextRequest):
 
 
 def _initial_password(role: str, auth_version: int, username: str) -> bool:
-    """A teacher still on the password the deployment set (``classroom-init`` or the bootstrap): every password
-    change or reset raises the account's auth version past 1. Demo accounts keep their shared password."""
-    if role != "teacher" or auth_version != 1:
+    """An account still on the password it was created with: the deployment's (a teacher from ``classroom-init`` or
+    the bootstrap) or the teacher's (a student added one by one or imported with a downloaded list of passwords).
+    Every password change or reset raises the account's auth version past 1, so a student whose password the
+    teacher reset is not recognised. Demo accounts keep their shared password."""
+    if role not in ("teacher", "student") or auth_version != 1:
         return False
     return not (config.DEMO_MODE and demo_accounts.is_demo_account_username(username))
 

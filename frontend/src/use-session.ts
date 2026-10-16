@@ -71,6 +71,8 @@ export interface SessionApi extends QuizLearningState {
   updatedAt?: string | null;
   syncing: boolean;
   syncError: string | null;
+  /** A failed save to the server only (syncError also reports a failed draft backup in this tab). */
+  saveError: string | null;
   syncConflict: boolean;
   autoRetry?: boolean;
   unsynced: boolean;
@@ -428,6 +430,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     status, session, report, updatedAt, completion, reportCurrent, reportGate, materialGate, restoredEdits, ...quizState, refreshLearning,
     syncing: saveState.phase === "saving", unsynced: saveState.phase !== "saved" && status === "ready",
     syncError: saveState.error ?? (storageFailed ? "本标签页草稿备份失败，刷新前请等待服务器保存成功。" : null),
+    saveError: saveState.error,
     syncConflict: saveState.blocked, autoRetry: retryAt !== null,
     getStep: useCallback(<T,>(step: number) => readStep<T>(session, step), [session]),
     getConfirmedStep: useCallback(<T,>(step: number) => readStep<T>(confirmed, step), [confirmed]),

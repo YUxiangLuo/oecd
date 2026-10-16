@@ -459,3 +459,8 @@
 .teacher-quiz-preview .quiz-options { display: grid; gap: 7px; }
 .teacher-quiz-preview .quiz-options label { display: flex; gap: 8px; padding: 7px 9px; cursor: pointer; }
 .teacher-quiz-preview .quiz-options input { accent-color: #4b47e0; }
+
+/* The field a failed check pointed at, next to the message beside 保存并生效. */
+.quiz-editor [aria-invalid="true"] { border-color: #d0413a; box-shadow: 0 0 0 2px rgba(208, 65, 58, 0.18); }
+.quiz-field-error { margin: 4px 0 8px; color: #b3341f; font-size: 12px; }
+.quiz-save-blocked { margin: 8px 0; color: #b3341f; font-size: 12px; }

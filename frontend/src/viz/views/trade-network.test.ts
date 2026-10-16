@@ -13,8 +13,11 @@ import {
   networkNodeEncodingModel,
   networkThresholdAriaValueText,
   nextNetworkNode,
+  REGION_RING_GAP,
+  separateRegionRings,
   thresholdedNetworkModel,
 } from "./trade-network";
+import { REGION_OF, REGIONS } from "../shared";
 
 describe("network fullscreen activation", () => {
   test("partner amounts use full trade when one direction or the entire pair is hidden", () => {
@@ -253,5 +256,30 @@ describe("network keyboard navigation", () => {
     expect(nextNetworkNode(nodes, "JPN", "Home")).toBe("CHN");
     expect(nextNetworkNode(nodes, "JPN", "End")).toBe("USA");
     expect(nextNetworkNode(nodes, "JPN", "Enter")).toBeNull();
+  });
+});
+
+describe("network region layout", () => {
+  test("no two region rings overlap and every ring stays on the canvas (KHM was covered by IRL)", () => {
+    const W = 1000, H = 560;
+    const sizes = REGIONS.map((_, region) => Object.values(REGION_OF).filter((value) => value === region).length);
+    const anchors = sizes.map((size, i) => {
+      const a = -Math.PI / 2 + (i * 2 * Math.PI) / REGIONS.length;
+      return { x: W / 2 + Math.cos(a) * 300, y: H / 2 + Math.sin(a) * 170, ring: size > 1 ? Math.min(108, 16 + size * 3.1) : 0, used: size > 0 };
+    });
+    const before = Math.hypot(anchors[1].x - anchors[2].x, anchors[1].y - anchors[2].y);
+    expect(before).toBeLessThan(anchors[1].ring + anchors[2].ring + REGION_RING_GAP);
+    separateRegionRings(anchors, W, H);
+    for (let i = 0; i < anchors.length; i++) {
+      const anchor = anchors[i];
+      expect(anchor.x - anchor.ring).toBeGreaterThanOrEqual(0);
+      expect(anchor.y - anchor.ring).toBeGreaterThanOrEqual(0);
+      expect(anchor.x + anchor.ring).toBeLessThanOrEqual(W);
+      expect(anchor.y + anchor.ring).toBeLessThanOrEqual(H);
+      for (let j = i + 1; j < anchors.length; j++) {
+        const other = anchors[j];
+        expect(Math.hypot(anchor.x - other.x, anchor.y - other.y)).toBeGreaterThanOrEqual(anchor.ring + other.ring + REGION_RING_GAP - 0.1);
+      }
+    }
   });
 });

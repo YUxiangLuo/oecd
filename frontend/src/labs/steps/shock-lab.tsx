@@ -486,7 +486,8 @@ export function ShockLab({ meta, step: _step, state }: {
           ? { label: "改用当前例子作为报告材料（之后需在步骤 15 更新报告）", onClick: () => { recordStripRef.current?.focus({ preventScroll: true }); setRechosen(true); recordExample(); } }
           : null}
         syncing={state.syncing}
-        syncError={state.syncError}
+        syncError={state.materialSyncError ?? null}
+        syncConflict={state.syncConflict}
         onRetrySync={state.syncNow}
       />
       {boundaryNote && <p className="reg-boundary" role="status">{boundaryNote}</p>}

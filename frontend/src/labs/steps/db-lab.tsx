@@ -987,7 +987,8 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
             onClick: () => { state.save(withDbLabel(pickedCell, table)); setPickedCell(null); setRechosen(true); } }
           : null}
         syncing={state.syncing}
-        syncError={state.syncError}
+        syncError={state.materialSyncError ?? null}
+        syncConflict={state.syncConflict}
         onRetrySync={state.syncNow}
       />
       </FullscreenPanel>

@@ -94,20 +94,92 @@ def _report_data(step: str, data: dict[str, Any]) -> dict[str, Any]:
     return projected
 
 
-def report_fingerprint(session: dict[str, Any]) -> str:
-    """Fingerprint of the session parts a report is built from (view-only settings excluded)."""
+def _projected_fingerprint(session: dict[str, Any], *, with_quiz: bool) -> str:
     steps = session.get("steps")
     if not isinstance(steps, dict):
         return _session_fingerprint(session)
+
+    def project(key: str, data: dict[str, Any]) -> dict[str, Any]:
+        projected = _report_data(key, data)
+        if not with_quiz:
+            projected.pop("quiz", None)
+        return projected
+
     projected_steps = {
         key: (
-            {**value, "data": _report_data(str(key), value["data"])}
+            {**value, "data": project(str(key), value["data"])}
             if isinstance(value, dict) and isinstance(value.get("data"), dict)
             else value
         )
         for key, value in steps.items()
     }
     return _session_fingerprint({**session, "steps": projected_steps})
+
+
+def report_fingerprint(session: dict[str, Any]) -> str:
+    """Fingerprint of the session parts a report is built from: view-only settings and quiz answers excluded.
+
+    Answering a quiz again (after a teacher edits it, or with the same answer) does not make a submitted report out
+    of date: the report keeps the answers it was generated with, and generating or submitting a draft still checks
+    the quiz bank's revision on its own.
+    """
+    return _projected_fingerprint(session, with_quiz=False)
+
+
+def _report_fingerprint_with_quiz(session: dict[str, Any]) -> str:
+    """The fingerprint reports stored as ``report_fingerprint`` before quiz answers were excluded."""
+    return _projected_fingerprint(session, with_quiz=True)
+
+
+# Viewing a page saves a default record without the student doing anything: step 1 records the slice's largest
+# cell (``auto``), steps 2–5 the chosen country's reading, step 10 the default example. Such a session is not
+# student work, so the teacher's board must not count it as activity.
+_AUTO_SOURCES = frozenset({"auto-indicator-comparison"})
+_AUTO_INDICATOR_KEYS = frozenset({"year", "metric", "country", "compared", "observations"})
+_AUTO_TEACHING_EXAMPLE_KEYS = frozenset(
+    {
+        "compared",
+        "teaching_year",
+        "teaching_country",
+        "teaching_industry",
+        "teaching_observation",
+        "viewed_teaching_panel",
+        "teaching_panel_version",
+        "teaching_example_chosen",
+    }
+)
+
+
+def _only_automatic(step: str, data: dict[str, Any]) -> bool:
+    keys = set(data) - _VIEW_ONLY_KEYS
+    if not keys:
+        return True
+    if step == "1":
+        observation = data.get("observation")
+        return keys == {"observation"} and isinstance(observation, dict) and observation.get("auto") is True
+    if step in {"2", "3", "4", "5"}:
+        observations = data.get("observations")
+        return (
+            keys <= _AUTO_INDICATOR_KEYS
+            and isinstance(observations, list)
+            and all(isinstance(item, dict) and item.get("source") in _AUTO_SOURCES for item in observations)
+        )
+    if step == "10":
+        return keys <= _AUTO_TEACHING_EXAMPLE_KEYS and data.get("teaching_example_chosen") is not True
+    return False
+
+
+def has_student_work(session: dict[str, Any]) -> bool:
+    """Whether the session holds anything the student did, beyond records saved automatically by viewing pages."""
+    steps = session.get("steps")
+    if not isinstance(steps, dict):
+        return False
+    return any(
+        not (
+            isinstance(value, dict) and isinstance(value.get("data"), dict) and _only_automatic(str(key), value["data"])
+        )
+        for key, value in steps.items()
+    )
 
 
 def report_handed_in(report: dict[str, Any] | None) -> bool:
@@ -120,15 +192,19 @@ def report_handed_in(report: dict[str, Any] | None) -> bool:
 def report_matches_session(session: dict[str, Any], report: dict[str, Any] | None) -> bool:
     """Return whether a report was generated from this session's report inputs.
 
-    Reports saved before the view-only exclusion carry only the full-session fingerprint.
+    Reports saved before quiz answers were excluded carry ``report_fingerprint`` (quiz answers included); reports
+    saved before the view-only exclusion carry only the full-session fingerprint. Each is compared the way it was
+    made until it is generated again.
     """
     if report is None:
         return False
     provenance = report.get("provenance")
     if not isinstance(provenance, dict):
         return False
+    if "report_inputs_fingerprint" in provenance:
+        return provenance["report_inputs_fingerprint"] == report_fingerprint(session)
     if "report_fingerprint" in provenance:
-        return provenance["report_fingerprint"] == report_fingerprint(session)
+        return provenance["report_fingerprint"] == _report_fingerprint_with_quiz(session)
     return provenance.get("session_fingerprint") == _session_fingerprint(session)
 
 
@@ -253,7 +329,7 @@ def save_generated_report(
         stored_provenance = {
             **provenance,
             "session_fingerprint": _session_fingerprint(current_session["session"]),
-            "report_fingerprint": report_fingerprint(current_session["session"]),
+            "report_inputs_fingerprint": report_fingerprint(current_session["session"]),
         }
         return c.execute(
             "INSERT INTO reports(account_id,release_id,markdown,provenance,state,generated_at,updated_at)"

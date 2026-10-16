@@ -114,6 +114,14 @@ describe("tables", () => {
     expect(designValueRow(columns, "production", "3b_FGY_GVC_C_share", options)!.cells[0]).toBe("设定为 0（与 X 无关）");
     expect(designValueRow(columns, "length", "GVCPs", options)!.cells[0]).toBe("无单一设定值（比值 Y）");
     expect(designValueRow(columns, "trade", "unknown", options)).toBeNull();
+    // Only a model whose X terms cover the two-year total is compared with it; L2.X (0 by design) may be added.
+    const spans = designValueRow([
+      ...columns,
+      { name: "只放 L2.X", spec: { ...DEFAULT, x_lags: [2] }, snapshot: snapshotOf(DEFAULT_RUN) },
+      { name: "三年", spec: { ...DEFAULT, x_lags: [0, 1, 2] }, snapshot: snapshotOf(DEFAULT_RUN) },
+    ], "trade", "FVA_share", options)!;
+    expect(spans.cells[2]).toBe("-0.55 个百分点（两年累计）；本列跨度不同，不计偏差");
+    expect(spans.cells[3]).toStartWith("-0.55 个百分点；估计偏差 ");
     expect(designDeviation(-0.66, -0.55)).toBeCloseTo(0.2);
     expect(designDeviation(-0.44, -0.55)).toBeCloseTo(-0.2);
     expect(designDeviation(0.11, -0.55)).toBeCloseTo(-1.2);
@@ -609,6 +617,8 @@ describe("the open workbench", () => {
     fireEvent.click(checkbox(/^L2\.X/));
     expect(document.querySelector(".reg-stale-note")?.textContent).toBe("设定已更改，下面保留最近计算的结果；点“计算这个模型”查看新结果。");
     expect(screen.getAllByRole("status").some((node) => node.textContent === "设定已更改，下面保留最近计算的结果；点“计算这个模型”查看新结果。")).toBe(true);
+    // As the note says, the last result stays in the table (and the chart), named as computed before the change.
+    expect(tableHeaders()).toEqual(["变量", "默认模型", "上次计算（设定已更改）：去掉汇率变动"]);
     // The preset no longer reads pressed: the form holds another model.
     expect(screen.getByRole("button", { name: /^去掉汇率变动/ }).getAttribute("aria-pressed")).toBe("false");
     const details = screen.getByRole("group", { name: "单模型详细数字" });

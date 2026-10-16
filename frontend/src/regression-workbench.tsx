@@ -379,16 +379,23 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
     void run(model);
   };
 
-  const computedSpec = current && computed ? computed.design.spec ?? null : null;
-  const isDefault = Boolean(computedSpec && sameSpec(computedSpec, options.default_spec, options));
-  const latest = computedSpec && !isDefault ? computed : null;
-  const latestIsReported = Boolean(latest && experiment && experimentY === yKey && sameSpec(experiment.spec, latest.design.spec!, options));
-  // Table columns: the chosen Y's default model, the model just computed, and the one in the report when it is
+  // The model computed last, in its own column unless the default column already shows it; after the form changed
+  // it stays there (as the stale message says), named as computed before the change.
+  const computedSpec = computed?.design.spec ?? null;
+  const shown = computedSpec && !sameSpec(computedSpec, options.default_spec, options) ? computed : null;
+  const isDefault = Boolean(current && computedSpec && !shown);
+  const latest = current ? shown : null;
+  const shownIsReported = Boolean(shown && experiment && experimentY === yKey && sameSpec(experiment.spec, shown.design.spec!, options));
+  const latestIsReported = Boolean(latest) && shownIsReported;
+  // Table columns: the chosen Y's default model, the model computed last, and the one in the report when it is
   // another model on this Y (on another Y it is only named below: two Ys cannot share a table).
   const columns: TableColumn[] = defaultForY ? [
     { name: DEFAULT_COLUMN, spec: options.default_spec, snapshot: snapshotOf(defaultForY) },
-    ...(latest ? [{ name: `${latestIsReported ? "已记入报告" : "本次"}：${label(latest.design.spec!)}`, spec: latest.design.spec!, snapshot: snapshotOf(latest) }] : []),
-    ...(experiment && experimentY === yKey && !latestIsReported ? [{ name: `已记入报告：${label(experiment.spec)}`, spec: experiment.spec, snapshot: experiment.snapshot }] : []),
+    ...(shown ? [{
+      name: `${shownIsReported ? "已记入报告" : current ? "本次" : "上次计算（设定已更改）"}：${label(shown.design.spec!)}`,
+      spec: shown.design.spec!, snapshot: snapshotOf(shown),
+    }] : []),
+    ...(experiment && experimentY === yKey && !shownIsReported ? [{ name: `已记入报告：${label(experiment.spec)}`, spec: experiment.spec, snapshot: experiment.snapshot }] : []),
   ] : [];
   const highlighted = latest ? 1 : isDefault ? 0 : -1;
   const coefficients = coefficientRows(columns, options);

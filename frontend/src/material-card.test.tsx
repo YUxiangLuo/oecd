@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { AUTO_RECORD_HOW, MaterialCard } from "./material-card";
+import { AUTO_RECORD_HOW, MATERIAL_CONFLICT_NOTE, MaterialCard } from "./material-card";
 import { MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT } from "./step-task-card";
 
 afterEach(cleanup);
@@ -39,4 +39,20 @@ test("a step that records on request shows one button; locked and re-recorded st
   expect(document.querySelector(".material-chip")?.textContent).toBe("暂不能记录");
   expect(screen.getByRole("alert").textContent).toContain("材料还没保存成功");
   expect(screen.getByRole("button", { name: "重试同步" })).toBeTruthy();
+});
+
+test("an unsaved material is not called recorded; a conflict says where to act instead of offering a retry that cannot help", () => {
+  let retries = 0;
+  const view = render(<MaterialCard state="recorded" summary="JPN 9.891%" syncError="网络错误" onRetrySync={() => { retries += 1; }} />);
+  const card = screen.getByRole("region", { name: "本步报告材料" });
+  expect(card.querySelector(".material-chip")?.textContent).toBe("未保存");
+  fireEvent.click(screen.getByRole("button", { name: "重试同步" }));
+  expect(retries).toBe(1);
+  view.rerender(<MaterialCard state="recorded" summary="JPN 9.891%" syncError="冲突" syncConflict onRetrySync={() => { retries += 1; }} />);
+  expect(screen.getByRole("alert").textContent).toBe(MATERIAL_CONFLICT_NOTE);
+  expect(screen.queryByRole("button", { name: "重试同步" })).toBeNull();
+  // Without an error for this step (another step's edit failed), the card reads as recorded.
+  view.rerender(<MaterialCard state="recorded" summary="JPN 9.891%" syncError={null} />);
+  expect(card.querySelector(".material-chip")?.textContent).toBe("已记录");
+  expect(screen.queryByRole("alert")).toBeNull();
 });

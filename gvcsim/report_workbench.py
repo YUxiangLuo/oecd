@@ -53,6 +53,12 @@ _OMITTED_REASONS = {"zero": "样本里全为 0", "collinear": "与其他变量�
 _X_SPANS = {(0,): "仅当年", (0, 1): "两年累计", (0, 1, 2): "三年累计"}
 
 
+def _covers_design_span(spec: ModelSpec) -> bool:
+    """Whether a model's X terms add up to what the design value is: the two-year total needs both X and L1.X
+    (L2.X is set to 0 by design, so adding it keeps the comparison). Another span is not the same estimand."""
+    return {0, 1} <= set(spec.x_lags)
+
+
 def _x_span(spec: ModelSpec) -> str:
     """Named spans, or the terms themselves ("仅 L1.X", "X + L2.X 之和") so one coefficient is never called a sum."""
     lags = tuple(sorted(spec.x_lags))
@@ -278,7 +284,8 @@ def _per_point_rows(columns: list[dict[str, Any]]) -> list[str]:
 
 def _design_value_rows(columns: list[dict[str, Any]]) -> list[str]:
     """The row "课程设定值": the two-year total the course data were built around, in the step's unit, and how far
-    each column's X-terms sum is from it (+ larger in size, − smaller; a sign flip reads as more than −100%)."""
+    each column's X-terms sum is from it (+ larger in size, − smaller; a sign flip reads as more than −100%).
+    A column whose X terms span other years is not compared."""
 
     def x_sum(column: dict[str, Any]) -> dict[str, Any] | None:
         run = column["run"]
@@ -304,6 +311,9 @@ def _design_value_rows(columns: list[dict[str, Any]]) -> list[str]:
         total = x_sum(column)
         if total is None:
             cells.append("")
+            continue
+        if not _covers_design_span(column["spec"]):
+            cells.append(f"{target}（两年累计）；本列跨度不同，不计偏差")
             continue
         value = float(total["coef"])
         deviation = (

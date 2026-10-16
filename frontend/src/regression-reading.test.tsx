@@ -246,6 +246,12 @@ describe("the course's design value on the result card (v13)", () => {
     const ratio = response();
     ratio.model_snapshot!.beta = null;
     expect(renderToStaticMarkup(<RegressionResultCard outcome="length" response={ratio} />)).toContain("没有单一的设定值");
+    // X terms spanning other years than the two-year total are not compared with it.
+    const span = response();
+    span.design.spec = { x_lags: [2], controls: [], fixed_effects: ["year"] };
+    const spanHtml = renderToStaticMarkup(<RegressionResultCard outcome="trade" response={span} />);
+    expect(spanHtml).toContain("跨度不同，不是同一个估计量，不与设定值比较");
+    expect(spanHtml).not.toContain("估计偏差");
     const legacy = response();
     delete (legacy as { model_snapshot?: unknown }).model_snapshot;
     expect(renderToStaticMarkup(<RegressionResultCard outcome="trade" response={legacy} />)).not.toContain("课程数据设定");

@@ -371,11 +371,12 @@ def _learning_status(
     # a record changed since then is said separately (report_outdated), the teacher still holding the submitted one.
     handed_in = records.report_handed_in(report)
     summary = evidence.completion_summary(session_payload, report_exists=handed_in, quiz_bank=quiz_bank)
-    # Only the student's own actions count; grading also bumps reports.updated_at.
+    # Only the student's own actions count; grading also bumps reports.updated_at, and viewing a page saves default
+    # records (step 1's largest cell on the first login) that are not the student's work.
     timestamps = [
         value
         for value in (
-            session and session["updated_at"],
+            session and records.has_student_work(session_payload) and session["updated_at"],
             report and report["generated_at"],
             report and report["submitted_at"],
         )

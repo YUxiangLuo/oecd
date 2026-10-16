@@ -15,17 +15,35 @@ export type TipLine = [string, string, string?, boolean?];
 
 const TIP_WIDTH = 250;
 
-/** The visible part of the page: the scrolling step content (the fixed step footer sits below it), else the window. */
-function visibleBounds(element: Element | null): { top: number; bottom: number } {
-  const viewport = { top: 0, bottom: window.innerHeight || Infinity };
-  const scroller = element?.closest(".content")?.getBoundingClientRect();
-  if (!scroller || !scroller.height) return viewport;
-  return { top: Math.max(viewport.top, scroller.top), bottom: Math.min(viewport.bottom, scroller.bottom) };
+/** The boxes between a chart and the step content that clip what overflows them, then the step content itself
+ * (step 6's scrolling industry ranking cut off the readout of its bottom rows). They do not change while a readout
+ * moves with the pointer, so the hook looks them up once per chart. */
+export function clippingAncestors(element: Element | null): Element[] {
+  const found: Element[] = [];
+  for (let node = element?.parentElement ?? null; node; node = node.parentElement) {
+    if (node.classList.contains("content")) return [...found, node];
+    if (/(auto|scroll|hidden|clip)/.test(getComputedStyle(node).overflowY)) found.push(node);
+  }
+  return found;
+}
+
+/** The visible part of the page: the window narrowed by the clipping boxes around the chart (the scrolling step
+ * content keeps the readout above the fixed step footer). */
+export function visibleBounds(element: Element | null, clips = clippingAncestors(element)): { top: number; bottom: number } {
+  const bounds = { top: 0, bottom: window.innerHeight || Infinity };
+  for (const clip of clips) {
+    const rect = clip.getBoundingClientRect();
+    if (!rect.height) continue;
+    bounds.top = Math.max(bounds.top, rect.top);
+    bounds.bottom = Math.min(bounds.bottom, rect.bottom);
+  }
+  return bounds;
 }
 
 export function useHoverTip() {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const tipRef = useRef<HTMLDivElement | null>(null);
+  const clipsRef = useRef<{ wrap: Element | null; clips: Element[] }>({ wrap: null, clips: [] });
   const [tip, setTip] = useState<{ x: number; y: number; lines: TipLine[] } | null>(null);
   const place = useCallback((clientX: number, clientY: number, lines: TipLine[]) => {
     const rect = wrapRef.current?.getBoundingClientRect() ?? { left: 0, top: 0, width: 0 };
@@ -56,7 +74,8 @@ export function useHoverTip() {
     if (!tip || !box) return;
     const rect = box.getBoundingClientRect();
     if (!rect.height) return;
-    const bounds = visibleBounds(wrapRef.current);
+    if (clipsRef.current.wrap !== wrapRef.current) clipsRef.current = { wrap: wrapRef.current, clips: clippingAncestors(wrapRef.current) };
+    const bounds = visibleBounds(wrapRef.current, clipsRef.current.clips);
     const overflow = rect.bottom - (bounds.bottom - 4);
     if (overflow <= 0) return;
     const room = rect.top - (bounds.top + 4);

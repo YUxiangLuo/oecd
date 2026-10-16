@@ -48,7 +48,9 @@ def save_step(step: int, questions: Any, expected_version: str, teacher_username
         bank = _read(c, " FOR UPDATE")
         current = bank["steps"][str(step)]
         if expected_version != current["version"]:
-            raise QuizChanged("题目版本已更新，请刷新后重试")
+            raise QuizChanged(
+                "题目版本已更新：刚有其他教师保存了本步。你的编辑已保留，需要的内容请先复制，再点“载入最新”。"
+            )
         other_ids = {q["id"] for key, entry in bank["steps"].items() if key != str(step) for q in entry["questions"]}
         if any(q["id"] in other_ids for q in normalized):
             raise ValueError("题目 ID 必须全局唯一")

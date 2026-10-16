@@ -114,15 +114,16 @@ def test_password_change_updates_credentials_and_revokes_existing_token(teaching
 
 def test_teacher_on_the_initial_password_is_reminded_until_it_changes(teaching_db, monkeypatch):
     """classroom-init asks the first teacher to replace the password the deployment set: login and /me say whether
-    the teacher still uses it, so the workspace can remind them; a student's password is the teacher's business."""
+    the teacher still uses it, so the workspace can remind them."""
     monkeypatch.setattr("gvcsim.config.DEMO_MODE", False)
     client = TestClient(app)
     login = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).json()
     assert login["user"]["initial_password"] is True
     headers = {"Authorization": f"Bearer {login['token']}"}
     assert client.get("/api/auth/me", headers=headers).json()["initial_password"] is True
+    # A student on the password the teacher gave (here the bootstrap's) is reminded too.
     student = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).json()
-    assert student["user"]["initial_password"] is False
+    assert student["user"]["initial_password"] is True
     client.post(
         "/api/auth/password",
         headers=headers,
@@ -353,3 +354,24 @@ def test_login_reads_a_full_width_username_as_ascii(teaching_db):
     client = TestClient(app)
     login = client.post("/api/auth/login", json={"username": "　ｓｔｕｄｅｎｔ ", "password": "gvclab2026"})
     assert login.status_code == 200
+
+
+def test_student_on_the_teachers_password_is_reminded_until_they_change_it(teaching_db):
+    client = TestClient(app)
+    teaching_db.create_student("imported01", "导入学生", "imported01-initial", teacher_username="teacher")
+    login = client.post("/api/auth/login", json={"username": "imported01", "password": "imported01-initial"}).json()
+    assert login["user"]["initial_password"] is True
+    headers = {"Authorization": f"Bearer {login['token']}"}
+    assert client.get("/api/auth/me", headers=headers).json()["initial_password"] is True
+    client.post(
+        "/api/auth/password",
+        headers=headers,
+        json={"current_password": "imported01-initial", "new_password": "imported01-own-password"},
+    )
+    relogin = client.post(
+        "/api/auth/login", json={"username": "imported01", "password": "imported01-own-password"}
+    ).json()
+    assert relogin["user"]["initial_password"] is False
+    # Demo students share a password on purpose: no reminder.
+    demo = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).json()
+    assert demo["user"]["initial_password"] is False

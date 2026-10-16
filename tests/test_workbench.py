@@ -528,3 +528,27 @@ def test_report_generation_charges_the_reported_models_once_the_gate_passes(monk
     [(account, designs)] = charged
     assert account == 3
     assert [design.spec for design in designs] == [DEFAULT_SPEC, ModelSpec((0,), (), ("country_industry", "year"))]
+
+
+def test_report_design_value_row_compares_only_models_covering_the_two_year_total():
+    """A model whose X terms span other years estimates something else: no deviation from the two-year total."""
+    from gvcsim import report_workbench
+    from gvcsim.regression.teaching import X_LAG_COLUMNS
+
+    def column(lags, coefs, cumulative=None):
+        result = {"coefs": coefs, **({"cumulative": cumulative} if cumulative else {})}
+        design = {"outcome": "trade", "baseline": "FVA_share", "depvar_kind": "share"}
+        return {
+            "spec": ModelSpec(lags, DEFAULT_SPEC.controls, DEFAULT_SPEC.fixed_effects),
+            "run": {"design": design, "result": result},
+        }
+
+    total = {"coef": -0.55, "ci_low": -0.57, "ci_high": -0.54}
+    only_l2 = {"name": X_LAG_COLUMNS[2], "coef": -0.26, "ci_low": -0.3, "ci_high": -0.2}
+    [row] = report_workbench._design_value_rows(
+        [column((0, 1), [], total), column((2,), [only_l2]), column((0, 1, 2), [], total)]
+    )
+    cells = row.split(" | ")[1:]
+    assert cells[0].startswith("-0.55 个百分点；估计偏差 ")
+    assert cells[1] == "-0.55 个百分点（两年累计）；本列跨度不同，不计偏差"
+    assert cells[2].startswith("-0.55 个百分点；估计偏差 ")
