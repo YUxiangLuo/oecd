@@ -77,6 +77,10 @@ def test_options_list_every_choice_in_page_order_with_the_default_and_the_limits
     # L2.X is named, not explained: its answer (no two-year-later link) is for the student to find.
     assert options["x_lags"][2]["description"] == "滞后 2 期：两年前的 X"
     assert "吸收不等于没有控制" in effects["country_year"]["description"]
+    # Said only of the model that keeps country × industry effects: alone, the total can even change sign.
+    assert effects["country_year"]["description"].startswith("每个国家每年一个截距")
+    assert "和国家×行业 FE 一起用时" in effects["country_year"]["description"]
+    assert "不勾国家×行业 FE 时" in effects["country_year"]["description"]
     # The course's design value of each Y, for the page to say how far an estimate is from it.
     assert options["design_values"]["trade"]["FVA_share"] == -0.55
     assert options["design_values"]["production"]["3b_FGY_GVC_C_share"] == 0.0

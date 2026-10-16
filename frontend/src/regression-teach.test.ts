@@ -221,7 +221,8 @@ describe("ReportedExperiments", () => {
           { key: "DVAex_share", label: "selected Y", kind: "share", default: false, coef: 2.37, ci_low: 2.1, ci_high: 2.6, p: 0.01, status: "ok", suppress_inference: false, depvar_std: 1, depvar_mean: 1, n_obs: 10 },
         ], production: [], length: [], network: [] } });
         await waitFor(() => expect(defaultCell()).toBe(fails ? "—" : "+2.37 个百分点"));
-        expect(view.container.querySelectorAll("tbody tr td")[2]?.textContent).toBe("+1.73 个百分点（两年累计）");
+        // The total, then its sample on the next line.
+        expect(view.container.querySelectorAll("tbody tr td")[2]?.textContent).toBe("+1.73 个百分点（两年累计）样本 N = 10");
         expect(view.container.textContent).toContain("同一 Y 的默认模型");
       } finally { cleanup(); options.mockRestore(); overview.mockRestore(); }
     });
@@ -245,8 +246,8 @@ describe("ReportedExperiments", () => {
       expect(rows[0][0]).toBe("步骤 11 · 贸易流");
       expect(rows[0][2]).toContain("X + L1.X；GDP 对数、贸易开放度；国家×行业 + 年份 FE");
       // The model's sum says which years it covers; both read at the default's decimals.
-      expect(rows[0][3]).toBe("-0.70 个百分点（两年累计）");
-      expect(rows[0][4]).toBe("-0.55 个百分点");
+      expect(rows[0][3]).toBe("-0.70 个百分点（两年累计）样本 N = 10");
+      expect(rows[0][4]).toBe("-0.55 个百分点样本 N = 10");
       expect(overview).not.toHaveBeenCalled();
     } finally { cleanup(); options.mockRestore(); overview.mockRestore(); }
   });
@@ -268,6 +269,11 @@ describe("ReportedExperiments", () => {
       await waitFor(() => expect(view.container.textContent).toContain("被国家×年份 FE 吸收：汇率变动"));
       // Not a preset: named as a custom setting.
       expect(view.container.querySelector("tbody tr td b")?.textContent).toBe("自定义（去掉 GDP 对数；去掉贸易开放度；固定效应：国家×年份 FE）");
+      // Each total names its sample, as the writing prompt asks whether the samples are the same.
+      const cells = [...view.container.querySelectorAll("tbody tr td")].map((cell) => cell.textContent ?? "");
+      expect(cells[2]).toMatch(/样本 N = [\d,]+/);
+      expect(cells[3]).toMatch(/样本 N = [\d,]+/);
+      expect(cells[2]).not.toContain("与默认模型不同");
     } finally { cleanup(); options.mockRestore(); }
   });
 

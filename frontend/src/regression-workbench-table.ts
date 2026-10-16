@@ -212,11 +212,12 @@ const effectIncluded = (spec: ModelSpec, key: string, options: WorkbenchOptions)
 const yearsText = (snapshot: CustomResultSnapshot) =>
   snapshot.result.years ? `${snapshot.result.years[0]}–${snapshot.result.years[1]}` : "—";
 
-/** What a column's X-terms sum covers: "两年累计" for X + L1.X, "仅当年" for X alone, "三年累计" with L2.X; other
+/** What a column's X-terms sum covers: "两年累计" for X + L1.X, "仅当期 X" for X alone (its coefficient is not the
+ *  default's 当年 term, so not "当年"), "三年累计" with L2.X; other
  *  sets name their terms ("仅 L1.X", "X + L2.X 之和"), so one coefficient is never called a sum. */
 export function xSpanLabel(spec: Pick<ModelSpec, "x_lags">): string {
   const lags = [...spec.x_lags].sort((a, b) => a - b);
-  const named = ({ "0": "仅当年", "0,1": "两年累计", "0,1,2": "三年累计" } as Record<string, string>)[lags.join(",")];
+  const named = ({ "0": "仅当期 X", "0,1": "两年累计", "0,1,2": "三年累计" } as Record<string, string>)[lags.join(",")];
   if (named) return named;
   const terms = lags.map((lag) => (lag === 0 ? "X" : `L${lag}.X`));
   return terms.length === 1 ? `仅 ${terms[0]}` : `${terms.join(" + ")} 之和`;
@@ -259,7 +260,7 @@ export function xSum(snapshot: CustomResultSnapshot, spec: Pick<ModelSpec, "x_la
 
 /**
  * "合计：X 每高 1 个百分点": each column's X-terms sum read per percentage point, all at the first column's decimals
- * so the row compares like with like, each saying which years it covers ("（两年累计）", "（仅当年）").
+ * so the row compares like with like, each saying which years it covers ("（两年累计）", "（仅当期 X）").
  */
 export function perPointRow(columns: TableColumn[], outcome: RegressionOutcome): SummaryRow | null {
   const first = columns.find(({ snapshot, spec }) => xSum(snapshot, spec));

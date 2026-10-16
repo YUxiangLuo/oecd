@@ -50,7 +50,7 @@ _TERM_LABELS = {X_LAG_COLUMNS[lag]: x_term_label(lag) for lag in X_LAG_COLUMNS} 
 }
 _OMITTED_REASONS = {"zero": "样本里全为 0", "collinear": "与其他变量完全共线"}
 # What a column's X-terms sum covers (frontend ``xSpanLabel``).
-_X_SPANS = {(0,): "仅当年", (0, 1): "两年累计", (0, 1, 2): "三年累计"}
+_X_SPANS = {(0,): "仅当期 X", (0, 1): "两年累计", (0, 1, 2): "三年累计"}
 
 
 def _deviation_text(deviation: float) -> str:
@@ -503,5 +503,7 @@ def custom_model_sections(tables: list[dict[str, Any]]) -> list[str]:
         samples = {(result.get("n_obs"), str((result.get("sample_flow") or {}).get("years"))) for result in computed}
         if len(samples) > 1:
             lines.append(f"- {workbench.SAMPLE_DIFFERS_NOTE}")
+        if any(tuple(column["spec"].canonical().x_lags) == (0,) for column in columns):
+            lines.append(f"- {workbench.CURRENT_X_ONLY_NOTE}")
         lines += ["", _escape(workbench.FOOTNOTE), ""]
     return lines

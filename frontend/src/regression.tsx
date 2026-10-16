@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { scrollIntoCourseContent } from "./content-scroll";
+import { sameJsonValue } from "./session-store";
 import { api } from "./api";
 import { useAsync } from "./labs";
 import { DEFAULT_BASELINES, displayBaselineLabel, GENERATED_DATA_NOTE, lessonFor, lessonQuestion } from "./regression-lessons";
@@ -73,6 +74,23 @@ export function RegressionRequestError({ label, error, onRetry }: {
  * course default model on the step's default Y; that run is the headline and the report material. The bars show
  * every Y of the family; a click on another bar previews its reading and saves nothing.
  */
+/**
+ * Step 10 records its example once its data have loaded; a student who changed the example and left at once has a
+ * newer choice on step 10 than the one steps 11–14 convert with. Said here, so the conversion is not taken as the new
+ * one; null when the two agree.
+ */
+export function pendingStepTenExample(
+  stepTen: { browse_selection?: { first: string; second?: string; industry: string } } | undefined,
+  recorded: { first: string; second?: string; industry: string },
+): string | null {
+  const browsed = stepTen?.browse_selection;
+  if (!browsed?.first || !browsed.industry) return null;
+  const key = (item: { first: string; second?: string; industry: string }) => [item.first, item.second || "", item.industry];
+  if (sameJsonValue(key(browsed), key(recorded))) return null;
+  const name = `${countryLabel(browsed.first)} · ${sectorLabel(browsed.industry)}${browsed.second ? `（对比 ${countryLabel(browsed.second)}）` : ""}`;
+  return `你在步骤 10 最后选的例子（${name}）还没有记录，这里仍按已记录的例子换算。回到步骤 10 等数据加载完，会自动记录（美国等不能作例子的选择除外）。`;
+}
+
 export function RegressionRunLab({ step, meta, state, getStep, reportCustomResults, reportOutdated = false, quiz }: {
   step: Step;
   /** The step's quiz panel: placed after the result, before the optional workbench. */
@@ -144,11 +162,14 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
   const lesson = lessonFor(outcome, defaultKey, result?.design.baseline_label ?? defaultOption?.label);
 
   // After the run: the estimate converted to the example(s) followed from step 10 (one country or two).
-  const stepTen = getStep?.<TeachingExampleSelection & { teaching_observation?: unknown }>(10);
+  const stepTen = getStep?.<TeachingExampleSelection & {
+    teaching_observation?: unknown; browse_selection?: { first: string; second?: string; industry: string };
+  }>(10);
   const example = teachingExample(meta, stepTen);
   const exampleSaved = Boolean(stepTen?.teaching_observation);
   // As step 10 records it (exampleWasChosen): the default saved because the page was shown is not the student's pick.
   const exampleChosen = exampleWasChosen(stepTen, teachingExample(meta, undefined));
+  const pendingExample = !state.materialLocked && exampleSaved ? pendingStepTenExample(stepTen, example) : null;
   const exampleCountries = [example.first, example.second].filter(Boolean);
   const exampleKey = `teaching-example:${exampleCountries.join(",")}:${example.industry}`;
   const exampleQuery = useAsync<TeachingPanelResponse>(
@@ -335,6 +356,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
               ? <RegressionRequestError label="条形图" error={overviewQuery.error} onRetry={overviewQuery.retry} />
               : overviewQuery.status === "loading" && <div className="reg-request-state muted" role="status" aria-busy="true">正在绘制本类各 Y 的条形图…</div>}
             <RegressionResultCard outcome={outcome} response={result} examples={examples} exampleSaved={exampleSaved} exampleChosen={exampleChosen} exampleYear={lastYear} />
+            {pendingExample && <p className="reg-stale-note" role="note">{pendingExample}</p>}
             {exampleQuery.status === "error" && exampleQuery.error
               ? <RegressionRequestError label="步骤 10 例子换算" error={exampleQuery.error} onRetry={exampleQuery.retry} />
               : exampleQuery.status === "loading" && <div className="reg-request-state muted" role="status" aria-busy="true">正在读取步骤 10 例子，准备换算…</div>}

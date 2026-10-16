@@ -976,6 +976,8 @@ export interface WorkbenchOptions {
   hints: string[];
   footnote: string;
   sample_differs_note: string;
+  /** Under the table when a column has X alone: its coefficient is not the default's 当年 term. */
+  current_x_only_note?: string;
   suppressed_note: string;
 }
 

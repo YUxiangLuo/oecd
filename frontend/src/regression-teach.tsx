@@ -212,8 +212,15 @@ export function ReportedExperiments({ getStep, onNavigateStep }: {
                         {specSummary(experiment.spec, options)}
                         {omittedSummary(experiment.snapshot, options).map((text) => <p className="muted" key={text}>{text}</p>)}
                       </> : "…"}</td>
-                      <td>{sum ? `${perPointReading(outcome, sum, experiment.snapshot, digits)}（${xSpanLabel(experiment.spec)}）` : "—"}</td>
-                      <td>{defaultSum && defaultSource ? perPointReading(outcome, defaultSum, defaultSource, digits) : !sameY && overviewQuery.status === "loading" ? "…" : "—"}</td>
+                      <td>
+                        {sum ? `${perPointReading(outcome, sum, experiment.snapshot, digits)}（${xSpanLabel(experiment.spec)}）` : "—"}
+                        {/* The writing prompt asks whether the samples are the same: each number names its sample. */}
+                        <br /><small className="muted">{sampleText(experiment.snapshot.result)}{stepDefault && sampleText(stepDefault.result) !== sampleText(experiment.snapshot.result) ? "（与默认模型不同）" : ""}</small>
+                      </td>
+                      <td>
+                        {defaultSum && defaultSource ? perPointReading(outcome, defaultSum, defaultSource, digits) : !sameY && overviewQuery.status === "loading" ? "…" : "—"}
+                        {stepDefault && <><br /><small className="muted">{sampleText(stepDefault.result)}</small></>}
+                      </td>
                     </tr>
                   );
                 })}
@@ -225,6 +232,11 @@ export function ReportedExperiments({ getStep, onNavigateStep }: {
   );
 }
 
+
+/** "样本 N = 12,800，2017–2020": a model's sample, as the workbench table gives it. */
+function sampleText(result: { n_obs: number; years: [number, number] | null }): string {
+  return `样本 N = ${result.n_obs.toLocaleString("zh-CN")}${result.years ? `，${result.years.join("–")}` : ""}`;
+}
 
 /**
  * Under the three-group chart, once the default model is computed: the first wave's change in Y since before its

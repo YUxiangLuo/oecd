@@ -3082,7 +3082,7 @@ def test_report_appendix_reads_each_x_sum_per_percentage_point():
         {"name": "算不出", "spec": ModelSpec((0, 1), (), ()), "run": "关税暴露 X 在这个设定下无法估计"},
     ]
     assert _per_point_rows(columns) == [
-        "| 合计：X 每高 1 个百分点 | -0.0182 个长度单位（两年累计） | -0.0120 个长度单位（仅当年） |  |"
+        "| 合计：X 每高 1 个百分点 | -0.0182 个长度单位（两年累计） | -0.0120 个长度单位（仅当期 X） |  |"
     ]
     assert _per_point_rows([columns[2]]) == []
 
@@ -3160,7 +3160,7 @@ def test_x_sum_labels_name_their_terms_when_not_a_run_of_years():
     assert [
         _x_span(ModelSpec(lags, (), effects)) for lags in ((0,), (0, 1), (0, 1, 2), (1,), (2,), (0, 2), (1, 2))
     ] == [
-        "仅当年",
+        "仅当期 X",
         "两年累计",
         "三年累计",
         "仅 L1.X",
@@ -3311,6 +3311,10 @@ def test_custom_report_chart_compares_native_effects_and_omits_invalid_models(ki
     assert "百分点" in chart["x_label"] if kind == "share" else "原始单位" in chart["note"]
     assert markdown.count("不绘制对应模型") == 5
     assert workbench.SAMPLE_DIFFERS_NOTE in markdown
+    # No column with X alone: no note about it.
+    assert workbench.CURRENT_X_ONLY_NOTE not in markdown
+    current_only = {**table, "columns": [columns[0], column("只放当期 X", ModelSpec((0,), (), ()), coefficient)]}
+    assert workbench.CURRENT_X_ONLY_NOTE in "\n".join(custom_model_sections([current_only]))
     assert markdown.index("| 变量 |") < markdown.index("```gvcsim-chart")
     # No empty chart or synthetic zero when every model is unavailable.
     unavailable = "\n".join(custom_model_sections([{**table, "columns": columns[3:]}]))

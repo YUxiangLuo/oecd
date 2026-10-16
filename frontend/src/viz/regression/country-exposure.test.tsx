@@ -39,7 +39,8 @@ test("the industry note counts taxed industries and says when some have X = 0", 
   // Goods only (v8): a taxed country's services are counted but not taxed.
   expect(countryIndustryNote({ ...row("DEU", 0.08, true, 33, 44), goods_industries: 34 })).toBe("34/44 个行业被加税（10 个非货物行业不加税，1 个货物行业对美无出口：w = 0）");
   expect(countryIndustryLines({ ...row("DEU", 0.08, true, 33, 44), goods_industries: 34 })).toEqual([
-    ["被加税行业", "34 个（样本内共 44 个）"], ["非货物行业", "10 个，不加税"], ["其中 X > 0", "33 个"], ["其余 1 个", "对美无出口：w = 0"],
+    // "其中" right under the taxed industries it splits, the non-goods line after it.
+    ["被加税行业", "34 个（样本内共 44 个）"], ["其中 X > 0", "33 个"], ["其余 1 个", "对美无出口：w = 0"], ["非货物行业", "10 个，不加税"],
   ]);
   expect(countryIndustryNote(row("MEX", 0, false, 0, 43))).toBe("0/43 个行业被加税");
 });

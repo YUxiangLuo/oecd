@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api";
 import {
-  barPreviewText, degreeIdentity, exampleEffect, parallelTrendsNote, familyBarRows, forwardShareIdentity, tradeShareIdentity, GROUP_CHART_CAPTION, groupedFixed, groupLines, INTERRUPTED_RUN_NOTE, lagSplit, waveMarkers, networkDigits, RegressionRequestError,
+  barPreviewText, degreeIdentity, exampleEffect, parallelTrendsNote, familyBarRows, forwardShareIdentity, pendingStepTenExample, tradeShareIdentity, GROUP_CHART_CAPTION, groupedFixed, groupLines, INTERRUPTED_RUN_NOTE, lagSplit, waveMarkers, networkDigits, RegressionRequestError,
   equationSymbol, RegressionResultCard, RegressionRunLab, scrollRegressionVerdict, TEACHING_MODEL_VERSION,
 } from "./regression";
 import type {
@@ -392,6 +392,16 @@ describe("simple regression workbench", () => {
     expect(rows.filter((row) => row.uncertain)).toHaveLength(1);
     expect(forwardShareIdentity(items)).toBe("纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（0.00）；前向 GVC 生产总份额 = 简单 + 复杂（按未取整的原值精确相加，条旁取整后的数字可能相差末位 1）。本步默认的“复杂 GVC 生产份额”按增加值来源（前向）计算；“后向复杂 GVC 生产份额”按最终品（后向）计算，是另一项指标。");
     expect(forwardShareIdentity(items.slice(0, 3))).toBeNull();
+  });
+
+  test("a newer step 10 choice that was not recorded yet is said next to the conversion", () => {
+    const recorded = { first: "CAN", second: "AUS", industry: "C29" };
+    expect(pendingStepTenExample({ browse_selection: { first: "CAN", second: "AUS", industry: "C29" } }, recorded)).toBeNull();
+    expect(pendingStepTenExample({ browse_selection: { first: "CAN", second: "", industry: "C29" } }, { first: "CAN", industry: "C29" })).toBeNull();
+    expect(pendingStepTenExample({}, recorded)).toBeNull();
+    const note = pendingStepTenExample({ browse_selection: { first: "MYS", second: "", industry: "C28" } }, recorded)!;
+    expect(note).toContain("步骤 10 最后选的例子（MYS 马来西亚 · C28");
+    expect(note).toContain("这里仍按已记录的例子换算");
   });
 
   test("step 11: one line says the domestic and foreign value-added shares move about opposite", () => {

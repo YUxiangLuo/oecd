@@ -88,8 +88,10 @@ function download(text: string, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-function ModelForm({ options, spec, onChange }: {
+function ModelForm({ options, spec, onChange, disabled = false }: {
   options: WorkbenchOptions; spec: ModelSpec; onChange: (spec: ModelSpec) => void;
+  /** While a model is computed: the settings stay those of the model being computed. */
+  disabled?: boolean;
 }) {
   const toggleLag = (lag: number) => onChange({
     ...spec, x_lags: spec.x_lags.includes(lag) ? spec.x_lags.filter((item) => item !== lag) : [...spec.x_lags, lag],
@@ -107,7 +109,8 @@ function ModelForm({ options, spec, onChange }: {
     fixed_effects: spec.fixed_effects.includes(key) ? spec.fixed_effects.filter((item) => item !== key) : [...spec.fixed_effects, key],
   });
   return (
-    <div className="reg-custom-form">
+    // One outer fieldset, so `disabled` locks every choice at once.
+    <fieldset className="reg-custom-form" disabled={disabled}>
       <fieldset>
         <legend>关税暴露 X（至少选一项）</legend>
         {options.x_lags.map((item) => (
@@ -157,8 +160,13 @@ function ModelForm({ options, spec, onChange }: {
         })}
         <p className="muted reg-custom-note">{options.no_fixed_effects_note}</p>
         {spec.fixed_effects.includes("country_year") && <p className="reg-custom-note">吸收不等于没有控制：国家年度变化由固定效应扣除，因此不再单独估计这些控制变量的系数。</p>}
+        {/* Country × year effects match the default only on top of country × industry ones: alone, each unit's own
+            level is left in, and on the course data the total can even change sign (step 11: +0.08 against -0.55). */}
+        {spec.fixed_effects.includes("country_year") && !spec.fixed_effects.includes("country_industry") && (
+          <p className="reg-custom-note">没有勾国家×行业 FE：各国家×行业自身的水平差异没有扣除，X 合计可能和默认模型差很多。</p>
+        )}
       </fieldset>
-    </div>
+    </fieldset>
   );
 }
 
@@ -291,6 +299,11 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const spec = localSpec ?? draft.spec ?? options?.default_spec ?? null;
   const [computed, setComputed] = useState<RegressionResponse | null>(null);
   const [running, setRunning] = useState(false);
+  // The model being computed, named by the status line (the form is locked meanwhile, but a preset sets it too).
+  const [runningSpec, setRunningSpec] = useState<ModelSpec | null>(null);
+  // Each preset's total as computed in this visit, by Y: the next preset's question compares with an earlier one
+  // ("和去掉汇率变动偏向同一边吗？"), whose column has left the table by then.
+  const [presetTotals, setPresetTotals] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const rateLimitMessage = useRef<string | null>(null);
   // Read out once a calculation or a report change is done (the table changes without moving focus there).
@@ -362,6 +375,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
     const request = new AbortController();
     controller.current = request;
     setRunning(true);
+    setRunningSpec(model);
     setError(null);
     try {
       const response = await api.runRegression(outcome, request.signal, yKey, canonicalSpec(model, options));
@@ -370,6 +384,10 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       }
       setComputed(response);
       setDetailColumn(0);
+      const preset = options.presets.find((item) => sameSpec(item.spec, response.design.spec!, options));
+      const snapshot = snapshotOf(response);
+      const total = preset ? xSum(snapshot, response.design.spec!) : null;
+      if (preset && total) setPresetTotals((all) => ({ ...all, [`${yKey}:${preset.key}`]: perPoint(total, snapshot) }));
       // The status line (a live region) says what was computed; no second announcement.
       setAnnouncement("");
     } catch (cause) {
@@ -386,6 +404,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
     } finally {
       if (controller.current === request) controller.current = null;
       setRunning(false);
+      setRunningSpec(null);
     }
   };
   /** A preset: its model goes into the form and is computed at once. */
@@ -490,14 +509,19 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   // the course data were updated.
   const reportedOnly = inStep && !defaultSettings && !current;
   const stale = computedDiffers && !inStep;
+  // Back on the page: the form holds the settings left last time (the draft is saved, results are not), so they are
+  // not "never computed", only not computed in this visit.
+  const restoredDraft = !inStep && !computed && localSpec === null && Boolean(draft.spec);
   // The other columns by their models: "“去掉汇率变动”", "已记入报告的“自定义：加 L2.X”".
   const otherColumns = columns.slice(1).map((column) => `${column.reported ? "已记入报告的" : ""}“${chartModelLabel(label(column.spec))}”`);
   const status: { kind: "busy" | "stale" | "done" | "idle"; text: string } = running
-    ? { kind: "busy", text: `正在计算“${label(spec)}”…` }
+    ? { kind: "busy", text: `正在计算“${label(runningSpec ?? spec)}”…` }
     : loadingY ? { kind: "busy", text: `正在取“${depvarLabel}”的默认模型…` }
     : !defaultForY ? { kind: "idle", text: `“${depvarLabel}”的默认模型还没有取到，下面暂时没有结果（见上方提示）。` }
     : !inStep
-      ? { kind: "stale", text: `勾选框里的设定还没有计算${noX ? "（至少要选一项关税暴露 X）" : ""}。${otherColumns.length
+      ? { kind: "stale", text: `${restoredDraft
+        ? `勾选框里是你上次离开时的设定“${chartModelLabel(label(spec))}”；离开页面后结果不保留，点计算可重新算出`
+        : "勾选框里的设定还没有计算"}${noX ? "（至少要选一项关税暴露 X）" : ""}。${otherColumns.length
         ? `下面仍是之前的结果：默认模型、${otherColumns.join("、")}。`
         : "下面仍只有默认模型。"}` }
     : latest ? { kind: "done", text: `下面比较：默认模型 和 “${label(latest.design.spec!)}”（已算好）${otherColumns.length > 1 ? `；另有${otherColumns.slice(1).join("、")}` : ""}。` }
@@ -536,6 +560,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
                       <b>{item.label}</b><small>{(item.key === "no_exchange_rate" || item.key === "separate_effects") && (noDesignValue || zeroDesignValue)
                         ? noDesignValue ? "与同一 Y 的默认模型相比，X 各项合计和区间怎样变化？" : "X 各项合计的区间还包含 0 吗？"
                         : item.question}</small>
+                      {presetTotals[`${yKey}:${item.key}`] && <small className="reg-preset-total">本次打开后算过：合计 {presetTotals[`${yKey}:${item.key}`]}</small>}
                     </button>
                   </li>
                 ))}
@@ -546,14 +571,14 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       </div>
       <details className="reg-custom-details reg-custom-form-details" open={customOpen} onToggle={(event) => setCustomOpen(event.currentTarget.open)}>
         <summary>方式二：自己改设定<small>X 的滞后、控制变量、固定效应；改完点“计算这个模型”</small></summary>
-        <p className="reg-custom-start">勾选框里是要计算的设定：<b>{label(spec)}</b>（{inStep ? "结果已在下面" : "还没有计算"}）。在它的基础上改，改完点“计算这个模型”。</p>
-        <ModelForm options={options} spec={spec} onChange={changeSpec} />
+        <p className="reg-custom-start">勾选框里是要计算的设定：<b>{label(spec)}</b>（{inStep ? "结果已在下面" : restoredDraft ? "上次离开时的设定，结果不保留，需重新计算" : "还没有计算"}）。在它的基础上改，改完点“计算这个模型”。</p>
+        <ModelForm options={options} spec={spec} onChange={changeSpec} disabled={running} />
         {noX ? <p className="reg-custom-note">至少选一项关税暴露 X。</p> : <p className="reg-custom-equation">{equationPreview(spec, options)}</p>}
         <div className="reg-custom-actions">
           <button type="button" className="run-btn" aria-disabled={!defaultForY || running || noX || (inStep && !reportedOnly) || undefined} onClick={() => { if (!inStep || reportedOnly) void run(spec); }}>
             {running ? "正在计算…" : reportedOnly ? "重新计算这个模型" : inStep ? "已算好（结果在下面）" : "计算这个模型"}
           </button>
-          <button type="button" className="secondary" onClick={() => changeSpec(options.default_spec)}>恢复默认设定</button>
+          <button type="button" className="secondary" aria-disabled={running || undefined} onClick={() => { if (!running) changeSpec(options.default_spec); }}>恢复默认设定</button>
           {retryWait > 0 && <span className="muted reg-custom-wait">新的设定 {retryWait} 秒后可以计算</span>}
         </div>
       </details>
@@ -630,6 +655,9 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
           })}
         </ul>
         {samplesDiffer(columns) && <p className="reg-boundary" role="note">{options.sample_differs_note}</p>}
+        {columns.some((column) => canonicalSpec(column.spec, options).x_lags.join(",") === "0") && options.current_x_only_note && (
+          <p className="reg-boundary" role="note">{options.current_x_only_note}</p>
+        )}
       </div>
       </>}
 

@@ -396,6 +396,11 @@ export function ShockLab({ meta, step: _step, state }: {
   const firstWave = waves.find((wave) => wave.wave === 1)?.start_year ?? policyYear ?? undefined;
   // The first wave's currencies fall from its start year: marked only when an example country is in that wave.
   const exampleInFirstWave = lastRows.some((row) => overview?.countries.find((item) => item.country === row.country)?.wave === 1);
+  // A later wave only (COL: 2019): its line is drawn too, and the page says why the currency does not move then (the
+  // course's depreciation is the first wave's).
+  const exampleLaterWave = exampleInFirstWave ? undefined : lastRows
+    .map((row) => overview?.countries.find((item) => item.country === row.country))
+    .find((item) => item?.wave && item.wave > 1 && item.start_year != null);
 
   // The example's X with its worked "w × τ", and why it is 0 when it is: one line a country, then the chart.
   const exampleLines = lastRows.map((row) => {
@@ -597,6 +602,9 @@ export function ShockLab({ meta, step: _step, state }: {
       <span className="reg-section-step">控制变量</span>
       <h3>回归还控制汇率变动、GDP 对数和贸易开放度</h3>
       <p className="teaching-one-line">它们和加税同时变化，也会影响步骤 11–14 的 Y，所以默认模型把它们作为控制变量（由课程生成）。{hasRateChange && shownExample ? "下图是例子国家每年的汇率变动。" : ""}</p>
+      {hasRateChange && shownExample && exampleLaterWave && firstWave && (
+        <p className="muted teaching-one-line">课程设定的汇率贬值只发生在第一批被加税国家（{firstWave} 年起）；这个例子没有第一批国家，所以加税那年看不出汇率变化。</p>
+      )}
       {hasRateChange && shownExample && (
         <IndicatorTrendChart
           rows={rateRows}
@@ -605,7 +613,9 @@ export function ShockLab({ meta, step: _step, state }: {
           metric="teaching_exchange_rate_change"
           label="汇率变动（本币兑美元，负为贬值）"
           unit="个百分点"
-          markYear={firstWave && exampleInFirstWave ? { year: firstWave, label: `${firstWave} 年第一批加税` } : undefined}
+          markYear={firstWave && exampleInFirstWave ? { year: firstWave, label: `${firstWave} 年第一批加税` }
+            : exampleLaterWave ? { year: exampleLaterWave.start_year!, label: `${exampleLaterWave.start_year} 年${WAVE_NAMES[exampleLaterWave.wave!] ?? `第 ${exampleLaterWave.wave} 批`}加税` }
+            : undefined}
           digits={1}
           cards={false}
         />

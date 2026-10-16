@@ -53,7 +53,8 @@ FIXED_EFFECT_DESCRIPTIONS = {
     "country_industry": "每个国家的每个行业一个截距，包含国家 FE 和行业 FE",
     "year": "每年一个截距，扣掉所有单位共同的年度变化",
     "country_year": "每个国家每年一个截距，包含国家 FE 和年份 FE；会吸收本页全部国家层面的控制变量（包括滞后项），省略这些变量但不因其缺失删样本。"
-    "课程数据的混杂都在国家层面，所以它和默认模型算出的 X 合计几乎相同：吸收不等于没有控制",
+    "和国家×行业 FE 一起用时，课程数据的混杂都在国家层面，X 合计和默认模型几乎相同：吸收不等于没有控制；"
+    "不勾国家×行业 FE 时，各国家×行业自身的水平差异没有扣除，结果可能差很多",
 }
 DESIGN_VALUE_NOTE = (
     "课程数据按设定生成：每个 Y 的两年累计有一个“课程设定值”。默认模型的估计通常落在它附近（偶尔区间不含它，属抽样波动）；"
@@ -142,6 +143,9 @@ FOOTNOTE = (
     "自由度计入样本内全部固定效应；用其他统计软件的默认设置复算时，标准误可能小约 11%，属于计算口径不同。"
 )
 SAMPLE_DIFFERS_NOTE = "这几列的样本不同，差异有一部分来自样本，而不只是设定。"
+# A model with X alone: its coefficient also takes up part of the next-year link (X and L1.X move together), so it is
+# not the default model's 当年 term, which the result card shows.
+CURRENT_X_ONLY_NOTE = "只放当期 X 的列：X 的系数会吸收一部分与上一年 X 相关的变化，不等于默认模型里“当年”那一项。"
 # Said whatever stopped the inference: the library check (regression.panel) or the design's treatment support.
 SUPPRESSED_NOTE = "未通过估计检查，已隐藏推断结果（标准误、t 值、p 值、星号与区间）。"
 
@@ -239,6 +243,7 @@ def options() -> dict[str, Any]:
         "hints": list(HINTS),
         "footnote": FOOTNOTE,
         "sample_differs_note": SAMPLE_DIFFERS_NOTE,
+        "current_x_only_note": CURRENT_X_ONLY_NOTE,
         "suppressed_note": SUPPRESSED_NOTE,
     }
 

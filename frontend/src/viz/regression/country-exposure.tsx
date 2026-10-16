@@ -75,17 +75,18 @@ export function taxedRuleText(rule: TeachingCountriesResponse["taxed_rule"], rel
 }
 
 /** The industry count as short readout lines that fit the 260 px readout: "被加税行业 36 个（样本内共 44 个）" (the
- * total is the country's industries in the regression sample, which can be fewer than 45; only goods are taxed),
- * "非货物行业 8 个，不加税", and for a taxed country with goods industries that export nothing to the US, "其中 X > 0
- * 35 个" and "其余 1 个 对美无出口：w = 0". */
+ * total is the country's industries in the regression sample, which can be fewer than 45; only goods are taxed); for
+ * a taxed country with goods industries that export nothing to the US, "其中 X > 0 35 个" and "其余 1 个 对美无出口：
+ * w = 0" right under it; then "非货物行业 8 个，不加税". */
 export function countryIndustryLines(row: CountryRow): TipLine[] {
   const goods = goodsOf(row);
   const lines: TipLine[] = [["被加税行业", `${row.taxed ? goods : 0} 个（样本内共 ${row.industries} 个）`]];
-  if (row.taxed && goods < row.industries) lines.push(["非货物行业", `${row.industries - goods} 个，不加税`]);
+  // "其中" right under the taxed industries it splits; the non-goods line after it, so it is not read as their part.
   if (row.taxed && row.exposed_industries < goods) {
     lines.push(["其中 X > 0", `${row.exposed_industries} 个`]);
     lines.push([`其余 ${goods - row.exposed_industries} 个`, "对美无出口：w = 0"]);
   }
+  if (row.taxed && goods < row.industries) lines.push(["非货物行业", `${row.industries - goods} 个，不加税`]);
   return lines;
 }
 

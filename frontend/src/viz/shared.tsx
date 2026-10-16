@@ -149,6 +149,15 @@ export const joinCountries = (codes: readonly string[]) => codes.map(countryLabe
 export const rowLabel = (r: Row) => (r.industry != null ? sectorLabel(String(r.industry)) : countryLabel(String(r.country)));
 
 /** 暗色悬浮 tooltip(增强通道;全部数值同时可在表格视图获得) */
+/** The top of the window area an element can be seen in: its nearest scrolling ancestor's top, or the window's. */
+function visibleTop(element: HTMLElement): number {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node);
+    if (overflowY === "auto" || overflowY === "scroll") return Math.max(0, node.getBoundingClientRect().top);
+  }
+  return 0;
+}
+
 export function useTip() {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -162,11 +171,12 @@ export function useTip() {
       boxRef.current.setAttribute("aria-hidden", "true");
       dismissed.current = true;
     };
-    // Only the scroll that focus itself causes is let pass: a key (other than the Tab that moves focus) or a wheel
-    // scroll right after it dismisses the tip as usual.
+    // Only the scroll that focus itself causes is let pass: a later key (PageDown, Space) or wheel scroll dismisses
+    // the tip as usual. Cleared in the capture phase, before the key's own handlers run: a key that moves focus (an
+    // arrow key between bars) shows the next tip after this, so the scroll into view keeps it.
     const keydown = (event: KeyboardEvent) => {
       if (event.key === "Escape") dismiss();
-      else if (event.key !== "Tab") anchoredAt.current = 0;
+      else anchoredAt.current = 0;
     };
     const wheel = () => { anchoredAt.current = 0; };
     const scroll = (event: Event) => {
@@ -175,11 +185,11 @@ export function useTip() {
       if (Date.now() - anchoredAt.current < 400) return;
       if (target === document || target === window || (target instanceof Element && target.contains(wrapRef.current))) dismiss();
     };
-    document.addEventListener("keydown", keydown);
+    document.addEventListener("keydown", keydown, true);
     window.addEventListener("scroll", scroll, true);
     window.addEventListener("wheel", wheel, { capture: true, passive: true });
     return () => {
-      document.removeEventListener("keydown", keydown);
+      document.removeEventListener("keydown", keydown, true);
       window.removeEventListener("scroll", scroll, true);
       window.removeEventListener("wheel", wheel, true);
     };
@@ -222,8 +232,10 @@ export function useTip() {
     if (anchor) {
       // Above the focused element whenever the window has room, even over the chart's own legend or title (the
       // top row of a bar chart has no room inside the chart, and below it the tip would cover the next bars).
+      // "Room" is below the top of the scrolling area the chart sits in: the page's top bar covers the window above
+      // it, so a tip placed there is half hidden.
       const above = anchor.top - r.top - box.offsetHeight - 6;
-      y = above >= 0 || anchor.top - box.offsetHeight - 6 >= 0 ? above : anchor.bottom - r.top + 6;
+      y = anchor.top - box.offsetHeight - 6 >= visibleTop(wrap) ? above : anchor.bottom - r.top + 6;
     }
     box.style.left = `${x}px`; box.style.top = `${y}px`; box.style.opacity = "1";
     box.removeAttribute("aria-hidden");

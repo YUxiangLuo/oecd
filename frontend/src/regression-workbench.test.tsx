@@ -161,6 +161,8 @@ describe("tables", () => {
     expect(options.x_lags[2].description).toBe("滞后 2 期：两年前的 X");
     expect(options.design_value_note).toContain("区间可能仍包含它");
     expect(options.fixed_effects.find((item) => item.key === "country_year")?.description).toContain("吸收不等于没有控制");
+    // Only on top of country × industry effects: alone they leave each unit's level in.
+    expect(options.fixed_effects.find((item) => item.key === "country_year")?.description).toContain("和国家×行业 FE 一起用时");
   });
 
   test("rows are the union of the columns' terms, then each fixed effect and the statistics", () => {
@@ -219,7 +221,7 @@ describe("tables", () => {
       { name: "b", spec: { ...DEFAULT, x_lags: [0] }, snapshot: snapshotOf(xOnly) },
       { name: "c", spec: { ...DEFAULT, x_lags: [0, 1, 2] }, snapshot: snapshotOf(lag2) },
     ], "trade")!;
-    expect(mixed.cells).toEqual(["-0.55 个百分点（两年累计）", "-0.55 个百分点（两年累计）", "-0.46 个百分点（仅当年）", "-0.54 个百分点（三年累计）"]);
+    expect(mixed.cells).toEqual(["-0.55 个百分点（两年累计）", "-0.55 个百分点（两年累计）", "-0.46 个百分点（仅当期 X）", "-0.54 个百分点（三年累计）"]);
     // L1.X dropped from a two-term model: no sum, so the remaining X term is not printed as 两年累计.
     const dropped = response(NO_RATE, { teaching_tariff_exposure: -0.46 }, {
       cumulative: null, omitted: [{ name: "teaching_tariff_exposure_lag1", reason: "collinear", by: null }],
@@ -419,6 +421,20 @@ describe("the workbench", () => {
     expect(document.querySelector(".reg-custom-point-row")?.textContent).toContain("0.55");
   });
 
+  test("back on the page with a draft that was computed last time, it is said to be last time's settings, not never computed", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    spyOn(api, "runRegression").mockResolvedValue(NO_RATE_RUN as never);
+    render(<Harness initial={{ custom_draft: { spec: NO_RATE } }} />);
+    await screen.findByRole("group", { name: "预设实验" });
+    // Folded form: the status line offers the calculation itself.
+    expect(statusBar()).toBe("勾选框里是你上次离开时的设定“去掉汇率变动”；离开页面后结果不保留，点计算可重新算出。下面仍只有默认模型。计算当前设定");
+    openDetails(document.querySelector(".reg-custom-form-details"));
+    expect(document.querySelector(".reg-custom-start")?.textContent).toContain("（上次离开时的设定，结果不保留，需重新计算）");
+    // A change made now is an ordinary uncomputed setting.
+    fireEvent.click(checkbox(/^L2\.X/));
+    expect(statusBar()).toBe("勾选框里的设定还没有计算。下面仍只有默认模型。");
+  });
+
   test("back on the page with the reported model in the form, its column is said to be that model, not uncomputed", async () => {
     spyOn(api, "regressionOptions").mockResolvedValue(options);
     spyOn(api, "runRegression").mockResolvedValue(NO_RATE_RUN as never);
@@ -510,6 +526,42 @@ describe("the workbench", () => {
     expect(document.querySelector("th.reg-custom-current")?.textContent).toBe("本次：去掉汇率变动");
     expect(statusBar()).toBe("下面比较：默认模型 和 “去掉汇率变动”（已算好）。");
     expect(screen.getByRole("button", { name: "把“去掉汇率变动”记入报告" }).className).toBe("primary");
+    // The preset keeps its total for the next preset's question ("和去掉汇率变动偏向同一边吗？").
+    expect(screen.getByRole("button", { name: /^去掉汇率变动/ }).querySelector(".reg-preset-total")?.textContent).toBe("本次打开后算过：合计 -0.70 个百分点");
+    expect(screen.getByRole("button", { name: /^去掉 GDP 对数/ }).querySelector(".reg-preset-total")).toBeNull();
+  });
+
+  test("while a model is computed the form is locked and the status line names that model, not the form's", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    let resolve: (value: unknown) => void = () => {};
+    spyOn(api, "runRegression").mockImplementation(() => new Promise((done) => { resolve = done; }) as never);
+    render(<Harness />);
+    await screen.findByRole("group", { name: "预设实验" });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^去掉汇率变动/ })); });
+    openDetails(document.querySelector(".reg-custom-form-details"));
+    expect(statusBar()).toBe("正在计算“去掉汇率变动”…");
+    // Locked through the outer fieldset (each input's own `disabled` stays false; :disabled matches).
+    expect((checkbox(/^L2\.X/).closest("fieldset.reg-custom-form") as HTMLFieldSetElement).disabled).toBe(true);
+    // "恢复默认设定" does nothing until the model is back.
+    fireEvent.click(screen.getByRole("button", { name: "恢复默认设定" }));
+    expect(statusBar()).toBe("正在计算“去掉汇率变动”…");
+    await act(async () => { resolve(NO_RATE_RUN); });
+    await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "本次：去掉汇率变动"]));
+    expect((checkbox(/^L2\.X/).closest("fieldset.reg-custom-form") as HTMLFieldSetElement).disabled).toBe(false);
+    expect(screen.getByRole("button", { name: "把“去掉汇率变动”记入报告" })).toBeTruthy();
+  });
+
+  test("a column with X alone says its coefficient is not the default model's 当年 term", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    const current = { ...DEFAULT, x_lags: [0] };
+    spyOn(api, "runRegression").mockResolvedValue(response(current, { teaching_tariff_exposure: -0.46, [ER]: 0.005, ...macroValues }) as never);
+    render(<Harness />);
+    await screen.findByRole("group", { name: "预设实验" });
+    expect(document.body.textContent).not.toContain(options.current_x_only_note!);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^只放当期 X/ })); });
+    await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "本次：只放当期 X（去掉 L1.X）"]));
+    expect(document.querySelector(".reg-custom-point-row")?.textContent).toContain("（仅当期 X）");
+    expect(document.body.textContent).toContain("只放当期 X 的列：X 的系数会吸收一部分与上一年 X 相关的变化");
   });
 
   test("the custom form sends the canonical spec; the computed model can be put into the report, replaced and removed", async () => {

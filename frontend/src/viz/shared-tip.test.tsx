@@ -83,3 +83,30 @@ test("a wheel scroll right after a focus tip still dismisses it", () => {
   fireEvent.scroll(view.getByTestId("scroll"));
   expect(tip.style.opacity).toBe("0");
 });
+
+function TwoBars() {
+  const { wrapRef, Tip, show } = useTip();
+  const focusTip = (name: string) => (event: React.FocusEvent<HTMLButtonElement>) =>
+    show(event as never, [["", name]], event.currentTarget.getBoundingClientRect());
+  return (
+    <div ref={wrapRef} data-testid="chart">
+      <button onFocus={focusTip("first")} onKeyDown={(event) => { if (event.key === "ArrowDown") (event.currentTarget.nextElementSibling as HTMLElement).focus(); }}>first</button>
+      <button onFocus={focusTip("second")}>second</button>
+      {Tip}
+    </div>
+  );
+}
+
+test("an arrow key that moves focus to the next bar keeps its tip through the scroll into view; PageDown dismisses it", () => {
+  const view = render(<div data-testid="scroll"><TwoBars /></div>);
+  const tip = view.getByTestId("chart").lastElementChild as HTMLElement;
+  const first = view.getByText("first");
+  first.focus();
+  fireEvent.keyDown(first, { key: "ArrowDown" });
+  fireEvent.scroll(view.getByTestId("scroll"));
+  expect(tip.style.opacity).toBe("1");
+  expect(tip.textContent).toBe("second");
+  fireEvent.keyDown(view.getByRole("button", { name: "second" }), { key: "PageDown" });
+  fireEvent.scroll(view.getByTestId("scroll"));
+  expect(tip.style.opacity).toBe("0");
+});
