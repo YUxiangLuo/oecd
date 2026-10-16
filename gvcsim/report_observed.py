@@ -13,7 +13,7 @@ from gvcsim.report_common import (
     _STUDENT_METRIC_LABELS,
     _list_values,
     _safe,
-    _signed,
+    page_fixed,
     reading_digits,
     reading_number,
 )
@@ -133,14 +133,29 @@ def _reading(value: float, unit: str) -> str:
     return f"{reading_number(value, unit)}%" if unit == "%" else reading_number(value, unit)
 
 
-def _change(delta: float, unit: str) -> str:
-    """A change in the chart's own unit: percentage points for shares, grouped amounts in 百万美元."""
-    # Same precision as the page's reading cards: whole millions for amounts, three decimals otherwise.
-    if unit == "%":
-        return f"{_signed(delta, 3)} 个百分点"
-    if unit == "百万美元":
-        return f"{_signed(delta, 0 if abs(delta) >= 1 else 3)} 百万美元"
-    return _signed(delta, reading_digits(delta, unit) if delta else 3)
+def _card_digits(value: float, unit: str) -> int:
+    """Decimals of a trend card reading (frontend ``smallAmountDigits ?? readingDigits``): an amount from 1 to 10
+    keeps three decimals ("3.832", not "4")."""
+    return 3 if unit == "百万美元" and 1 <= abs(value) < 10 else reading_digits(value, unit)
+
+
+def _card_reading(value: float, unit: str) -> str:
+    """A trend endpoint as the step 6–9 trend card prints it."""
+    text = page_fixed(value, _card_digits(value, unit))
+    return f"{text}%" if unit == "%" else text
+
+
+def _change(start: float, end: float, unit: str) -> str:
+    """A change in the chart's own unit at the decimals of its two readings, as the trend card prints it (frontend
+    ``changeReading``): "+1 百万美元" beside "10 → 11"; a change too small for them reads "+不到 0.001 个百分点"."""
+    suffix = " 个百分点" if unit == "%" else " 百万美元" if unit == "百万美元" else ""
+    delta = end - start
+    if delta == 0:
+        return f"0{suffix}"
+    digits = max(_card_digits(start, unit), _card_digits(end, unit))
+    if abs(delta) < 0.5 * 10**-digits:
+        return f"{'+' if delta > 0 else '-'}不到 {10**-digits:.{digits}f}{suffix}"
+    return f"{'+' if delta > 0 else ''}{page_fixed(delta, digits)}{suffix}"
 
 
 def _item_label(item: dict[str, Any]) -> str:
@@ -597,6 +612,9 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
                 scope = "前后向指标" if view == "directions" else "已保存指标"
                 lines.extend((f"> {scope}拆成多张趋势图（每项指标一张），保留每项读数与变化。", ""))
         countries_saved = [str(item) for item in _list_values(data.get("compared"))]
+        # Steps 6–8 reading cards print amounts from 1 to 10 with three decimals (textNumber); step 9's ranking table
+        # keeps the plain reading (indicatorNumber).
+        read = _card_reading if str(observations[0]["source"]).startswith("explicit-indicator-") else _reading
         for chart in charts:
             unit = _chart_unit(chart)
             context = chart.get("_context")
@@ -629,8 +647,8 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
                 for series in chart["series"]:
                     first, last = series["points"][0], series["points"][-1]
                     changes.append(
-                        f"{series['label']}{'' if str(series['label']).endswith('）') else ' '}从 {first['label']} 年 {_reading(first['value'], unit)} 变为 "
-                        f"{last['label']} 年 {_reading(last['value'], unit)}（{_change(last['value'] - first['value'], unit)}）"
+                        f"{series['label']}{'' if str(series['label']).endswith('）') else ' '}从 {first['label']} 年 {_card_reading(first['value'], unit)} 变为 "
+                        f"{last['label']} 年 {_card_reading(last['value'], unit)}（{_change(first['value'], last['value'], unit)}）"
                     )
                 ranks = _rank_reading(context, countries_saved) if context else ""
                 lines.append(
@@ -640,13 +658,13 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
                 year = next(iter(context["references"]))
                 median = context["references"][year]["median"] * (100 if unit == "%" else 1)
                 readings = "、".join(
-                    f"{item['label']} {_reading(item['value'], unit)}"
+                    f"{item['label']} {read(item['value'], unit)}"
                     for item in chart["items"]
                     if not str(item["label"]).startswith("全球中位数")
                 )
                 ranks = _rank_reading(context, countries_saved)
                 lines.append(
-                    f"- 自动读图：{year} 年 {readings}；全球中位数 {_reading(median, unit)}。"
+                    f"- 自动读图：{year} 年 {readings}；全球中位数 {read(median, unit)}。"
                     f"{ranks + '。' if ranks else ''}排名只表示相对高低，这是描述性比较。"
                 )
             else:
@@ -665,7 +683,7 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
                 )
                 references = [item for item in chart["items"] if _is_reference_item(item)]
                 median_reading = (
-                    f"；{references[0].get('group') or references[0]['label']}为 {_reading(references[0]['value'], unit)}"
+                    f"；{references[0].get('group') or references[0]['label']}为 {read(references[0]['value'], unit)}"
                     if len(references) == 1
                     else ""
                 )
@@ -676,8 +694,8 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
                     else ""
                 )
                 lines.append(
-                    f"- 自动读图：{scope}最高为 {largest_labels}（{_reading(largest['value'], unit)}），"
-                    f"最低为 {smallest_labels}（{_reading(smallest['value'], unit)}）{median_reading}。"
+                    f"- 自动读图：{scope}最高为 {largest_labels}（{read(largest['value'], unit)}），"
+                    f"最低为 {smallest_labels}（{read(smallest['value'], unit)}）{median_reading}。"
                     f"{medians_note}这是描述性比较。"
                 )
             lines.append("")

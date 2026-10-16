@@ -1003,6 +1003,61 @@ def test_indicator_trend_requires_two_common_years_per_metric():
     assert any(item["step"] == 6 for item in check_material_gate(session))
 
 
+def test_steps_two_to_five_table_prints_the_reading_as_the_step_does():
+    """The 快照 table row reads as the sentence above it and the step's own table (formatMetric): a tiny flow is
+    "<0.001", not 0.000; a share and an index keep toFixed's digits (12.345, 1.000), not toLocaleString's (12.346,
+    1.001), which the steps 6–9 rows use."""
+    session = _complete()
+    session["steps"]["2"]["data"]["observations"][0]["value"] = 0.123455
+    session["steps"]["4"]["data"]["observations"][0]["value"] = 1.0005
+    session["steps"]["5"]["data"]["observations"][0]["value"] = 0.0002
+    sections = "\n".join(_experiment_sections(session)).split("### 步骤 ")
+    step = {part[:2].strip(): part for part in sections if part[:2] in ("2 ", "4 ", "5 ")}
+    assert "外国增加值项占比 12.345%" in step["2"] and "| % | 12.345 |" in step["2"]
+    assert "后向 GVC 段） 1.000" in step["4"] and "| 无量纲 | 1.000 |" in step["4"]
+    assert "加权总度 <0.001 百万美元" in step["5"] and "| 百万美元 | <0.001 |" in step["5"]
+
+
+def test_steps_six_to_eight_bar_readings_keep_the_card_precision(monkeypatch):
+    """Steps 6–8 reading cards (textNumber) print an amount from 1 to 10 with three decimals; step 9's ranking
+    table (indicatorNumber) rounds it to whole millions."""
+    # No real reference files: each branch below is chosen by the patched references alone.
+    monkeypatch.setattr(report_observed, "country_reference", lambda *args, **kwargs: None)
+    monkeypatch.setattr(report_observed, "industry_reference", lambda *args, **kwargs: [])
+    session = _complete()
+    for item, value in zip(session["steps"]["6"]["data"]["observations"], (3.832, 120.4)):
+        item.update(metric="gross_exports", unit="百万美元", value=value)
+    section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 6", 1)[1]
+    reading = next(line for line in section.splitlines() if line.startswith("- 自动读图"))
+    assert "（120）" in reading and "（3.832）" in reading
+    # With the global median (comparisonCards), the readings and the median keep the same precision.
+    monkeypatch.setattr(
+        report_observed, "country_reference", lambda *args, **kwargs: {"n": 76, "median": 5.5, "ranks": {}, "ties": {}}
+    )
+    section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 6", 1)[1]
+    reading = next(line for line in section.splitlines() if line.startswith("- 自动读图"))
+    assert "3.832" in reading and "120" in reading and "全球中位数 5.500" in reading
+    data = session["steps"]["9"]["data"]
+    base = data["observations"][0]
+    data["observations"] = [
+        {
+            **base,
+            "country": country,
+            "entity": f"{country}·C27",
+            "industry": "C27",
+            "year": 2020,
+            "value": value,
+            "metric": "weighted degree",
+            "unit": "百万美元",
+            "source": "explicit-network-ranking",
+        }
+        for country, value in (("CHN", 3.832), ("USA", 120.4))
+    ]
+    section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 9", 1)[1]
+    reading = next(line for line in section.splitlines() if line.startswith("- 自动读图"))
+    assert "（120）" in reading and "（4）" in reading
+
+
 def test_composition_reading_says_the_part_medians_need_not_add_up_to_100(monkeypatch):
     """Round 27: each part's global median is taken on its own (step 7's four sum to 100.87%)."""
     session = _complete()

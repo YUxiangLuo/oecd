@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Context, Decimal
 from collections.abc import Iterable
 from typing import Any, cast
 
@@ -144,11 +145,61 @@ def reading_digits(value: float, unit: str) -> int:
     return 3
 
 
+# Enough digits for any double at the few decimals the pages show (the default 28 would refuse 1e28 or 1e25 at 3).
+_EXACT = Context(prec=400)
+
+
+def page_fixed(value: float, digits: int) -> str:
+    """``value`` at ``digits`` decimals with thousands separators, as the pages' ``toLocaleString`` prints it: ICU
+    rounds the shortest decimal form of the number (the one ``repr`` gives) and sends a tie away from zero, so
+    2.5 → "3", a betweenness of 0.5 → "1" and -2.4995 → "-2.500", where Python's own formatting rounds the binary
+    value to even ("2", "0", "-2.499"). Never "-0"."""
+    if not math.isfinite(value):
+        return "—"
+    rounded = Decimal(repr(float(value))).quantize(Decimal(1).scaleb(-digits), context=_EXACT, rounding=ROUND_HALF_UP)
+    return _no_negative_zero(f"{rounded:,.{digits}f}")
+
+
+def page_to_fixed(value: float, digits: int) -> str:
+    """``value`` at ``digits`` decimals, ungrouped, as the pages' ``toFixed`` prints it: the exact binary value is
+    rounded, and only an exact tie goes away from zero (1.0005 → "1.000", 0.0625 → "0.063"). Never "-0"."""
+    if not math.isfinite(value):
+        return "—"
+    rounded = Decimal(float(value)).quantize(Decimal(1).scaleb(-digits), context=_EXACT, rounding=ROUND_HALF_UP)
+    return _no_negative_zero(f"{rounded:.{digits}f}")
+
+
 def reading_number(value: float, unit: str) -> str:
     """A reading's number in the page's fixed precision (shares are passed already multiplied by 100)."""
-    digits = reading_digits(value, unit)
-    text = f"{value:,.{digits}f}"
-    return text[1:] if text.startswith("-") and float(text.replace(",", "")) == 0 else text
+    return page_fixed(value, reading_digits(value, unit))
+
+
+def format_metric(value: float, fmt: str | None) -> str:
+    """A steps 2–5 reading as the step's table and saved label print it (frontend ``formatMetric``): shares in
+    percent to three decimals; amounts whole from 1 up, three decimals below, "<0.001" for a tiny flow; counts
+    (degrees, eccentricity, unnormalised betweenness) whole, "<1" for a betweenness above 0 but below 0.5; other
+    values three decimals, whole from 100 up."""
+    if not math.isfinite(value):
+        return "—"
+    if value == 0:
+        return "0%" if fmt == "pct" else "0"
+    if fmt == "pct":
+        return f"{page_to_fixed(value * 100, 3)}%"
+    if fmt == "amount":
+        if abs(value) < 1e-9:
+            return "0"
+        if abs(value) < 0.0005:
+            return "<0.001" if value > 0 else ">-0.001"
+        return page_fixed(value, 0 if abs(value) >= 1 else 3)
+    if fmt == "count":
+        if abs(value) < 1e-9:
+            return "0"
+        if abs(value) < 0.5:
+            return "<1" if value > 0 else ">-1"
+        return page_fixed(value, 0)
+    if float(value).is_integer() or abs(value) >= 100:
+        return page_fixed(value, 0)
+    return page_to_fixed(value, 3)
 
 
 def _db_amount(value: float) -> str:

@@ -1,4 +1,4 @@
-import type { Row, VizObservation } from "./scaffold";
+import type { Row, VizObservation } from "./observation-types";
 
 export interface IndicatorTopic {
   key: "trade" | "production" | "length";

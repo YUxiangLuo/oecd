@@ -3,8 +3,9 @@ from __future__ import annotations
 import math
 import re
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any
+from typing import Any, cast
 
+from gvcsim.indicator_schema import INDICATOR_SCHEMA
 from gvcsim.regression.teaching import MARKET, X_LAG_COLUMNS
 from gvcsim.regression.validity import CLUSTER_INTERVAL_NOTE
 from gvcsim.report_common import (
@@ -34,6 +35,7 @@ from gvcsim.report_common import (
     _y_label,
     estimate_digits,
     network_digits,
+    format_metric,
     reading_number,
     share_size,
     shown_per_point,
@@ -139,6 +141,7 @@ _UNIT_READINGS = (
 )
 _UNIT_KINDS = {"%": "份额", "长度单位": "长度", "无量纲": "位置指数"}
 _NETWORK_UNITS = {"未归一化介数", "连接数", "路径长度", "中心性单位"}
+_INDICATOR_FIELDS = cast(dict[str, dict[str, Any]], INDICATOR_SCHEMA["fields"])
 
 
 def _unit_kinds(observations: list[dict[str, Any]]) -> str:
@@ -157,14 +160,26 @@ def _unit_reading_note(observations: list[dict[str, Any]]) -> str:
     return ("；".join(notes) or "数值按所列单位解释") + "。"
 
 
+def _saved_label_number(item: dict[str, Any]) -> str | None:
+    """A steps 2–5 reading's number as the step's table and saved label print it (frontend ``formatMetric`` with the
+    schema format, else one from the unit, as ``indicatorMaterialLabel``): shares end in "%"; None if not a number."""
+    value = item.get("value")
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
+        return None
+    unit = str(item.get("unit") or "")
+    field = _INDICATOR_FIELDS.get(str(item.get("metric")))
+    fmt = field["format"] if field else "pct" if unit == "%" else "amount" if unit == "百万美元" else None
+    return format_metric(float(value), fmt)
+
+
 def _country_reading(item: dict[str, Any]) -> str:
     """A steps 2–5 reading as one phrase, e.g. “2020 年 CHN 中国 外国增加值项占比 11.730%”."""
     metric = _STUDENT_METRIC_LABELS.get(str(item.get("metric")), _safe(item.get("metric", "—")))
     value = item.get("value")
     unit = str(item.get("unit") or "")
-    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
-        number = reading_number(float(value) * (100 if unit == "%" else 1), unit)
-        shown = f"{number}%" if unit == "%" else f"{number} {_safe(unit)}" if unit == "百万美元" else number
+    number = _saved_label_number(item)
+    if number is not None:
+        shown = f"{number} {_safe(unit)}" if unit == "百万美元" else number
     else:
         shown = _safe(value if value not in (None, "") else "—")
     return f"{_safe(item.get('year', '—'))} 年 {_safe(country_label(str(item.get('country', ''))))} {metric} {shown}"
@@ -373,14 +388,24 @@ def _experiment_sections(session: dict[str, Any], scenario: dict[str, Any] | Non
         lines.extend(("", f"| {entity_header} | 年份 | 指标 | 单位 | 数值 |", "|---|---:|---|---|---:|"))
         for item in observations:
             observation_value = item.get("value", "—")
-            if item.get("unit") == "%" and isinstance(observation_value, (int, float)):
-                observation_value *= 100
+            if step in (2, 3, 4, 5):
+                # As the step's own table and the reading above (formatMetric); the unit has its own column.
+                label_number = _saved_label_number(item)
+                shown = label_number.removesuffix("%") if label_number is not None else _safe(observation_value)
+            else:
+                if item.get("unit") == "%" and isinstance(observation_value, (int, float)):
+                    observation_value *= 100
+                shown = (
+                    reading_number(float(observation_value), str(item.get("unit") or ""))
+                    if isinstance(observation_value, (int, float)) and not isinstance(observation_value, bool)
+                    else _safe(observation_value)
+                )
             lines.append(
                 f"| {_safe(_entity_label(item))} | "
                 f"{_safe(item.get('year', '—'))} | "
                 f"{_STUDENT_METRIC_LABELS.get(str(item.get('metric')), _safe(item.get('metric', '—')))} | "
                 f"{_safe(item.get('unit', '—'))} | "
-                f"{reading_number(float(observation_value), str(item.get('unit') or '')) if isinstance(observation_value, (int, float)) and not isinstance(observation_value, bool) else _safe(observation_value)} |"
+                f"{shown} |"
             )
         lines.append("")
 

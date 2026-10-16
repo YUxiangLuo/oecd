@@ -17,8 +17,10 @@ import type { IndicatorSchema, Meta, QuizCompletionState, Step, StepStateApi } f
 import { useAsync } from "../../shared";
 import { CountryPicker } from "../../country-picker";
 import type { IndicatorSelection } from "./indicator-model";
+import type { ObservationScope, Row, VizObservation } from "./observation-types";
 
-export type Row = Record<string, string | number | null>;
+export type { ObservationScope, Row, VizObservation } from "./observation-types";
+
 export const num = (v: string | number | null | undefined): number => (typeof v === "number" ? v : 0);
 const isFin = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 /** 占比/长度等对“实际不出口的行业”为 null 的指标:排序/散点前先剔除,避免幽灵点。 */
@@ -27,23 +29,6 @@ export const finiteBy = (rows: Row[], ...keys: string[]) => rows.filter((r) => k
 /** 讲解性正文的最大阅读行宽(px):容器与图表/表格仍全宽,只有正文不跟着拉长,保证可读。 */
 const PROSE_MAX = 820;
 
-export type ObservationScope = "country" | "country-industry";
-
-export interface VizObservation {
-  entity: string;
-  country: string;
-  industry?: string;
-  year: number;
-  value: number;
-  /** Indicator and request provenance for explicitly saved readings. */
-  metric?: string;
-  unit?: string;
-  release?: string;
-  scope?: ObservationScope;
-  generation?: number;
-  request_key?: string;
-  source?: "explicit-network-trend" | "explicit-network-ranking" | "explicit-indicator-trend" | "explicit-indicator-comparison" | "explicit-indicator-composition";
-}
 
 export interface ObservationRequestIdentity {
   release: string;
