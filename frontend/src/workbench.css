@@ -329,11 +329,6 @@
 .indicator-evidence-capture > button { white-space: nowrap; }
 .indicator-evidence-capture .observation-strip { grid-column: 1 / -1; margin: 0; }
 .indicator-evidence-capture .observation-strip .empty { background: transparent; color: var(--text-muted); padding-left: 0; }
-@media (max-width: 760px) {
-  .indicator-evidence-capture { grid-template-columns: 1fr; align-items: stretch; }
-  .indicator-evidence-capture > button { justify-self: start; white-space: normal; }
-  .indicator-evidence-capture .observation-strip { grid-column: auto; }
-}
 .comparison-plan { margin: 14px 0; padding: 13px 14px; border: 1px solid #dfe3ed; border-left: 4px solid #4b47e0; border-radius: 9px; background: #f8f9fd; }
 .comparison-plan p { margin: 4px 0 10px; color: #626a7b; font-size: 12px; line-height: 1.6; }
 .comparison-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
@@ -408,7 +403,6 @@
 .teaching-example-charts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .teaching-example-charts > * { min-width: 0; }
 .teaching-table-note { margin: 6px 0 0; font-size: 11.5px; }
-@media (max-width: 600px) { .teaching-tiles { grid-template-columns: minmax(0, 1fr); } }
 .reg-group-figure { margin: 10px 0 12px; }
 
 /* ---- 图表悬停读数层（viz/hover.tsx）：所有数值同时在图下读数表可得，提示只做增强 ---- */

@@ -78,11 +78,3 @@
   color: #687187; font-size: 10.5px; line-height: 1.5;
 }
 
-@media (max-width: 760px) {
-  .indicator-reading-library > summary { align-items: flex-start; padding: 14px; }
-  .indicator-reading-workspace { grid-template-columns: 1fr; }
-  .indicator-reading-list { border-right: 0; border-bottom: 1px solid #e4e7ef; }
-  .indicator-reading-viewer-head { align-items: flex-start; flex-direction: column; }
-  .indicator-reading-links { flex-wrap: wrap; }
-  .indicator-reading-viewer object { min-height: 380px; }
-}
