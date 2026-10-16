@@ -53,6 +53,16 @@ _OMITTED_REASONS = {"zero": "样本里全为 0", "collinear": "与其他变量�
 _X_SPANS = {(0,): "仅当年", (0, 1): "两年累计", (0, 1, 2): "三年累计"}
 
 
+def _deviation_text(deviation: float) -> str:
+    """How an estimate's size compares with the design value, in words (frontend ``designDeviationText``)."""
+    if deviation < -1:
+        return "方向与设定值相反"
+    percent = int(abs(deviation) * 100 + 0.5)  # half up, as the page's Math.round
+    if percent == 0:
+        return "与设定值几乎相同"
+    return f"幅度比设定值{'大' if deviation > 0 else '小'} {percent}%"
+
+
 def _covers_design_span(spec: ModelSpec) -> bool:
     """Whether a model's X terms add up to what the design value is: the two-year total needs both X and L1.X
     (L2.X is set to 0 by design, so adding it keeps the comparison). Another span is not the same estimand."""
@@ -224,7 +234,7 @@ def _coefficient_rows(columns: list[dict[str, Any]]) -> list[str]:
         rows.append(f"| {_TERM_LABELS.get(name, _safe(name))} | {cells(pick)} |")
     if any(isinstance(column["run"], dict) and _x_terms(column["run"]["result"]) > 1 for column in columns):
         total_cells = cells(lambda result: (result.get("cumulative") if _x_terms(result) > 1 else None, False))
-        rows.append(f"| X 各项合计（累计效应） | {total_cells} |")
+        rows.append(f"| X 各项合计 | {total_cells} |")
     rows += _per_point_rows(columns)
     rows += _design_value_rows(columns)
     if any(isinstance(column["run"], dict) and column["run"]["result"].get("constant") for column in columns):
@@ -315,14 +325,16 @@ def _design_value_rows(columns: list[dict[str, Any]]) -> list[str]:
         if not _covers_design_span(column["spec"]):
             cells.append(f"{target}（两年累计）；本列跨度不同，不计偏差")
             continue
-        value = float(total["coef"])
-        deviation = (
-            (abs(value) - abs(beta)) / abs(beta)
-            if math.copysign(1, value) == math.copysign(1, beta)
-            else -(abs(value) + abs(beta)) / abs(beta)
-        )
-        cells.append(f"{target}；估计偏差 {deviation:+.0%}")
+        cells.append(f"{target}；{_deviation_text(design_deviation(float(total['coef']), beta))}")
     return [f"| 课程设定值（X 每高 1 个百分点） | {' | '.join(cells)} |"]
+
+
+def design_deviation(value: float, beta: float) -> float:
+    """How far an estimate is from a nonzero design value, as a share of it (the page's designDeviation): 0.13 is 13%
+    larger, -0.2 is 20% smaller; an opposite sign counts both magnitudes, so it is below -1."""
+    if math.copysign(1, value) == math.copysign(1, beta):
+        return (abs(value) - abs(beta)) / abs(beta)
+    return -(abs(value) + abs(beta)) / abs(beta)
 
 
 def _included(spec: ModelSpec, key: str) -> bool:

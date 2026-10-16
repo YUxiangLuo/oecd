@@ -182,7 +182,7 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
                 {axis.ticks.map((tick) => (
                   <g key={tick}>
                     <line x1={left} x2={W - right} y1={y(tick)} y2={y(tick)} stroke={tick === 0 ? "#4b5263" : "#e2e5ee"} />
-                    <text x={left - 6} y={y(tick) + 4} textAnchor="end" fontSize={11} fill="#596173">{indicatorTick(tick, "%")}</text>
+                    <text x={left - 6} y={y(tick) + 4} textAnchor="end" fontSize={11} fill="#596173">{indicatorTick(tick, "%", axis.ticks)}</text>
                   </g>
                 ))}
                 {areas(facet).map(({ segment, paths }) => paths.map(({ d, negative, isolated }, at) => (
@@ -252,7 +252,7 @@ export function IndustryDotPlot({ groups, countries, unit, nationals = [], label
         {nationals.some(finiteValue) && <span><i className="bar" />竖线：各国的国家整体值（颜色同点）</span>}
       </div>
       <div className="dot-plot-axis" aria-hidden="true">
-        {axis.ticks.map((tick) => <span key={tick} style={{ left: `${px(tick)}%` }}>{indicatorTick(tick, unit)}</span>)}
+        {axis.ticks.map((tick) => <span key={tick} style={{ left: `${px(tick)}%` }}>{indicatorTick(tick, unit, axis.ticks)}</span>)}
       </div>
       {groups.map((group) => (
         <div
@@ -324,7 +324,7 @@ export function Dumbbell({ rows, leftLabel, rightLabel, unit, title, domain }: {
         <span><i className="dot" style={{ background: CAT[1] }} />{rightLabel}</span>
       </div>
       <div className="dot-plot-axis" aria-hidden="true">
-        {axis.ticks.map((tick) => <span key={tick} style={{ left: `${px(tick)}%` }}>{indicatorTick(tick, unit)}</span>)}
+        {axis.ticks.map((tick) => <span key={tick} style={{ left: `${px(tick)}%` }}>{indicatorTick(tick, unit, axis.ticks)}</span>)}
       </div>
       {rows.map((row) => (
         <div

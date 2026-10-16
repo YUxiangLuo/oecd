@@ -181,7 +181,7 @@ export function ReportedExperiments({ getStep, onNavigateStep }: {
       <span className="reg-section-step">改模型、对比</span>
       <h3 id="reg-reported-models-title">你的模型实验</h3>
       {rows.length === 0
-        ? <p className="muted">还没有记入报告的模型实验（选做）：在步骤 11–14 的“改模型、对比”里算出一个模型并点“也记入报告”，报告附录会把它和同一 Y 的默认模型并列。</p>
+        ? <p className="muted">还没有记入报告的模型实验（选做）：在步骤 11–14 的“改模型、对比”里算出一个模型，在“记入报告（选做）”框里记入，报告附录会把它和同一 Y 的默认模型并列。</p>
         : (
           <div className="table-wrap" role="region" aria-label="记入报告的模型实验，可横向滚动" tabIndex={0}>
             <table className="data-table reg-reported-table">
@@ -231,9 +231,9 @@ export function ReportedExperiments({ getStep, onNavigateStep }: {
  * tariff as the fitted model splits it, in the chart's unit (shares in points), so the chart's drop and the
  * headline's coefficient are read as one thing. `scale` converts the Y's raw unit to the chart's.
  */
-export function decompositionSentence(
+export function decompositionParts(
   decomposition: FirstWaveDecomposition, metric: string, scale: number, unit: string, digits: number,
-): string {
+): { lead: string; parts: { label: string; value: string; tariff: boolean }[]; tail: string } {
   // "8.4 个百分点", "0.320 个长度单位": the chart's unit, counted.
   const counted = unit.startsWith("个") ? unit : `个${unit}`;
   const amount = (value: number) => `${(value * scale).toFixed(digits)} ${counted}`;
@@ -241,7 +241,39 @@ export function decompositionSentence(
   const observed = decomposition.observed;
   const direction = observed < 0 ? "低" : "高";
   // "与 GDP 对数同步" keeps a space before a Latin name, "与汇率变动同步" none.
-  const parts = decomposition.terms.map((term) => `${term.name === "x_terms" ? "与关税 X 相关" : `与${/^[A-Za-z]/.test(term.label) ? " " : ""}${term.label}同步`} ${signedAmount(term.change)}`);
-  parts.push(`其余（各年共同的变化与噪声）${signedAmount(decomposition.remainder)}`);
-  return `第一批被加税国家 ${decomposition.year} 年的${metric}比加税前（${decomposition.pre_years.join("、")} 年）平均${direction} ${amount(Math.abs(observed))}。按本次估计拆开：${parts.join("，")}。结论句里的估计只对应“与关税 X 相关”这一部分；第二批税率相同，但对美出口份额小、X 小，所以变化也小。`;
+  const parts = decomposition.terms.map((term) => ({
+    label: term.name === "x_terms" ? "与关税 X 相关" : `与${/^[A-Za-z]/.test(term.label) ? " " : ""}${term.label}同步`,
+    value: signedAmount(term.change),
+    tariff: term.name === "x_terms",
+  }));
+  parts.push({ label: "其余（各年共同的变化与噪声）", value: signedAmount(decomposition.remainder), tariff: false });
+  return {
+    lead: `第一批被加税国家 ${decomposition.year} 年的${metric}，比加税前（${decomposition.pre_years.join("、")} 年平均）${direction} ${amount(Math.abs(observed))}。按默认模型的估计可拆成：`,
+    parts,
+    tail: "回归结论说的只是“与关税 X 相关”这一项，它等于默认模型的系数乘以第一批国家 X 的平均变化；结果卡里的例子换算用的是例子自己的 X，可能比这里大得多。各项相加等于总变化，控制变量的几项可能正负相抵。第二批税率相同，但对美出口份额小、X 小，所以变化也小。",
+  };
+}
+
+/** The same split as one sentence (tests and plain-text readers). */
+export function decompositionSentence(
+  decomposition: FirstWaveDecomposition, metric: string, scale: number, unit: string, digits: number,
+): string {
+  const { lead, parts, tail } = decompositionParts(decomposition, metric, scale, unit, digits);
+  return `${lead}${parts.map((part) => `${part.label} ${part.value}`).join("，")}。${tail}`;
+}
+
+/** The split as the page shows it: the total, one line a part (the tariff's part marked), then what to take from it. */
+export function DecompositionList(props: { decomposition: FirstWaveDecomposition; metric: string; scale: number; unit: string; digits: number }) {
+  const { lead, parts, tail } = decompositionParts(props.decomposition, props.metric, props.scale, props.unit, props.digits);
+  return (
+    <div className="reg-decomposition" role="note">
+      <p>{lead}</p>
+      <ul>
+        {parts.map((part) => <li key={part.label} className={part.tariff ? "reg-decomposition-tariff" : undefined}>
+          {part.tariff ? <b>{part.label} {part.value}</b> : <>{part.label} {part.value}</>}
+        </li>)}
+      </ul>
+      <p className="muted">{tail}</p>
+    </div>
+  );
 }

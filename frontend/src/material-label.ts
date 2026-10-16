@@ -50,7 +50,7 @@ export function shockMaterialLabel(parts: { first: string; second?: string; indu
   // While the country list is unavailable, leave the classification out instead of guessing.
   const tag = (taxed: boolean | undefined) => taxed == null ? "" : `（${taxed ? "被加税" : "未被加税"}）`;
   const second = parts.second ? ` 对 ${countryLabel(parts.second)}${tag(parts.secondTaxed)}` : "";
-  return `例子：${countryLabel(parts.first)}${tag(parts.firstTaxed)}${second} · ${sectorLabel(parts.industry)}${parts.serviceExempt ? "（服务业不加税）" : ""}`;
+  return `例子：${countryLabel(parts.first)}${tag(parts.firstTaxed)}${second} · ${sectorLabel(parts.industry)}${parts.serviceExempt ? "（非货物行业，不加税）" : ""}`;
 }
 
 /** Rebuild the step 10 label for display from its recorded selection and authoritative country list.

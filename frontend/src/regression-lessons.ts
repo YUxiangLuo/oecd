@@ -6,7 +6,7 @@ import type { RegressionOutcome } from "./types";
  */
 /** Shown at the top of every step 11–14 result card (the report's 关键证据摘要 opens with the same words). */
 export const GENERATED_Y_DISCLOSURE = "教学数据：Y 由课程按设定生成，与 X 的关联是有意设计的，多数 Y 设得很清晰（区间窄、p 值小），精度高于真实数据通常能得到的结果。结果用于练习读回归，不是真实关税影响的证据。";
-export const GENERATED_DATA_NOTE = "关税情景、GDP、人口增长率、贸易开放度、汇率、FDI 与步骤 11–14 的 Y 由课程按设定生成；制造业增加值占比等 ICIO 派生控制另行标注。用于练习建模，不是真实政策效应或官方宏观统计。";
+export const GENERATED_DATA_NOTE = "关税情景、GDP、人口增长率、贸易开放度、汇率、FDI 和步骤 11–14 的 Y 都由课程按设定生成，用来练习建模，不是真实政策效应或官方宏观统计；制造业增加值占比等少数可选控制变量按 ICIO 计算，页面上另有标注。";
 
 export type ReadingDirection = "negative" | "positive" | "insufficient" | "suppressed";
 
@@ -21,6 +21,8 @@ interface RegressionLesson {
   unit: string;
   priorStep: number;
   priorLabel: string;
+  /** What the step's default Y is, in one sentence, for a student who comes to steps 11–14 without the earlier ones. */
+  definition: string;
   dontClaim: string;
 }
 
@@ -41,6 +43,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "百分点",
     priorStep: 2,
     priorLabel: "GVC 总贸易流分解指标",
+    definition: "外国增加值项占比：一国出口额中，由其他国家生产的增加值所占的比例（见步骤 2）。",
     dontClaim: "不要写成“已经证明生产回流”。这一项占比较高或较低，不能说明企业是否将生产迁回国内。",
   },
   production: {
@@ -52,6 +55,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "百分点",
     priorStep: 3,
     priorLabel: "GVC 生产分解指标",
+    definition: "复杂 GVC 生产份额：一国创造的增加值中，以中间品出口、在最终使用前跨境两次及以上的部分所占的比例（按增加值来源，即前向口径；见步骤 3）。",
     dontClaim: "不要写成“复杂 GVC 生产规模缩小”。这一项是占总增加值的份额，份额较低不代表复杂 GVC 生产的绝对量较小。",
   },
   length: {
@@ -63,6 +67,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "长度单位",
     priorStep: 4,
     priorLabel: "GVC 长度分解指标",
+    definition: "前向 GVC 段长度：一国增加值进入跨境生产后，到被最终使用之前平均还要经过的生产环节数（见步骤 4）。",
     dontClaim: "不要将它与贸易流回归的估计值直接比较：两者单位不同。",
   },
   network: {
@@ -74,6 +79,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "中心性原始单位（另附标准差换算）",
     priorStep: 5,
     priorLabel: "全球生产网络指标",
+    definition: "加权总度：一个国家×行业在全球投入产出网络中买入与卖出的流量之和（见步骤 5）；本步的 Y 由课程按它的排名校准生成，数值没有金额含义，主要看方向和标准差大小。",
     dontClaim: "不要写成连接已经减少或脱钩，也不要将其视为关税的“总影响”。",
   },
 };

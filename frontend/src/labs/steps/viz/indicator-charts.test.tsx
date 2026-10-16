@@ -132,6 +132,18 @@ describe("mark-level hover layers", () => {
     cleanup();
   });
 
+  test("equal only as shown (0.347 and 0.353 both read 0.35) is not 差距为 0", () => {
+    const readings = [
+      { country: "BRA", year: 2016, value: 0 }, { country: "HUN", year: 2016, value: 0 },
+      { country: "BRA", year: 2020, value: 0.347435 }, { country: "HUN", year: 2020, value: 0.352801 },
+    ];
+    const view = render(<ComparisonSummary readings={readings} countries={["BRA", "HUN"]} years={[2016, 2020]} unit="个百分点" countryDigits={{ BRA: 2, HUN: 2 }} />);
+    const text = view.getByRole("group", { name: "两国趋势结论" }).textContent ?? "";
+    expect(text).not.toContain("差距为 0");
+    expect(text).toContain("差距基本不变");
+    cleanup();
+  });
+
   test("pair bar labels read amounts under 10 at the cards' three decimals (8.765, -2.235, not 9, -2)", () => {
     const view = render(
       <IndicatorPairBars

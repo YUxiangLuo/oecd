@@ -392,6 +392,10 @@ test("readings keep fixed decimals without a negative zero; ticks are trimmed", 
   expect(indicatorNumber(-0.0004, "长度单位")).toBe("0.000");
   expect(indicatorTick(0.25, "%")).toBe("25%");
   expect(indicatorTick(2, "长度单位")).toBe("2");
+  // Given the axis's ticks, each keeps the decimals its step needs, so neighbours never read alike.
+  const tiny = [0, 0.00025, 0.0005, 0.00075, 0.001];
+  expect(tiny.map((tick) => indicatorTick(tick, "个百分点", tiny))).toEqual(["0", "0.00025", "0.0005", "0.00075", "0.001"]);
+  expect([0, 0.025, 0.05].map((tick) => indicatorTick(tick, "%", [0, 0.025, 0.05]))).toEqual(["0%", "2.5%", "5%"]);
 });
 
 test("crowded labels at the chart edge never lie across a lower label's leader", () => {

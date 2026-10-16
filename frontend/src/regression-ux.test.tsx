@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api";
 import {
-  barPreviewText, degreeIdentity, exampleEffect, parallelTrendsNote, familyBarRows, forwardShareIdentity, GROUP_CHART_CAPTION, groupedFixed, groupLines, INTERRUPTED_RUN_NOTE, lagSplit, waveMarkers, networkDigits, RegressionRequestError,
+  barPreviewText, degreeIdentity, exampleEffect, parallelTrendsNote, familyBarRows, forwardShareIdentity, tradeShareIdentity, GROUP_CHART_CAPTION, groupedFixed, groupLines, INTERRUPTED_RUN_NOTE, lagSplit, waveMarkers, networkDigits, RegressionRequestError,
   equationSymbol, RegressionResultCard, RegressionRunLab, scrollRegressionVerdict, TEACHING_MODEL_VERSION,
 } from "./regression";
 import type {
@@ -146,14 +146,15 @@ describe("simple regression workbench", () => {
     // The run travels with its one-sentence label, which step 15 repeats; nothing else is saved.
     expect(saves[0]).toEqual({ run: expect.anything(), material_label: expect.any(String) });
     expect(saves[0].material_label).toMatch(/^默认模型：外国增加值项占比两年累计 /);
-    // The shared card sits after the result and before the quiz, saying what 计算 saved.
+    // The shared card sits after the result and the optional change-the-model fold, before the quiz, saying what 计算
+    // saved; with no model experiment put into the report it names none.
     const material = document.getElementById("step-material-action")!;
     expect(material.className).toContain("material-card--recorded");
     expect(material.querySelector(".material-card-summary")?.textContent).toBe("默认模型：外国增加值项占比（已计算）");
-    expect(material.querySelector(".material-card-extra")?.textContent).toBe("记入报告的模型实验：无（选做，在下方“改模型、对比”里算出一个模型后点“也记入报告”）。");
-    expect(material.querySelector(".material-card-how")?.textContent).toBe("点“计算”后自动保存本步默认 Y 的默认模型结果；重新计算得到相同的数字。");
+    expect(material.querySelector(".material-card-extra")).toBeNull();
+    expect(material.querySelector(".material-card-how")?.textContent).toBe("计算后自动保存，无需另外操作。");
     expect(material.compareDocumentPosition(document.querySelector(".verdict-card")!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
-    expect(material.compareDocumentPosition(document.querySelector("details.reg-custom-section")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(material.compareDocumentPosition(document.querySelector("details.reg-custom-section")!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     const pressed = screen.getAllByRole("button", { pressed: true });
     expect(pressed).toHaveLength(1);
     expect(pressed[0].getAttribute("aria-label")).toBe(`${FVA_BAR}，已保存`);
@@ -214,7 +215,10 @@ describe("simple regression workbench", () => {
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: saved } as never }} />);
     await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("外国增加值项占比平均低 0.50 个百分点"));
     // The sentence under the chart comes back with the saved run (it is saved with it), not only after a fresh run.
-    expect(document.querySelector(".reg-decomposition")?.textContent).toContain("与关税 X 相关 −1.6，与汇率变动同步 −4.3，其余");
+    expect([...document.querySelectorAll(".reg-decomposition li")].map((item) => item.textContent)).toEqual(
+      ["与关税 X 相关 −1.6", "与汇率变动同步 −4.3", "其余（各年共同的变化与噪声） −2.5"]);
+    // The part the headline's estimate is about is marked.
+    expect(document.querySelector(".reg-decomposition-tariff")?.textContent).toBe("与关税 X 相关 −1.6");
     // The saved run, not the overview, is the selected bar: page and report agree.
     await screen.findByRole("button", { name: "外国增加值项占比：-0.50 个百分点，95% 区间 [-0.60, -0.40]，已保存" });
     expect(document.body.textContent).not.toContain("教学模拟");
@@ -257,14 +261,16 @@ describe("simple regression workbench", () => {
     // Folded until opened: nothing of the workbench (its options are not even requested) shows before that.
     const workbench = document.querySelector<HTMLDetailsElement>("details.reg-custom-section")!;
     expect(workbench.hasAttribute("open")).toBe(false);
-    expect(screen.queryByRole("button", { name: "计算这个模型" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "预设实验" })).toBeNull();
     expect(screen.getByRole("link", { name: "查看结果" }).getAttribute("href")).toBe("#regression-results");
     expect(screen.getByRole("link", { name: "改模型、对比（选做）" }).getAttribute("href")).toBe("#regression-model");
     const summary = workbench.querySelector("summary")!;
     const scroll = spyOn(summary, "scrollIntoView").mockImplementation(() => {});
     const shortcut = screen.getByRole("link", { name: "改模型、对比（选做）" });
     fireEvent.click(shortcut);
-    expect(await screen.findByRole("button", { name: "计算这个模型" })).toBeTruthy();
+    // The default settings are already the first column: the form's button says so.
+    expect(await screen.findByRole("group", { name: "预设实验" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "已算好（结果在下面）" })).toBeTruthy();
     await waitFor(() => expect(document.activeElement).toBe(summary));
     expect(workbench.open).toBe(true);
     expect(scroll).toHaveBeenCalledWith({ behavior: "auto", block: "start" });
@@ -273,8 +279,11 @@ describe("simple regression workbench", () => {
     expect(document.activeElement).toBe(summary);
     expect(workbench.open).toBe(true);
     expect(scroll).toHaveBeenCalledTimes(2);
-    expect(screen.getByRole("heading", { level: 4, name: "必看" }).className).toBe("reg-preset-tier-title");
-    expect(screen.getByRole("heading", { level: 4, name: "进阶" }).className).toBe("reg-preset-tier-title");
+    // Two ways to change the model: the presets (their tiers one level below), then the custom form.
+    expect(screen.getByRole("heading", { level: 4, name: /^方式一：点一个预设实验/ }).className).toBe("reg-custom-way");
+    expect(screen.getByRole("heading", { level: 5, name: "必看" }).className).toBe("reg-preset-tier-title");
+    expect(screen.getByRole("heading", { level: 5, name: "进阶" }).className).toBe("reg-preset-tier-title");
+    expect(workbench.querySelector(".reg-custom-form-details > summary")?.textContent).toMatch(/^方式二：自己改设定/);
     // The single-model table (the Stata/Excel-like one the course asked for) is open from the start.
     expect(screen.getByRole("group", { name: "单模型详细数字" }).hasAttribute("open")).toBe(true);
     expect([...document.querySelectorAll(".reg-custom-compare-table thead th")].map((cell) => cell.textContent)).toEqual(["变量", "默认模型"]);
@@ -381,8 +390,15 @@ describe("simple regression workbench", () => {
     const weak = rows.find((row) => row.key === "3b_FGY_GVC_C_share")!;
     expect([weak.uncertain, weak.valueLabel, weak.intervalLabel]).toEqual([true, "+0.008", "[-0.011, +0.026] 个百分点"]);
     expect(rows.filter((row) => row.uncertain)).toHaveLength(1);
-    expect(forwardShareIdentity(items)).toBe("纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（0.00）；前向 GVC 生产总份额 = 简单 + 复杂（按未取整的原值精确相加，条旁取整后的数字可能相差末位 1）。");
+    expect(forwardShareIdentity(items)).toBe("纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（0.00）；前向 GVC 生产总份额 = 简单 + 复杂（按未取整的原值精确相加，条旁取整后的数字可能相差末位 1）。本步默认的“复杂 GVC 生产份额”按增加值来源（前向）计算；“后向复杂 GVC 生产份额”按最终品（后向）计算，是另一项指标。");
     expect(forwardShareIdentity(items.slice(0, 3))).toBeNull();
+  });
+
+  test("step 11: one line says the domestic and foreign value-added shares move about opposite", () => {
+    const fva = estimate("FVA_share", "外国增加值项占比", 0.20, 0.18, 0.22, { default: true });
+    const dva = estimate("DVAex_share", "国内增加值出口占比", -0.19, -0.21, -0.17);
+    expect(tradeShareIdentity([fva, dva])).toBe("课程数据里，国内增加值出口占比 = 1 − 外国增加值项占比 − 其余小项（重复计算等），所以这两条大小相近、方向相反。");
+    expect(tradeShareIdentity([fva])).toBeNull();
   });
 
   test("个标准差 uses the within SD (after removing each unit's level and the year effect), not the pooled SD", () => {
@@ -466,7 +482,7 @@ describe("simple regression workbench", () => {
 
   test("the 加税前后 chart states the parallel-trends premise and its two pre-tariff years", () => {
     expect(parallelTrendsNote([2016, 2017, 2018, 2019, 2020], 2018)).toBe(
-      "这张图也用来看回归的前提：如果没有关税，扣掉汇率等同期变化后，两组的走势应大致平行。加税前只有 2016、2017 两年可看，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，控制汇率、GDP 对数和贸易开放度后条件均值满足这一设计前提。",
+      "这张图也用来看回归的前提：如果没有关税，扣掉汇率等同期变化后，两组的走势应大致平行。加税前只有 2016、2017 两年可看，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，控制汇率、GDP 对数和贸易开放度后，这个前提按设计成立。",
     );
   });
 
@@ -558,7 +574,7 @@ describe("previewing another Y from the bars", () => {
     const run = spyOn(api, "runRegression").mockResolvedValue({ ...DVA(), benchmark } as never);
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: FVA() } as never }} />);
     const group = await screen.findByRole("group", { name: /（键盘：方向键切换，Enter 查看）/ });
-    expect(group.getAttribute("aria-label")).toContain("本类 2 个 Y · 点击任一条查看该 Y 的读数（键盘：方向键切换，Enter 查看）");
+    expect(group.getAttribute("aria-label")).toContain("本步 2 个 Y · 点击任一条查看该 Y 的读数（键盘：方向键切换，Enter 查看）");
     const tip = () => document.querySelector<HTMLElement>(".diverging-bars > div[style*='pointer-events']");
     const other = screen.getByRole("button", { name: DVA_BAR });
     fireEvent.focus(other);
@@ -594,7 +610,7 @@ test("the model's equation reads its lagged X and its controls as symbols, not c
   expect(equationSymbol({ text: "teaching_y_trade_ijt", term: "dependent" })).toBe("Y_ijt");
   expect(equationSymbol({ text: "β₁·teaching_tariff_exposure_ijt", term: "policy" })).toBe("β₁·X_ijt");
   expect(equationSymbol({ text: "β₂·teaching_tariff_exposure_lag1_ijt", term: "policy" })).toBe("β₂·L1.X_ijt");
-  expect(equationSymbol({ text: "γ₁·teaching_exchange_rate_change_it", term: "control" })).toBe("γ₁·汇率_it");
+  expect(equationSymbol({ text: "γ₁·teaching_exchange_rate_change_it", term: "control" })).toBe("γ₁·汇率变动_it");
   expect(equationSymbol({ text: "γ₂·log_gdp_proxy__lag1_it", term: "control" })).toBe("γ₂·L1.增加值总额对数_it");
   // The single-X model's wording is unchanged.
   expect(equationSymbol({ text: "β·teaching_tariff_exposure_ijt", term: "policy" })).toBe("β·X_ijt");

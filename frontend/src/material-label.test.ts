@@ -65,10 +65,10 @@ test("saved service labels use country policy, not their zero industry tariff, a
     countries: [{ country: "CHN", taxed: true }, { country: "AUS", taxed: false }],
     taxed_rule: { scope: "goods industries (ICIO sectors A-C)" },
   } as TeachingCountriesResponse;
-  expect(recordedShockMaterialLabel(saved, overview)).toBe("例子：CHN 中国（被加税） 对 AUS 澳大利亚（未被加税） · D 电力燃气（服务业不加税）");
+  expect(recordedShockMaterialLabel(saved, overview)).toBe("例子：CHN 中国（被加税） 对 AUS 澳大利亚（未被加税） · D 电力燃气（非货物行业，不加税）");
   expect(recordedShockMaterialLabel(saved)).toBe("例子：CHN 中国 对 AUS 澳大利亚 · D 电力燃气");
-  expect(recordedShockMaterialLabel({ ...saved, teaching_industry: "C29" }, overview)).not.toContain("服务业不加税");
-  expect(recordedShockMaterialLabel(saved, { ...overview, taxed_rule: undefined })).not.toContain("服务业不加税");
+  expect(recordedShockMaterialLabel({ ...saved, teaching_industry: "C29" }, overview)).not.toContain("非货物行业，不加税");
+  expect(recordedShockMaterialLabel(saved, { ...overview, taxed_rule: undefined })).not.toContain("非货物行业，不加税");
   expect(recordedShockMaterialLabel({ ...saved, material_label: undefined }, overview)).toBeNull();
   expect(recordedShockMaterialLabel(undefined, overview)).toBeNull();
   expect(JSON.stringify(saved)).toBe(before);

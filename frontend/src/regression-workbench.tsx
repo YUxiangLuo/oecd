@@ -13,10 +13,12 @@ import {
   coefficientRows,
   comparisonCsv,
   equationPreview,
-  experimentLabel,
+  shownModelLabel,
+  chartModelLabel,
   fixed4,
   includedBy,
   omittedSummary,
+  perPointDigits,
   perPointReading,
   perPointRow,
   sameSpec,
@@ -124,7 +126,7 @@ function ModelForm({ options, spec, onChange }: {
             <div key={item.name} className="reg-custom-control">
               <label className="reg-custom-choice">
                 <input type="checkbox" checked={Boolean(chosen)} onChange={() => toggleControl(item.name)} />
-                <span><b>{item.label}</b><small>{item.definition}（{item.source}）</small></span>
+                <span><b>{item.label}</b><small>{item.definition} · {item.source}</small></span>
               </label>
               {chosen && (
                 <select aria-label={`${item.label}的期数`} value={chosen.lag} onChange={(event) => setControlLag(item.name, Number(event.target.value))}>
@@ -135,6 +137,7 @@ function ModelForm({ options, spec, onChange }: {
           );
         })}
         <p className="muted reg-custom-note">{options.control_lag_note}</p>
+        <p className="reg-custom-note">控制变量不是越多越好：本身会受关税影响的变量（如按 ICIO 计算的制造业增加值占比、出口强度）放进模型，可能把 X 的一部分关联“控制掉”。课程数据里这些变量与 Y 无关，加上后结果几乎不变；真实研究中要先想清楚因果顺序。</p>
       </fieldset>
       <fieldset>
         <legend>固定效应</legend>
@@ -148,7 +151,7 @@ function ModelForm({ options, spec, onChange }: {
                 disabled={parent != null}
                 onChange={() => toggleEffect(item.key)}
               />
-              <span><b>{item.label}</b><small>{parent ? `已包含在${parent}中` : item.description}</small></span>
+              <span><b>{item.label}</b><small>{parent ? `已包含在${parent}${/[A-Za-z]$/.test(parent) ? " " : ""}中` : item.description}</small></span>
             </label>
           );
         })}
@@ -206,22 +209,30 @@ export function ModelComparisonChart({ columns, outcome }: { columns: TableColum
       continue;
     }
     const scale = column.snapshot.depvar_kind === "share" ? 1 : 0.01;
-    const interval = `${perPointReading(outcome, { ...stat, coef: stat.ci_low }, column.snapshot)} 至 ${perPointReading(outcome, { ...stat, coef: stat.ci_high }, column.snapshot)}`;
+    // The interval ends at the estimate's own decimals (not each end's own, which printed 5–7 digits).
+    const digits = perPointDigits(outcome, stat, column.snapshot);
+    const end = (coef: number) => perPointReading(outcome, { ...stat, coef }, column.snapshot, digits);
+    const interval = `${end(stat.ci_low)} 至 ${end(stat.ci_high)}`;
+    const reading = perPointReading(outcome, stat, column.snapshot, digits);
     rows.push({
-      key: String(index), label: column.name,
-      sublabel: `${xSpanLabel(column.spec)} · N=${result.n_obs} · ${result.years?.join("–") ?? "年份未提供"}`,
+      key: String(index), label: column.chartName ?? column.name,
+      sublabel: `${xSpanLabel(column.spec)}${column.snapshot.depvar_kind === "position" ? " · 无量纲" : ""} · N=${result.n_obs.toLocaleString("zh-CN")} · ${result.years?.join("–") ?? "年份未提供"}`,
       value: stat.coef * scale, low: stat.ci_low * scale, high: stat.ci_high * scale,
       uncertain: stat.ci_low <= 0 && stat.ci_high >= 0,
-      valueLabel: perPointReading(outcome, stat, column.snapshot),
-      intervalLabel: `95% 区间：${interval}`,
-      spokenLabel: `${perPointReading(outcome, stat, column.snapshot)}，95% 区间：${interval}，${xSpanLabel(column.spec)}`,
+      valueLabel: reading,
+      // The tooltip names the row "95% 区间" itself.
+      intervalLabel: interval,
+      spokenLabel: `${reading}，95% 区间：${interval}，${xSpanLabel(column.spec)}`,
     });
   }
   return <section aria-label="同一因变量的模型比较">
     <h4>同一个 Y，换模型后怎样变？</h4>
-    <p className="muted">比较 X 各项的合计及 95% 区间；各行注明所含期数。不同跨度不是同一个估计量，样本变化也可能影响结果。此图不替换默认教学结果。</p>
+    <p className="muted">每行一个模型：X 各项合计及 95% 区间，行下注明所含期数和样本。</p>
     {samplesDiffer(columns) && <p className="reg-stale-note">这几列的样本不同，差异有一部分来自样本，而不只是设定。</p>}
     {rows.length > 0 && <DivergingBarChart rows={rows} title="同一 Y 的模型比较" unitTitle="X 每高 1 个百分点，Y 平均相差（各行标注原始单位）" />}
+    {columns.some((column) => column.chartName && column.chartName !== column.name) && (
+      <p className="muted">图中较长的自定义模型只写改动处数，完整设定见下方结果表的列名（行的顺序与列相同）。</p>
+    )}
     {notes.map((note, index) => <p className="muted" key={index}>{note}</p>)}
   </section>;
 }
@@ -307,6 +318,8 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   }, [retryAt]);
   const retryWait = retryAt == null ? 0 : Math.max(0, Math.ceil((retryAt - now) / 1000));
   const controller = useRef<AbortController | null>(null);
+  // Every hook stays above the early returns below (the options load after the first render).
+  const reportBoxRef = useRef<HTMLElement | null>(null);
   // Leaving the step (or the page) stops a calculation still running; its answer would land nowhere.
   useEffect(() => () => controller.current?.abort(), []);
 
@@ -316,7 +329,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   if (!options || !spec) return <div className="reg-request-state muted" role="status" aria-busy="true">正在载入可选的设定…</div>;
 
   const perPoint = (stat: CoefStat, snapshot: CustomResultSnapshot) => perPointReading(outcome, stat, snapshot);
-  const label = (model: ModelSpec) => experimentLabel(model, options);
+  const label = (model: ModelSpec) => shownModelLabel(model, options);
   const changeSpec = (next: ModelSpec) => {
     setLocalSpec(next);
     // A refused calculation's message stays until its wait is over (the button counts down beside it).
@@ -329,19 +342,20 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
     controller.current?.abort();
     setYKey(key);
     setComputed(null);
+    // As the note by the select says: the comparison starts again from this Y's default model, form included.
+    setLocalSpec(options.default_spec);
     setDetailColumn(0);
     if (retryWait === 0) setError(null);
-    state.saveView?.({ custom_draft: { ...draft, baseline: key === stepBaseline ? undefined : key } });
+    state.saveView?.({ custom_draft: { baseline: key === stepBaseline ? undefined : key } });
     setAnnouncement(`因变量改为“${yLabel(key)}”；表中第一列是它的默认模型。`);
   };
   // The computed model belongs to this form; otherwise it is kept but marked out of date.
   const current = Boolean(computed && sameSpec(computed.design.spec!, spec, options));
   const noX = spec.x_lags.length === 0;
-  const staleMessage = computed && !current
-    ? noX
-      ? "下面保留最近计算的结果；请先选择至少一项关税暴露 X，再计算当前设定。"
-      : "设定已更改，下面保留最近计算的结果；点“计算这个模型”查看新结果。"
-    : "";
+  // The computed model no longer matches the form (the details table says so).
+  // The form's settings differ from the last computed model; whether they are shown anyway (the default model, the
+  // reported one) is settled below (inStep), and only then are the details "待重算".
+  const computedDiffers = Boolean(computed && !current);
   const run = async (model: ModelSpec) => {
     if (!defaultForY || running || model.x_lags.length === 0) return;
     controller.current?.abort();
@@ -356,7 +370,8 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       }
       setComputed(response);
       setDetailColumn(0);
-      setAnnouncement(`已算出“${label(response.design.spec)}”，结果在下面的回归结果表中。`);
+      // The status line (a live region) says what was computed; no second announcement.
+      setAnnouncement("");
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 429 && cause.retryAfter) {
         // Not a problem with the model: the student's calculations of the minute are used up.
@@ -392,10 +407,14 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const columns: TableColumn[] = defaultForY ? [
     { name: DEFAULT_COLUMN, spec: options.default_spec, snapshot: snapshotOf(defaultForY) },
     ...(shown ? [{
-      name: `${shownIsReported ? "已记入报告" : current ? "本次" : "上次计算（设定已更改）"}：${label(shown.design.spec!)}`,
-      spec: shown.design.spec!, snapshot: snapshotOf(shown),
+      name: `${shownIsReported ? "已记入报告" : current ? "本次" : "上次计算"}：${label(shown.design.spec!)}`,
+      chartName: `${shownIsReported ? "已记入报告" : current ? "本次" : "上次计算"}：${chartModelLabel(label(shown.design.spec!))}`,
+      spec: shown.design.spec!, snapshot: snapshotOf(shown), reported: shownIsReported,
     }] : []),
-    ...(experiment && experimentY === yKey && !shownIsReported ? [{ name: `已记入报告：${label(experiment.spec)}`, spec: experiment.spec, snapshot: experiment.snapshot }] : []),
+    ...(experiment && experimentY === yKey && !shownIsReported ? [{
+      name: `已记入报告：${label(experiment.spec)}`, chartName: `已记入报告：${chartModelLabel(label(experiment.spec))}`,
+      spec: experiment.spec, snapshot: experiment.snapshot, reported: true,
+    }] : []),
   ] : [];
   const highlighted = latest ? 1 : isDefault ? 0 : -1;
   const coefficients = coefficientRows(columns, options);
@@ -403,14 +422,17 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const designRow = designValueRow(columns, outcome, yKey, options);
   const summary = summaryRows(columns, options);
   const latestColumn: TableColumn | null = computed && computed.design.spec
-    ? { name: !current ? "上次计算（设定已更改）" : columns[highlighted]?.name ?? DEFAULT_COLUMN, spec: computed.design.spec, snapshot: snapshotOf(computed) }
+    ? { name: !current ? "上次计算" : columns[highlighted]?.name ?? DEFAULT_COLUMN, spec: computed.design.spec, snapshot: snapshotOf(computed) }
     : null;
   const detailColumns = latestColumn ? [latestColumn, ...columns.filter((column) => !sameSpec(column.spec, latestColumn.spec, options))] : columns;
   const shownDetail = Math.min(detailColumn, detailColumns.length - 1);
   const reportChanged = Boolean(state.materialLocked && reportOutdated && experimentReportChanged(stepNumber, experiment, reportCustomResults, options, stepBaseline));
   const cellClass = (index: number) => (index === highlighted ? "reg-custom-current" : undefined);
+  // The add/replace/remove button unmounts on click: keep keyboard focus in the report box, not on the page body.
+  const focusReportBox = () => window.requestAnimationFrame(() => reportBoxRef.current?.focus({ preventScroll: true }));
   const putInReport = () => {
     if (!latest || latestIsReported) return;
+    focusReportBox();
     state.save({ experiment: {
       spec: latest.design.spec!, ...(yKey !== stepBaseline ? { baseline: yKey } : {}),
       saved_at: new Date().toISOString(), snapshot: snapshotOf(latest),
@@ -419,17 +441,74 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   };
   const removeFromReport = () => {
     if (!experiment) return;
+    focusReportBox();
     const name = label(experiment.spec);
     state.save({ experiment: null });
     setAnnouncement(`已把“${name}”从报告移除。`);
   };
   const activePreset = options.presets.find((item) => sameSpec(item.spec, spec, options))?.key ?? null;
   const noDesignValue = options.design_values?.[outcome]?.[yKey] === null;
+  // A Y the course data leave unrelated to X (design value 0): "how far from the design value" reads as "is 0 still in".
+  const zeroDesignValue = options.design_values?.[outcome]?.[yKey] === 0;
+
+  // The report's appendix takes one model a step: right under the comparison, where the model was just read; shown
+  // also while another Y's default model loads or fails, so the recorded model can still be seen or removed.
+  const reportBox = (
+      <section className="reg-custom-report" ref={reportBoxRef} tabIndex={-1} aria-label="记入报告（选做）">
+        <h4>记入报告（选做）</h4>
+        {experiment
+          ? (
+            <p className="reg-custom-report-chip" role="note">
+              <span>已记入报告：<b>{label(experiment.spec)}</b>（{specSummary(experiment.spec, options)}{experimentY !== stepBaseline || experimentY !== yKey ? `；Y：${yLabel(experimentY)}` : ""}）</span>
+              <span aria-hidden="true"> · </span>
+              <button type="button" className="link-button danger" onClick={removeFromReport}>从报告移除</button>
+            </p>
+          )
+          : <p className="muted reg-custom-report-none">{latest ? "报告附录会把它和默认模型并列；每步最多记入一个模型。" : "算出一个模型后，可以把它记入报告附录，和默认模型并列（每步最多一个）。"}</p>}
+        {latest && !latestIsReported && (
+          <button type="button" className="primary" onClick={putInReport}>
+            {/* A long custom name is shortened as in the chart; the column above it carries the full name. */}
+            {experiment
+              ? `用“${chartModelLabel(label(latest.design.spec!))}”${yKey !== experimentY ? `（Y：${depvarLabel}）` : ""}替换记入报告的模型`
+              : `把“${chartModelLabel(label(latest.design.spec!))}”记入报告`}
+          </button>
+        )}
+        {state.materialLocked && !reportChanged && (
+          <p className="reg-rerun-warning" role="note"><b>报告已提交</b>记入、替换或移除模型都会改变报告；之后要到步骤 15 更新报告并重新提交，如已评分，评分和评语会被清除。</p>
+        )}
+        {reportChanged && <p className="reg-rerun-warning reg-replaced-notice" role="status">记入报告的模型与已提交报告里的不同；请到步骤 15 更新报告并重新提交给老师（如已评分，评分和评语会被清除）。</p>}
+      </section>
+  );
+
+  // One line above the results says what they are and whether they follow the settings on screen. The settings are
+  // "in step" when the table already shows them: the default model (always the first column) or the model computed last.
+  const defaultSettings = sameSpec(spec, options.default_spec, options);
+  // The model in the report on this Y is a column too: its settings in the form are shown below, not "uncomputed".
+  const reportedSettings = Boolean(experiment && experimentY === yKey && sameSpec(experiment.spec, spec, options));
+  const inStep = Boolean(defaultForY) && (defaultSettings || current || reportedSettings);
+  // Shown only from what the report saved (not computed in this visit): it can still be computed again, e.g. after
+  // the course data were updated.
+  const reportedOnly = inStep && !defaultSettings && !current;
+  const stale = computedDiffers && !inStep;
+  // The other columns by their models: "“去掉汇率变动”", "已记入报告的“自定义：加 L2.X”".
+  const otherColumns = columns.slice(1).map((column) => `${column.reported ? "已记入报告的" : ""}“${chartModelLabel(label(column.spec))}”`);
+  const status: { kind: "busy" | "stale" | "done" | "idle"; text: string } = running
+    ? { kind: "busy", text: `正在计算“${label(spec)}”…` }
+    : loadingY ? { kind: "busy", text: `正在取“${depvarLabel}”的默认模型…` }
+    : !defaultForY ? { kind: "idle", text: `“${depvarLabel}”的默认模型还没有取到，下面暂时没有结果（见上方提示）。` }
+    : !inStep
+      ? { kind: "stale", text: `勾选框里的设定还没有计算${noX ? "（至少要选一项关税暴露 X）" : ""}。${otherColumns.length
+        ? `下面仍是之前的结果：默认模型、${otherColumns.join("、")}。`
+        : "下面仍只有默认模型。"}` }
+    : latest ? { kind: "done", text: `下面比较：默认模型 和 “${label(latest.design.spec!)}”（已算好）${otherColumns.length > 1 ? `；另有${otherColumns.slice(1).join("、")}` : ""}。` }
+    : !defaultSettings ? { kind: "done", text: `勾选框里是已记入报告的“${label(spec)}”，结果就在下面它的那一列。` }
+    : otherColumns.length ? { kind: "idle", text: `勾选框里是默认模型（第一列）。下面另有${otherColumns.join("、")}；点一个预设实验，或改设定后计算，可再比较一个模型。` }
+    : { kind: "idle", text: `下面是“${depvarLabel}”的默认模型。点一个预设实验，或改设定后计算，旁边会多出一列用来比较。` };
 
   return (
     <div className="reg-custom">
       <p className="reg-custom-y">
-        <label>因变量：
+        <label>因变量 Y：
           {yOptions.length > 1
             ? (
               <select aria-label="因变量" value={yKey} disabled={running} onChange={(event) => changeY(event.target.value)}>
@@ -438,25 +517,24 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
             )
             : <b>{depvarLabel}</b>}
         </label>
-        {yOptions.length > 1 && yKey === stepBaseline ? "" : yKey === stepBaseline ? "（本步的 Y）" : "（本步家族的另一个指标：表中第一列是它的默认模型；记入报告时一起记录）"}
-        。每次只改一处设定，算出后和表中第一列的默认模型比较；只改一项也可能改变样本。
+        {yKey !== stepBaseline && <span className="muted">换了 Y 后，下面从这个 Y 的默认模型重新开始比较。</span>}
       </p>
-      {loadingY && <p className="reg-request-state muted" role="status" aria-busy="true">正在取“{depvarLabel}”的默认模型…</p>}
       {yError && <div className="error-box async-error" role="alert">{yError}<button type="button" className="secondary" onClick={() => changeY(stepBaseline)}>改回本步的 Y</button></div>}
       <div className="reg-custom-presets" role="group" aria-label="预设实验">
+        <h4 className="reg-custom-way">方式一：点一个预设实验<small>每个只改默认模型的一处，点了就计算</small></h4>
         {(["core", "advanced"] as const).map((tier) => {
           const items = options.presets.filter((item) => (item.tier ?? "core") === tier);
           if (!items.length) return null;
           return (
             <div key={tier} className={`reg-preset-tier reg-preset-tier-${tier}`}>
-              <h4 className="reg-preset-tier-title">{items[0].tier_label ?? (tier === "core" ? "必看" : "进阶")}</h4>
+              <h5 className="reg-preset-tier-title">{items[0].tier_label ?? (tier === "core" ? "必看" : "进阶")}</h5>
               <ul>
                 {items.map((item) => (
                   <li key={item.key}>
-                    <button type="button" className="reg-preset" aria-pressed={activePreset === item.key} aria-disabled={!defaultForY || running || undefined}
+                    <button type="button" className="reg-preset" aria-pressed={Boolean(latest) && activePreset === item.key} aria-disabled={!defaultForY || running || undefined}
                       onClick={() => { if (defaultForY && !running) runPreset(item.spec); }}>
-                      <b>{item.label}</b><small>{noDesignValue && (item.key === "no_exchange_rate" || item.key === "separate_effects")
-                        ? "与同一 Y 的默认模型相比，X 各项合计和区间怎样变化？"
+                      <b>{item.label}</b><small>{(item.key === "no_exchange_rate" || item.key === "separate_effects") && (noDesignValue || zeroDesignValue)
+                        ? noDesignValue ? "与同一 Y 的默认模型相比，X 各项合计和区间怎样变化？" : "X 各项合计的区间还包含 0 吗？"
                         : item.question}</small>
                     </button>
                   </li>
@@ -465,37 +543,42 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
             </div>
           );
         })}
-        {noDesignValue
-          ? <p className="muted reg-design-note">当前 Y 是比值指标，没有单一的线性设定值，不能计算相对设定值的偏差。请与同一 Y 的默认模型比较 X 各项合计及区间；模型之间的差异不等于偏离某个固定真值。</p>
-          : options.design_value_note && <p className="muted reg-design-note">{options.design_value_note}</p>}
       </div>
       <details className="reg-custom-details reg-custom-form-details" open={customOpen} onToggle={(event) => setCustomOpen(event.currentTarget.open)}>
-        <summary>自定义设定（X 的滞后、8 个控制变量、固定效应）</summary>
+        <summary>方式二：自己改设定<small>X 的滞后、控制变量、固定效应；改完点“计算这个模型”</small></summary>
+        <p className="reg-custom-start">勾选框里是要计算的设定：<b>{label(spec)}</b>（{inStep ? "结果已在下面" : "还没有计算"}）。在它的基础上改，改完点“计算这个模型”。</p>
         <ModelForm options={options} spec={spec} onChange={changeSpec} />
-        <p className="reg-custom-equation" aria-live="polite">{noX ? "至少选一项关税暴露 X。" : equationPreview(spec, options)}</p>
+        {noX ? <p className="reg-custom-note">至少选一项关税暴露 X。</p> : <p className="reg-custom-equation">{equationPreview(spec, options)}</p>}
         <div className="reg-custom-actions">
-          <button type="button" className="run-btn" aria-disabled={!defaultForY || running || noX || undefined} onClick={() => void run(spec)}>
-            {running ? "正在计算…" : "计算这个模型"}
+          <button type="button" className="run-btn" aria-disabled={!defaultForY || running || noX || (inStep && !reportedOnly) || undefined} onClick={() => { if (!inStep || reportedOnly) void run(spec); }}>
+            {running ? "正在计算…" : reportedOnly ? "重新计算这个模型" : inStep ? "已算好（结果在下面）" : "计算这个模型"}
           </button>
           <button type="button" className="secondary" onClick={() => changeSpec(options.default_spec)}>恢复默认设定</button>
+          {retryWait > 0 && <span className="muted reg-custom-wait">新的设定 {retryWait} 秒后可以计算</span>}
         </div>
       </details>
-      <div className="reg-custom-status">
-        {running && <span className="muted reg-inline-status">正在计算…</span>}
-        {retryWait > 0 && <span className="muted reg-custom-wait">新的设定 {retryWait} 秒后可以计算</span>}
-        <span className="sr-only" role="status" aria-live="polite">{running ? "正在计算…" : staleMessage || announcement}</span>
-      </div>
       {error && <div className="error-box async-error" role="alert">{error}</div>}
-      {staleMessage && <p className="reg-stale-note" role="note">{staleMessage}</p>}
-      {isDefault && <p className="muted reg-custom-default-note">这就是本步的默认模型（表中第一列）。</p>}
+      <div className={`reg-custom-status reg-custom-status-${status.kind}`} role="status" aria-live="polite" aria-busy={status.kind === "busy" || undefined}>
+        <span>{status.text}</span>
+        {status.kind === "stale" && !noX && !customOpen && (
+          <button type="button" className="primary" aria-disabled={!defaultForY || running || undefined} onClick={() => void run(spec)}>计算当前设定</button>
+        )}
+      </div>
+      <span className="sr-only" role="status">{announcement}</span>
+      {noDesignValue
+        ? <p className="muted reg-design-note">当前 Y 是比值指标，没有单一的课程设定值：只和同一 Y 的默认模型比较 X 各项合计及区间。</p>
+        : options.design_value_note && <p className="muted reg-design-note">{options.design_value_note}</p>}
 
+      {!defaultForY && reportBox}
       {defaultForY && <>
       <ModelComparisonChart columns={columns} outcome={outcome} />
+
+      {reportBox}
 
       <div className="reg-custom-compare">
         <h4>回归结果表（因变量：{depvarLabel}）</h4>
         <ScrollableRegion className="table-wrap" label="回归结果表，可横向滚动">
-          <table className="data-table reg-custom-table reg-custom-compare-table">
+          <table className={`data-table reg-custom-table reg-custom-compare-table${columns.length === 1 ? " reg-custom-table-single" : ""}`}>
             <thead><tr><th>变量</th>{columns.map((column, index) => <th key={index} scope="col" className={cellClass(index)}>{column.name}</th>)}</tr></thead>
             <tbody>
               {coefficients.filter((row) => row.key !== "_constant").map((row) => (
@@ -504,7 +587,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
                   {row.cells.map((item, index) => (
                     <td key={index} className={cellClass(index)}>
                       {item === "omitted" ? <span className="muted">（省略）</span>
-                        : item ? <><span>{item.coef}</span><br /><span className="muted">{item.se}</span></> : null}
+                        : item ? <><span>{item.coef}</span><br /><span className="muted">{item.se}</span></> : <span className="muted" title="这个模型没有放入这一项">—</span>}
                     </td>
                   ))}
                 </tr>
@@ -526,7 +609,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
                   <th scope="row">{row.label}</th>
                   {row.cells.map((item, index) => (
                     <td key={index} className={cellClass(index)}>
-                      {item && item !== "omitted" ? <><span>{item.coef}</span><br /><span className="muted">{item.se}</span></> : null}
+                      {item && item !== "omitted" ? <><span>{item.coef}</span><br /><span className="muted">{item.se}</span></> : <span className="muted" title="这个模型没有报告这一项">—</span>}
                     </td>
                   ))}
                 </tr>
@@ -550,41 +633,19 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       </div>
       </>}
 
-      {/* One model a step goes into the report: the one just computed replaces the one there. */}
-      <div className="reg-custom-report">
-        {latest && !latestIsReported && (
-          <button type="button" className="secondary" onClick={putInReport}>
-            {experiment ? `用“${label(latest.design.spec!)}”替换记入报告的模型` : `把“${label(latest.design.spec!)}”也记入报告（选做）`}
-          </button>
-        )}
-        {experiment
-          ? (
-            <p className="reg-custom-report-chip" role="note">
-              <span>已记入报告：<b>{label(experiment.spec)}</b>（{specSummary(experiment.spec, options)}{experimentY !== stepBaseline ? `；Y：${yLabel(experimentY)}` : ""}）</span>
-              <span aria-hidden="true"> · </span>
-              <button type="button" className="link-button danger" onClick={removeFromReport}>从报告移除</button>
-            </p>
-          )
-          : <p className="muted reg-custom-report-none">还没有记入报告的模型实验（选做）：算出一个模型后点“也记入报告”，报告附录“模型实验”会把它和默认模型并列。</p>}
-        {state.materialLocked && (
-          <p className="reg-rerun-warning" role="note"><b>报告已提交</b>记入、替换或移除报告里的模型都会改变报告；之后要到步骤 15 更新报告，并重新提交给老师。</p>
-        )}
-        {reportChanged && <p className="reg-rerun-warning reg-replaced-notice" role="status">记入报告的模型与已提交报告里的不同；请到步骤 15 更新报告并重新提交给老师。</p>}
-      </div>
-
       {defaultForY && <details className="reg-custom-details" aria-label="单模型详细数字" open={detailsOpen} onToggle={(event) => setDetailsOpen(event.currentTarget.open)}>
-        <summary>单模型详细数字（系数、标准误、t 值、p 值、显著性、区间）与导出 CSV{staleMessage ? " · 当前设定待重算" : ""}</summary>
+        <summary>单模型详细数字（系数、标准误、t 值、p 值、显著性、区间）与导出 CSV{stale ? " · 当前设定待重算" : ""}</summary>
         <label className="reg-custom-detail-pick">查看
           <select value={shownDetail} onChange={(event) => setDetailColumn(Number(event.target.value))}>
             {detailColumns.map((column, index) => <option key={index} value={index}>{column.name}</option>)}
           </select>
         </label>
         <p><b>{detailColumns[shownDetail].name}</b>：{specSummary(detailColumns[shownDetail].spec, options)}</p>
-        {staleMessage && <p className="reg-stale-note">当前设定待重算；以下数字仅对应上方选中的结果及其设定。</p>}
+        {stale && <p className="reg-stale-note">当前设定待重算；以下数字仅对应上方选中的结果及其设定。</p>}
         <ColumnDetails column={detailColumns[shownDetail]} options={options} perPoint={perPoint} />
         {detailColumns[shownDetail].snapshot.result.suppressed && <p className="reg-stale-note">{options.suppressed_note}</p>}
         {omittedSummary(detailColumns[shownDetail].snapshot, options).map((note) => <p className="muted" key={note}>{note}</p>)}
-        <p className="muted">系数按 X 以份额计（1 = 100 个百分点）；最后一列换算为 X 每高 1 个百分点。{xSpanLabel(detailColumns[shownDetail].spec)}；括号内为标准误，星号含义见表下注释。{detailColumns[shownDetail].spec.fixed_effects.length ? "带固定效应的模型没有常数项：各单位和各年的截距已被固定效应吸收。" : ""}</p>
+        <p className="muted">系数按 X 以份额计（1 = 100 个百分点）；最后一列换算为 X 每高 1 个百分点。X 各项合计覆盖：{xSpanLabel(detailColumns[shownDetail].spec)}；括号内为标准误，星号含义见表下注释。{detailColumns[shownDetail].spec.fixed_effects.length ? "带固定效应的模型没有常数项：各单位和各年的截距已被固定效应吸收。" : ""}</p>
         <button type="button" className="secondary" onClick={() => download(comparisonCsv(columns, options, depvarLabel, pointRow, designRow), `步骤${stepNumber}-回归对比.csv`)}>
           导出 CSV（上面的回归结果表）
         </button>

@@ -464,3 +464,32 @@
 .quiz-editor [aria-invalid="true"] { border-color: #d0413a; box-shadow: 0 0 0 2px rgba(208, 65, 58, 0.18); }
 .quiz-field-error { margin: 4px 0 8px; color: #b3341f; font-size: 12px; }
 .quiz-save-blocked { margin: 8px 0; color: #b3341f; font-size: 12px; }
+
+/* Printing a report under review: the report full width, the student named once; navigation and the grading
+   panel are the workspace, not the report. (The report body's own print rules are in styles.css.) */
+@media print {
+  .teacher-nav,
+  .dash-header,
+  .grade-side,
+  .review-topbar .back-btn,
+  .review-skip,
+  .teacher-first-step {
+    display: none !important;
+  }
+  .teacher-layout,
+  .teacher-main,
+  .teacher-content,
+  .grade-split,
+  .grade-doc {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: auto !important;
+  }
+  .review-topbar { display: block; margin: 0 0 10pt; }
+  .review-topbar .review-student { font-size: 14pt; }
+  .grade-doc .report-md th, .grade-doc .report-md td:first-child { white-space: normal; }
+}

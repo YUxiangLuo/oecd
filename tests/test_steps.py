@@ -58,15 +58,15 @@ def test_student_copy_never_reverses_the_supply_direction():
 def test_step_ten_task_names_the_keyboard_readout_too():
     """步骤 10 的国家图可用方向键逐个读数，任务卡不只说悬停。"""
     tasks = "".join(next(step for step in STEPS if step["n"] == 10)["tasks"])
-    assert "悬停或用方向键查看各国读数" in tasks
+    assert "悬停或用方向键查看读数" in tasks
 
 
 def test_task_cards_count_what_the_page_shows():
-    """步骤 2 的六项不再说成“四类”（方法卡 3 写的是 WWZ 五类加 taxsub）；步骤 10 以美国加税为主线，例子叫“举例”。"""
+    """步骤 2 的六项不再说成“四类”（方法卡 3 写的是 WWZ 五类加 taxsub）；步骤 10 以美国加税为主线，例子在“关税暴露 X”里。"""
     goal = next(step for step in STEPS if step["n"] == 2)["goal"]
     assert "六项" in goal and "四类" not in goal
     tasks = "".join(next(step for step in STEPS if step["n"] == 10)["tasks"])
-    assert "美国加征关税" in tasks and "举例" in tasks and "跟踪" not in tasks and "四个摘要" not in tasks
+    assert "美国分两批" in tasks and "“关税暴露 X”" in tasks and "跟踪" not in tasks and "四个摘要" not in tasks
 
 
 def test_steps_six_to_nine_record_on_request_and_rank_no_tab_below_another():

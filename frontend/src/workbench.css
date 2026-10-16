@@ -367,7 +367,7 @@
 .teaching-example-summary b { margin-right: 6px; color: #2a3040; }
 .teaching-example-hint { margin: -4px 0 12px; padding: 8px 12px; border-radius: 8px; background: #fff8e8; color: #7a5300; font-size: 12.5px; }
 /* 步骤 10：美国加税的三个数字卡、被加税国家的单列 X 条形图（viz/regression/country-exposure.tsx） */
-.teaching-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 10px 0 6px; padding: 0; list-style: none; }
+.teaching-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin: 10px 0 6px; padding: 0; list-style: none; }
 .teaching-tiles li { min-width: 0; padding: 10px 12px; border: 1px solid #e3e5ee; border-radius: 10px; background: #fafbfe; }
 .teaching-tiles b { display: block; color: #1b1f2b; font-size: 21px; line-height: 1.2; font-variant-numeric: tabular-nums; word-break: keep-all; }
 .teaching-tiles span { display: block; margin-top: 2px; color: #5a6274; font-size: 11.5px; line-height: 1.45; }
@@ -578,7 +578,8 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 /* Grid items keep min-width:auto by default: a wide regression table would widen its card (and the whole content
    area) instead of scrolling inside its own region. */
 .reg-custom > * { min-width: 0; }
-.reg-custom-y { margin: 0; }
+.reg-custom-y { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.reg-custom-y select { min-width: 220px; padding: 6px 10px; border: 1px solid #d5d9e4; border-radius: 8px; background: #fff; font: inherit; font-size: 13px; color: #1b1f2b; }
 .reg-custom-hints { margin: 0; padding: 8px 10px 8px 26px; border-radius: 7px; background: #f4f5fb; color: #3d4556; font-size: 12px; line-height: 1.6; }
 .reg-custom-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .reg-custom-form fieldset { min-width: 0; margin: 0; padding: 9px 11px 10px; border: 1px solid #e1e5ee; border-radius: 9px; background: #fbfcff; }
@@ -668,6 +669,10 @@ details.reg-custom-section[open] > summary { margin-bottom: 12px; }
 details.reg-custom-section > summary:focus-visible { outline: 2px solid #4b47e0; outline-offset: 4px; border-radius: 6px; }
 .teaching-definitions { display: grid; gap: 4px; margin: 10px 0 6px; padding: 10px 12px; border: 1px solid #dcdff0; border-radius: 9px; background: #f8f8ff; color: #3f4759; font-size: 12.5px; line-height: 1.6; }
 .teaching-definitions b { color: #35328d; }
+dl.teaching-definitions { margin: 10px 0 14px; }
+dl.teaching-definitions > div { display: grid; grid-template-columns: 3.2em minmax(0, 1fr); gap: 8px; align-items: baseline; }
+dl.teaching-definitions dt { margin: 0; color: #35328d; font-weight: 700; }
+dl.teaching-definitions dd { margin: 0; }
 .teaching-variable-details { margin: 0 0 12px; font-size: 12px; }
 .teaching-variable-details > summary { cursor: pointer; color: #4b47e0; font-weight: 650; }
 .teaching-variable-details[open] > summary { margin-bottom: 4px; }
@@ -691,10 +696,10 @@ details.reg-custom-section > summary:focus-visible { outline: 2px solid #4b47e0;
 .reg-custom-form-details[open] .reg-custom-form { margin-top: 8px; }
 .reg-custom-form-details .reg-custom-equation { margin-top: 8px; }
 .reg-custom-form-details .reg-custom-actions { margin-top: 8px; }
-.reg-custom-status { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; min-height: 0; font-size: 12.5px; }
-.reg-custom-status:empty { display: none; }
 .reg-custom-default-note { margin: 0; }
-.reg-custom-report { display: grid; gap: 8px; justify-items: start; }
+.reg-custom-report { display: grid; gap: 8px; justify-items: start; margin: 14px 0; padding: 12px 14px; border: 1px solid #c9cdf6; border-left: 4px solid #4f46e5; border-radius: 10px; background: #f6f6ff; }
+.reg-custom-report:focus-visible { outline: 2px solid #4f46e5; outline-offset: 2px; }
+.reg-custom-report > h4 { margin: 0; font-size: 13.5px; color: #2c2a86; }
 .reg-custom-report > p { justify-self: stretch; }
 .reg-custom-report-chip { margin: 0; padding: 7px 10px; border-radius: 7px; background: #eef8f1; color: #1c4d2f; font-size: 12.5px; line-height: 1.6; }
 .reg-custom-report-none { margin: 0; font-size: 12.5px; }
@@ -707,7 +712,6 @@ details.reg-custom-section > summary:focus-visible { outline: 2px solid #4b47e0;
 .reg-design-note { margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; }
 .reg-custom-design-row > * { border-top: 1px dashed #c9cde0; color: #1b4d7a; }
 .reg-design-value { margin: 6px 0 0; font-size: 13.5px; color: #1b4d7a; }
-.reg-decomposition { margin: 8px 0 0; font-size: 13px; line-height: 1.55; color: #2a2f3a; }
 
 /* Steps 6–9: the record button under every chart, in one place, right above the material card. */
 .material-record { margin: 12px 0 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
@@ -738,3 +742,25 @@ details.reg-custom-section > summary:focus-visible { outline: 2px solid #4b47e0;
 .report-materials td, .report-materials th { padding: 6px 8px; border-bottom: 1px solid #e6e8f0; text-align: left; vertical-align: top; }
 .report-materials td:first-child { white-space: nowrap; color: #51586a; }
 .report-materials .material-chip { white-space: nowrap; }
+
+/* 改模型、对比: two ways to choose a model, and one status line saying what the results below are. */
+.reg-custom-way { margin: 14px 0 6px; font-size: 13.5px; color: #1b1f2b; }
+.reg-custom-way small, .reg-custom-form-details > summary small { margin-left: 8px; color: #6b7487; font-size: 12px; font-weight: 400; }
+.reg-custom-start { margin: 8px 0; font-size: 12.5px; color: #3f4759; }
+.reg-custom-status { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0 10px; padding: 10px 12px; border-radius: 9px; font-size: 13px; line-height: 1.6; border: 1px solid #dcdff0; background: #f8f9fc; color: #2f3545; }
+.reg-custom-status-done { border-color: #bfe3cc; background: #eef8f1; color: #1c4d2f; }
+.reg-custom-status-stale { border-color: #f0d29b; background: #fff8ea; color: #7a4b0c; }
+.reg-custom-status-busy { border-color: #c9cdf6; background: #f4f4ff; color: #2c2a86; }
+.reg-decomposition { margin: 10px 0 4px; font-size: 13px; line-height: 1.65; color: #2f3545; }
+.reg-decomposition p { margin: 0 0 4px; }
+.reg-decomposition ul { margin: 0 0 4px; padding-left: 20px; }
+.reg-decomposition-tariff { color: #2c2a86; }
+.reg-example-list { margin: 4px 0 0; padding-left: 18px; }
+.reg-example-list > li { margin: 2px 0; }
+/* One model: the table stays narrow so each number sits near its variable; several: headers may wrap, so the
+   third column fits at 1200px instead of hiding behind a scroll. */
+.reg-custom-table-single { width: auto; min-width: 420px; }
+.reg-custom-compare-table thead th { white-space: normal; vertical-align: bottom; }
+.reg-custom-compare-table thead th:not(:first-child) { min-width: 8em; }
+/* The total and design-value rows are sentences ("-0.55 个百分点；幅度比设定值大 13%"): they wrap too. */
+.reg-custom-compare-table .reg-custom-point-row td, .reg-custom-compare-table .reg-custom-design-row td { white-space: normal; min-width: 8em; }

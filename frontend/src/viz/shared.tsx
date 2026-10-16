@@ -154,22 +154,34 @@ export function useTip() {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const pointer = useRef<{ x: number; y: number; target: EventTarget } | null>(null);
   const dismissed = useRef(false);
+  const anchoredAt = useRef(0);
   useEffect(() => {
     const dismiss = () => {
       if (boxRef.current?.style.opacity !== "1") return;
       boxRef.current.style.opacity = "0";
+      boxRef.current.setAttribute("aria-hidden", "true");
       dismissed.current = true;
     };
-    const keydown = (event: KeyboardEvent) => { if (event.key === "Escape") dismiss(); };
+    // Only the scroll that focus itself causes is let pass: a key (other than the Tab that moves focus) or a wheel
+    // scroll right after it dismisses the tip as usual.
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") dismiss();
+      else if (event.key !== "Tab") anchoredAt.current = 0;
+    };
+    const wheel = () => { anchoredAt.current = 0; };
     const scroll = (event: Event) => {
       const target = event.target;
+      // Keyboard focus scrolls its bar into view: that scroll must not take away the tip the focus just showed.
+      if (Date.now() - anchoredAt.current < 400) return;
       if (target === document || target === window || (target instanceof Element && target.contains(wrapRef.current))) dismiss();
     };
     document.addEventListener("keydown", keydown);
     window.addEventListener("scroll", scroll, true);
+    window.addEventListener("wheel", wheel, { capture: true, passive: true });
     return () => {
       document.removeEventListener("keydown", keydown);
       window.removeEventListener("scroll", scroll, true);
+      window.removeEventListener("wheel", wheel, true);
     };
   }, []);
   /**
@@ -214,14 +226,23 @@ export function useTip() {
       y = above >= 0 || anchor.top - box.offsetHeight - 6 >= 0 ? above : anchor.bottom - r.top + 6;
     }
     box.style.left = `${x}px`; box.style.top = `${y}px`; box.style.opacity = "1";
+    box.removeAttribute("aria-hidden");
+    if (anchor) anchoredAt.current = Date.now();
   };
   const hide = () => {
-    if (boxRef.current) boxRef.current.style.opacity = "0";
+    if (boxRef.current) {
+      // Hidden means empty too: no stale reading of another bar (or another Y) stays for a screen reader.
+      boxRef.current.style.opacity = "0";
+      boxRef.current.setAttribute("aria-hidden", "true");
+      // Emptied once the fade is over, unless another bar showed it again meanwhile.
+      const box = boxRef.current;
+      window.setTimeout(() => { if (box.style.opacity === "0") box.replaceChildren(); }, 150);
+    }
     dismissed.current = false;
     pointer.current = null;
   };
   const Tip = (
-    <div ref={boxRef} style={{
+    <div ref={boxRef} aria-hidden="true" style={{
       position: "absolute", pointerEvents: "none", opacity: 0, transition: "opacity .12s",
       background: "#1b1f2b", color: "#fff", padding: "9px 12px", borderRadius: 10,
       fontSize: 11.5, lineHeight: 1.75, boxShadow: "0 8px 24px rgba(0,0,0,.22)", zIndex: 6, minWidth: 150, maxWidth: 320,

@@ -286,6 +286,7 @@ export function RecordedMaterials({ steps, getStep, blocked, onNavigateStep }: {
       {countries.status === "loading" && <p className="muted" role="status">正在核对步骤 10 例子的国家税况…</p>}
       {countries.status === "error" && <div className="error-box" role="alert">{userFacingRequestError(countries.error, "步骤 10 例子的国家税况读取失败")} 材料已保留，暂不显示国家税况。<button className="secondary" onClick={countries.retry}>重试国家税况</button></div>}
       <table>
+        <thead><tr><th scope="col">步骤</th><th scope="col">状态</th><th scope="col">记录的材料</th></tr></thead>
         <tbody>
           {rows.map(({ step, label, missing, recorded }) => (
             <tr key={step.n}>

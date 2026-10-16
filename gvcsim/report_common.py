@@ -325,7 +325,7 @@ def _coefficient_label(name: Any, design: dict[str, Any]) -> str:
     # The page's names for X and its lags (steps 10–14 and their coefficient tables), the controls and the sum.
     labels = {column: "关税暴露 " + ("X" if lag == 0 else f"L{lag}.X") for lag, column in X_LAG_COLUMNS.items()}
     labels |= {control_column(key, lag): control_term_label(key, lag) for key in CONTROLS for lag in CONTROL_LAGS}
-    labels["cumulative"] = "X 各项合计（累计效应）"
+    labels["cumulative"] = "X 各项合计"
     return labels.get(raw, _safe(raw))
 
 

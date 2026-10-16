@@ -267,14 +267,14 @@ describe("ReportedExperiments", () => {
       }));
       await waitFor(() => expect(view.container.textContent).toContain("被国家×年份 FE 吸收：汇率变动"));
       // Not a preset: named as a custom setting.
-      expect(view.container.querySelector("tbody tr td b")?.textContent).toBe("自定义设定");
+      expect(view.container.querySelector("tbody tr td b")?.textContent).toBe("自定义（去掉 GDP 对数；去掉贸易开放度；固定效应：国家×年份 FE）");
     } finally { cleanup(); options.mockRestore(); }
   });
 
   test("says how to add one when none is marked", () => {
     const html = renderToStaticMarkup(createElement(ReportedExperiments, { getStep: () => undefined }));
     expect(html).toContain("还没有记入报告的模型实验（选做）");
-    expect(html).toContain("也记入报告");
+    expect(html).toContain("在“记入报告（选做）”框里记入");
     expect(html).not.toContain("放入报告");
     expect(html).not.toContain("<table");
   });
@@ -303,10 +303,10 @@ describe("the sentence under the three-group chart (v13)", () => {
       ],
       remainder: -0.026,
     }, "外国增加值项占比", 100, "个百分点", 1);
-    expect(text).toContain("第一批被加税国家 2020 年的外国增加值项占比比加税前（2016、2017 年）平均低 8.4 个百分点");
-    expect(text).toContain("与关税 X 相关 −1.6，与汇率变动同步 −4.1，与 GDP 对数同步 −5.0，与贸易开放度同步 +4.9，其余（各年共同的变化与噪声）−2.6");
+    expect(text).toContain("第一批被加税国家 2020 年的外国增加值项占比，比加税前（2016、2017 年平均）低 8.4 个百分点。按默认模型的估计可拆成：");
+    expect(text).toContain("与关税 X 相关 −1.6，与汇率变动同步 −4.1，与 GDP 对数同步 −5.0，与贸易开放度同步 +4.9，其余（各年共同的变化与噪声） −2.6");
     expect(decompositionSentence({ group: "first", wave_start: 2018, year: 2020, pre_years: [2016, 2017], observed: -0.32, terms: [], remainder: -0.32 }, "前向 GVC 段长度", 1, "长度单位", 3))
-      .toContain("平均低 0.320 个长度单位");
+      .toContain("年平均）低 0.320 个长度单位");
     expect(text).toContain("第二批税率相同");
   });
 });

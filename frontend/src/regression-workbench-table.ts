@@ -97,11 +97,11 @@ export function equationPreview(spec: ModelSpec, options: WorkbenchOptions): str
   return `Y = ${terms.join(" + ")} + ε${note}`;
 }
 
-/** A term's name in the tables: "X", "L1.X", "汇率变动", "L1.GDP（取对数）", "X 各项合计（累计效应）", "常数项". */
+/** A term's name in the tables: "X", "L1.X", "汇率变动", "L1.GDP（取对数）", "X 各项合计", "常数项". */
 export function termLabel(name: string, options: WorkbenchOptions): string {
   const lag = Object.entries(X_COLUMNS).find(([, column]) => column === name)?.[0];
   if (lag != null) return xTermLabel(Number(lag));
-  if (name === "cumulative") return "X 各项合计（累计效应）";
+  if (name === "cumulative") return "X 各项合计";
   if (name === CONSTANT) return "常数项";
   const match = /^(.+?)(?:__lag(\d))?$/.exec(name);
   return match ? controlLabel(options, match[1], Number(match[2] ?? 0)) : name;
@@ -146,8 +146,12 @@ export function snapshotOf(response: Pick<RegressionResponse, "design" | "result
 /** One column of a comparison table: the default model or a saved one. */
 export interface TableColumn {
   name: string;
+  /** A shorter name for the comparison chart's one-line row label (a long custom name there shrank the whole chart). */
+  chartName?: string;
   spec: ModelSpec;
   snapshot: CustomResultSnapshot;
+  /** The model this step put into the report. */
+  reported?: boolean;
 }
 
 export interface CoefCell { coef: string; se: string }
@@ -300,6 +304,15 @@ export function summaryRows(columns: TableColumn[], options: WorkbenchOptions): 
   ];
 }
 
+/** How an estimate's size compares with the design value, in words (the sign of a percentage was easy to misread):
+ *  "幅度比设定值大 13%", "幅度比设定值小 6%", "与设定值几乎相同", or "方向与设定值相反". */
+export function designDeviationText(deviation: number): string {
+  if (deviation < -1) return "方向与设定值相反";
+  const percent = Math.round(Math.abs(deviation) * 100);
+  if (percent === 0) return "与设定值几乎相同";
+  return `幅度比设定值${deviation > 0 ? "大" : "小"} ${percent}%`;
+}
+
 /** How far an estimate's size is from the design value: + larger, − smaller; a sign flip reads beyond −100%. */
 export function designDeviation(estimate: number, design: number): number {
   if (design === 0) return Number.NaN;
@@ -339,7 +352,7 @@ export function designValueRow(columns: TableColumn[], outcome: RegressionOutcom
       if (!sum) return "";
       if (!coversDesignSpan(spec)) return `${target}（两年累计）；本列跨度不同，不计偏差`;
       const deviation = designDeviation(sum.coef, design);
-      return `${target}；估计偏差 ${deviation > 0 ? "+" : ""}${Math.round(deviation * 100)}%`;
+      return `${target}；${designDeviationText(deviation)}`;
     }),
   };
 }
@@ -361,13 +374,54 @@ export function omittedSummary(snapshot: CustomResultSnapshot, options: Workbenc
   return [...groups].map(([reason, terms]) => `${reason}：${terms.join("、")}`);
 }
 
-/** How the page and the report name a model experiment: its preset's label, else "自定义设定" (the model itself is
- *  always shown beside the name; the server's workbench.experiment_label). */
-export function experimentLabel(spec: ModelSpec, options: WorkbenchOptions): string {
+/**
+ * What a custom model changes from the default, for the page: "自定义（去掉汇率变动；加 L2.X）" (every change), so
+ * two custom models on screen are told apart. A preset keeps its own label. The report names the model
+ * alike (the server's workbench.experiment_label).
+ */
+export function shownModelLabel(spec: ModelSpec, options: WorkbenchOptions): string {
+  if (sameSpec(spec, options.default_spec, options)) return "默认模型";
   const preset = options.presets.find((item) => sameSpec(item.spec, spec, options));
-  // The name is the server's; an options payload from before it was sent (a deploy in progress) still gets a name.
-  return preset ? preset.label : options.custom_label ?? "自定义设定";
+  if (preset) return preset.label;
+  // Compared as the models are run (contained effects dropped, terms in page order), so the form, the column and the
+  // report-box chip name one model alike.
+  const model = canonicalSpec(spec, options);
+  const base = canonicalSpec(options.default_spec, options);
+  // "去掉 GDP 对数", "加 L2.X": a space before a Latin name, as the presets write it.
+  const verb = (word: string, name: string) => `${word}${/^[A-Za-z]/.test(name) ? " " : ""}${name}`;
+  // What is taken out first, then what is added, then what changes: "去掉汇率变动；加 L2.X".
+  const changes: string[] = [
+    ...base.x_lags.filter((lag) => !model.x_lags.includes(lag)).map((lag) => verb("去掉", xTermLabel(lag))),
+    ...base.controls.filter((item) => !model.controls.some((other) => other.name === item.name))
+      .map((item) => verb("去掉", controlLabel(options, item.name, 0))),
+    ...model.x_lags.filter((lag) => !base.x_lags.includes(lag)).map((lag) => verb("加", xTermLabel(lag))),
+    ...model.controls.filter((item) => !base.controls.some((other) => other.name === item.name))
+      .map((item) => verb("加", controlLabel(options, item.name, item.lag))),
+    ...model.controls.filter((item) => base.controls.some((other) => other.name === item.name && other.lag !== item.lag))
+      .map((item) => `${controlLabel(options, item.name, 0)}改为 ${controlLabel(options, item.name, item.lag)}`),
+  ];
+  if (model.fixed_effects.join(",") !== base.fixed_effects.join(",")) {
+    changes.push(model.fixed_effects.length
+      ? `固定效应：${model.fixed_effects.map((key) => effectName(options, key)).join(" + ")} FE`
+      : "无固定效应");
+  }
+  if (!changes.length) return options.custom_label ?? "自定义设定";
+  // In brackets, so a column name reads "本次：自定义（去掉汇率变动；加 L2.X）", not one colon after another.
+  // Every change is named, so two custom models on screen never share a name (the column headers wrap).
+  return `自定义（${changes.join("；")}）`;
 }
+
+/**
+ * A short name for a model where one line is all there is (the comparison chart's rows, the report button): the
+ * page's name when it is short, else "自定义（7 处改动）". The table's column headers keep the full name.
+ */
+export function chartModelLabel(name: string): string {
+  if (name.length <= 20 || !name.startsWith("自定义（")) return name;
+  return `自定义（${name.slice(4, -1).split("；").length} 处改动）`;
+}
+
+/** How the page and the report name a model experiment: shownModelLabel (the server's workbench.experiment_label). */
+export const experimentLabel = shownModelLabel;
 
 function csvField(value: string): string {
   // The table's cells ("+0.55 个百分点（两年累计）", "-0.3298***") are never formulas, so they keep their sign and

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { TeachingCountriesResponse } from "../../types";
-import { countryIndustryLines, countryIndustryNote, CountryExposureChart, countryTipLines, goodsBalanceText, ruleYiUsd, taxedRuleText, yiUsd } from "./country-exposure";
+import { countryIndustryLines, countryIndustryNote, CountryExposureChart, countryTipLines, goodsBalanceText, ruleYiUsd, ruleYiUsdRange, taxedRuleText, yiUsd } from "./country-exposure";
 import { TAXED, TAXED_LATER } from "./palette";
 
 const row = (country: string, mean: number, taxed = mean > 0, exposed = taxed ? 44 : 0, industries = 44) => ({
@@ -37,9 +37,9 @@ test("the industry note counts taxed industries and says when some have X = 0", 
   expect(countryIndustryNote(row("CAN", 0.143))).toBe("44/44 个行业被加税");
   expect(countryIndustryNote(row("CRI", 0.0782, true, 42, 43))).toBe("43/43 个行业被加税（1 个货物行业对美无出口：w = 0）");
   // Goods only (v8): a taxed country's services are counted but not taxed.
-  expect(countryIndustryNote({ ...row("DEU", 0.08, true, 33, 44), goods_industries: 34 })).toBe("34/44 个行业被加税（10 个服务业不加税，1 个货物行业对美无出口：w = 0）");
+  expect(countryIndustryNote({ ...row("DEU", 0.08, true, 33, 44), goods_industries: 34 })).toBe("34/44 个行业被加税（10 个非货物行业不加税，1 个货物行业对美无出口：w = 0）");
   expect(countryIndustryLines({ ...row("DEU", 0.08, true, 33, 44), goods_industries: 34 })).toEqual([
-    ["被加税行业", "34 个（样本内共 44 个）"], ["服务业", "10 个，不加税"], ["其中 X > 0", "33 个"], ["其余 1 个", "对美无出口：w = 0"],
+    ["被加税行业", "34 个（样本内共 44 个）"], ["非货物行业", "10 个，不加税"], ["其中 X > 0", "33 个"], ["其余 1 个", "对美无出口：w = 0"],
   ]);
   expect(countryIndustryNote(row("MEX", 0, false, 0, 43))).toBe("0/43 个行业被加税");
 });
@@ -326,4 +326,9 @@ test("teaching data v10: the two waves have their own colour and legend entry, a
   } finally {
     cleanup();
   }
+});
+
+test("a wave's surplus range formats both ends alike, with the unit once", () => {
+  expect(ruleYiUsdRange(1000, 10000)).toBe("10–100 亿美元");
+  expect(ruleYiUsdRange(1234, 10000)).toBe("12.3–100 亿美元");
 });

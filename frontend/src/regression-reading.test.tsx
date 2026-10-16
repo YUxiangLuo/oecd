@@ -103,9 +103,14 @@ describe("fixed teaching regression reading", () => {
     ]} />);
     const sentence = container.querySelector(".reg-example-effect")!.textContent;
     // An association with X, not a tariff effect; X = 0 implies no X-related difference (not "Y 不变").
-    expect(sentence).toBe("按你在步骤 10 选的例子换算：CAN 加拿大·C29 的 X 为 9.32 个百分点，按估计与 X 相关的差异约为 -5.13 个百分点（Y 偏低）；MEX 墨西哥·C29 未被加税，X = 0，按估计没有与 X 相关的差异。");
+    expect(sentence.startsWith("换算到你在步骤 10 选的例子：")).toBe(true);
+    // One line an example: its X, then the difference that goes with it.
+    expect([...container.querySelectorAll(".reg-example-list > li")].map((item) => item.textContent)).toEqual([
+      "CAN 加拿大·C29：X = 9.32 个百分点 → 与 X 相关的差异约 -5.13 个百分点（Y 偏低）",
+      "MEX 墨西哥·C29：未被加税，X = 0 → 没有与 X 相关的差异",
+    ]);
     expect(sentence).not.toMatch(/下降|不变|X 为 0 时/);
-    // With w and τ, X reads at step 10's digits, so the conversion checks by hand: 0.22444 × 40.80 ≈ 9.16.
+    // With w and τ, X reads at step 10's digits ("0.898% × 25% = 0.22"), so the conversion checks by hand: 0.22 × 40.80 ≈ 8.98.
     cleanup();
     const network = response();
     network.design.outcome = "network";
@@ -115,7 +120,7 @@ describe("fixed teaching regression reading", () => {
       { label: "SVK 斯洛伐克·C26", x: 0.00224440, w: 0.0089776, tau: 0.25 },
     ]} />);
     expect(checked.container.querySelector(".reg-example-effect")!.textContent)
-      .toContain("SVK 斯洛伐克·C26 的 X 为 0.22444 个百分点，按估计与 X 相关的差异约为 +9.16 个中心性原始单位");
+      .toContain("SVK 斯洛伐克·C26：X = 0.22 个百分点 → 与 X 相关的差异约 +8.98 个中心性原始单位");
     expect(exampleXText({ x: 0.0932 })).toBe("9.32");
     cleanup();
     // Goods only (v8): a service industry's X is 0 in every country, and the line says why and what to pick instead.
@@ -123,13 +128,13 @@ describe("fixed teaching regression reading", () => {
       { label: "CAN 加拿大·O", x: 0, tau: 0, w: 0.4, service: true },
     ]} />);
     expect(services.container.querySelector(".reg-example-effect")!.textContent).toContain(
-      "CAN 加拿大·O 是服务业，不在加税范围内（τ = 0）。这个例子的 X = 0，按估计没有与 X 相关的差异。如需看到不为 0 的换算，请回到步骤 10 换一个货物行业（服务业不加税），如加拿大的汽车行业。",
+      "CAN 加拿大·O：不是货物行业，不加税（τ = 0）这个例子的 X = 0，按估计没有与 X 相关的差异。如需看到不为 0 的换算，请回到步骤 10 换一个货物行业（非货物行业不加税），如加拿大的汽车行业。",
     );
     // An uncertain direction is flagged; suppressed inference and missing examples show no conversion.
     Object.assign(data.result.coefs[0], { ci_low: -1, ci_high: 0.2 });
     const uncertain = render(<RegressionResultCard outcome="trade" response={data} examples={[{ label: "例子", x: 0.05 }]} />);
     const uncertainText = uncertain.container.querySelector(".reg-example-effect")!.textContent;
-    expect(uncertainText).toContain("按估计与 X 相关的差异约为 -2.75 个百分点，但区间包含 0，差异的高低方向并不确定。");
+    expect(uncertainText).toContain("与 X 相关的差异约 -2.75 个百分点，但区间包含 0，高低方向并不确定");
     expect(uncertainText).not.toContain("偏低");
     data.result.status = "invalid_design";
     const suppressed = render(<RegressionResultCard outcome="trade" response={data} examples={[{ label: "例子", x: 0.05 }]} />);
@@ -155,10 +160,10 @@ describe("fixed teaching regression reading", () => {
     expect(container.querySelector(".reg-interval-words")?.textContent).toBe(
       "95% 区间（模型系数的不确定性范围）为 [-0.30, +0.54] 个百分点，包含 0：不能说“没有关联”，只能说方向还不确定。",
     );
-    expect(container.querySelector(".reg-example-effect")?.textContent).toBe(
-      "按你在步骤 10 选的例子换算：CAN 加拿大·C29 的 X 为 23.25 个百分点，按估计与 X 相关的差异约为 +2.79 个百分点，但区间包含 0，差异的高低方向并不确定；"
-      + "USA 美国·C29 属于加征关税的一方，按设计不在回归样本中，X 记为 0 只是定义，不做换算。",
-    );
+    expect([...container.querySelectorAll(".reg-example-list > li")].map((item) => item.textContent)).toEqual([
+      "CAN 加拿大·C29：X = 23.25 个百分点 → 与 X 相关的差异约 +2.79 个百分点，但区间包含 0，高低方向并不确定",
+      "USA 美国·C29：加征关税的一方，不在回归样本中，不做换算",
+    ]);
     expect(container.textContent).not.toMatch(/平均高|平均低|偏高|偏低|没受加税影响/);
   });
 
@@ -172,13 +177,13 @@ describe("fixed teaching regression reading", () => {
       return text;
     };
     const untaxed = sentence([{ label: "GBR 英国·C29", x: 0, tau: 0 }, { label: "FRA 法国·C29", x: 0, tau: 0 }]);
-    expect(untaxed).toBe("按你在步骤 10 选的例子换算：GBR 英国·C29 未被加税；FRA 法国·C29 未被加税。"
+    expect(untaxed).toBe("换算到你在步骤 10 选的例子：GBR 英国·C29：未被加税FRA 法国·C29：未被加税"
       + "两个例子的 X 都是 0，按估计没有与 X 相关的差异。如需看到不为 0 的换算，请回到步骤 10 选一个被加税的国家（如加拿大）。");
     const unexposed = sentence([{ label: "BRN 文莱·C22", x: 0, tau: 0.25 }, { label: "MEX 墨西哥·C22", x: 0, tau: 0 }]);
-    expect(unexposed).toContain("BRN 文莱·C22 被加税但首年不向美国出口（w = 0）；MEX 墨西哥·C22 未被加税。两个例子的 X 都是 0");
+    expect(unexposed).toContain("BRN 文莱·C22：被加税但首年不向美国出口（w = 0）MEX 墨西哥·C22：未被加税两个例子的 X 都是 0");
     expect(unexposed).toContain("换一个向美国出口的被加税国家或行业");
     const single = sentence([{ label: "GBR 英国·C29", x: 0, tau: 0 }]);
-    expect(single).toBe("按你在步骤 10 选的例子换算：GBR 英国·C29 未被加税。"
+    expect(single).toBe("换算到你在步骤 10 选的例子：GBR 英国·C29：未被加税"
       + "这个例子的 X = 0，按估计没有与 X 相关的差异。如需看到不为 0 的换算，请回到步骤 10 换成被加税的国家（如加拿大），或再选一个被加税的对照国家。");
     for (const text of [untaxed, unexposed, single]) {
       expect(text).not.toContain("区间包含 0");
@@ -196,7 +201,9 @@ describe("fixed teaching regression reading", () => {
     data.result.depvar_within_std = 0.58;
     const { container } = render(<RegressionResultCard outcome="length" response={data} />);
     expect(container.querySelector(".reg-headline-main")?.textContent)
-      .toContain("前向 GVC 段长度平均短 0.0182 个长度单位（幅度约 0.031 个标准差，标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏）");
+      .toContain("前向 GVC 段长度平均短 0.0182 个长度单位（幅度约 0.031 个标准差）");
+    // What a standard deviation is: one line under the headline, not inside it.
+    expect(container.querySelector(".reg-sd-note")?.textContent).toBe("标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏。");
     expect(container.querySelector(".reg-interval-words")?.textContent).toContain("[-0.0190, -0.0170] 个长度单位；约 [-0.033, -0.029] 个标准差");
     expect(container.textContent).not.toContain("样本均值");
     // The definition is said once on the card.
@@ -212,7 +219,7 @@ describe("fixed teaching regression reading", () => {
     data.result.depvar_within_std = 0.17;
     const { container } = render(<RegressionResultCard outcome="length" response={data} />);
     expect(container.querySelector(".reg-headline-main")?.textContent)
-      .toContain("平均低 0.0021（幅度约 0.012 个标准差，标准差指扣除各国家×行业自身水平和各年共同变化后 Y 的起伏）");
+      .toContain("平均低 0.0021（幅度约 0.012 个标准差）");
     // A ratio: no unit after its amounts, "无量纲" where a unit is named (as step 7 and the report say).
     expect(container.querySelector(".reg-interval-words")?.textContent).toContain("[-0.0030, -0.0012]；约 [");
     expect(container.textContent).not.toContain("位置指数单位");
@@ -238,7 +245,7 @@ describe("the course's design value on the result card (v13)", () => {
     const run = response();
     const html = renderToStaticMarkup(<RegressionResultCard outcome="trade" response={run} />);
     expect(html).toContain("课程数据设定的两年累计为");
-    expect(html).toContain("区间包含设定值（估计偏差 0%）");
+    expect(html).toContain("区间包含设定值（与设定值几乎相同）");
     const zero = response();
     zero.model_snapshot!.beta = 0;
     zero.result.coefs[0] = { ...zero.result.coefs[0], coef: 0.01, ci_low: -0.02, ci_high: 0.04 };
@@ -251,7 +258,7 @@ describe("the course's design value on the result card (v13)", () => {
     span.design.spec = { x_lags: [2], controls: [], fixed_effects: ["year"] };
     const spanHtml = renderToStaticMarkup(<RegressionResultCard outcome="trade" response={span} />);
     expect(spanHtml).toContain("跨度不同，不是同一个估计量，不与设定值比较");
-    expect(spanHtml).not.toContain("估计偏差");
+    expect(spanHtml).not.toMatch(/幅度比设定值|与设定值几乎相同|方向与设定值相反/);
     const legacy = response();
     delete (legacy as { model_snapshot?: unknown }).model_snapshot;
     expect(renderToStaticMarkup(<RegressionResultCard outcome="trade" response={legacy} />)).not.toContain("课程数据设定");

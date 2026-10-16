@@ -91,19 +91,21 @@ def _shown_decimals(share: float) -> int:
 
 
 def worked_numbers(w: float, tau: float, x: float) -> tuple[str, str]:
-    """w (in %) and X (in percentage points) as step 10 shows them (frontend ``workedNumbers``): two decimals, more
-    only until the shown w times the shown τ rounds to the shown X, so "X = w × τ" and the conversions in steps
-    11–14 check by hand (0.22444, not 0.22). An exact zero X reads "0"."""
+    """w (in %) and X (in percentage points) as step 10 shows them (frontend ``workedNumbers``): two decimals, and the
+    fewest extra decimals in all (X's first on a tie) with which the shown w times the shown τ rounds to the shown X,
+    so "X = w × τ" and the conversions in steps 11–14 check by hand ("0.898% × 25% = 0.22", "0.006% × 25% = 0.0015").
+    An exact zero X reads "0"."""
 
     def w_at(decimals: int) -> str:
         return _fixed(w * 100, decimals)
 
     w_base, x_base = _shown_decimals(w), _shown_decimals(x)
     if x == 0:
-        return w_at(w_base), "0"
+        return ("0" if w == 0 else w_at(w_base)), "0"
     tau_shown = Decimal(_rate(tau * 100))
-    for extra in range(7):
-        for w_decimals, x_decimals in ((w_base + extra, x_base + extra), (w_base + extra, x_base + extra + 1)):
+    for extra in range(13):
+        for w_extra in range(extra + 1):
+            w_decimals, x_decimals = w_base + w_extra, x_base + extra - w_extra
             w_text, x_text = w_at(w_decimals), _fixed(x * 100, x_decimals)
             product = (Decimal(w_text) * tau_shown / 100).quantize(
                 Decimal(1).scaleb(-x_decimals), rounding=ROUND_HALF_UP
@@ -223,13 +225,13 @@ def _scenario_line(scenario: dict[str, Any] | None) -> str | None:
         )
         return (
             f"- 情景：美国分两批对{space}{who}的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 "
-            f"{_rate(float(rate) * 100)}% 关税：{parts}；服务业不加税；其余 {untaxed} 国未被加税。"
+            f"{_rate(float(rate) * 100)}% 关税：{parts}；非货物行业不加税；其余 {untaxed} 国未被加税。"
         )
     # Teaching data v8 taxes goods only (the rule carries a scope); an older release taxed every industry.
     if rule.get("scope"):
         return (
             f"- 情景：美国{since}对{space}{who}的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 "
-            f"{_rate(float(rate) * 100)}% 关税，服务业不加税；其余 {untaxed} 国未被加税。"
+            f"{_rate(float(rate) * 100)}% 关税，非货物行业不加税；其余 {untaxed} 国未被加税。"
         )
     return f"- 情景：美国{since}对{space}{who}加征 {_rate(float(rate) * 100)}% 关税，其余 {untaxed} 国未被加税。"
 
@@ -456,7 +458,7 @@ def _experiment_sections(session: dict[str, Any], scenario: dict[str, Any] | Non
                     f"τ = {_rate(float(teaching_observation['teaching_tariff_rate_tau']) * 100)}%；"
                     f"X = w × τ = {worked[1]} 个百分点"
                     + (
-                        "（服务业不在加税范围内，τ = 0）"
+                        "（非货物行业，不在加税范围内，τ = 0）"
                         if _is_service(teaching_observation.get("industry"))
                         and float(teaching_observation["teaching_tariff_rate_tau"]) == 0
                         else ""
@@ -640,7 +642,7 @@ def _example_conversion(
                 f"{label} 的 X 为 {_example_x(item, x, tau)} 个百分点，按估计两年累计与 X 相关的差异{amount}{reading}"
             )
         elif tau == 0 and _is_service(item.get("industry")):
-            text = f"{label} 是服务业，不在加税范围内（τ = 0），X = 0，按估计没有与 X 相关的差异"
+            text = f"{label} 不是货物行业，不在加税范围内（τ = 0），X = 0，按估计没有与 X 相关的差异"
         elif tau > 0:
             text = f"{label} 被加税但首年不向美国出口（w = 0），X = 0，按估计没有与 X 相关的差异"
         else:
@@ -769,7 +771,7 @@ def _evidence_summary(
             lines.append(f"- **需要写明的限制**：{design_limit}")
         names = compared.get(step)
         if names:
-            lines.append(f"- 你在本步做了一个模型实验（{markdown_name(names[0])}），见附录“模型实验”。")
+            lines.append(f"- 你在本步做了一个模型实验：{markdown_name(names[0])}，见附录“模型实验”。")
         lines.append("")
     return lines
 

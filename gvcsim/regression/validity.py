@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
-CLUSTER_INTERVAL_NOTE = "95% 区间按国家计算（按国家聚类），是近似值；结果主要由少数国家决定时，区间可能偏窄。"
+CLUSTER_INTERVAL_NOTE = "标准误按国家聚类，95% 区间据此计算，是近似值；结果主要由少数国家决定时，区间可能偏窄。"
 
 # 处理聚类数低于此值时抑制推断。
 #

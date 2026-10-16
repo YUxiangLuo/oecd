@@ -40,3 +40,46 @@ test("scroll dismissal is scoped to ancestors and listeners are removed on unmou
   fireEvent.scroll(window);
   expect(tip.style.opacity).toBe("1");
 });
+
+function FocusChart() {
+  const { wrapRef, Tip, show, hide } = useTip();
+  return (
+    <div ref={wrapRef} data-testid="chart">
+      <button
+        onFocus={(event) => show(event as never, [["", "focused"]], event.currentTarget.getBoundingClientRect())}
+        onMouseMove={(event) => show(event, [["", "value"]])}
+        onMouseLeave={hide}
+      >mark</button>
+      {Tip}
+    </div>
+  );
+}
+
+test("a hidden tip is hidden from screen readers and emptied; a focus tip survives the scroll that focus causes", async () => {
+  const view = render(<div data-testid="scroll"><FocusChart /></div>);
+  const mark = view.getByText("mark");
+  const tip = view.getByTestId("chart").lastElementChild as HTMLElement;
+  expect(tip.getAttribute("aria-hidden")).toBe("true");
+  fireEvent.mouseMove(mark, { clientX: 20, clientY: 30 });
+  expect(tip.getAttribute("aria-hidden")).toBeNull();
+  expect(tip.textContent).toBe("value");
+  fireEvent.mouseLeave(mark);
+  expect(tip.getAttribute("aria-hidden")).toBe("true");
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  expect(tip.textContent).toBe("");
+  // Tab onto the bar: the browser scrolls it into view right away, and the tip stays.
+  fireEvent.focus(mark);
+  fireEvent.scroll(view.getByTestId("scroll"));
+  expect(tip.style.opacity).toBe("1");
+  expect(tip.textContent).toBe("focused");
+});
+
+test("a wheel scroll right after a focus tip still dismisses it", () => {
+  const view = render(<div data-testid="scroll"><FocusChart /></div>);
+  const mark = view.getByText("mark");
+  const tip = view.getByTestId("chart").lastElementChild as HTMLElement;
+  fireEvent.focus(mark);
+  fireEvent.wheel(mark);
+  fireEvent.scroll(view.getByTestId("scroll"));
+  expect(tip.style.opacity).toBe("0");
+});

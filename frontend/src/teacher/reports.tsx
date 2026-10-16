@@ -14,8 +14,8 @@ import { LEAVE_MESSAGE, useTeacherReviewGuard } from "./review-guard";
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
 type Filter = "pending" | "graded" | "all";
 
-export const OUTDATED_REPORT_NOTE = "学生提交后改过记录，尚未重新提交；当前评阅的是已提交版本，仍可评分。";
-export const OUTDATED_REPORT_LABEL = "记录已变更，未重新提交";
+export const OUTDATED_REPORT_NOTE = "学生之后改过记录，未重新提交；当前评阅的是已提交版本，仍可评分。";
+export const OUTDATED_REPORT_LABEL = "学生之后改过记录，未重新提交";
 
 /**
  * Empty list copy: "no match" only when a search or class filter is active, not when all pending work is done.

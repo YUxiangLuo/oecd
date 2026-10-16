@@ -103,7 +103,7 @@ export function waveMarkers(years: readonly number[]): { year: number; label: st
  * years, which the regression separates; said without telling which way, so the student still finds it in the
  * workbench.
  */
-export const GROUP_CHART_CAPTION = "图上的变化混有同一时期的其他变化（如汇率），回归会把它们分开，所以条形图的数字不必等于图上两条线的距离。";
+export const GROUP_CHART_CAPTION = "图上的变化混有同一时期的其他变化（如汇率），回归会把它们分开，所以计算后下方的回归数字不必等于图上各组线之间的距离。";
 
 /** Under the 加税前后 chart: the premise the regression rests on, and how little the chart can show of it. In teaching
  *  data v10 it holds by design only once the exchange-rate change is controlled (the chart's lines are not parallel). */
@@ -112,7 +112,7 @@ export function parallelTrendsNote(years: readonly number[], policyYear: number 
   const count = ["", "一", "两", "三", "四", "五"][before.length] ?? String(before.length);
   const pre = before.length ? `加税前只有 ${before.join("、")} ${count}年可看` : "加税前的年份很少";
   const who = groups > 2 ? "各组" : "两组";
-  return `这张图也用来看回归的前提：如果没有关税，扣掉汇率等同期变化后，${who}的走势应大致平行。${pre}，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，控制汇率、GDP 对数和贸易开放度后条件均值满足这一设计前提。`;
+  return `这张图也用来看回归的前提：如果没有关税，扣掉汇率等同期变化后，${who}的走势应大致平行。${pre}，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，控制汇率、GDP 对数和贸易开放度后，这个前提按设计成立。`;
 }
 
 /** Step 14: weighted degree is in-degree + out-degree in every row (the report says the same under its chart). */
@@ -130,12 +130,19 @@ export function forwardShareIdentity(items: TeachingEstimate[]): string | null {
   const coefs = FORWARD_SHARES.map((key) => items.find((item) => item.key === key)?.coef);
   if (coefs.some((coef) => coef == null || !Number.isFinite(coef))) return null;
   const sum = (coefs as number[]).reduce((total, coef) => total + coef, 0);
-  return `纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（${Math.abs(sum) < 0.005 ? "0.00" : signed(sum, 2)}）；前向 GVC 生产总份额 = 简单 + 复杂（按未取整的原值精确相加，条旁取整后的数字可能相差末位 1）。`;
+  return `纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（${Math.abs(sum) < 0.005 ? "0.00" : signed(sum, 2)}）；前向 GVC 生产总份额 = 简单 + 复杂（按未取整的原值精确相加，条旁取整后的数字可能相差末位 1）。本步默认的“复杂 GVC 生产份额”按增加值来源（前向）计算；“后向复杂 GVC 生产份额”按最终品（后向）计算，是另一项指标。`;
+}
+
+/** Step 11's two shares: the course data make 国内增加值出口占比 = 1 − 外国增加值项占比 − the small rest. */
+export function tradeShareIdentity(items: TeachingEstimate[]): string | null {
+  return ["FVA_share", "DVAex_share"].every((key) => items.some((item) => item.key === key))
+    ? "课程数据里，国内增加值出口占比 = 1 − 外国增加值项占比 − 其余小项（重复计算等），所以这两条大小相近、方向相反。"
+    : null;
 }
 
 /** The bars' title: a click (or Enter on the focused bar) shows that Y's reading; nothing is saved. */
 export function familyBarsTitle(count: number): string {
-  return `本类 ${count} 个 Y · 点击任一条查看该 Y 的读数（键盘：方向键切换，Enter 查看）`;
+  return `本步 ${count} 个 Y · 点击任一条查看该 Y 的读数（键盘：方向键切换，Enter 查看）`;
 }
 
 /** Under the bars after a click on another Y: its reading, and that the step's material stays the default Y. */

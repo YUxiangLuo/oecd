@@ -1,7 +1,7 @@
 /** The step's result card: the headline sentence, its interval in words, the step 10 example's conversion and the limits. */
 import { groupedFixed, percentagePoints } from "../format";
 import { GENERATED_Y_DISCLOSURE, lessonFor } from "../regression-lessons";
-import { coversDesignSpan, designDeviation, perPointDigits, perPointReading, xSpanLabel } from "../regression-workbench-table";
+import { coversDesignSpan, designDeviation, designDeviationText, perPointDigits, perPointReading, xSpanLabel } from "../regression-workbench-table";
 import {
   buildRegressionVerdict,
   differenceWords,
@@ -9,6 +9,7 @@ import {
   withCountUnit,
   depvarKind,
   networkDigits,
+  SD_DEFINITION,
   shownPerPoint,
 } from "../regression-verdict";
 import { workedNumbers } from "../labs/steps/shock-lab";
@@ -34,8 +35,8 @@ export { networkDigits };
 export { groupedFixed };
 
 /**
- * An example's X in percentage points with the digits step 10 shows for it ("0.22444", not "0.22"), so the
- * conversion can be checked by hand; without w and τ, two decimals.
+ * An example's X in percentage points with the digits step 10 shows for it (workedNumbers: "0.0015" for a tiny X,
+ * not "0.00"), so the conversion can be checked by hand; without w and τ, two decimals.
  */
 export function exampleXText(example: Pick<RegressionExample, "x" | "w" | "tau">): string {
   return example.w != null && example.tau != null && Number.isFinite(example.w) && Number.isFinite(example.tau)
@@ -96,14 +97,16 @@ export function RegressionResultCard({ outcome, response, examples = [], example
   // 外国增加值项占比平均低 0.55 个百分点". Once the word says the direction, the number drops its sign (the
   // parenthetical sizes are unsigned already, as in the report). With an interval that includes 0 (or none
   // shown) the sign is not settled, so the signed estimate is given without 高/低.
-  const unsignedEffect = verdict.effect.replace(/^[+−-]/, "");
+  // The headline keeps the short form; what a standard deviation is follows it on its own line.
+  const unsignedEffect = verdict.effectBrief.replace(/^[+−-]/, "");
+  const standardized = verdict.effect !== verdict.effectBrief;
   // The course model has X and L1.X: the headline is their sum, the relation over the tariff's year and the next.
   // Said only for that model (a sum of other X terms, or no sum at all, is not "两年累计").
   const lags = response.design.spec?.x_lags;
   const twoYears = Boolean(response.result.cumulative) && (lags == null || (lags.length === 2 && lags.includes(0) && lags.includes(1)));
   const plainResult = directional
     ? `${twoYears ? "两年累计" : ""}平均${verdict.state === "negative" ? words.lower : words.higher} ${unsignedEffect}`
-    : `${twoYears ? "两年累计" : ""}平均相差 ${verdict.effect}，但高低方向不确定`;
+    : `${twoYears ? "两年累计" : ""}平均相差 ${verdict.effectBrief}，但高低方向不确定`;
   const split = twoYears ? lagSplit(outcome, response) : null;
   // "外国增加值项占比平均低", but "GVC 位置指数 平均…" keeps a space after a Latin name.
   const metricGap = /[A-Za-z]$/.test(lesson.shortMetric) ? " " : "";
@@ -126,6 +129,7 @@ export function RegressionResultCard({ outcome, response, examples = [], example
         </p>
       )}
       {verdict.coefficient && split && <p className="reg-lag-split">{split}</p>}
+      {standardized && <p className="muted reg-sd-note">{SD_DEFINITION}。</p>}
       {verdict.coefficient && !suppressed && response.model_snapshot && "beta" in response.model_snapshot && (
         <p className="reg-design-value" role="note">{designValueSentence(outcome, response, verdict.coefficient)}</p>
       )}
@@ -137,13 +141,13 @@ export function RegressionResultCard({ outcome, response, examples = [], example
           const lastConverted = converted.at(-1);
           const noConversion = converted.length === 0;
           const unexposedTaxed = examples.some((example) => !example.imposer && example.x <= 0 && (example.tau ?? 0) > 0);
-          const zeroNote = noConversion ? "" : "，X = 0，按估计没有与 X 相关的差异";
-          return <li className="reg-example-effect">{!exampleSaved ? "按默认例子（步骤 10 还没有保存你的例子）" : exampleChosen ? "按你在步骤 10 选的例子" : "按步骤 10 的默认例子（你没有另选）"}换算{exampleYear ? `（用 ${exampleYear} 年的 X）` : ""}：{examples.map((example, index) => {
+          const zeroNote = noConversion ? "" : "，X = 0 → 没有与 X 相关的差异";
+          return <li className="reg-example-effect">换算到{!exampleSaved ? "步骤 10 的默认例子（步骤 10 还没有保存你的例子）" : exampleChosen ? "你在步骤 10 选的例子" : "步骤 10 的默认例子"}{exampleYear ? `（${exampleYear} 年的 X）` : ""}：<ul className="reg-example-list">{examples.map((example) => {
             const coef = verdict.coefficient!.coef;
             // An association, not a tariff effect: the difference in Y that goes with the example's X. With X = 0
             // the estimate implies no X-related difference (Y still moves with the shared yearly changes).
             const text = example.imposer
-              ? <>{example.label} 属于加征关税的一方，按设计不在回归样本中，X 记为 0 只是定义，不做换算</>
+              ? <>{example.label}：加征关税的一方，不在回归样本中，不做换算</>
               : example.x > 0
               ? (() => {
                 const effect = exampleEffect(outcome, shownPerPoint(outcome, verdict.coefficient!, response.design), Number(exampleXText(example)), response.design);
@@ -152,22 +156,22 @@ export function RegressionResultCard({ outcome, response, examples = [], example
                 // "与 X 相关的差异约为 -12.83 个百分点（Y 偏低）"; below the shown precision it reads "不到 0.01 个百分点".
                 // With an interval that includes 0 the sign is not settled, so 偏低/偏高 is left out and the open
                 // direction is said once, after the last conversion.
-                return <>{example.label} 的 X 为 {exampleXText(example)} 个百分点，按估计{twoYears ? "两年累计" : ""}与 X 相关的差异{tiny ? "" : "约为 "}<b>{tiny ? effect : `${lower ? "-" : "+"}${effect}`}</b>{directional ? `（Y 偏${lower ? words.lower : words.higher}）` : ""}{verdict.state === "insufficient" && example === lastConverted ? "，但区间包含 0，差异的高低方向并不确定" : ""}</>;
+                return <>{example.label}：X = {exampleXText(example)} 个百分点 → {twoYears ? "两年累计" : ""}与 X 相关的差异{tiny ? "" : "约"} <b>{tiny ? effect : `${lower ? "-" : "+"}${effect}`}</b>{directional ? `（Y 偏${lower ? words.lower : words.higher}）` : ""}{verdict.state === "insufficient" && example === lastConverted ? "，但区间包含 0，高低方向并不确定" : ""}</>;
               })()
               : example.service
-                ? <>{example.label} 是服务业，不在加税范围内（τ = 0）{zeroNote}</>
+                ? <>{example.label}：不是货物行业，不加税（τ = 0）{zeroNote}</>
               : (example.tau ?? 0) > 0
-                ? <>{example.label} 被加税但首年不向美国出口（w = 0）{zeroNote}</>
-                : <>{example.label} 未被加税{zeroNote}</>;
-            return <span key={example.label}>{index ? "；" : ""}{text}</span>;
-          })}。
+                ? <>{example.label}：被加税但首年不向美国出口（w = 0）{zeroNote}</>
+                : <>{example.label}：未被加税{zeroNote}</>;
+            return <li key={example.label}>{text}</li>;
+          })}</ul>
             {noConversion && `${examples.length === 1 ? "这个例子的 X = 0" : "两个例子的 X 都是 0"}，按估计没有与 X 相关的差异。如需看到不为 0 的换算，请回到步骤 10 ${examples.some((example) => example.service)
-              ? "换一个货物行业（服务业不加税），如加拿大的汽车行业"
+              ? "换一个货物行业（非货物行业不加税），如加拿大的汽车行业"
               : unexposedTaxed
               ? "换一个向美国出口的被加税国家或行业（如加拿大的汽车行业）"
               : examples.length === 1 ? "换成被加税的国家（如加拿大），或再选一个被加税的对照国家" : "选一个被加税的国家（如加拿大）"}。`}</li>;
         })()}
-        {!suppressed && verdict.coefficient && examples.some((example) => !example.imposer && example.x > 0) && <li className="muted">例子换算使用全样本系数，以 X=0 为比较基准；不是两国实际差或该行业的实际前后变化。</li>}
+        {!suppressed && verdict.coefficient && examples.some((example) => !example.imposer && example.x > 0) && <li className="muted">换算 = 显示的系数 × 例子的 X，以 X = 0 为基准；不是两国的实际差距，也不是该行业实际的前后变化。</li>}
         {/* As the report says next to the number: step 14's unit is not the 百万美元 of steps 5 and 9. */}
         {kind === "network" && <li className="muted reg-unit-note">{NETWORK_UNIT_NOTE}</li>}
         <li className="reg-caveat"><b>解释限制</b> {lesson.dontClaim}</li>
@@ -201,7 +205,7 @@ export function designValueSentence(outcome: RegressionOutcome, response: Pick<R
   const covered = coefficient.ci_low != null && coefficient.ci_high != null && coefficient.ci_low <= beta && beta <= coefficient.ci_high;
   const deviation = designDeviation(coefficient.coef, beta);
   const span = lags == null || (lags.length === 2 && lags.includes(0) && lags.includes(1)) ? "两年累计" : "X 各项合计";
-  return `课程数据设定的${span}为 ${target}，你算出 ${estimate}，区间${covered ? "包含" : "不包含"}设定值（估计偏差 ${deviation > 0 ? "+" : ""}${Math.round(deviation * 100)}%）。`;
+  return `课程数据设定的${span}为 ${target}，你算出 ${estimate}，区间${covered ? "包含" : "不包含"}设定值（${designDeviationText(deviation)}）。`;
 }
 
 /**

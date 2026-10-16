@@ -8,11 +8,22 @@ import { stripNegativeZero } from "../../../format";
 import type { Row } from "./scaffold";
 import { CardGrid } from "./card-grid";
 
-/** Axis ticks: round values, trailing zeros trimmed ("10%", "1.5"). */
-export const indicatorTick = (value: number | null, unit: string) => {
+/** Decimals a tick step needs in the shown unit (0.00025 → 5), so neighbouring ticks never read alike. */
+const stepDecimals = (ticks: readonly number[] | undefined, unit: string) => {
+  if (!ticks || ticks.length < 2) return 0;
+  const step = Math.abs(ticks[1] - ticks[0]) * (unit === "%" ? 100 : 1);
+  if (!(step > 0)) return 0;
+  const text = String(Number(step.toPrecision(6)));
+  const exponent = /e-(\d+)$/.exec(text);
+  return exponent ? Number(exponent[1]) + (text.split("e")[0].split(".")[1]?.length ?? 0) : text.split(".")[1]?.length ?? 0;
+};
+
+/** Axis ticks: round values, trailing zeros trimmed ("10%", "1.5"); given the axis's ticks, at least the decimals
+ * their step needs (0, 0.00025, 0.0005, … rather than 0.001 three times). */
+export const indicatorTick = (value: number | null, unit: string, ticks?: readonly number[]) => {
   if (value === null) return "缺失";
   const shown = unit === "%" ? value * 100 : value;
-  const digits = readingDigits(value, unit);
+  const digits = Math.max(readingDigits(value, unit), stepDecimals(ticks, unit));
   // A tick that is not zero must not read "0" (tiny exposures): keep two significant digits instead.
   const tooSmall = shown !== 0 && Math.abs(shown) < 0.5 * 10 ** -digits;
   const text = tooSmall
@@ -168,8 +179,8 @@ export function TrendSummary({
       : gapMagnitude === null
         ? "差距基本不变"
         : gapChange > 0
-          ? `差距扩大 ${gapMagnitude}`
-          : `差距缩小 ${gapMagnitude}`;
+          ? `差距（不计正负）扩大 ${gapMagnitude}`
+          : `差距（不计正负）缩小 ${gapMagnitude}`;
     return (
       <div key={second}>
         <span>与对比国家 {scopeLabel(second, industry)}</span>
@@ -265,26 +276,31 @@ export function ComparisonSummary({
       .value!;
   const starts = countries.map((country) => value(country, firstYear));
   const ends = countries.map((country) => value(country, lastYear));
-  const startGap = starts[0] - starts[1];
-  const endGap = ends[0] - ends[1];
+  // Each country's value as its card shows it: the gap cards read from these, so the two gaps agree with each other
+  // and with the cards ("−0.00111" twice, not −0.00111 beside 0.00115 from the unrounded values).
+  const shown = (values: number[], index: number) => {
+    const places = countryDigits?.[countries[index]];
+    // Rounded where the card rounds it: a "%" card shows the share × 100.
+    const factor = unit === "%" ? 100 : 1;
+    return places == null ? values[index] : Number((values[index] * factor).toFixed(places)) / factor;
+  };
+  const startGap = shown(starts, 0) - shown(starts, 1);
+  const endGap = shown(ends, 0) - shown(ends, 1);
   const gapChange = Math.abs(endGap) - Math.abs(startGap);
   const gapMagnitude = magnitudeReading(gapChange, unit, digits);
   const reversed = startGap !== 0 && endGap !== 0 && Math.sign(startGap) !== Math.sign(endGap);
-  // Two equal readings at both ends (step 10: both X = 0) have no gap at all, not an unchanged one.
-  const gapStory = startGap === 0 && endGap === 0
+  // Two equal values at both ends (step 10: both X = 0) have no gap at all, not an unchanged one. Equal only as
+  // shown (0.347 and 0.353 both read 0.35) is not "no gap": it reads as about unchanged below.
+  const gapStory = starts[0] === starts[1] && ends[0] === ends[1]
     ? "差距为 0"
     : reversed
     ? "高低位置互换"
     : gapMagnitude === null
       ? "差距基本不变"
       : gapChange > 0
-        ? `差距扩大 ${gapMagnitude}`
-        : `差距缩小 ${gapMagnitude}`;
-  const shownEnd = (index: number) => {
-    const value = ends[index];
-    const places = countryDigits?.[countries[index]];
-    return value == null || places == null ? value : Number(value.toFixed(places));
-  };
+        ? `差距（不计正负）扩大 ${gapMagnitude}`
+        : `差距（不计正负）缩小 ${gapMagnitude}`;
+  const shownEnd = (index: number) => shown(ends, index);
   return (
     <div className="comparison-summary" role="group" aria-label="两国趋势结论">
       {countries.map((country, index) => (
@@ -534,7 +550,7 @@ export function IndicatorTrendChart({
           <g key={tick}>
             <line x1={110} x2={730} y1={y(tick)} y2={y(tick)} stroke="#e2e5ee" />
             <text x={100} y={y(tick) + 4} textAnchor="end" fontSize={12} fill="#596173">
-              {indicatorTick(tick, unit)}
+              {indicatorTick(tick, unit, axis.ticks)}
             </text>
           </g>
         ))}
@@ -627,10 +643,11 @@ export function IndicatorTrendChart({
           .filter((mark) => years.includes(mark.year) && mark.year > years[0])
           .map((mark, index) => (
             <g key={mark.year} data-mark-year={mark.year} pointerEvents="none">
-              <line x1={x(mark.year - 0.5)} x2={x(mark.year - 0.5)} y1={34} y2={250} stroke="#4b5563" strokeDasharray="5 4" />
-              {/* Before a tariff wave X is zero, but exchange-rate lines can cross this area.
-                  Draw the label and its white outline after the series so the text stays readable. */}
-              <text x={x(mark.year - 0.5) - 10} y={index === 0 ? 149 : 228} textAnchor="end" fontSize={12} fill="#374151"
+              {/* A stepped series changes halfway between years, where its riser sits; a plain line chart (the
+                  exchange rate) marks the year itself, with the label at the top, clear of the lines. The label
+                  is drawn after the series, with a white outline, so it stays readable. */}
+              <line x1={x(mark.year - (stepped ? 0.5 : 0))} x2={x(mark.year - (stepped ? 0.5 : 0))} y1={34} y2={250} stroke="#4b5563" strokeDasharray="5 4" />
+              <text x={x(mark.year - (stepped ? 0.5 : 0)) - 10} y={stepped ? (index === 0 ? 149 : 228) : 48 + index * 16} textAnchor="end" fontSize={12} fill="#374151"
                 stroke="#fff" strokeWidth={3} strokeLinejoin="round" paintOrder="stroke">{mark.label}</text>
             </g>
           ))}
@@ -876,7 +893,7 @@ export function DistributionStrip({
         </text>
         <line x1={60} x2={740} y1={base} y2={base} stroke="#c7ccd8" />
         {axis.ticks.map((tick) => (
-          <text key={tick} x={x(tick)} y={base + 18} textAnchor="middle" fontSize={11} fill="#596173">{indicatorTick(tick, unit)}</text>
+          <text key={tick} x={x(tick)} y={base + 18} textAnchor="middle" fontSize={11} fill="#596173">{indicatorTick(tick, unit, axis.ticks)}</text>
         ))}
         {placed.map((point) => highlight.includes(point.country) ? null : (
           <g
@@ -1040,8 +1057,8 @@ export function LengthPositionTrajectory({
           return <g key={tickValue}>
             <line x1={120} x2={660} y1={y(tickValue)} y2={y(tickValue)} stroke="#e2e5ee" />
             <line x1={x(tickValue)} x2={x(tickValue)} y1={50} y2={590} stroke="#e2e5ee" />
-            <text x={110} y={y(tickValue) + 4} textAnchor="end" fontSize={12}>{indicatorTick(tickValue, "生产阶段")}</text>
-            <text x={x(tickValue)} y={615} textAnchor="middle" fontSize={12}>{indicatorTick(tickValue, "生产阶段")}</text>
+            <text x={110} y={y(tickValue) + 4} textAnchor="end" fontSize={12}>{indicatorTick(tickValue, "生产阶段", axis.ticks)}</text>
+            <text x={x(tickValue)} y={615} textAnchor="middle" fontSize={12}>{indicatorTick(tickValue, "生产阶段", axis.ticks)}</text>
           </g>;
         })}
         {shownCloud.map((point) => (

@@ -146,7 +146,8 @@ def test_step_12_interval_question_does_not_require_changing_saved_y():
     assert "点击" not in question["prompt"] and "95% 区间包含 0" in question["prompt"]
     assert question["correct"] == "b" and quizzes.quiz_version(12) == "course-quiz-v11"
     tasks = " ".join(next(step for step in STEPS if step["n"] == 12)["tasks"])
-    assert "点灰色" not in tasks and "不用点击" in tasks
+    # Hovering or clicking the grey bar only previews its interval; the saved Y stays the step's default.
+    assert "点灰色" not in tasks and "悬停或点它看区间" in tasks
 
 
 def _quiz_text(question):

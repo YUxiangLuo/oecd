@@ -16,12 +16,12 @@ const points = (share: number) => (share === 0 ? "0" : percentagePoints(share));
 /** A country's goods industries in the sample (the tariff falls on goods); an older server sends none: all of them. */
 const goodsOf = (row: CountryRow) => row.goods_industries ?? row.industries;
 
-/** "36/44 个行业被加税（8 个服务业不加税）", plus how many taxed goods industries export nothing to the US. */
+/** "36/44 个行业被加税（8 个非货物行业不加税）", plus how many taxed goods industries export nothing to the US. */
 export function countryIndustryNote(row: CountryRow): string {
   if (!row.taxed) return `0/${row.industries} 个行业被加税`;
   const goods = goodsOf(row);
   const notes = [
-    ...(goods < row.industries ? [`${row.industries - goods} 个服务业不加税`] : []),
+    ...(goods < row.industries ? [`${row.industries - goods} 个非货物行业不加税`] : []),
     ...(row.exposed_industries < goods ? [`${goods - row.exposed_industries} 个货物行业对美无出口：w = 0`] : []),
   ];
   return `${goods}/${row.industries} 个行业被加税${notes.length ? `（${notes.join("，")}）` : ""}`;
@@ -43,6 +43,13 @@ export function yiUsd(millionUsd: number): string {
 export function ruleYiUsd(millionUsd: number): string {
   const yi = millionUsd / 100;
   return Number.isInteger(yi) ? `${yi.toLocaleString("zh-CN")} 亿美元` : yiUsd(millionUsd);
+}
+
+/** "10–100 亿美元": both ends formatted alike, the unit once (a "12.34–100 亿美元" mix of two formats is avoided). */
+export function ruleYiUsdRange(lowMillionUsd: number, highMillionUsd: number): string {
+  const low = ruleYiUsd(lowMillionUsd), high = ruleYiUsd(highMillionUsd);
+  const unit = " 亿美元";
+  return low.endsWith(unit) && high.endsWith(unit) ? `${low.slice(0, -unit.length)}–${high}` : `${low}–${high}`;
 }
 
 /** The year the taxed rule reads the goods balance in, as a phrase ("2016 年"; "首年" from an older server). */
@@ -69,12 +76,12 @@ export function taxedRuleText(rule: TeachingCountriesResponse["taxed_rule"], rel
 
 /** The industry count as short readout lines that fit the 260 px readout: "被加税行业 36 个（样本内共 44 个）" (the
  * total is the country's industries in the regression sample, which can be fewer than 45; only goods are taxed),
- * "服务业 8 个，不加税", and for a taxed country with goods industries that export nothing to the US, "其中 X > 0
+ * "非货物行业 8 个，不加税", and for a taxed country with goods industries that export nothing to the US, "其中 X > 0
  * 35 个" and "其余 1 个 对美无出口：w = 0". */
 export function countryIndustryLines(row: CountryRow): TipLine[] {
   const goods = goodsOf(row);
   const lines: TipLine[] = [["被加税行业", `${row.taxed ? goods : 0} 个（样本内共 ${row.industries} 个）`]];
-  if (row.taxed && goods < row.industries) lines.push(["服务业", `${row.industries - goods} 个，不加税`]);
+  if (row.taxed && goods < row.industries) lines.push(["非货物行业", `${row.industries - goods} 个，不加税`]);
   if (row.taxed && row.exposed_industries < goods) {
     lines.push(["其中 X > 0", `${row.exposed_industries} 个`]);
     lines.push([`其余 ${goods - row.exposed_industries} 个`, "对美无出口：w = 0"]);
@@ -257,7 +264,7 @@ export function CountryExposureChart({ data, limit }: {
         </div>
       )}
       {limit != null && limit > 0 && allTaxed.length > limit && (
-        <button type="button" className="link-button country-exposure-expand" aria-expanded={expanded}
+        <button type="button" className="secondary country-exposure-expand" aria-expanded={expanded}
           onClick={() => setExpanded((value) => !value)}>
           {expanded ? `只看 X 最高的 ${limit} 国` : `展开全部 ${allTaxed.length} 个被加税国家`}
         </button>

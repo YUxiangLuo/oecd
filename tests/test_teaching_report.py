@@ -1557,10 +1557,7 @@ def test_report_renders_authoritative_result_fixture_without_calling_estimator(t
     assert report.provenance["runs"][0]["result"]["cumulative"]["coef"] == 1.2
     assert "1.2" in report.markdown and "未缓存的重新计算，不采用浏览器保存的数字" in report.markdown
     assert "[0.5721, 1.8279]" in report.markdown
-    assert (
-        "| X 各项合计（累计效应） | +1.20 个百分点 | 1.2000 | [0.5721, 1.8279] | 0.3000 | 4.00 | 0.0008 |"
-        in report.markdown
-    )
+    assert "| X 各项合计 | +1.20 个百分点 | 1.2000 | [0.5721, 1.8279] | 0.3000 | 4.00 | 0.0008 |" in report.markdown
     assert "## 关键证据摘要" in report.markdown
     assert X_COLUMN in report.markdown
     assert "+1.20 个百分点" in report.markdown
@@ -1601,7 +1598,8 @@ def test_report_renders_authoritative_result_fixture_without_calling_estimator(t
     )
     # The method notes state the tariff's scope, the parallel-trends premise and the SD basis.
     assert (
-        "美国分两批对被加税国家的货物行业（ICIO 行业 A–C）加税" in report.markdown and "服务业 τ = 0" in report.markdown
+        "美国分两批对被加税国家的货物行业（ICIO 行业 A–C）加税" in report.markdown
+        and "非货物行业 τ = 0" in report.markdown
     )
     assert "前提是没有关税时两组的 Y 会平行变化" in report.markdown
     assert "扣掉各国家×行业平均水平和每年共同变化后 Y 的标准差" in report.markdown
@@ -1611,7 +1609,7 @@ def test_report_renders_authoritative_result_fixture_without_calling_estimator(t
     )
     assert "本实验没有生成冲击后的投入产出表或网络" not in report.markdown
     assert "不能证明真实关税" not in report.markdown
-    assert "95% 区间按国家计算（按国家聚类），是近似值" in report.markdown
+    assert "标准误按国家聚类，95% 区间据此计算，是近似值" in report.markdown
     assert "区间可能偏窄" in report.markdown
     # The interval is named for what it is, once, where the results start.
     assert "区间说明：95% 区间是真实系数的合理取值范围，包含 0 时方向不确定。" in report.markdown
@@ -2015,7 +2013,7 @@ def test_report_marks_suppressed_inference_and_reasons(tmp_path, monkeypatch):
     assert "这一项不显示 95% 区间" in report.markdown
     assert "处理聚类不足" in report.markdown
     assert "| 关税暴露 X | — | -0.1200 | 不显示 | — | — | 不显示 |" in report.markdown
-    assert "| X 各项合计（累计效应） | -0.20 个百分点 | -0.2000 | 不显示 | — | — | 不显示 |" in report.markdown
+    assert "| X 各项合计 | -0.20 个百分点 | -0.2000 | 不显示 | — | — | 不显示 |" in report.markdown
 
 
 def test_report_translates_settings_controls_and_rounds_display_values(tmp_path, monkeypatch):
@@ -2624,14 +2622,16 @@ def test_report_example_conversion_multiplies_the_printed_numbers():
 
 
 def test_report_example_x_uses_step_ten_digits():
-    """X reads as on step 10 (frontend ``workedNumbers``), so the conversion checks by hand: 0.22444 × 40.80 ≈ 9.16."""
+    """X reads as on step 10 (frontend ``workedNumbers``), so the conversion checks by hand: 0.22 × 40.80 ≈ 8.98."""
     from gvcsim.report_render import _example_conversion, worked_numbers
 
-    assert worked_numbers(0.0089776, 0.25, 0.0089776 * 0.25) == ("0.89776", "0.22444")
+    assert worked_numbers(0.0089776, 0.25, 0.0089776 * 0.25) == ("0.898", "0.22")
+    # w just above two decimals' reach (IDN B07_08): one more for w, not eight.
+    assert worked_numbers(0.0000616123, 0.25, 0.0000616123 * 0.25) == ("0.006", "0.0015")
     assert worked_numbers(0.000985, 0.25, 0.000985 * 0.25) == ("0.10", "0.025")
     assert worked_numbers(0.93, 0.25, 0.93 * 0.25) == ("93.00", "23.25")
     assert worked_numbers(0.000033, 0.25, 0.000033 * 0.25) == ("0.0033", "0.00083")
-    assert worked_numbers(0, 0.25, 0) == ("0.00", "0")
+    assert worked_numbers(0, 0.25, 0) == ("0", "0")
     example = {
         "country": "SVK",
         "industry": "C26",
@@ -2641,8 +2641,7 @@ def test_report_example_x_uses_step_ten_digits():
     }
     line = _example_conversion("network", {"depvar_kind": "network"}, {"coef": 4080}, True, example)
     assert (
-        line is not None
-        and "的 X 为 0.22444 个百分点，按估计两年累计与 X 相关的差异约为 +9.16 个中心性原始单位" in line
+        line is not None and "的 X 为 0.22 个百分点，按估计两年累计与 X 相关的差异约为 +8.98 个中心性原始单位" in line
     )
     # Without w (an older record), two decimals as before.
     del example["teaching_export_share_w"]
@@ -2772,7 +2771,7 @@ def test_report_step_ten_states_the_scenario_and_who_is_taxed(tmp_path, monkeypa
     since = f"从 {overview['policy_year']} 年起" if overview["policy_year"] else ""
     assert (
         f"- 情景：美国{since}对 {rule_year} 年对美货物贸易顺差达到或超过 10 亿美元的 "
-        f"{overview['taxed_countries']} 国的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 25% 关税，服务业不加税；"
+        f"{overview['taxed_countries']} 国的货物（农业、采矿业和制造业，ICIO 行业 A–C）加征 25% 关税，非货物行业不加税；"
         f"其余 {overview['untaxed_countries']} 国未被加税。"
     ) in step_ten
     # The scenario comes before the example, as at the top of step 10.
@@ -2792,7 +2791,7 @@ def test_report_step_ten_states_the_scenario_and_who_is_taxed(tmp_path, monkeypa
             assert line.endswith(f"；{label} 被加税但首年不向美国出口（w = 0），X = 0，按估计没有与 X 相关的差异。")
         elif industry[:1] not in ("A", "B", "C"):
             # The fixture's industry "s1" is not an ICIO goods code: a service under v8, never taxed.
-            assert line.endswith(f"；{label} 是服务业，不在加税范围内（τ = 0），X = 0，按估计没有与 X 相关的差异。")
+            assert line.endswith(f"；{label} 不是货物行业，不在加税范围内（τ = 0），X = 0，按估计没有与 X 相关的差异。")
         else:
             assert line.endswith(f"；{label} 未被加税，X = 0，按估计没有与 X 相关的差异。")
 
@@ -2832,7 +2831,7 @@ def test_report_scenario_line_and_two_example_conversion_read_like_step_ten():
     goods = {**scenario, "taxed_rule": {**scenario["taxed_rule"], "scope": "goods industries (ICIO sectors A-C)"}}
     assert _scenario_line(goods) == (
         "- 情景：美国从 2018 年起对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 44 国的货物（农业、采矿业和制造业，"
-        "ICIO 行业 A–C）加征 25% 关税，服务业不加税；其余 32 国未被加税。"
+        "ICIO 行业 A–C）加征 25% 关税，非货物行业不加税；其余 32 国未被加税。"
     )
     # Two waves (v10): the line names both, largest surpluses first, as step 10 does; each taxed country's start year.
     waves = {
@@ -2849,7 +2848,7 @@ def test_report_scenario_line_and_two_example_conversion_read_like_step_ten():
     assert _scenario_line(waves) == (
         "- 情景：美国分两批对 2016 年对美货物贸易顺差达到或超过 10 亿美元的 37 国的货物（农业、采矿业和制造业，"
         "ICIO 行业 A–C）加征 25% 关税：对美货物顺差 ≥ 100 亿美元的 14 国 2018 年起，其余 23 国 2019 年起；"
-        "服务业不加税；其余 38 国未被加税。"
+        "非货物行业不加税；其余 38 国未被加税。"
     )
     assert _with_tax_status("MEX", waves) == f"{country_label('MEX')}（被加税，2019 年起）"
     assert _with_tax_status("CRI", waves) == f"{country_label('CRI')}（未被加税）"
@@ -2859,7 +2858,7 @@ def test_report_scenario_line_and_two_example_conversion_read_like_step_ten():
     service = {"country": "CAN", "industry": "O", X_COLUMN: 0.0, "teaching_tariff_rate_tau": 0.0}
     service_line = _example_conversion("trade", {}, {"coef": -0.55}, True, [service])
     assert service_line == (
-        f"- **按步骤 10 的例子换算**：{country_label('CAN')} · {_sector('O')} 是服务业，不在加税范围内（τ = 0），X = 0，"
+        f"- **按步骤 10 的例子换算**：{country_label('CAN')} · {_sector('O')} 不是货物行业，不在加税范围内（τ = 0），X = 0，"
         "按估计没有与 X 相关的差异。"
     )
     taxed = {"country": "CAN", "industry": "C29", X_COLUMN: 0.2325, "teaching_tariff_rate_tau": 0.25}
@@ -2966,7 +2965,10 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     failing = _complete()
     failing["steps"]["11"]["data"]["experiment"] = _experiment(ModelSpec((0,), (), ("year",)))
     lines = build(failing, "同学").markdown.split("## 附录：模型实验", 1)[1]
-    assert "- 自定义设定：X；无控制变量；年份 FE。这次没能重算：关税暴露 X 在这个设定下无法估计" in lines
+    assert (
+        "- 自定义（去掉 L1\\.X；去掉汇率变动；去掉 GDP 对数；去掉贸易开放度；固定效应：年份 FE）：X；无控制变量；年份 FE。"
+        "这次没能重算：关税暴露 X 在这个设定下无法估计" in lines
+    )
     # The rest of this test reads a teaching-shaped panel with two tariff waves.
     panel = _panel()
     monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: (artifacts.release_identity(tmp_path), panel))
@@ -2974,8 +2976,9 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
 
     no_rate = ModelSpec((0, 1), ((GDP_COLUMN, 0), (OPENNESS_COLUMN, 0)), ("country_industry", "year"))
     country_year = ModelSpec((0, 1), ((EXCHANGE_RATE_COLUMN, 0),), ("country_industry", "country_year"))
-    custom_name = "自定义设定"
-    escaped_name = "自定义设定"
+    custom_name = "自定义（去掉 GDP 对数；去掉贸易开放度；固定效应：国家×行业 + 国家×年份 FE）"
+    # Markdown-escaped in the report, as every model name ("+" is written "\+").
+    escaped_name = "自定义（去掉 GDP 对数；去掉贸易开放度；固定效应：国家×行业 \\+ 国家×年份 FE）"
     session = _complete()
     # The fixture panel carries step 11's Y only: step 11 recomputes, step 13 says it could not, step 12 has none.
     session["steps"]["11"]["data"]["experiment"] = _experiment(country_year)
@@ -2988,7 +2991,10 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     # One table a step; a preset's model is named after the preset, any other as a custom setting (escaped).
     assert "### 步骤 11 · 贸易流回归（Y：外国增加值项占比）" in appendix
     # The course's design value sits under the per-point row with each column's deviation from it.
-    assert "| 课程设定值（X 每高 1 个百分点） | -0.55 个百分点；估计偏差 " in appendix
+    assert re.search(
+        r"\| 课程设定值（X 每高 1 个百分点） \| -0\.55 个百分点；(幅度比设定值[大小] \d+%|与设定值几乎相同|方向与设定值相反)",
+        appendix,
+    )
     assert f"| 变量 | 默认模型 | {escaped_name} |" in appendix
     assert "### 步骤 13 · 长度回归（Y：" in appendix
     assert "| 变量 | 默认模型 | 去掉汇率变动 |" in appendix
@@ -3017,7 +3023,7 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     assert "| 观测值 |" in step11 and "| 组内 R² |" in step11 and "| F（自由度） |" in step11
     # Under the cumulative relation, each column's sum per 1 percentage point of X, as the page's table reads it.
     per_point = next(line for line in step11.splitlines() if line.startswith("| 合计：X 每高 1 个百分点 |"))
-    assert step11.index("| X 各项合计（累计效应） |") < step11.index(per_point)
+    assert step11.index("| X 各项合计 |") < step11.index(per_point)
     cells = per_point.strip(" |").split(" | ")[1:]
     assert len(cells) == 2 and all(cell.endswith(" 个百分点（两年累计）") for cell in cells)
     default_run = regression_routes.cached_run(panel, RegressionDesign("trade", teaching=True, spec=DEFAULT_SPEC))
@@ -3038,13 +3044,9 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     ]
     # Each step's evidence names its experiment.
     summary = markdown.split("## 关键证据摘要", 1)[1].split("## 理解题答题记录", 1)[0]
-    # A custom model is named by its model in the summary sentence (its name alone says only 自定义设定), escaped
-    # as a typed name would be.
-    assert (
-        "- 你在本步做了一个模型实验（自定义设定：X \\+ L1\\.X；汇率变动；国家×行业 \\+ 国家×年份 FE），见附录“模型实验”。"
-        in summary
-    )
-    assert "- 你在本步做了一个模型实验（去掉汇率变动），见附录“模型实验”。" in summary
+    # A custom model is named by what it changes (as on the page), escaped as a typed name would be.
+    assert f"- 你在本步做了一个模型实验：{escaped_name}，见附录“模型实验”。" in summary
+    assert "- 你在本步做了一个模型实验：去掉汇率变动，见附录“模型实验”。" in summary
     assert summary.count("你在本步做了一个模型实验") == 2
     # The methods note says the appendix is the one part recomputed.
     assert "“模型实验”附录中的模型则按你保存的设定在生成报告时重新计算。" in markdown

@@ -22,18 +22,18 @@ import { userFacingRequestError } from "./user-facing-error";
 import { countryLabel, GroupChangeChart, sectorLabel } from "./viz";
 import { DivergingBarChart } from "./viz/regression/diverging-bars";
 import { RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
-import { experimentLabel, perPointDigits, perPointReading } from "./regression-workbench-table";
+import { perPointDigits, perPointReading, shownModelLabel } from "./regression-workbench-table";
 import { MaterialCard } from "./material-card";
 import { regressionMaterialLabel } from "./material-label";
 import { DesignEquation } from "./regression-step/model-equation";
 import { RegressionResultCard, type RegressionExample } from "./regression-step/result-card";
 import { regressionRunSnapshotIdentity, savedRegressionResponse, TEACHING_MODEL_VERSION, type RegressionStepState } from "./regression-step/saved-run";
 import {
-  barPreviewText, degreeIdentity, familyBarRows, familyBarsTitle, forwardShareIdentity, GROUP_CHART_CAPTION, groupLines, kindOf,
+  barPreviewText, degreeIdentity, familyBarRows, familyBarsTitle, forwardShareIdentity, tradeShareIdentity, GROUP_CHART_CAPTION, groupLines, kindOf,
   parallelTrendsNote, waveMarkers,
 } from "./regression-step/family-bars";
 import { INTERRUPTED_RUN_NOTE, useRegressionRun } from "./regression-step/use-regression-run";
-import { decompositionSentence } from "./regression-teach";
+import { DecompositionList } from "./regression-teach";
 
 // The step's pieces, re-exported here: the page is what the course imports.
 export { equationSymbol, explanatoryText, sampleFilterLabel } from "./regression-step/model-equation";
@@ -44,7 +44,7 @@ export {
   regressionRunSnapshotIdentity, TEACHING_MODEL_VERSION, type RegressionStepState, type SavedRegressionRun,
 } from "./regression-step/saved-run";
 export {
-  barPreviewText, degreeIdentity, familyBarRows, familyBarsTitle, forwardShareIdentity, GROUP_CHART_CAPTION, groupLines,
+  barPreviewText, degreeIdentity, familyBarRows, familyBarsTitle, forwardShareIdentity, tradeShareIdentity, GROUP_CHART_CAPTION, groupLines,
   NETWORK_DEGREE_IDENTITY, parallelTrendsNote, runEstimate, waveMarkers,
 } from "./regression-step/family-bars";
 export { INTERRUPTED_RUN_NOTE } from "./regression-step/use-regression-run";
@@ -209,13 +209,13 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
 
   const bars = result && overviewItems.length > 0 ? familyBarRows(outcome, overviewItems, defaultKey, result) : null;
   const previewRow = bars && previewKey ? bars.rows.find((row) => row.key === previewKey) ?? null : null;
-  const identity = !bars ? null : outcome === "production" ? forwardShareIdentity(overviewItems) : outcome === "network" ? degreeIdentity(overviewItems) : null;
+  const identity = !bars ? null : outcome === "production" ? forwardShareIdentity(overviewItems) : outcome === "network" ? degreeIdentity(overviewItems) : outcome === "trade" ? tradeShareIdentity(overviewItems) : null;
   const latinGap = /^[A-Za-z]/.test(lesson.shortMetric) ? " " : "";
   const experiment = (state.data as { experiment?: Experiment | null } | undefined)?.experiment ?? null;
   const optionsQuery = useAsync<WorkbenchOptions>(() => api.regressionOptions(), ["regression-options"]);
   const experimentLine = experiment && optionsQuery.status === "success" && optionsQuery.data
-    ? `记入报告的模型实验：${experimentLabel(experiment.spec, optionsQuery.data)}${experiment.baseline && experiment.baseline !== defaultKey ? `（Y：${displayBaselineLabel(baselineOptions.find((option) => option.key === experiment.baseline)?.label ?? experiment.baseline)}）` : ""}（选做）。`
-    : experiment ? "记入报告的模型实验：1 个（选做）。" : null;
+    ? `另记入报告的模型实验：${shownModelLabel(experiment.spec, optionsQuery.data)}${experiment.baseline && experiment.baseline !== defaultKey ? `（Y：${displayBaselineLabel(baselineOptions.find((option) => option.key === experiment.baseline)?.label ?? experiment.baseline)}）` : ""}（选做）。`
+    : experiment ? "另记入报告的模型实验：1 个（选做）。" : null;
 
   return (
     <div className="reg-workbench">
@@ -236,6 +236,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
       <section className="reg-run-card">
         <span className="reg-section-step">先看数据</span>
         <h3>{lessonQuestion(outcome, defaultKey)}</h3>
+        {(!defaultKey || defaultKey === DEFAULT_BASELINES[outcome]) && <p className="reg-y-definition">{lesson.definition}</p>}
         {staleSavedY && (
           <p className="reg-boundary" role="status">上次保存的结果（{displayBaselineLabel(savedRun?.design?.baseline_label) || "—"}）不是本步的 Y，请重新计算。</p>
         )}
@@ -260,9 +261,8 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
                 title={`加税前后：各组${latinGap}${lesson.shortMetric}的平均变化`}
               />
               {result?.decomposition && (
-                <p className="reg-decomposition" role="note">
-                  {decompositionSentence(result.decomposition, lesson.shortMetric, levelScale, display.unit ?? lesson.unit, kind === "share" ? 1 : kind === "network" ? 0 : 3)}
-                </p>
+                <DecompositionList decomposition={result.decomposition} metric={lesson.shortMetric} scale={levelScale}
+                  unit={display.unit ?? lesson.unit} digits={kind === "share" ? 1 : kind === "network" ? 0 : 3} />
               )}
               {/* One note, folded: what the chart mixes in, and the premise it can only partly show. */}
               <details className="reg-gap-details">
@@ -342,24 +342,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
         </div>
       )}
 
-      {/* 本步报告材料: the default model's result (saved by 计算) and the one experiment put into the report. */}
-      <MaterialCard
-        state={result && savedUsable ? "recorded" : result ? "recorded" : "missing"}
-        summary={result
-          ? (state.data?.material_label as string | undefined) ?? `默认模型：${displayBaselineLabel(result.design.depvar_label)}（已计算）`
-          : `尚未记录：点“计算${runName}”后自动保存默认模型的结果。`}
-        extra={result ? (experimentLine ?? "记入报告的模型实验：无（选做，在下方“改模型、对比”里算出一个模型后点“也记入报告”）。") : null}
-        how={result ? "点“计算”后自动保存本步默认 Y 的默认模型结果；重新计算得到相同的数字。" : undefined}
-        syncing={state.syncing}
-        syncError={state.materialSyncError ?? null}
-        syncConflict={state.syncConflict}
-        onRetrySync={state.syncNow}
-      />
-
-      {/* 3 · The quiz: the step is complete once it is answered, before anything optional. */}
-      {quiz}
-
-      {/* 4 · Change one setting at a time and read it next to the default model (folded; optional for completion). */}
+      {/* 3 · Change one setting at a time and read it next to the default model (folded; optional for completion). */}
       {result && (
         <details className="reg-run-card reg-custom-section" id="regression-model" open={workbenchOpen}
           onToggle={(event) => setWorkbenchOpen(event.currentTarget.open)}>
@@ -380,6 +363,23 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
           )}
         </details>
       )}
+
+      {/* 本步报告材料: the default model's result (saved by 计算) and the one experiment put into the report. */}
+      <MaterialCard
+        state={result ? "recorded" : "missing"}
+        summary={result
+          ? (state.data?.material_label as string | undefined) ?? `默认模型：${displayBaselineLabel(result.design.depvar_label)}（已计算）`
+          : `尚未记录：点“计算${runName}”后自动保存默认模型的结果。`}
+        extra={result ? experimentLine : null}
+        how={result ? "计算后自动保存，无需另外操作。" : undefined}
+        syncing={state.syncing}
+        syncError={state.materialSyncError ?? null}
+        syncConflict={state.syncConflict}
+        onRetrySync={state.syncNow}
+      />
+
+      {/* 5 · The quiz, after everything the step shows (the optional workbench included). */}
+      {quiz}
     </div>
   );
 }

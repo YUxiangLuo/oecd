@@ -210,7 +210,7 @@ describe("indicator explorer with report material recorded on request", () => {
     expect(cards[1]).toContain("在全部经济体中");
     expect(cards[2]).toContain("全球中位数");
     expect(cards[3]).toContain("与对比国家 USA 美国");
-    expect(view.getByText(/差距缩小 .* 个百分点/)).toBeTruthy();
+    expect(view.getByText(/差距（不计正负）缩小 .* 个百分点/)).toBeTruthy();
     expect(chart.querySelector('[data-series="global-median"]')).not.toBeNull();
     // Switching the view records nothing either: the student records the chart they want.
     await view.findByRole("button", { name: RECORD_CHART_ACTION });

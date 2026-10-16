@@ -1157,7 +1157,7 @@ test("step 15 corrects a submitted service example's old label after country-lis
       countries: [{ country: "CHN", taxed: true }, { country: "AUS", taxed: false }],
       taxed_rule: { scope: "goods industries (ICIO sectors A-C)" },
     } as TeachingCountriesResponse); });
-    await waitFor(() => expect(label()).toBe("例子：CHN 中国（被加税） 对 AUS 澳大利亚（未被加税） · D 电力燃气（服务业不加税）"));
+    await waitFor(() => expect(label()).toBe("例子：CHN 中国（被加税） 对 AUS 澳大利亚（未被加税） · D 电力燃气（非货物行业，不加税）"));
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByText("报告需更新后重新提交")).toBeNull();
     expect((screen.getByRole("button", { name: "导出 PDF" }) as HTMLButtonElement).disabled).toBe(false);

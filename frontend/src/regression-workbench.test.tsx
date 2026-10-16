@@ -4,8 +4,8 @@ import { useState } from "react";
 import { api, ApiError } from "./api";
 import { ColumnDetails, experimentReportChanged, ModelComparisonChart, RegressionModelWorkbench, type WorkbenchStepState } from "./regression-workbench";
 import {
-  canonicalSpec, coefficientRows, comparisonCsv, designDeviation, designValueRow, effectiveEffects, equationPreview, experimentLabel, includedBy, omittedSummary, perPointReading,
-  perPointRow, samplesDiffer, significanceStars, snapshotOf, specSummary, summaryRows, termLabel,
+  canonicalSpec, coefficientRows, comparisonCsv, designDeviation, designDeviationText, designValueRow, effectiveEffects, equationPreview, experimentLabel, includedBy, omittedSummary, perPointReading,
+  perPointRow, samplesDiffer, shownModelLabel, chartModelLabel, significanceStars, snapshotOf, specSummary, summaryRows, termLabel,
   type TableColumn,
 } from "./regression-workbench-table";
 import optionsFixture from "./regression-workbench-options.fixture.json";
@@ -55,9 +55,9 @@ const NO_RATE_RUN = response(NO_RATE, { teaching_tariff_exposure: -0.4608, teach
 function experimentOf(spec: ModelSpec, run: RegressionResponse): Experiment {
   return { spec, saved_at: "2026-10-11T09:00:00Z", snapshot: snapshotOf(run) };
 }
-/** Opens a folded details (the custom form, the full-numbers fold) as a click on its summary would. */
-function openDetails(details: Element | null) {
-  (details as HTMLDetailsElement).open = true;
+/** Opens (or folds) a details (the custom form, the full-numbers fold) as a click on its summary would. */
+function openDetails(details: Element | null, open = true) {
+  (details as HTMLDetailsElement).open = open;
   fireEvent(details!, new Event("toggle"));
 }
 
@@ -86,18 +86,40 @@ describe("model wording (the server's ModelSpec.summary and equation)", () => {
 
   test("terms, stars and p values", () => {
     expect(["teaching_tariff_exposure", "teaching_tariff_exposure_lag2", ER, `${ER}__lag1`, "cumulative", "_constant"].map((name) => termLabel(name, options)))
-      .toEqual(["X", "L2.X", "汇率变动", "L1.汇率变动", "X 各项合计（累计效应）", "常数项"]);
+      .toEqual(["X", "L2.X", "汇率变动", "L1.汇率变动", "X 各项合计", "常数项"]);
     expect([0.005, 0.03, 0.07, 0.2, null].map(significanceStars)).toEqual(["***", "**", "*", "", ""]);
   });
 });
 
 describe("experiment labels", () => {
-  test("a preset's model is named after the preset; any other model as a custom setting", () => {
+  test("the comparison chart shortens a long custom name to its count of changes; short names stay whole", () => {
+    expect(chartModelLabel("去掉汇率变动")).toBe("去掉汇率变动");
+    expect(chartModelLabel("自定义（去掉汇率变动；加 L2.X）")).toBe("自定义（去掉汇率变动；加 L2.X）");
+    expect(chartModelLabel("自定义（去掉 L1.X；去掉汇率变动；去掉 GDP 对数；去掉贸易开放度；固定效应：年份 FE）")).toBe("自定义（5 处改动）");
+  });
+
+  test("on the page a custom model says what it changes, so two of them are told apart", () => {
+    expect(shownModelLabel(NO_RATE, options)).toBe("去掉汇率变动");
+    expect(shownModelLabel(DEFAULT, options)).toBe("默认模型");
+    expect(shownModelLabel({ ...DEFAULT, x_lags: [0, 1, 2] }, options)).toBe("自定义（加 L2.X）");
+    // Removals come before additions: "去掉…；加…".
+    expect(shownModelLabel({ ...DEFAULT, x_lags: [0, 1, 2], controls: DEFAULT.controls.slice(1) }, options)).toBe("自定义（去掉汇率变动；加 L2.X）");
+    const many = shownModelLabel({ x_lags: [2], controls: [], fixed_effects: ["year"] }, options);
+    expect(many).toBe("自定义（去掉 X；去掉 L1.X；去掉汇率变动；去掉 GDP 对数；去掉贸易开放度；加 L2.X；固定效应：年份 FE）");
+    // Two models alike in their first three changes still get different names (every change is named).
+    expect(shownModelLabel({ x_lags: [2], controls: [], fixed_effects: ["country_industry"] }, options)).not.toBe(many);
+    // The same names as the server's workbench.experiment_label gives the report (tests/test_workbench.py).
+    expect(shownModelLabel({ x_lags: [0], controls: [], fixed_effects: ["year"] }, options)).toBe("自定义（去掉 L1.X；去掉汇率变动；去掉 GDP 对数；去掉贸易开放度；固定效应：年份 FE）");
+    expect(shownModelLabel({ ...DEFAULT, controls: DEFAULT.controls.map((item) => ({ ...item, lag: 1 })) }, options))
+      .toBe("自定义（汇率变动改为 L1.汇率变动；GDP 对数改为 L1.GDP 对数；贸易开放度改为 L1.贸易开放度）");
+  });
+
+  test("a preset's model is named after the preset; any other model by what it changes", () => {
     expect(experimentLabel(NO_RATE, options)).toBe("去掉汇率变动");
     expect(experimentLabel({ ...DEFAULT, x_lags: [0] }, options)).toBe("只放当期 X（去掉 L1.X）");
     // Written in another order, it is the same model.
     expect(experimentLabel({ ...NO_RATE, controls: [...NO_RATE.controls].reverse() }, options)).toBe("去掉汇率变动");
-    expect(experimentLabel({ x_lags: [0], controls: [], fixed_effects: ["year"] }, options)).toBe("自定义设定");
+    expect(experimentLabel({ x_lags: [0], controls: [], fixed_effects: ["year"] }, options)).toBe("自定义（去掉 L1.X；去掉汇率变动；去掉 GDP 对数；去掉贸易开放度；固定效应：年份 FE）");
   });
 });
 
@@ -110,7 +132,7 @@ describe("tables", () => {
   test("the design-value row says the course's number per point and each column's deviation from it (v13)", () => {
     const row = designValueRow(columns, "trade", "FVA_share", options)!;
     expect(row.label).toBe("课程设定值（X 每高 1 个百分点）");
-    expect(row.cells.every((cell) => cell.startsWith("-0.55 个百分点；估计偏差 "))).toBe(true);
+    expect(row.cells.every((cell) => /^-0\.55 个百分点；(?:幅度比设定值[大小] \d+%|与设定值几乎相同|方向与设定值相反)$/.test(cell))).toBe(true);
     expect(designValueRow(columns, "production", "3b_FGY_GVC_C_share", options)!.cells[0]).toBe("设定为 0（与 X 无关）");
     expect(designValueRow(columns, "length", "GVCPs", options)!.cells[0]).toBe("无单一设定值（比值 Y）");
     expect(designValueRow(columns, "trade", "unknown", options)).toBeNull();
@@ -121,10 +143,12 @@ describe("tables", () => {
       { name: "三年", spec: { ...DEFAULT, x_lags: [0, 1, 2] }, snapshot: snapshotOf(DEFAULT_RUN) },
     ], "trade", "FVA_share", options)!;
     expect(spans.cells[2]).toBe("-0.55 个百分点（两年累计）；本列跨度不同，不计偏差");
-    expect(spans.cells[3]).toStartWith("-0.55 个百分点；估计偏差 ");
+    expect(spans.cells[3]).toMatch(/^-0\.55 个百分点；(?:幅度比设定值[大小] \d+%|与设定值几乎相同|方向与设定值相反)$/);
     expect(designDeviation(-0.66, -0.55)).toBeCloseTo(0.2);
     expect(designDeviation(-0.44, -0.55)).toBeCloseTo(-0.2);
     expect(designDeviation(0.11, -0.55)).toBeCloseTo(-1.2);
+    // In words, so the sign of a percentage cannot be misread.
+    expect([0.2, -0.2, 0.004, -1.2].map(designDeviationText)).toEqual(["幅度比设定值大 20%", "幅度比设定值小 20%", "与设定值几乎相同", "方向与设定值相反"]);
     const summary = summaryRows(columns, options);
     expect(summary.map((item) => item.key)).toEqual(expect.arrayContaining(["f_p", "root_mse"]));
   });
@@ -134,13 +158,14 @@ describe("tables", () => {
     expect(options.presets.map((item) => item.label)).toEqual([
       "去掉汇率变动", "去掉 GDP 对数", "去掉贸易开放度", "只放当期 X（去掉 L1.X）", "去掉年份固定效应", "固定效应改为国家 + 行业 + 年份", "加上人口增长率和 FDI 净流入占比",
     ]);
-    expect(options.x_lags[2].description).toContain("没有两年后的关联");
+    expect(options.x_lags[2].description).toBe("滞后 2 期：两年前的 X");
+    expect(options.design_value_note).toContain("区间可能仍包含它");
     expect(options.fixed_effects.find((item) => item.key === "country_year")?.description).toContain("吸收不等于没有控制");
   });
 
   test("rows are the union of the columns' terms, then each fixed effect and the statistics", () => {
     const rows = coefficientRows(columns, options);
-    expect(rows.map((row) => row.label)).toEqual(["X", "L1.X", "汇率变动", "GDP 对数", "贸易开放度", "X 各项合计（累计效应）"]);
+    expect(rows.map((row) => row.label)).toEqual(["X", "L1.X", "汇率变动", "GDP 对数", "贸易开放度", "X 各项合计"]);
     expect(rows[2].cells).toEqual([{ coef: "0.0052***", se: "(0.0005)" }, null]);
     expect(rows[5].cells[1]).toEqual({ coef: "-0.7048***", se: "(0.0705)" });
     const summary = summaryRows(columns, options);
@@ -208,7 +233,7 @@ describe("tables", () => {
     const plain = response(plainSpec, { teaching_tariff_exposure: 0.1, teaching_tariff_exposure_lag1: -0.25 }, { constant: coef("_constant", 0.4) });
     const csv = comparisonCsv([columns[0], { name: "无FE", spec: plainSpec, snapshot: snapshotOf(plain) }], options, "Y", perPointRow([columns[0], { name: "无FE", spec: plainSpec, snapshot: snapshotOf(plain) }], "trade"));
     const labels = csv.slice(1).split("\r\n").map((line) => line.split(",")[0]);
-    expect(labels.indexOf("合计：X 每高 1 个百分点")).toBe(labels.indexOf("X 各项合计（累计效应）") + 2);
+    expect(labels.indexOf("合计：X 每高 1 个百分点")).toBe(labels.indexOf("X 各项合计") + 2);
     expect(labels.indexOf("常数项")).toBeGreaterThan(labels.indexOf("合计：X 每高 1 个百分点"));
   });
 
@@ -230,7 +255,7 @@ describe("tables", () => {
     const lines = csv.slice(1).trimEnd().split("\r\n");
     const labels = lines.map((line) => line.split(",")[0]);
     expect(labels.indexOf("课程设定值（X 每高 1 个百分点）")).toBe(labels.indexOf("合计：X 每高 1 个百分点") + 1);
-    expect(lines[labels.indexOf("课程设定值（X 每高 1 个百分点）")]).toMatch(/^课程设定值（X 每高 1 个百分点）,-0\.55 个百分点；估计偏差 [+-]?\d+%,-0\.55 个百分点；估计偏差 \+\d+%$/);
+    expect(lines[labels.indexOf("课程设定值（X 每高 1 个百分点）")]).toMatch(/^课程设定值（X 每高 1 个百分点）,-0\.55 个百分点；(?:幅度比设定值[大小] \d+%|与设定值几乎相同|方向与设定值相反),-0\.55 个百分点；幅度比设定值大 \d+%$/);
   });
 
   test("the CSV has a BOM, two rows per term, the fixed effects, the models and the footnote last", () => {
@@ -301,6 +326,12 @@ function Harness({ initial, onSave, onView, locked = false, defaultResponse = DE
 const checkbox = (label: RegExp) => screen.getByRole("checkbox", { name: label });
 /** The regression table's column names (the full-numbers fold has a table of its own). */
 const tableHeaders = () => [...document.querySelectorAll(".reg-custom-compare-table thead th")].map((cell) => cell.textContent);
+/** The one line above the results: what they are and whether they follow the settings on screen. */
+const statusBar = () => document.querySelector(".reg-custom-status")?.textContent ?? "";
+/** The design-value note under the status line (or the ratio Y's note in its place). */
+const designNote = () => document.querySelector(".reg-design-note")?.textContent ?? "";
+/** The screen-reader announcement of the last action. */
+const announcement = () => document.querySelector(".sr-only[role='status']")?.textContent;
 
 describe("the workbench", () => {
   test("a ratio Y explains its missing target and compares presets with its own default, then restores target guidance", async () => {
@@ -318,13 +349,13 @@ describe("the workbench", () => {
       { ...BASELINES[0], key: "PLv_GVC", label: "前向 GVC 段长度", kind: "length" },
       { ...BASELINES[1], key: "GVCPs", label: "GVC 位置指数", kind: "position" },
     ]} />);
-    const presets = await screen.findByRole("group", { name: "预设实验" });
-    expect(presets.textContent).toContain(options.design_value_note);
+    await screen.findByRole("group", { name: "预设实验" });
+    expect(designNote()).toBe(options.design_value_note);
     const select = screen.getByRole("combobox", { name: "因变量" });
     await act(async () => { fireEvent.change(select, { target: { value: "GVCPs" } }); });
     await screen.findByText("回归结果表（因变量：GVC 位置指数）");
-    expect(presets.textContent).toContain("没有单一的线性设定值");
-    expect(presets.textContent).not.toContain("每个 Y 的两年累计关联有一个设定值");
+    expect(designNote()).toContain("没有单一的课程设定值");
+    expect(designNote()).not.toContain("每个 Y 的两年累计关联有一个设定值");
     for (const name of [/^去掉汇率变动/, /^固定效应改为国家/]) {
       const question = screen.getByRole("button", { name }).textContent ?? "";
       expect(question).toContain("同一 Y 的默认模型");
@@ -332,7 +363,7 @@ describe("the workbench", () => {
     }
     expect(document.querySelector(".reg-custom-design-row")?.textContent).toContain("无单一设定值（比值 Y）");
     await act(async () => { fireEvent.change(select, { target: { value: "PLv_GVC" } }); });
-    expect(presets.textContent).toContain(options.design_value_note);
+    expect(designNote()).toBe(options.design_value_note);
     expect(screen.getByRole("button", { name: /^去掉汇率变动/ }).textContent).toContain("离课程设定值");
   });
 
@@ -388,6 +419,38 @@ describe("the workbench", () => {
     expect(document.querySelector(".reg-custom-point-row")?.textContent).toContain("0.55");
   });
 
+  test("back on the page with the reported model in the form, its column is said to be that model, not uncomputed", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    spyOn(api, "runRegression").mockResolvedValue(NO_RATE_RUN as never);
+    render(<Harness initial={{ experiment: experimentOf(NO_RATE, NO_RATE_RUN), custom_draft: { spec: NO_RATE } }} />);
+    await screen.findByRole("group", { name: "预设实验" });
+    expect(tableHeaders()).toEqual(["变量", "默认模型", "已记入报告：去掉汇率变动"]);
+    // The model without the exchange rate shows a dash in that row, not an empty cell.
+    const rateRow = [...document.querySelectorAll(".reg-custom-compare-table tbody tr")].find((row) => row.querySelector("th")?.textContent === "汇率变动")!;
+    expect(rateRow.querySelectorAll("td")[1].textContent).toBe("—");
+    expect(document.querySelector(".reg-custom-table-single")).toBeNull();
+    expect(statusBar()).toBe("勾选框里是已记入报告的“去掉汇率变动”，结果就在下面它的那一列。");
+    openDetails(document.querySelector(".reg-custom-form-details"));
+    // Shown from what the report saved, so it can be computed again (e.g. after the course data were updated).
+    expect(screen.getByRole("button", { name: "重新计算这个模型" }).getAttribute("aria-disabled")).toBeNull();
+  });
+
+  test("while another Y's default model fails, the report box stays and nothing claims results below", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    spyOn(api, "runRegression").mockRejectedValue(new ApiError(500, "服务器忙", "x") as never);
+    render(<Harness baselines={BASELINES} initial={{ experiment: experimentOf(NO_RATE, NO_RATE_RUN) }} />);
+    const select = await screen.findByRole("combobox", { name: "因变量" });
+    await act(async () => { fireEvent.change(select, { target: { value: "DVAex_share" } }); });
+    await screen.findByRole("button", { name: "改回本步的 Y" });
+    // The model in the report can still be seen and removed.
+    expect(document.querySelector(".reg-custom-report-chip")?.textContent).toContain("去掉汇率变动");
+    expect(screen.getByRole("button", { name: "从报告移除" })).toBeTruthy();
+    // No results are shown, so neither the status line nor the form's button says they are.
+    expect(statusBar()).toBe("“国内增加值出口占比”的默认模型还没有取到，下面暂时没有结果（见上方提示）。");
+    openDetails(document.querySelector(".reg-custom-form-details"));
+    expect(screen.queryByRole("button", { name: "已算好（结果在下面）" })).toBeNull();
+  });
+
   test("another Y of the family: its default model is the first column, the design value is its β, the report records the Y", async () => {
     spyOn(api, "regressionOptions").mockResolvedValue(options);
     const onY = (run: RegressionResponse) => ({ ...run, design: { ...run.design, depvar_label: "国内增加值出口占比" } });
@@ -406,11 +469,11 @@ describe("the workbench", () => {
     await waitFor(() => expect(run).toHaveBeenCalledWith("trade", expect.anything(), "DVAex_share", null));
     await screen.findByText("回归结果表（因变量：国内增加值出口占比）");
     expect(views.at(-1)).toEqual({ custom_draft: { baseline: "DVAex_share" } });
-    await waitFor(() => expect(document.querySelector(".reg-custom-design-row")?.textContent).toContain("0.55 个百分点；估计偏差 +0%"));
+    await waitFor(() => expect(document.querySelector(".reg-custom-design-row")?.textContent).toContain("0.55 个百分点；与设定值几乎相同"));
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^去掉汇率变动/ })); });
     await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "本次：去掉汇率变动"]));
     expect(run).toHaveBeenLastCalledWith("trade", expect.anything(), "DVAex_share", expect.objectContaining({ controls: NO_RATE.controls }));
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /也记入报告（选做）$/ })); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "把“去掉汇率变动”记入报告" })); });
     expect(saved.at(-1)?.experiment).toMatchObject({ baseline: "DVAex_share", spec: NO_RATE });
     expect(document.querySelector(".reg-custom-report-chip")?.textContent).toContain("Y：国内增加值出口占比");
     // Back on the step's Y: the experiment on the other Y is named, not shown as a column (two Ys share no table).
@@ -418,7 +481,9 @@ describe("the workbench", () => {
     await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型"]));
     expect(document.querySelector(".reg-custom-report-chip")?.textContent).toContain("Y：国内增加值出口占比");
     expect(views.at(-1)?.custom_draft?.baseline).toBeUndefined();
-    expect(views.at(-1)?.custom_draft?.spec).toEqual(NO_RATE);
+    // The comparison starts again from this Y's default model, form included: nothing reads as uncomputed.
+    expect(views.at(-1)?.custom_draft?.spec).toBeUndefined();
+    expect(statusBar()).toBe("下面是“外国增加值项占比”的默认模型。点一个预设实验，或改设定后计算，旁边会多出一列用来比较。");
   });
 
   test("an experiment on another Y counts as changed when the report printed it on the step's Y", () => {
@@ -443,7 +508,8 @@ describe("the workbench", () => {
     expect(screen.getByRole("button", { name: /^去掉汇率变动/ }).getAttribute("aria-pressed")).toBe("true");
     await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "本次：去掉汇率变动"]));
     expect(document.querySelector("th.reg-custom-current")?.textContent).toBe("本次：去掉汇率变动");
-    expect(screen.getByRole("button", { name: "把“去掉汇率变动”也记入报告（选做）" })).toBeTruthy();
+    expect(statusBar()).toBe("下面比较：默认模型 和 “去掉汇率变动”（已算好）。");
+    expect(screen.getByRole("button", { name: "把“去掉汇率变动”记入报告" }).className).toBe("primary");
   });
 
   test("the custom form sends the canonical spec; the computed model can be put into the report, replaced and removed", async () => {
@@ -463,14 +529,19 @@ describe("the workbench", () => {
     expect(run).toHaveBeenCalledWith("trade", expect.anything(), "FVA_share", NO_RATE);
     await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "本次：去掉汇率变动"]));
     // Into the report: the one model of this step.
-    fireEvent.click(screen.getByRole("button", { name: "把“去掉汇率变动”也记入报告（选做）" }));
+    // The form's model is computed: the button says so instead of computing it again.
+    const computeButton = screen.getByRole("button", { name: "已算好（结果在下面）" });
+    expect(computeButton.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(computeButton);
+    expect(run).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "把“去掉汇率变动”记入报告" }));
     expect(saves).toHaveLength(1);
     expect(saves[0].experiment).toMatchObject({ spec: NO_RATE });
     expect(saves[0].experiment!.snapshot.result.cumulative?.coef).toBeCloseTo(-0.7048);
     await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "已记入报告：去掉汇率变动"]));
     expect(document.querySelector(".reg-custom-report-chip")?.textContent).toContain("已记入报告：去掉汇率变动");
-    expect(screen.queryByRole("button", { name: /也记入报告（选做）$/ })).toBeNull();
-    expect(screen.getByRole("status").textContent).toBe("已把“去掉汇率变动”记入报告。");
+    expect(screen.queryByRole("button", { name: /^把“.*”记入报告$/ })).toBeNull();
+    expect(announcement()).toBe("已把“去掉汇率变动”记入报告。");
     // Another model computed: it can replace the one in the report; both show until then.
     const xOnly = response({ ...DEFAULT, x_lags: [0] }, { teaching_tariff_exposure: -0.46, [ER]: 0.005, ...macroValues });
     run.mockResolvedValue(xOnly as never);
@@ -482,11 +553,12 @@ describe("the workbench", () => {
     // Out of the report again.
     fireEvent.click(screen.getByRole("button", { name: "从报告移除" }));
     expect(saves.at(-1)).toEqual({ experiment: null });
-    await waitFor(() => expect(screen.getByText(/^还没有记入报告的模型实验（选做）：算出一个模型后点“也记入报告”/)).toBeTruthy());
-    expect(screen.getByRole("status").textContent).toBe("已把“只放当期 X（去掉 L1.X）”从报告移除。");
+    await waitFor(() => expect(screen.getByText("报告附录会把它和默认模型并列；每步最多记入一个模型。")).toBeTruthy());
+    expect(screen.getByRole("button", { name: "把“只放当期 X（去掉 L1.X）”记入报告" })).toBeTruthy();
+    expect(announcement()).toBe("已把“只放当期 X（去掉 L1.X）”从报告移除。");
     // Changing the form marks the shown result as out of date.
     fireEvent.click(checkbox(/^L2\.X/));
-    expect(screen.getByRole("note").textContent).toContain("设定已更改");
+    expect(statusBar()).toBe("勾选框里的设定还没有计算。下面仍是之前的结果：默认模型、“只放当期 X（去掉 L1.X）”。");
   });
 
   test("the default model itself cannot be put into the report", async () => {
@@ -495,10 +567,16 @@ describe("the workbench", () => {
     render(<Harness />);
     await screen.findByRole("group", { name: "预设实验" });
     openDetails(document.querySelector(".reg-custom-form-details"));
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "计算这个模型" })); });
-    expect(await screen.findByText("这就是本步的默认模型（表中第一列）。")).toBeTruthy();
-    expect(document.querySelector("th.reg-custom-current")?.textContent).toBe("默认模型");
+    // The default settings are already the first column: nothing to compute, and the line says what is below.
+    expect(screen.getByRole("button", { name: "已算好（结果在下面）" }).getAttribute("aria-disabled")).toBe("true");
+    expect(document.querySelector(".reg-custom-start")?.textContent).toContain("要计算的设定：默认模型（结果已在下面）");
+    expect(statusBar()).toBe("下面是“外国增加值项占比”的默认模型。点一个预设实验，或改设定后计算，旁边会多出一列用来比较。");
     expect(screen.queryByRole("button", { name: /记入报告/ })).toBeNull();
+    // Settings changed before anything was computed are said too, with the calculation offered once the form folds.
+    fireEvent.click(checkbox(/^L2\.X/));
+    expect(statusBar()).toBe("勾选框里的设定还没有计算。下面仍只有默认模型。");
+    openDetails(document.querySelector(".reg-custom-form-details"), false);
+    expect(screen.getByRole("button", { name: "计算当前设定" })).toBeTruthy();
   });
 
   test("the model in the report is shown on return, and after a submitted report removing it says the report changed", async () => {
@@ -507,11 +585,13 @@ describe("the workbench", () => {
     const saves: Partial<WorkbenchStepState>[] = [];
     render(<Harness initial={{ experiment: experimentOf(NO_RATE, NO_RATE_RUN) }} onSave={(patch) => saves.push(patch)} locked reported={reported} outdated />);
     await waitFor(() => expect(tableHeaders()).toEqual(["变量", "默认模型", "已记入报告：去掉汇率变动"]));
-    expect(document.querySelector(".reg-rerun-warning")?.textContent).toBe("报告已提交记入、替换或移除报告里的模型都会改变报告；之后要到步骤 15 更新报告，并重新提交给老师。");
+    expect(document.querySelector(".reg-rerun-warning")?.textContent).toBe("报告已提交记入、替换或移除模型都会改变报告；之后要到步骤 15 更新报告并重新提交，如已评分，评分和评语会被清除。");
     expect(screen.queryByText(/记入报告的模型与已提交报告里的不同/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "从报告移除" }));
     expect(saves).toEqual([{ experiment: null }]);
-    await waitFor(() => expect(screen.getByText("记入报告的模型与已提交报告里的不同；请到步骤 15 更新报告并重新提交给老师。")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("记入报告的模型与已提交报告里的不同；请到步骤 15 更新报告并重新提交给老师（如已评分，评分和评语会被清除）。")).toBeTruthy());
+    // One notice, not the general one stacked above it.
+    expect(document.querySelectorAll(".reg-rerun-warning")).toHaveLength(1);
   });
 
   test("the CSV is the table on screen, with the model just computed", async () => {
@@ -568,8 +648,9 @@ describe("the open workbench", () => {
     render(<Harness />);
     await screen.findByRole("group", { name: "预设实验" });
     openDetails(document.querySelector(".reg-custom-form-details"));
-    const compute = screen.getByRole("button", { name: "计算这个模型" });
+    // Changed settings first: the default settings are already computed (the button says so).
     fireEvent.click(checkbox(/^汇率变动/));
+    const compute = screen.getByRole("button", { name: "计算这个模型" });
     await act(async () => { fireEvent.click(compute); });
     expect((await screen.findByRole("alert")).textContent).toContain("计算太频繁");
     run.mockRejectedValue(new ApiError(400, "样本不足", "x") as never);
@@ -586,8 +667,9 @@ describe("the open workbench", () => {
     render(<Harness />);
     await screen.findByRole("group", { name: "预设实验" });
     openDetails(document.querySelector(".reg-custom-form-details"));
-    const compute = screen.getByRole("button", { name: "计算这个模型" });
+    // Changed settings first: the default settings are already computed (the button says so).
     fireEvent.click(checkbox(/^汇率变动/));
+    const compute = screen.getByRole("button", { name: "计算这个模型" });
     await act(async () => { fireEvent.click(compute); });
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toBe("计算太频繁：每分钟最多算 20 个新模型，新的设定请等倒计时结束；仍在服务器缓存中的设定不计次，现在就能算。");
@@ -615,26 +697,36 @@ describe("the open workbench", () => {
     await waitFor(() => expect(tableHeaders()).toContain("本次：去掉汇率变动"));
     openDetails(document.querySelector(".reg-custom-form-details"));
     fireEvent.click(checkbox(/^L2\.X/));
-    expect(document.querySelector(".reg-stale-note")?.textContent).toBe("设定已更改，下面保留最近计算的结果；点“计算这个模型”查看新结果。");
-    expect(screen.getAllByRole("status").some((node) => node.textContent === "设定已更改，下面保留最近计算的结果；点“计算这个模型”查看新结果。")).toBe(true);
+    const stale = "勾选框里的设定还没有计算。下面仍是之前的结果：默认模型、“去掉汇率变动”。";
+    expect(statusBar()).toBe(stale);
+    expect(screen.getAllByRole("status").some((node) => node.textContent === stale)).toBe(true);
     // As the note says, the last result stays in the table (and the chart), named as computed before the change.
-    expect(tableHeaders()).toEqual(["变量", "默认模型", "上次计算（设定已更改）：去掉汇率变动"]);
+    expect(tableHeaders()).toEqual(["变量", "默认模型", "上次计算：去掉汇率变动"]);
     // The preset no longer reads pressed: the form holds another model.
     expect(screen.getByRole("button", { name: /^去掉汇率变动/ }).getAttribute("aria-pressed")).toBe("false");
     const details = screen.getByRole("group", { name: "单模型详细数字" });
     expect(details.hasAttribute("open")).toBe(true);
     expect(details.textContent).toContain("GDP 对数、贸易开放度");
-    expect(details.textContent).toContain("上次计算（设定已更改）");
+    expect(details.textContent).toContain("上次计算");
     expect(details.textContent).toContain("当前设定待重算");
+    expect(details.querySelector(".reg-stale-note")?.textContent).toBe("当前设定待重算；以下数字仅对应上方选中的结果及其设定。");
     for (const input of screen.getByRole("group", { name: "关税暴露 X（至少选一项）" }).querySelectorAll<HTMLInputElement>("input:checked")) {
       fireEvent.click(input);
     }
-    expect(document.querySelector(".reg-stale-note")?.textContent).toBe("下面保留最近计算的结果；请先选择至少一项关税暴露 X，再计算当前设定。");
+    expect(statusBar()).toBe("勾选框里的设定还没有计算（至少要选一项关税暴露 X）。下面仍是之前的结果：默认模型、“去掉汇率变动”。");
     expect(screen.getByRole("button", { name: "计算这个模型" }).getAttribute("aria-disabled")).toBe("true");
     fireEvent.click(checkbox(/^L2\.X/));
-    expect(document.querySelector(".reg-stale-note")?.textContent).toContain("点“计算这个模型”查看新结果");
+    expect(statusBar()).toBe(stale);
+    // Back to the default settings: they are the first column already, so nothing is out of date.
     fireEvent.click(screen.getByRole("button", { name: "恢复默认设定" }));
-    expect(document.querySelector(".reg-stale-note")?.textContent).toContain("保留最近计算的结果");
+    expect(statusBar()).toBe("勾选框里是默认模型（第一列）。下面另有“去掉汇率变动”；点一个预设实验，或改设定后计算，可再比较一个模型。");
+    expect(screen.getByRole("button", { name: "已算好（结果在下面）" })).toBeTruthy();
+    // ...and the details do not call the default model out of date either.
+    expect(details.textContent).not.toContain("待重算");
+    // With the form folded and settings changed, the status line offers the calculation itself.
+    fireEvent.click(checkbox(/^L2\.X/));
+    openDetails(document.querySelector(".reg-custom-form-details"), false);
+    expect(screen.getByRole("button", { name: "计算当前设定" })).toBeTruthy();
   });
 
   test("it shows the presets from the server, the custom form folded, and the default model's column before anything is computed", async () => {
@@ -646,7 +738,8 @@ describe("the open workbench", () => {
     expect(document.querySelector(".reg-custom-form-details")!.hasAttribute("open")).toBe(false);
     expect(tableHeaders()).toEqual(["变量", "默认模型"]);
     expect(document.querySelector(".reg-custom-point-row")?.textContent).toBe("合计：X 每高 1 个百分点-0.55 个百分点（两年累计）");
-    expect(screen.getByText("还没有记入报告的模型实验（选做）：算出一个模型后点“也记入报告”，报告附录“模型实验”会把它和默认模型并列。")).toBeTruthy();
+    expect(statusBar()).toBe("下面是“外国增加值项占比”的默认模型。点一个预设实验，或改设定后计算，旁边会多出一列用来比较。");
+    expect(screen.getByText("算出一个模型后，可以把它记入报告附录，和默认模型并列（每步最多一个）。")).toBeTruthy();
   });
 });
 
@@ -665,7 +758,7 @@ describe("one column's full numbers", () => {
     run.design.depvar_kind = "length";
     run.result.cumulative = { ...coef("cumulative", -1.8414), ci_low: -1.92, ci_high: -1.76 };
     const sum = cells(run, "length").at(-1)!;
-    expect(sum[0]).toBe("X 各项合计（累计效应）");
+    expect(sum[0]).toBe("X 各项合计");
     expect(sum[1]).toBe("-1.8414");
     expect(sum[5]).toBe("***");
     expect(sum[7]).toBe("-0.0184 个长度单位");

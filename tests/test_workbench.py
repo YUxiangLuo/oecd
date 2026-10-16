@@ -2,6 +2,7 @@
 
 import copy
 import json
+import re
 from types import SimpleNamespace
 
 import pandas as pd
@@ -73,8 +74,8 @@ def test_options_list_every_choice_in_page_order_with_the_default_and_the_limits
         ("advanced", "加上人口增长率和 FDI 净流入占比"),
     ]
     assert {item["tier_label"] for item in presets} == {"必看", "进阶"}
-    # The two choices that leave the estimate unchanged by design are explained where they are offered.
-    assert "没有两年后的关联" in options["x_lags"][2]["description"]
+    # L2.X is named, not explained: its answer (no two-year-later link) is for the student to find.
+    assert options["x_lags"][2]["description"] == "滞后 2 期：两年前的 X"
     assert "吸收不等于没有控制" in effects["country_year"]["description"]
     # The course's design value of each Y, for the page to say how far an estimate is from it.
     assert options["design_values"]["trade"]["FVA_share"] == -0.55
@@ -87,7 +88,18 @@ def test_options_list_every_choice_in_page_order_with_the_default_and_the_limits
     assert options["custom_label"] == "自定义设定"
     # The report names an experiment after its preset, else as a custom setting (the page says the same).
     assert workbench.experiment_label(ModelSpec.from_dict(presets[0]["spec"])) == "去掉汇率变动"
-    assert workbench.experiment_label(ModelSpec((0,), (), ("year",))) == "自定义设定"
+    # Any other model is named by what it changes from the default, as the page's shownModelLabel names it.
+    assert workbench.experiment_label(ModelSpec((0,), (), ("year",))) == (
+        "自定义（去掉 L1.X；去掉汇率变动；去掉 GDP 对数；去掉贸易开放度；固定效应：年份 FE）"
+    )
+    no_rate_l2 = ModelSpec((0, 1, 2), DEFAULT_SPEC.controls[1:], DEFAULT_SPEC.fixed_effects)
+    assert workbench.experiment_label(no_rate_l2) == "自定义（去掉汇率变动；加 L2.X）"
+    lagged = ModelSpec((0, 1), tuple((key, 1) for key, _ in DEFAULT_SPEC.controls), DEFAULT_SPEC.fixed_effects)
+    assert (
+        workbench.experiment_label(lagged)
+        == "自定义（汇率变动改为 L1.汇率变动；GDP 对数改为 L1.GDP 对数；贸易开放度改为 L1.贸易开放度）"
+    )
+    assert workbench.experiment_label(DEFAULT_SPEC) == "默认模型"
 
 
 @pytest.fixture
@@ -549,6 +561,30 @@ def test_report_design_value_row_compares_only_models_covering_the_two_year_tota
         [column((0, 1), [], total), column((2,), [only_l2]), column((0, 1, 2), [], total)]
     )
     cells = row.split(" | ")[1:]
-    assert cells[0].startswith("-0.55 个百分点；估计偏差 ")
+    # The deviation reads in words (a signed percentage was easy to misread); the frontend's designDeviationText.
+    assert re.fullmatch(
+        r"-0\.55 个百分点；(幅度比设定值[大小] \d+%|与设定值几乎相同|方向与设定值相反)", cells[0].strip(" |")
+    )
     assert cells[1] == "-0.55 个百分点（两年累计）；本列跨度不同，不计偏差"
-    assert cells[2].startswith("-0.55 个百分点；估计偏差 ")
+    assert re.fullmatch(
+        r"-0\.55 个百分点；(幅度比设定值[大小] \d+%|与设定值几乎相同|方向与设定值相反)", cells[2].strip(" |")
+    )
+    # Half up, as the page's Math.round: 0.125 reads 13%, a sign flip beyond −100% reads as opposite.
+    assert [report_workbench._deviation_text(value) for value in (0.125, -0.06, 0.004, -1.2)] == [
+        "幅度比设定值大 13%",
+        "幅度比设定值小 6%",
+        "与设定值几乎相同",
+        "方向与设定值相反",
+    ]
+
+
+def test_the_page_and_the_report_print_the_same_generated_data_note():
+    """The page keeps its own copy of the sentence (regression-lessons.ts); the report prints this one."""
+    import re
+    from pathlib import Path
+
+    from gvcsim.regression.teaching import GENERATED_DATA_NOTE
+
+    source = (Path(__file__).resolve().parents[1] / "frontend/src/regression-lessons.ts").read_text(encoding="utf-8")
+    page = re.search(r'export const GENERATED_DATA_NOTE = "(.*)";', source)
+    assert page is not None and page.group(1) == GENERATED_DATA_NOTE
