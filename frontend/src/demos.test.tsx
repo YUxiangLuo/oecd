@@ -1073,6 +1073,17 @@ describe("steps 2–3: every table row checks by hand, not only the formula (rou
   const shown = (text: string) => Number(text.replace(/,/g, ""));
   const byHand = (amount: string, total: string) => `${((shown(amount) / shown(total)) * 100).toFixed(3)}%`;
 
+  test("negative value added hides shares without claiming the ratios cannot be calculated", async () => {
+    const { cells, text } = await renderPanel(5, {
+      country: "FIN", year: 2020, SVA: -177.61780000000027,
+      "1_VA_D": -47.53345253498036, "2_VA_RT": -59.83693605793531,
+      "3a_VA_GVC_S": -46.557137496641296, "3b_VA_GVC_C": -23.69027391044313,
+    });
+    expect(cells).toHaveLength(4);
+    expect(cells.every((cell) => cell.share === "—（总量为负，本页面不展示比重）")).toBe(true);
+    expect(text).not.toContain("无法计算");
+  });
+
   test("BRN C10T12 2020 (step 2): rows, total, formula and the EXDVA line read one precision and check by hand", async () => {
     // Was "DVAex 0.755 54.795%" beside "0.5600 / 1.3788" (0.755 / 1.3788 = 54.758%), and "DVArt <0.001" beside
     // "EXDVA = 0.755 + 0.000151 = 0.756".

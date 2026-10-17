@@ -440,6 +440,7 @@ export function DecompositionDetailTable({
   negativeNote = "负值表示抵减项（例如净补贴），所以其他分项的比重之和可能超过 100%。",
   decimals,
   roundingNote = false,
+  shareUnavailableText = "—（无法计算）",
 }: {
   caption: string;
   parts: readonly Part[];
@@ -455,6 +456,7 @@ export function DecompositionDetailTable({
   decimals?: number;
   /** Some row's shown amount ÷ the shown total does not give its shown percentage: say so under the table. */
   roundingNote?: boolean;
+  shareUnavailableText?: string;
 }) {
   // The note explains shares summing past 100%; with no shares (e.g. a negative total) the reason line says why.
   const hasNegative = !unavailable
@@ -488,7 +490,7 @@ export function DecompositionDetailTable({
               {part.label}
             </th>
             <td className="dt-val">{value == null ? "—" : decimals != null && unit === "amount" ? amountAt(value, decimals) : fmt(value, unit)}</td>
-            <td className="dt-share">{unavailable ? "—" : share == null ? "—（无法计算）" : percentText(share)}</td>
+            <td className="dt-share">{unavailable ? "—" : share == null ? shareUnavailableText : percentText(share)}</td>
             <td className="dt-desc">{part.desc}</td>
           </tr>
         );
@@ -921,6 +923,7 @@ export function DecompositionDemo({
           negativeNote={cfg.negativeNote}
           decimals={precision?.decimals}
           roundingNote={model.total > 0 && precision?.checks === false}
+          shareUnavailableText={model.total < 0 ? "—（总量为负，本页面不展示比重）" : undefined}
         />
         {cfg.note && sharesAvailable && <div className="decomp-note">{cfg.note(row, model.values, precision?.decimals)}</div>}
         {step === 6 && <MiniBackwardBar row={row} countryLevel={gran === "country"} />}

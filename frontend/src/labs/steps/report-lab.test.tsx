@@ -938,6 +938,11 @@ test("a blocked generate click marks the short analysis fields invalid at once; 
 test("in a save conflict the report actions ask for the server version, not a retry", () => {
   expect(reportWaitLabel("ready", true, false, "冲突", true)).toBe("请先载入服务器版本");
   expect(reportWaitLabel("ready", true, false, "网络中断")).toBe("保存失败，请先重试");
+  render(<ReportLab {...finishProps} state={{ ...finishProps.state, syncConflict: true, syncError: "版本变化" }} sessionUnsynced />);
+  const checklist = screen.getByRole("region", { name: "报告完成清单" });
+  expect(checklist.textContent).toContain("服务器版本已变化，无法确认能否安全合并");
+  expect(checklist.textContent).toContain("请先复制需要保留的内容");
+  expect(checklist.textContent).not.toContain("同一份材料");
 });
 
 const sessionWith = (latest: ReportMutationResponse, steps: Record<string, unknown> = {}) => ({

@@ -368,6 +368,18 @@ const designNote = () => document.querySelector(".reg-design-note")?.textContent
 const announcement = () => document.querySelector(".sr-only[role='status']")?.textContent;
 
 describe("the workbench", () => {
+  test("a network save error does not claim the server failed to persist the model", async () => {
+    spyOn(api, "regressionOptions").mockResolvedValue(options);
+    render(<RegressionModelWorkbench stepNumber={11} outcome="trade" defaultResponse={DEFAULT_RUN} state={{
+      data: { experiment: experimentOf(NO_RATE, NO_RATE_RUN) },
+      save: () => {}, complete: false, syncing: false, syncConflict: false,
+      materialSyncError: "网络连接中断", syncError: "网络连接中断", syncNow: () => {},
+    }} />);
+    const warning = await screen.findByText("这次改动尚未确认保存成功，请稍后重试同步。");
+    expect(warning.getAttribute("role")).toBe("alert");
+    expect(screen.queryByText("这次改动还没有保存成功，请稍后重试同步。")).toBeNull();
+  });
+
   test("a ratio Y explains its missing target and compares presets with its own default, then restores target guidance", async () => {
     spyOn(api, "regressionOptions").mockResolvedValue(options);
     const forward = response(DEFAULT, { teaching_tariff_exposure: -1.1, teaching_tariff_exposure_lag1: -0.7 }, {}, "PLv_GVC");
@@ -498,7 +510,7 @@ describe("the workbench", () => {
     const box = screen.getByRole("region", { name: "记入报告（选做）" });
     expect(box.querySelector(".reg-custom-report-chip")?.textContent).toContain("记入报告（未保存）：去掉汇率变动");
     expect(box.querySelector(".reg-custom-report-chip")?.textContent).not.toContain("已记入报告");
-    expect(screen.getByRole("alert").textContent).toBe("这次改动没有保存：你的账号在别处保存了更新的记录，请按页面顶部的说明处理。");
+    expect(screen.getByRole("alert").textContent).toBe("这次改动尚未确认保存成功：服务器版本已变化，保存已暂停，请按页面顶部的说明处理。");
   });
 
   test("back on the page with the reported model in the form, its column is said to be that model, not uncomputed", async () => {

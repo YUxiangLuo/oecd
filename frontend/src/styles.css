@@ -945,6 +945,9 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
   /* Paper has no horizontal scrollbar. Keep all report columns in the printable
      width, including long indicator names/URLs, and allow long tables to paginate. */
   .report-md p:has(+ .table-wrap) { break-after: avoid; }
+  /* Keep introductions such as “计算方法与限制” with the list they introduce. */
+  .report-md p:has(+ ul),
+  .report-md p:has(+ ol) { break-after: avoid; }
   .report-md .table-wrap {
     overflow: visible;
     background: #fff;

@@ -18,11 +18,11 @@ export const SyncProblemContext = createContext<SyncProblem | null>(null);
 
 export function SyncProblemBanner({ problem, compact = false }: { problem: SyncProblem; compact?: boolean }) {
   if (!problem.error) return null;
-  // Edits to different steps, or browsing in one tab, merge on their own: this is the case they cannot.
-  const conflictNote = "你的账号在另一个标签页或电脑上也改了同一步的同一份材料，两边无法自动合并，本页的修改暂未保存。当前内容仍在，请先复制需要保留的内容；载入服务器版本会丢弃本页未保存的修改。";
+  // A recovered draft may lack the old merge base, so a conflict does not prove the same material changed.
+  const conflictNote = "服务器版本已变化，系统无法确认能否安全合并本页修改，因此已暂停保存。当前内容仍在，请先复制需要保留的内容；载入服务器版本会丢弃本页未保存的修改。";
   return (
     <div className={`error-box persistent-qc-warning${compact ? " sync-problem--compact" : ""}`} role="alert">
-      <b>{problem.conflict ? "另一个标签页或电脑改了同一份材料" : "实验记录尚未保存到服务器"}</b>
+      <b>{problem.conflict ? "服务器版本已变化，无法自动合并" : "实验记录尚未确认保存成功"}</b>
       {!compact && (
         <p>
           {problem.conflict
@@ -30,7 +30,7 @@ export function SyncProblemBanner({ problem, compact = false }: { problem: SyncP
             : `${problem.error} 本页内容还在，${problem.autoRetry ? "系统会自动重试，也可以现在重试" : "可以直接重试"}；关闭标签页可能丢失未保存的修改。`}
         </p>
       )}
-      {compact && <span>{problem.conflict ? "另一个标签页或电脑改了同一份材料。请先复制未保存内容；载入服务器版本会丢弃本页未保存的修改。" : problem.error}</span>}
+      {compact && <span>{problem.conflict ? "无法确认能否安全合并，已暂停保存。请先复制未保存内容；载入服务器版本会丢弃本页未保存的修改。" : problem.error}</span>}
       <button type="button" className="secondary" disabled={problem.syncing} onClick={problem.act}>
         {problem.syncing
           ? problem.conflict ? "正在载入…" : "正在重试…"

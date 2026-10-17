@@ -3,11 +3,46 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { AUTO_RECORD_HOW, MATERIAL_CONFLICT_NOTE, MaterialCard } from "./material-card";
 import { MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT } from "./step-task-card";
 import { api, ApiError } from "./api";
-import { emptySession } from "./session-store";
+import { emptySession, patchStep } from "./session-store";
 import { useSession } from "./use-session";
 import type { SessionResponse, SessionSaveResponse } from "./types";
 
 afterEach(() => { cleanup(); mock.restore(); sessionStorage.clear(); });
+
+test("a committed save with a lost response stays uncertain when retry conflicts and reading the newer version fails", async () => {
+  let server: SessionResponse & SessionSaveResponse = {
+    session: emptySession(), updated_at: "2026-09-10T00:00:00Z", release_id: "a".repeat(32), report: null,
+    completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_current: false, report_gate: [], material_gate: [],
+  };
+  spyOn(api.classroom, "session").mockResolvedValueOnce(server).mockRejectedValue(new TypeError("read response lost"));
+  spyOn(api.classroom, "saveSession").mockImplementation(async (body) => {
+    if (body.base_updated_at !== server.updated_at) throw new ApiError(409, null, "conflict");
+    server = { ...server, session: body.session, updated_at: "2026-09-10T00:01:00Z" };
+    throw new TypeError("successful save response lost");
+  });
+  let session!: ReturnType<typeof useSession>;
+  function StudentMaterial() {
+    session = useSession(true, "student");
+    return <MaterialCard state="recorded" summary="JPN 9.891%"
+      pending={session.hasMaterialChanges(7)} syncError={session.hasMaterialChanges(7) ? session.saveError : null}
+      syncConflict={session.syncConflict} />;
+  }
+  render(<StudentMaterial />);
+  await waitFor(() => expect(session.status).toBe("ready"));
+  const material = { observations: [{ country: "JPN", value: 9.891 }] };
+  await act(async () => {
+    session.patchStep(7, material);
+    await session.syncNow().catch(() => {});
+  });
+  // Another tab preserves this material and saves an unrelated step.
+  server = { ...server, session: patchStep(server.session, 15, { research_question: "other tab" }), updated_at: "2026-09-10T00:02:00Z" };
+  await act(async () => { await session.syncNow().catch(() => {}); });
+  expect(server.session.steps["7"].data).toEqual(material);
+  expect(session.syncConflict).toBe(true);
+  expect(session.hasMaterialChanges(7)).toBe(true);
+  expect(screen.getByRole("alert").textContent).toContain("尚未确认保存成功");
+  expect(screen.getByRole("alert").textContent).not.toContain("本步材料没有保存");
+});
 
 for (const outcome of ["success", "error"] as const) {
   test(`material waits through debounce and an unresolved server save, then shows ${outcome}`, async () => {
@@ -51,7 +86,7 @@ for (const outcome of ["success", "error"] as const) {
       expect(card.querySelector(".material-card-how")?.textContent).toBe(AUTO_RECORD_HOW);
       expect(screen.queryByRole("alert")).toBeNull();
     } else {
-      expect(screen.getByRole("alert").textContent).toContain("材料还没保存成功");
+      expect(screen.getByRole("alert").textContent).toContain("材料尚未确认保存成功");
       expect(screen.getByRole("button", { name: "重试同步" })).toBeTruthy();
       expect(card.querySelector(".material-card-how")).toBeNull();
     }
@@ -68,7 +103,7 @@ test("pending material replaces the recorded action; unrelated syncing does not 
   expect(card.querySelector("summary")?.textContent).toBe("核对本步材料读数");
   view.rerender(<MaterialCard {...props} pending syncing syncError="offline" />);
   expect(card.querySelector(".material-chip")?.textContent).toBe("未保存");
-  expect(screen.getByRole("alert").textContent).toContain("材料还没保存成功");
+  expect(screen.getByRole("alert").textContent).toContain("材料尚未确认保存成功");
   expect(screen.queryByRole("button", { name: "已记录为本步报告材料" })).toBeNull();
   expect(screen.getByRole("button", { name: "本步报告材料尚未确认保存" })).toBeTruthy();
   expect(card.querySelector("summary")?.textContent).toBe("核对本步材料读数");
@@ -116,7 +151,7 @@ test("a step that records on request shows one button; locked and re-recorded st
   expect((screen.getByRole("button", { name: "已记录为本步报告材料" }) as HTMLButtonElement).disabled).toBe(true);
   view.rerender(<MaterialCard state="blocked" summary="这张图没有可记录的读数条目。" syncError="失败" onRetrySync={() => {}} />);
   expect(document.querySelector(".material-chip")?.textContent).toBe("暂不能记录");
-  expect(screen.getByRole("alert").textContent).toContain("材料还没保存成功");
+  expect(screen.getByRole("alert").textContent).toContain("材料尚未确认保存成功");
   expect(screen.getByRole("button", { name: "重试同步" })).toBeTruthy();
 });
 

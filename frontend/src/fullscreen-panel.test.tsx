@@ -87,7 +87,7 @@ describe("FullscreenPanel save problems", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "全屏查看：中间投入 Z" }));
     const alert = screen.getByRole("dialog").querySelector("[role=alert]");
-    expect(alert?.textContent).toContain("实验记录尚未保存到服务器");
+    expect(alert?.textContent).toContain("实验记录尚未确认保存成功");
     fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
     expect(retried).toBe(1);
   });

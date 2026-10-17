@@ -194,7 +194,7 @@ test("recording takes a click, never a browse; the card says whether the chart o
   expect(materialHow()!.textContent).toBe("已记录的是另一张图；要换成当前图表，点下面的按钮。");
   expect(materialSummary().textContent).toContain("加权总度");
   rerender(<NetworkTrend {...props} observations={saved} syncError="offline" />);
-  expect(screen.getByRole("alert").textContent).toContain("还没保存成功");
+  expect(screen.getByRole("alert").textContent).toContain("尚未确认保存成功");
   fireEvent.click(screen.getByRole("button", { name: "重试同步" }));
   expect(retry).toHaveBeenCalledTimes(1);
   fireEvent.click(await recordButton());

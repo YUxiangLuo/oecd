@@ -199,7 +199,7 @@ class SessionSaveQueue {
 
 type SaveState = { phase: "saved" | "pending" | "saving" | "failed"; error: string | null; blocked: boolean };
 const SAVED: SaveState = { phase: "saved", error: null, blocked: false };
-const VERSION_ERROR = "你的账号在另一个标签页或电脑上也改了同一份材料，无法自动合并。本页内容已保留，请先复制需要保留的内容，再放弃本页修改并重新加载。";
+const VERSION_ERROR = "服务器版本已变化，系统无法确认能否安全合并本页修改，已暂停保存。本页内容已保留，请先复制需要保留的内容，再放弃本页修改并重新加载。";
 
 export function useSession(enabled: boolean, username?: string): SessionApi {
   const [status, setStatus] = useState<SessionStatus>(enabled ? "loading" : "unavailable");

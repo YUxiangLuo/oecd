@@ -9,9 +9,9 @@ import { MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT, STEP_MATERIAL_ACTION_ID }
 export type MaterialState = "recorded" | "missing" | "blocked";
 export const MATERIAL_CARD_TITLE = "本步报告材料";
 export const MATERIAL_STATE_LABELS: Record<MaterialState, string> = { recorded: "已记录", missing: "尚未记录", blocked: "暂不能记录" };
-/** A recorded material that has not reached the server yet: not "已记录" until it is saved. */
+/** A material without server confirmation: not "已记录" until its save is acknowledged. */
 export const MATERIAL_UNSAVED_LABEL = "未保存";
-export const MATERIAL_CONFLICT_NOTE = "本步材料没有保存：你的账号在别处保存了更新的记录，请按页面顶部的说明处理。";
+export const MATERIAL_CONFLICT_NOTE = "本步材料尚未确认保存成功：服务器版本已变化，保存已暂停，请按页面顶部的说明处理。";
 /** Another tab saved a newer record while this step's own material is unchanged here: what it shows may be old. */
 export const MATERIAL_STALE_LABEL = "待同步";
 export const MATERIAL_STALE_NOTE = "你的账号在别处保存了更新的记录，这里显示的可能不是最新的材料；请按页面顶部的说明处理。";
@@ -82,7 +82,7 @@ export function MaterialCard({ state, summary, how, action, check, extra, locked
       {syncError
         ? syncConflict
           ? <p role="alert" className="material-card-sync">{MATERIAL_CONFLICT_NOTE}</p>
-          : <p role="alert" className="material-card-sync">材料还没保存成功，请重试。{onRetrySync && <button type="button" className="secondary" onClick={onRetrySync}>重试同步</button>}</p>
+          : <p role="alert" className="material-card-sync">材料尚未确认保存成功，请重试。{onRetrySync && <button type="button" className="secondary" onClick={onRetrySync}>重试同步</button>}</p>
         : stale ? <p role="alert" className="material-card-sync">{MATERIAL_STALE_NOTE}</p>
         : saving ? <p className="muted material-card-sync" role="status">本步材料正在等待服务器保存，保存成功后才会显示“已记录”。</p>
         : syncing && <p className="muted material-card-sync" role="status">正在同步实验记录…</p>}

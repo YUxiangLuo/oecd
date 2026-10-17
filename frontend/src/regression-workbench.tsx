@@ -207,8 +207,8 @@ export function ColumnDetails({ column, options, perPoint, digits }: {
   );
 }
 
-/** Said when a change to the report cannot be saved: another tab saved a newer record first. */
-const CONFLICT_SAVE_NOTE = "这次改动没有保存：你的账号在别处保存了更新的记录，请按页面顶部的说明处理。";
+/** A newer server version blocks confirmation; an earlier save may already have committed. */
+const CONFLICT_SAVE_NOTE = "这次改动尚未确认保存成功：服务器版本已变化，保存已暂停，请按页面顶部的说明处理。";
 
 export function ModelComparisonChart({ columns, outcome }: { columns: TableColumn[]; outcome: RegressionOutcome }) {
   const rows: DivergingBarRow[] = [];
@@ -270,15 +270,15 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   const optionsQuery = useAsync<WorkbenchOptions>(() => api.regressionOptions(), ["regression-options"]);
   const options = optionsQuery.status === "success" ? optionsQuery.data ?? null : null;
   const experiment = state.data?.experiment ?? null;
-  // This step's material did not reach the server (another tab saved first, or the network failed): the model in the
-  // box is this page's choice, not yet the report's, so it is not called "已记入报告".
+  // This step's material has no save confirmation (a response may have been lost), so the model in the
+  // box cannot yet be called "已记入报告".
   const reportUnsaved = Boolean(state.materialSyncError);
   // Another save of this page (a draft) met a newer record: the model shown may not be the report's any more.
   const reportStale = !reportUnsaved && Boolean(state.syncConflict);
   const reportedWord = reportUnsaved ? "记入报告（未保存）" : reportStale ? "已记入报告（可能已过期）" : "已记入报告";
   const unsavedNote = reportStale
     ? "你的账号在别处保存了更新的记录，这里显示的可能不是报告里现在的模型；请按页面顶部的说明处理。"
-    : state.syncConflict ? CONFLICT_SAVE_NOTE : "这次改动还没有保存成功，请稍后重试同步。";
+    : state.syncConflict ? CONFLICT_SAVE_NOTE : "这次改动尚未确认保存成功，请稍后重试同步。";
   const draft = state.data?.custom_draft ?? {};
   const stepBaseline = defaultResponse.design.baseline;
   // The Y the models are run on: the step's Y unless the student chose another of the family. The first column is
