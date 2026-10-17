@@ -36,6 +36,8 @@ export function DesignEquation({ design, expanded = true }: { design: Regression
   const yLabel = displayBaselineLabel(design.depvar_label) || "本步的结果指标";
   const lagged = (design.spec?.x_lags ?? [0]).includes(1);
   const controls = Object.values(design.control_labels ?? {});
+  const preTrend = controls.filter((label) => label === "GDP 对数" || label === "贸易开放度");
+  const hasExchange = controls.includes("汇率变动");
   return (
     <div className="reg-model-box">
       <div className="model-eq" role="group" aria-label="本步计算的公式">
@@ -51,7 +53,12 @@ export function DesignEquation({ design, expanded = true }: { design: Regression
           ? <li><b>β₁·X + β₂·L1.X</b>：当年和上一年的关税暴露。β₁ 是当期 X 的条件关联，β₂ 是上一年的 X 在今年对应的条件关联。<b>两者之和是两年累计关联</b>：X 仅当期提高后恢复时的两期关联之和，也对应 X 持续提高时第二期的关联。累计的是系数，不是把图上两个年份的 Y 变化相加；这些是控制其他变量和固定效应后的共同条件斜率，不是国家×行业的等权平均，也不是因果效应。</li>
           : <li><b>β·X</b>：关税暴露（首年对美出口份额 w × 加征税率 τ）；β 是 X 每高 1 个百分点时 Y 平均相差多少。</li>}
         {controls.length > 0 && (
-          <li><b>γ·{controls.join("、")}</b>：控制变量。{controls.length > 1 ? "它们" : "它"}与加税同时变化、又与 Y 有关，放进模型是为了不把与{controls.length > 1 ? "它们" : "它"}相关的变化算到 X 上。</li>
+          <li>
+            <b>γ·{controls.join("、")}</b>：控制变量。
+            {preTrend.length > 0 && `${preTrend.join("、")}是加税前趋势，控制${preTrend.length > 1 ? "它们" : "它"}是为了减少遗漏预趋势的偏差；`}
+            {hasExchange && "汇率是加税后的同期变化，控制它估计的是扣除汇率渠道后的偏关联，去掉它估计的是包含该渠道的总关联。"}
+            {!preTrend.length && !hasExchange && "它们与 Y 有关，用来减少把其他因素算到 X 上的可能。"}
+          </li>
         )}
         <li><b>α + λ</b>：先扣掉每个国家×行业自己的平均水平（α）和每年所有国家×行业共同的变化（λ），即“双向固定效应”；ε 是剩下的随机波动。</li>
       </ul>

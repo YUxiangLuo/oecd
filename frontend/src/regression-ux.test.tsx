@@ -9,13 +9,14 @@ import {
 } from "./regression-step/family-bars";
 import { RegressionResultCard } from "./regression-step/result-card";
 import { exampleEffect, lagSplit } from "./regression-step/result-text";
+import { DesignEquation } from "./regression-step/model-equation";
 import { equationSymbol } from "./regression-step/model-equation-text";
 import { TEACHING_MODEL_VERSION } from "./regression-step/saved-run";
 import { INTERRUPTED_RUN_NOTE } from "./regression-step/use-regression-run";
 import { scrollIntoCourseContent } from "./content-scroll";
 import { groupedFixed } from "./format";
 import type {
-  RegressionOutcome, Step, StepStateApi, TeachingEstimate, TeachingGroupsResponse, TeachingOverviewResponse, TeachingPanelResponse,
+  RegressionDesignInfo, RegressionOutcome, Step, StepStateApi, TeachingEstimate, TeachingGroupsResponse, TeachingOverviewResponse, TeachingPanelResponse,
 } from "./types";
 import { GENERATED_DATA_NOTE, GENERATED_Y_DISCLOSURE } from "./regression-lessons";
 import { networkDigits, shownPerPoint } from "./regression-verdict";
@@ -488,7 +489,36 @@ describe("simple regression workbench", () => {
     expect(exampleEffect("trade", 0.55, 9.32, { depvar_kind: "share" })).toBe("5.13 个百分点");
   });
 
-  test("the 加税前后 chart states the parallel-trends premise and its two pre-tariff years", () => {
+  test("the model explanation separates pre-treatment trends from the post-treatment exchange rate", () => {
+  const design = {
+    outcome: "trade",
+    baseline: "FVA_share",
+    depvar_label: "外国增加值项占比",
+    depvar_kind: "share",
+    entity: "entity_id",
+    cluster: "country",
+    sample_filter: "排除 ROW",
+    spec: { x_lags: [0, 1], controls: [
+      { name: "teaching_exchange_rate_change", lag: 0 },
+      { name: "teaching_log_gdp", lag: 0 },
+      { name: "teaching_trade_openness", lag: 0 },
+    ], fixed_effects: ["country_industry", "year"] },
+    control_labels: {
+      teaching_exchange_rate_change: "汇率变动",
+      teaching_log_gdp: "GDP 对数",
+      teaching_trade_openness: "贸易开放度",
+    },
+    equation_parts: [],
+  } as unknown as RegressionDesignInfo;
+  const { container } = render(<DesignEquation design={design} expanded />);
+  const terms = container.querySelector(".reg-model-terms")?.textContent ?? "";
+  expect(terms).toContain("GDP 对数、贸易开放度是加税前趋势");
+  expect(terms).toContain("汇率是加税后的同期变化");
+  expect(terms).toContain("控制它估计的是扣除汇率渠道后的偏关联");
+  expect(terms).not.toContain("它们与加税同时变化");
+});
+
+test("the 加税前后 chart states the parallel-trends premise and its two pre-tariff years", () => {
     expect(parallelTrendsNote([2016, 2017, 2018, 2019, 2020], 2018)).toBe(
       "这张图也用来看回归的前提：如果没有关税，扣掉加税前趋势（GDP 对数和贸易开放度）后，两组的走势应大致平行（图上的线不会平行：汇率等同期变化也在动）。加税前只有 2016、2017 两年可看，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，GDP 和开放度是加税前趋势；汇率是加税后同期变化，不用于识别平行趋势。",
     );
