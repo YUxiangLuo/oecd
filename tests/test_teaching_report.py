@@ -2514,7 +2514,7 @@ def test_report_metric_labels_match_the_page_labels():
         "3a_VA_GVC_S_share": "简单 GVC 生产份额",
         "1_VA_D": "纯国内增加值",
         "3_VA_GVC": "GVC 增加值",
-        "FGY": "最终品生产（后向总量）",
+        "FGY": "最终品内含全球增加值（后向总量）",
         "1_FGY_D": "纯国内（后向）",
         "3_FGY_GVC": "全部 GVC（后向）",
         "3b_FGY_GVC_C": "复杂 GVC（后向）",
