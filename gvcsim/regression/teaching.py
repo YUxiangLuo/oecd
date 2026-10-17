@@ -440,7 +440,9 @@ def _unit_number(value: str, salt: str, seed: int = SEED) -> float:
 
 # The Y with no preset relation (β = 0) is the course's example of an interval that includes 0. With the v7 taxed
 # countries its first draw happened to land at p ≈ 0.04 (a 1-in-20 outcome for β = 0); the course uses the next
-# draw instead (p ≈ 0.41), and the release build checks that the interval still includes 0 (WEAK_Y below).
+# draw instead (p ≈ 0.41), and the release build checks that the interval still includes 0 (WEAK_Y below). This is a
+# curated zero-effect example, not a random null: the 200-seed benchmark is the evidence for the false-positive rate
+# (see the technical manual, section 7.7).
 WEAK_Y = ("production", "3b_FGY_GVC_C_share")
 WEAK_Y_DRAW = "|draw2"
 

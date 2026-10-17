@@ -68,14 +68,26 @@ GDP 对数和贸易开放度不同：它们从 2016 年起分化，是加税前�
 - 已保存的步骤 11–14 模型实验不需要重算：报告生成时按保存的 `spec` 重算，设计值行按同一规则判断是否比较。
 - 已有教学库的步骤 11 第 2 题仍是旧题；教师需在“理解题”页对步骤 11 点“恢复默认”并保存，学生按新题重新作答。
 
-## 7. 验证
+## 7. 浏览器验收（2026-10-17）
+
+在一次性 PostgreSQL（v15 schema）+ `GVCSIM_DEMO_MODE=1` 演示账号上，用 agent-browser 1440×1000 走真实页面：
+
+- 步骤 10：控制卡显示“GDP 对数和贸易开放度是加税前趋势；汇率变动是第一批加税后发生的同期变化”，并显示汇率 2018 年起额外贬值 8%；
+- 步骤 11：公式说明改为“GDP 对数、贸易开放度是加税前趋势……汇率是加税后的同期变化，控制它估计偏关联，去掉它是总关联”；预设问题为“去掉汇率渠道后，合计是总关联还是偏关联？”；
+- 步骤 11 的“自己改设定”表单显示 `加税后同期 / 加税前趋势 / 无关控制 / ICIO 派生` 角色标签；
+- 点“去掉汇率变动”后，比较表的“本次”列出现 `总关联；不与偏关联设定值比较`，默认列仍为“与设定值几乎相同”；
+- 步骤 11 第 2 题显示新题与三个选项，选“扣除汇率渠道后的偏关联”并提交后完成本步理解题。
+
+截图与脚本：`dogfood-output/browser-exchange-check-20261017/`（忽略目录）。这次验收额外发现公式说明仍写“它们与加税同时变化、又与 Y 有关”，已改为按控制角色区分；前端测试补充了该文案断言。
+
+## 8. 验证
 
 - `uv run ruff check .`、`uv run ruff format --check .`、`uv run mypy`。
 - `cd frontend && bunx tsc --noEmit -p . && bun run test:unit`。
 - 后端定向：`pytest tests/test_quizzes.py tests/test_workbench.py tests/test_teaching_report.py tests/test_teaching_regression.py tests/test_steps.py tests/test_route_adapters.py`（需要一次性测试库；`teaching_db` 会清空所连库的 `public` schema）。
 - 手工：步骤 10 控制卡、步骤 11–14 预设/设定值行/结果卡、步骤 15 报告附录；确认不含汇率的列写“总关联；不与偏关联设定值比较”。
 
-## 8. 后续
+## 9. 后续
 
 - 把 benchmark 绑定到当前 release（`release_id` + panel SHA-256），避免“当前 release”证据与提交物脱节。
 - 在教师手册/生成规则说明里写明弱效应 Y 的噪声 draw 是课程挑选的零效应示例。
