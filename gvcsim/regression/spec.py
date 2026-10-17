@@ -57,13 +57,13 @@ class ControlInfo:
 CONTROLS: dict[str, ControlInfo] = {
     EXCHANGE_RATE_COLUMN: ControlInfo(
         "汇率变动",
-        "本币兑美元的年变动率（%，负为贬值）；第一批被加税国家 2018 年起额外贬值 8%",
+        "本币兑美元的年变动率（%，负为贬值）",
         "generated",
         CONTROL_ROLE_POST_TREATMENT,
     ),
     GDP_COLUMN: ControlInfo(
         "GDP 对数",
-        "ln（模拟 GDP，美元）；首年以 ICIO 国家增加值规模校准，第一批国家 2016 年起增长更快",
+        "ln（模拟 GDP，美元）；首年以 ICIO 国家增加值规模校准",
         "generated",
         CONTROL_ROLE_CONFOUNDER,
     ),
@@ -72,7 +72,7 @@ CONTROLS: dict[str, ControlInfo] = {
     ),
     OPENNESS_COLUMN: ControlInfo(
         "贸易开放度",
-        "模拟进出口总额 / GDP（%），不是 ICIO 出口强度；第一批国家 2016 年起上升更多",
+        "模拟进出口总额 / GDP（%），不是 ICIO 出口强度",
         "generated",
         CONTROL_ROLE_CONFOUNDER,
     ),

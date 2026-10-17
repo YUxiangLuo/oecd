@@ -38,7 +38,7 @@ GDP 对数和贸易开放度不同：它们从 2016 年起分化，是加税前�
 
 不改数据、不改 β、不改 20,111 次估计与 200 种子基准的数值；只改估计量标签、页面/报告文案与设定值比较规则。
 
-- `gvcsim/regression/spec.py`：`ControlInfo` 增加 `role`；汇率=`post_treatment`，GDP/开放度=`confounder`，人口/FDI=`negative_control`，ICIO 派生=`icio_control`；新增 `spec_omits_post_treatment`。
+- `gvcsim/regression/spec.py`：`ControlInfo` 增加 `role`；汇率=`post_treatment`，GDP/开放度=`confounder`，人口/FDI=`negative_control`，ICIO 派生=`icio_control`；新增 `spec_omits_post_treatment`。控制变量的 `definition` 不改：`variable_catalog` 用它做逐字比较，改定义会让旧 run/experiment 被判成旧快照；时间信息放在 `role`/`role_label`、页面说明和报告方法段里。
 - `gvcsim/regression/workbench.py`：控制变量返回 `role`/`role_label` 与 `control_roles`；设定值说明区分“漏掉加税前趋势”与“去掉加税后同期”；`去掉汇率变动` 的问题改为“去掉汇率渠道后，合计是总关联还是偏关联？”；`去掉 GDP 对数` 改为与开放度比较。
 - `gvcsim/report_workbench.py`：报告附录的设定值行改为“课程设定值（默认模型偏关联）”；不含汇率的列写“总关联；不与偏关联设定值比较”，不再打印偏差。
 - `frontend/src/regression-workbench-table.ts`、`regression-step/result-text.ts`：结果卡与表格同规则；不含汇率的模型不比较设定值。

@@ -614,6 +614,20 @@ def test_report_design_value_row_compares_only_models_covering_the_two_year_tota
     ]
 
 
+def test_saved_run_catalog_units_stay_compatible_with_saved_runs():
+    """report_saved_run compares the saved variable catalog exactly; changing a control's definition would
+    silently invalidate every run saved before the change. The catalog unit is therefore kept stable and the
+    teaching timing lives in the control role, the options and the report method text."""
+    from gvcsim.regression.teaching import variable_catalog
+
+    units = {item["name"]: item["unit"] for item in variable_catalog("trade", "FVA_share") if item["role"] == "control"}
+    assert units == {
+        "teaching_exchange_rate_change": "本币兑美元的年变动率（%，负为贬值）",
+        "teaching_log_gdp": "ln（模拟 GDP，美元）；首年以 ICIO 国家增加值规模校准",
+        "teaching_trade_openness": "模拟进出口总额 / GDP（%），不是 ICIO 出口强度",
+    }
+
+
 def test_report_design_value_row_does_not_compare_a_total_association():
     """A model without the post-treatment control estimates the total association, not a biased partial one."""
     from gvcsim import report_workbench
