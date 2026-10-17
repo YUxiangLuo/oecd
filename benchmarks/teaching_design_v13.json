@@ -1,4 +1,26 @@
 {
+  "release": "8565f226719d4179967f6372dbc7c49e",
+  "release_id": "8565f226719d4179967f6372dbc7c49e",
+  "binding": {
+    "kind": "benchmark-release-binding",
+    "version": 1,
+    "computed": {
+      "release": "8565f226719d4179967f6372dbc7c49e",
+      "panel": "panel_industry.csv",
+      "panel_sha256": "8276f54b456e15da990fd0c9cac603b067788ecef59da22dacc8ee91f0e66806",
+      "exposure": "export_exposure_2016.csv",
+      "exposure_sha256": "05abf328b1af27b119a8a3e20746235bcdebb84717c28821518528845c4455d3"
+    },
+    "validated": {
+      "release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "panel": "panel_industry.csv",
+      "panel_sha256": "815e9d7c5fc1475032017145625485b858d06ded702a6a8da11a4d0536dede18",
+      "exposure": "export_exposure_2016.csv",
+      "exposure_sha256": "05abf328b1af27b119a8a3e20746235bcdebb84717c28821518528845c4455d3"
+    },
+    "status": "documented-equivalent-rebuild",
+    "note": "200 seeds were computed on release 8565 from panel_industry.csv (8276f54b\u2026) and export_exposure_2016.csv (05abf328\u2026). Release 88063 is the 2026-10-16 rebuild; the source panel differs only in 1e-13 betweenness values. Re-run scripts/benchmark_teaching_design.py --source data/processed to bind new seeds."
+  },
   "seeds": [
     1000,
     1001,

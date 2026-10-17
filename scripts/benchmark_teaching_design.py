@@ -7,6 +7,8 @@ each term's estimate are compared with the preset values (β split 60/40 over X 
 
 The balanced-panel NumPy calculation is checked against the production estimator and its library benchmark on the
 first seed for every Y. Earlier tariff-design candidates (v2–v7) are recorded in benchmarks/teaching_design_v*.json.
+When the source directory is a processed release, the result also carries a ``binding`` block naming the release and
+panel hashes it was computed on (checked by scripts/check_benchmark_binding.py).
 """
 
 import argparse
@@ -19,7 +21,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from gvcsim.regression import teaching
+from gvcsim.regression import benchmark_binding, teaching
 from gvcsim.regression.design import RegressionDesign
 from gvcsim.regression.panel import run_design_with_benchmark
 from gvcsim.regression.spec import DEFAULT_SPEC
@@ -90,6 +92,18 @@ def evaluate(root: Path, seeds: range) -> dict:
     exposure_path = f"export_exposure_{years[0]}.csv"
     exposure_bytes = (root / exposure_path).read_bytes()
     exposure = pd.read_csv(BytesIO(exposure_bytes))
+    source_panel_sha = hashlib.sha256(source_bytes).hexdigest()
+    source_exposure_sha = hashlib.sha256(exposure_bytes).hexdigest()
+    current = benchmark_binding.current_binding(root, panel_name="panel_industry.csv", exposure_name=exposure_path)
+    binding = None
+    if (
+        current is not None
+        and current["panel_sha256"] == source_panel_sha
+        and current.get("exposure_sha256") == source_exposure_sha
+    ):
+        binding = benchmark_binding.binding_from_current(
+            current, note="Computed and validated on the same processed release."
+        )
     pairs = [(outcome, item) for outcome in teaching.OUTCOMES for item in teaching.selectable_baselines(outcome)]
     records: dict[str, list[dict]] = {f"{outcome}:{item.key}": [] for outcome, item in pairs}
     sizes: dict[str, int] = {}
@@ -162,9 +176,10 @@ def evaluate(root: Path, seeds: range) -> dict:
         "release_seed_unchanged": teaching.SEED,
         "version": teaching.VERSION,
         "model": DEFAULT_SPEC.to_dict(),
-        "source_panel_sha256": hashlib.sha256(source_bytes).hexdigest(),
+        "binding": binding,
+        "source_panel_sha256": source_panel_sha,
         "source_read_contract": {"panel_float_precision": "round_trip", "exposure_float_precision": "default"},
-        "source_exposure": {"path": exposure_path, "sha256": hashlib.sha256(exposure_bytes).hexdigest()},
+        "source_exposure": {"path": exposure_path, "sha256": source_exposure_sha},
         "generator_snapshots": {name: teaching.model_snapshot(name) for name in teaching.OUTCOMES},
         "implementation_sha256": {
             "benchmark": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),

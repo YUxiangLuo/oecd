@@ -16,7 +16,7 @@ PR59 审查修复的实现与验证边界见 [审查记录](docs/review-pr59-202
 | [实验手册 PDF](实验手册.pdf) | 学生操作指南；正文与重新生成方法见 [docs/student-manual](docs/student-manual/README.md) |
 | [docs/indicator-readings](docs/indicator-readings/README.md) | 步骤 2–5 指标说明 PDF 的源文件与构建方法 |
 
-当前 v13 的本地验收 release 为 `88063fb4cbf24ce2b4657d6f3c679a66`（2016–2020；2026-10-16 为把汇率变动的单位改为“年变动率，%”重建，数据与上一 release `8565f226719d4179967f6372dbc7c49e` 相同，仅介数有 1e-13 量级的浮点差异；下述核查数字在该 release 上得出）：步骤 11–14 可构造的 1,183 种模型设定 × 17 个 Y 共 20,111 次估计全部通过标准库对照，去掉汇率／GDP／开放度与去掉年份固定效应的设计差异 15/15、15/15、15/15、90/90 显现（其中去掉汇率是总关联与偏关联的差异，不是偏误；GDP／开放度是遗漏预趋势），200 种子基准的两年累计区间覆盖率 91.5%–95.5%（`benchmarks/model_space_v13.json`、`benchmarks/teaching_design_v13.json`，结论见 [模型空间核查](docs/regression-model-space-check-2026-10-14.md) 与 [最终优化方案](docs/regression-steps-11-14-optimization-final-2026-10-14.md)）。此前 v12 的本地验收 release 为 `be37a7cfe40444f09749a77a276f45a3`。4,743 个分层选择的模型全部通过标准库对照，原先 30 个数值门禁失败已消除；独立复算 364 个案例中 352 个成功估计、12 个一致拒绝，无超容差差异。四类报告案例已完成生成、提交与重新读取检查。详见[当前规格与验证边界](docs/regression-refactor-20261010.md)。这不是全部模型组合、多随机种子或生产容量验收；历史 review 和版本评估只适用于其注明的基线。
+当前 v13 的本地验收 release 为 `88063fb4cbf24ce2b4657d6f3c679a66`（2016–2020；2026-10-16 为把汇率变动的单位改为“年变动率，%”重建，数据与上一 release `8565f226719d4179967f6372dbc7c49e` 相同，仅介数有 1e-13 量级的浮点差异；下述核查数字在该 release 上得出）：步骤 11–14 可构造的 1,183 种模型设定 × 17 个 Y 共 20,111 次估计全部通过标准库对照，去掉汇率／GDP／开放度与去掉年份固定效应的设计差异 15/15、15/15、15/15、90/90 显现（其中去掉汇率是总关联与偏关联的差异，不是偏误；GDP／开放度是遗漏预趋势），200 种子基准的两年累计区间覆盖率 91.5%–95.5%（`benchmarks/model_space_v13.json`、`benchmarks/teaching_design_v13.json`，结论见 [模型空间核查](docs/regression-model-space-check-2026-10-14.md) 与 [最终优化方案](docs/regression-steps-11-14-optimization-final-2026-10-14.md)）。两个 benchmark JSON 带 `binding` 块，记录 computed/validated 的 release 与 panel SHA-256；数据换版后运行 `uv run python scripts/check_benchmark_binding.py` 核对，未重跑会失败。此前 v12 的本地验收 release 为 `be37a7cfe40444f09749a77a276f45a3`。4,743 个分层选择的模型全部通过标准库对照，原先 30 个数值门禁失败已消除；独立复算 364 个案例中 352 个成功估计、12 个一致拒绝，无超容差差异。四类报告案例已完成生成、提交与重新读取检查。详见[当前规格与验证边界](docs/regression-refactor-20261010.md)。这不是全部模型组合、多随机种子或生产容量验收；历史 review 和版本评估只适用于其注明的基线。
 
 ## 支持范围
 
@@ -67,6 +67,7 @@ v12 升级到 v13（以及之前的 v11 → v12）必须重建 release，不能�
 uv run ruff check . && uv run ruff format --check .
 uv run pytest -q                       # 指向测试库
 cd frontend && bunx tsc --noEmit -p . && bun run test:unit
+uv run python scripts/check_benchmark_binding.py   # benchmark 与当前 release 的绑定
 ```
 
 完整本地检查 `scripts/local_ci.sh` 在临时目录复制源码、生成合成 OECD release，并启动一次性 PostgreSQL 容器，依次运行 Gephi 基准、后端静态检查与覆盖率测试、前端构建与单测、学生／教师浏览器验收（agent-browser）。需要 Docker、uv、Bun、Node（agent-browser 的运行时）、JDK 17+、Maven、agent-browser、`pdftotext` 和一套中文字体（如 `fonts-noto-cjk`）；产物留在忽略目录 `dogfood-output/local-ci/`。仓库没有 GitHub Actions，发布前手动运行。

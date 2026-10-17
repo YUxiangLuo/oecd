@@ -1,6 +1,6 @@
 # 步骤 11–14 模型空间核查
 
-> **口径说明（2026-10-17）**：本文中的“混杂”指加税前趋势（GDP 对数、贸易开放度）。汇率变动是第一批加税后的同期变化（post-treatment），不是预处理混杂；去掉汇率是总关联与偏关联的差异，不是偏误。数值与估计结果不变，相关表述已按新口径改写。
+> **口径说明（2026-10-17）**：本文中的“混杂”指加税前趋势（GDP 对数、贸易开放度）。汇率变动是第一批加税后的同期变化（post-treatment），不是预处理混杂；去掉汇率是总关联与偏关联的差异，不是偏误。数值与估计结果不变，相关表述已按新口径改写。benchmark JSON 的 `binding` 块记录 computed/validated release 与 panel SHA-256；数据换版后运行 `uv run python scripts/check_benchmark_binding.py` 核对。
 
 > 当前 release上，学生可构造的模型（7 种 X 滞后组合 × 13 种固定效应组合 × 13 种控制变量设置）对 17 个 Y 的估计，逐项与教学数据的生成规则对照。生成规则见 `gvcsim/regression/teaching.py`，核查脚本见 `scripts/check_model_space.py`。
 
