@@ -15,7 +15,13 @@ PR59 审查修复的实现与验证边界见 [审查记录](docs/review-pr59-202
 | [实验手册 PDF](实验手册.pdf) | 学生操作指南；正文与重新生成方法见 [docs/student-manual](docs/student-manual/README.md) |
 | [docs/indicator-readings](docs/indicator-readings/README.md) | 步骤 2–5 指标说明 PDF 的源文件与构建方法 |
 
-当前 v13 的本地验收 release 为 `88063fb4cbf24ce2b4657d6f3c679a66`（2016–2020；2026-10-16 为把汇率变动的单位改为“年变动率，%”重建，数据与上一 release `8565f226719d4179967f6372dbc7c49e` 相同，仅介数有 1e-13 量级的浮点差异；下述核查数字在该 release 上得出）：步骤 11–14 可构造的 1,183 种模型设定 × 17 个 Y 共 20,111 次估计全部通过标准库对照，漏汇率／漏 GDP／漏开放度与去掉年份固定效应的设计偏差 15/15、15/15、15/15、90/90 显现，200 种子基准的两年累计区间覆盖率 91.5%–95.5%（`benchmarks/model_space_v13.json`、`benchmarks/teaching_design_v13.json`，结论见 [模型空间核查](docs/regression-model-space-check-2026-10-14.md) 与 [最终优化方案](docs/regression-steps-11-14-optimization-final-2026-10-14.md)）。此前 v12 的本地验收 release 为 `be37a7cfe40444f09749a77a276f45a3`。4,743 个分层选择的模型全部通过标准库对照，原先 30 个数值门禁失败已消除；独立复算 364 个案例中 352 个成功估计、12 个一致拒绝，无超容差差异。四类报告案例已完成生成、提交与重新读取检查。详见[当前规格与验证边界](docs/regression-refactor-20261010.md)。这不是全部模型组合、多随机种子或生产容量验收；历史 review 和版本评估只适用于其注明的基线。
+当前 v13 的本地 release 为 `88063fb4cbf24ce2b4657d6f3c679a66`（2016–2020；2026-10-16 为修正汇率变动单位说明重建）。2026-10-17 核对：发布完整性、原始输入绑定、教学参数快照及 QC 重算均通过；与上一 release `8565f226719d4179967f6372dbc7c49e` 的面板差异仅为介数浮点末位，最大绝对差约 1.1e-11，数值在相对／绝对容差 1e-12 下相符。这不是整个计算管线的位级复现。
+
+**历史验证的适用范围：**`benchmarks/model_space_v13.json` 的 20,111 次估计属于旧 release `8565f226…`：7 种 X 组合 × 13 种固定效应组合 × 13 组代表性控制配置 × 17 个 Y，全部通过标准库对照。它不穷举工作台任意控制变量及滞后组合。`benchmarks/teaching_design_v13.json` 的 200 种子基准也绑定旧源面板。这些文件不能认证当前代码／release 已完整重跑；结论见 [历史模型空间核查](docs/regression-model-space-check-2026-10-14.md)。`shock_panel_v16.json` 同样保留为旧 release 的性能记录。
+
+**2026-10-17 当前版本补验：**[200 种子 × 17 个 Y](benchmarks/teaching_design_v13_20261017.json) 已完整重跑，逐种子估计、标准误和判定与历史记录完全一致；有预设 β 的累计区间覆盖率为 91.5%–95.5%，不是 95% 的保证。[36 种代表性设定 × 17 个 Y](benchmarks/model_space_v13_sample_20261017.json) 的 612 次估计全部通过库对照，未重跑完整 20,111 次网格；单次样本的设定值恢复仍有 9/165 项未通过原检查规则，明细保留，不能称为所有教学预期均通过。[contract 17 冲击面板性能](benchmarks/shock_panel_v17.json) 的单次冷请求约 340 ms、顺序热请求 p95 约 37 ms、8 并发热请求 p95 约 362 ms，均在脚本预算内；这是本机 TestClient 结果，不是生产容量或网络时延验收。旧 benchmark 未覆盖，release 未重建。
+
+此前 v12 的本地验收 release 为 `be37a7cfe40444f09749a77a276f45a3`：4,743 个分层选择的模型通过标准库对照；独立复算 364 个案例中 352 个成功估计、12 个一致拒绝，无超容差差异；四类报告案例完成生成、提交与重新读取检查。详见 [v12 历史规格与验证边界](docs/regression-refactor-20261010.md)。历史 review 和评估只适用于其注明的基线，不是生产容量验收。
 
 ## 支持范围
 

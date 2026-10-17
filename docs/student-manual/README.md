@@ -3,14 +3,15 @@
 - 成品：[实验手册.pdf](../../实验手册.pdf)，A4，28 页，20 张操作截图。学生在左侧“课程大纲”下的“实验手册 PDF”入口打开；前端直接引用这份 PDF，Vite 把它作为带内容指纹的静态资源打入构建，更新后重新构建前端即可发布。
 - 正文：[实验手册.md](../../实验手册.md)，`<!-- page -->` 为显式分页点。
 - 截图：[screenshots/](screenshots/)，来源清单 [screenshots.json](screenshots.json)（代码基线、数据 release、尺寸、SHA-256）。`tests/test_steps.py` 会核对清单中的哈希。
-- 脚本：`frontend/scripts/` 下的截图、排版与导出脚本，使用本机 Chrome（可用 `CHROME_PATH` 指定）和中文字体（Linux 用 Noto Sans CJK SC，Windows 用 Noto Sans SC）。
+- 脚本：`frontend/scripts/` 下的截图、排版与导出脚本，使用 Bun、本机 Chrome（可用 `CHROME_PATH` 指定）和中文字体（Linux 用 Noto Sans CJK SC，Windows 用 Noto Sans SC）。截图还需要 PATH 中的 `agent-browser`；状态条裁剪使用 ImageMagick 的 `magick`。
 
 ## 重新生成
 
-1. 在独立的本地课堂（新建数据库；API 与 Vite 开发服务器都不开演示模式，登录页才是普通页面）准备两个测试学生：一个完成步骤 1–14 且尚未生成报告（可用 `scripts/seed_full_journey.py`），另一个是新账号、什么都没做。截图脚本会在第一个学生的步骤 11“改模型、对比”里算一个去掉汇率变动的模型、保存并放入报告，再生成、提交报告并由教师评分，所以只用测试账号；同一个学生不能拍第二次，重拍时另建一个。
+1. 在独立的本地课堂（新建数据库；API 与 Vite 开发服务器都不开演示模式，登录页才是普通页面）准备两个测试学生：一个完成步骤 1–14 且尚未生成报告（可用 `scripts/seed_full_journey.py`），另一个是新账号、什么都没做。测试学生和教师先修改初始密码，避免首次登录警告干扰操作截图。截图脚本会在第一个学生的步骤 11“改模型、对比”里算一个去掉汇率变动的模型、记入报告，再生成、提交报告并由教师评分，所以只用测试账号；同一个学生不能全量拍第二次，重拍时另建一个。
 2. 截图（账号只通过环境变量传入）：
 
 ```bash
+MANUAL_BASE_URL=http://127.0.0.1:<前端端口> \
 MANUAL_STUDENT=<完整学生> MANUAL_STUDENT_PASSWORD=<口令> \
 MANUAL_GATE_STUDENT=<未完成学生> MANUAL_GATE_STUDENT_PASSWORD=<口令> \
 MANUAL_TEACHER=<教师> MANUAL_TEACHER_PASSWORD=<口令> \
@@ -32,6 +33,12 @@ bun run frontend/scripts/export-student-manual.ts
 2. 正文的按钮名、条件、截图说明和数据口径与当前界面一致；不要用新说明解释不匹配的旧截图。
 3. 页数变化时，同步正文导航表的页码和本说明的总页数；手册封面与末页的版本说明同步更新。
 4. 截图中的评分只说明流程，不构成评分标准。
+
+## 2.31（2026-10-17，现行文案与全部截图同步）
+
+- 校正“点其他条形即保存”的旧说法、固定效应吸收共同年份变化的说明，以及无关控制变量的统计解释。
+- 在独立非演示课堂 `gvcsim_manual_refresh_20261017`、当前 release `88063fb4cbf24ce2b4657d6f3c679a66` 重拍全部 20 张图。公开 API 预填步骤 1–14，浏览器完成模型实验、报告生成和提交，测试教师示例评分 90；这不是学生独立完成课程的验收。
+- 截图由 `agent-browser` 连接脚本启动的 Chrome 生成，状态图仅裁剪，不改页面内容；来源清单区分 OECD 指标与课程模拟。步骤 6–9 局部重拍以改善取景，全部图片仍来自同一天同一课堂与代码。PDF 重导为 28 页，检查版心溢出与受影响页面。
 
 ## 2.29（2026-10-17，单标签页保存说明）
 

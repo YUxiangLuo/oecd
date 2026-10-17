@@ -139,13 +139,13 @@ try {
   // Complete student: one image per step.
   page = await signedIn(studentToken);
   if (!onlyViz && !onlyReg) {
-  await open(page, 1, `window.__find("已记录的单元格") && document.querySelector("button.db-observation-cell")`);
-  await scrollTo(page, `window.__find("已记录的单元格")`, 150);
+  await open(page, 1, `document.querySelector(".material-card--recorded") && document.querySelector("button.db-observation-cell")`);
+  await scrollTo(page, `document.querySelector(".material-card")`, 300);
   await save("01-icio.png", await page.screenshot(), student.username, "Step 1 recorded cell.");
   await scrollTo(page, `document.querySelector(".quiz-question")?.closest("section") || document.querySelector(".quiz-question")`, 20);
   await save("01-quiz.png", await page.screenshot(), student.username, "Understanding check (completed).");
 
-  await open(page, 2, `window.__find("01 / 计算方法") && window.__find("报告材料 · 自动记录")`);
+  await open(page, 2, `window.__find("01 / 计算方法") && document.querySelector('[aria-label="本步报告材料"]')`);
   await save("02-indicators.png", await page.screenshot(), student.username, "Step 2 method intro with task card.");
   await open(page, 3, `window.__find("02 / 动手拆解") && window.__find("分解明细")`);
   await scrollTo(page, `window.__find("02 / 动手拆解")`, 8);
@@ -162,19 +162,20 @@ try {
   if (!onlyReg) {
   // Steps 6 and 7 open on their theme view (出口构成 / 四类生产活动); figures 9 and 10 show the 历年变化 view.
   const trendView = `[...document.querySelectorAll('[role=group][aria-label="图表视角"] button')].find((b) => b.textContent === "历年变化")`;
-  await open(page, 6, `document.querySelector('[aria-label="报告材料"]') && ${trendView}`);
+  await open(page, 6, `document.querySelector('[aria-label="本步报告材料"]') && ${trendView}`);
   await page.eval(`(() => { ${trendView}.click(); return true; })()`);
   await page.waitFor(`document.querySelector("main svg[role=img]") && document.querySelector('[aria-label="趋势读数"]')`, 45_000);
   await settled(page);
-  await save("06-visualization.png", await page.screenshot(), student.username, "Step 6 trend with automatic material.");
-  await open(page, 7, `document.querySelector('[aria-label="报告材料"]') && ${trendView}`);
+  await scrollTo(page, `window.__find("当前图表范围") || document.querySelector('[aria-label="当前图表范围"]')`, 140);
+  await save("06-visualization.png", await page.screenshot(), student.username, "Step 6 trend; materials were seeded through the public API. Browsing does not automatically replace report materials.");
+  await open(page, 7, `document.querySelector('[aria-label="本步报告材料"]') && ${trendView}`);
   await page.eval(`(() => { ${trendView}.click(); return true; })()`);
   await page.waitFor(`document.querySelector("main svg[role=img]") && document.querySelector('[aria-label="趋势读数"]')`, 45_000);
   await settled(page);
   await scrollTo(page, `window.__find("当前图表范围") || document.querySelector('[aria-label="当前图表范围"]')`, 140);
   await save("07-visualization.png", await page.screenshot(), student.username, "Step 7 production chart.");
-  await open(page, 8, `document.querySelector('[aria-label="报告材料"]') && document.querySelector("main svg[role=img]")`);
-  await scrollTo(page, `document.querySelector('[aria-label="当前图表范围"]')`, 140);
+  await open(page, 8, `document.querySelector('[aria-label="本步报告材料"]') && document.querySelector("main svg[role=img]")`);
+  await scrollTo(page, `document.querySelector("main svg[role=img]")`, 140);
   await save("08-visualization.png", await page.screenshot(), student.username, "Step 8 forward/backward lengths.");
   // Figure 12 shows the 历年变化 view even when the student last saved the 行业排名 view.
   await open(page, 9, `document.querySelector('section[aria-label="行业网络指标趋势"]') && ${trendView}`);
@@ -211,7 +212,7 @@ try {
   await scrollTo(page, `[...document.querySelectorAll(".reg-custom-section h4")].find((h) => h.textContent.startsWith("回归结果表"))`, 120);
   await save("11-regression-workbench.png", await page.screenshot(), student.username, "Step 11 改模型、对比: the 去掉汇率变动 preset beside the default model, with the 课程设定值 row.");
   // Put it in the report, so the generated report carries the appendix 模型实验.
-  await page.eval(`(() => { [...document.querySelectorAll(".reg-custom-report button")].find((b) => /放入报告/.test(b.textContent)).click(); return true; })()`);
+  await page.eval(`(() => { [...document.querySelectorAll(".reg-custom-report button")].find((b) => /记入报告/.test(b.textContent)).click(); return true; })()`);
   await page.waitFor(`document.querySelector(".reg-custom-report-chip")`, 20_000);
   await settled(page);
   if (onlyReg) {

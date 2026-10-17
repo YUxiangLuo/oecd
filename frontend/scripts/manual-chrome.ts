@@ -1,9 +1,9 @@
-/** Minimal headless-Chrome driver for the student manual (screenshots and A4 PDF export).
- * Uses the locally installed Chrome over the DevTools protocol, so no extra npm packages
- * or agent-browser install are needed. Set CHROME_PATH to override the browser location.
+/** Headless-Chrome driver for the student manual and A4 PDF export.
+ * Screenshots use agent-browser; cropped status images also require ImageMagick.
+ * Set CHROME_PATH to override the browser location. No extra npm packages are needed.
  */
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -55,7 +55,7 @@ export class Cdp {
   private pending = new Map<number, Pending>();
   private listeners = new Set<(message: any) => void>();
 
-  private constructor(private socket: WebSocket) {
+  private constructor(private socket: WebSocket, readonly endpoint: string) {
     socket.addEventListener("message", (event) => {
       const message = JSON.parse(String(event.data));
       if (message.id != null) {
@@ -77,7 +77,7 @@ export class Cdp {
       socket.addEventListener("open", () => resolve(), { once: true });
       socket.addEventListener("error", () => reject(new Error(`Cannot connect to ${url}`)), { once: true });
     });
-    return new Cdp(socket);
+    return new Cdp(socket, url);
   }
 
   send(method: string, params: Record<string, unknown> = {}, sessionId?: string): Promise<any> {
@@ -152,8 +152,26 @@ export class Page {
   }
 
   async screenshot(clip?: { x: number; y: number; width: number; height: number }) {
-    const result = await this.send("Page.captureScreenshot", { format: "png", ...(clip ? { clip: { ...clip, scale: 1 }, captureBeyondViewport: false } : {}) });
-    return Buffer.from(result.data, "base64");
+    const dir = await mkdtemp(join(tmpdir(), "gvcsim-manual-shot-"));
+    const image = join(dir, "capture.png");
+    const command = async (args: string[]) => {
+      const process = Bun.spawn(args, { stdout: "ignore", stderr: "pipe" });
+      const error = await new Response(process.stderr).text();
+      if (await process.exited) throw new Error(`Screenshot command failed: ${error}`);
+    };
+    try {
+      // Keep each page's selected tab independent when screenshots run concurrently.
+      const browser = ["agent-browser", "--session", `manual-capture-${this.targetId}`, "--cdp", this.cdp.endpoint];
+      await command([...browser, "tab", this.targetId]);
+      await command([...browser, "screenshot", image]);
+      if (clip) {
+        const { x, y, width, height } = clip;
+        await command(["magick", image, "-crop", `${Math.ceil(width)}x${Math.ceil(height)}+${Math.floor(x)}+${Math.floor(y)}`, "+repage", image]);
+      }
+      return await readFile(image);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   }
 
   async printA4() {

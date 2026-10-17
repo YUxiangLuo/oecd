@@ -1,477 +1,531 @@
 {
-  "captured_on": "2026-10-15",
+  "captured_on": "2026-10-17",
+  "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+  "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+  "simulation_contract": "step10-tariff-teaching-v13",
+  "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
   "viewport": {
     "width": 1280,
     "height": 960
   },
-  "baseline_commit": "b9a1693",
-  "code_state": "Business code at commit b9a1693 (teaching data v13; steps 6–9 record on request; step 15 folded report; step 10 Canada vs Australia example).",
   "code_sources_hash_rule": "SHA-256 of sorted sha256sum output for frontend/src and gvcsim .ts/.tsx/.css/.py files (Linux checkout).",
-  "code_sources_sha256": "ae934db31f569a4cedb965f1c1be11e54fa09dcc5a7cfeaa78bf9c9084bb6deb",
-  "data_release": "8565f226719d4179967f6372dbc7c49e",
-  "simulation_contract": "step10-tariff-teaching-v13",
-  "source": "Manual 2.27 re-captured all 20 figures with headless Chrome driven by frontend/scripts/capture-student-manual.ts at 1280x960 against an independent local classroom (fresh database gvclab_manual_20261015, plain non-demo build, API :8010 behind the Vite dev server :5173) on release 8565f226719d4179967f6372dbc7c49e (contract step10-tariff-teaching-v13). manual-student was seeded through the public APIs by scripts/seed_full_journey.py; the capture script put a 去掉汇率变动 experiment into the report, generated and submitted it, and manual-teacher graded it (90, flow example only). manual-gate is a blank account. Passwords are not visible.",
-  "provenance_scope": "All 20 images come from the 2026-10-15 run; per-image fields repeat the top-level metadata.",
+  "code_sources_sha256": "a2bc41dfcbe7f22e0ac864d0302d893bc0d20a94f5c41d1953838eb9b7dc0aa2",
+  "source": "Manual 2.31: all 20 figures captured using agent-browser attached to headless Chrome in an independent non-demo local classroom (database gvcsim_manual_refresh_20261017; API :8044, Vite :5244). Public APIs seeded manual-student-v231 through scripts/seed_full_journey.py. The browser capture script recorded a 去掉汇率变动 experiment, generated and submitted a report, and the teacher API graded it 90 (flow example only). manual-gate has no course records. Initial passwords were changed through public APIs. No real student accounts or production classroom data were modified.",
+  "provenance_scope": "All 20 images captured on 2026-10-17; figures 06–09 recaptured in the same classroom to improve framing. Unchanged login-page pixels are still from this new capture. Status images are cropped, not retouched.",
+  "capture_script_sha256": "bc5b6bed00e24a22e4abc56778b33251531e534d8909c520e679476e317bc008",
   "screenshots": [
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/00-login.png",
       "width": 1280,
       "height": 960,
       "sha256": "ae4355ea1f696a08584996d4f47a3cca63b697ea0f28ff2028ac0b04698c7ddc",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
       "journey": "public-page",
       "account": null,
       "capture_note": "Public login page; demo prefill only in demo builds.",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
-          "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "name": "Public application login page; no student data",
+          "production_data": false
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/15-material-gate.png",
       "width": 1280,
       "height": 960,
-      "sha256": "90af798cc24bdc4082cc08519871b255483724db59da5501d5dc8ef8cff2f0c5",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
-      "journey": "api-seeded-then-browser",
+      "sha256": "f12d2693ebb4d26367983aa540e790ef5c1005cc0329bb5e8468a24f38e4404a",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
+      "journey": "blank-account-browser",
       "account": "manual-gate",
       "capture_note": "Incomplete course: checklist and missing-item entry points.",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
+          "name": "OECD ICIO 2023 observed indicators",
           "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66"
+        },
+        {
+          "name": "Course-generated tariff and regression teaching data, not observed policy effects",
+          "production_data": false,
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66",
+          "version": "step10-tariff-teaching-v13"
+        },
+        {
+          "name": "Isolated classroom test account, authored report text and example grading",
+          "production_data": false
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/11-regression-setup.png",
       "width": 1280,
       "height": 960,
-      "sha256": "327b2934d638cca4369869b2bcbdf7f3de8fca1ec56cb46cceb3a0bbf46f0c02",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
-      "journey": "api-seeded-then-browser",
+      "sha256": "1a0b3eefb50be5c950026b7163dd37bd2b154f2b0508e570148deaf85d83f59a",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
+      "journey": "blank-account-browser",
       "account": "manual-gate",
       "capture_note": "Step 12 before running: taxed vs untaxed group chart and run button.",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
-          "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "name": "Course-generated tariff and regression teaching data, not observed policy effects",
+          "production_data": false,
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66",
+          "version": "step10-tariff-teaching-v13"
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/01-icio.png",
       "width": 1280,
       "height": 960,
-      "sha256": "1d40cacfe33fe5f3ae946a16b5f7b40fb85390c09a26d5997e5bf14f64521f8b",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
+      "sha256": "3e8f4102bfa9a330b6d42bb0846e3476665dcc646b63ebab752c065e2af435bc",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
       "journey": "api-seeded-then-browser",
-      "account": "manual-student",
+      "account": "manual-student-v231",
       "capture_note": "Step 1 recorded cell.",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
+          "name": "OECD ICIO 2023 observed indicators",
           "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66"
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/01-quiz.png",
       "width": 1280,
       "height": 960,
-      "sha256": "85d7b437c7354c88baee3b71306fbb57a6ef45a95c78f7dd4780a0f46ce99d74",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
+      "sha256": "2f0e28d9feb5a3ec8ae6d730a73c98d8c7d5893ad9299520a05e70ee35477c31",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
       "journey": "api-seeded-then-browser",
-      "account": "manual-student",
+      "account": "manual-student-v231",
       "capture_note": "Understanding check (completed).",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
+          "name": "OECD ICIO 2023 observed indicators",
           "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66"
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/02-indicators.png",
       "width": 1280,
       "height": 960,
-      "sha256": "78df21ed3c130b491fe076c6f2cc265d9d54d3ef7fa674906b416a7fd8fd0afa",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
+      "sha256": "38d9d225f9b68550da51e4135ca42a92ad5d5ba8ce4efe37f38e6fe35a6469ba",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
       "journey": "api-seeded-then-browser",
-      "account": "manual-student",
+      "account": "manual-student-v231",
       "capture_note": "Step 2 method intro with task card.",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
+          "name": "OECD ICIO 2023 observed indicators",
           "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66"
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/03-indicators.png",
       "width": 1280,
       "height": 960,
-      "sha256": "5fc09bb87910829b7bc154ea0e709a2aa875b90b1752cc17744ae11b1c80dadc",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
+      "sha256": "bfa88b6f3dbc96a5e89006c9ee172b3b77f5413ea2c5036f547ca3a6a1a83ef4",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
       "journey": "api-seeded-then-browser",
-      "account": "manual-student",
+      "account": "manual-student-v231",
       "capture_note": "Step 3 hands-on decomposition.",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
+          "name": "OECD ICIO 2023 observed indicators",
           "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66"
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/04-indicators.png",
       "width": 1280,
       "height": 960,
-      "sha256": "dce86aa99109869e881fac0e641b5b5ecad59790940326551ae297aaa3aae904",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
+      "sha256": "aad21b1fde83061590f6fcff10e795ec675b2e5d3b3a117508bf55229d83f511",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
       "journey": "api-seeded-then-browser",
-      "account": "manual-student",
+      "account": "manual-student-v231",
       "capture_note": "Step 4 length decomposition.",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
+          "name": "OECD ICIO 2023 observed indicators",
           "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66"
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/05-indicators.png",
       "width": 1280,
       "height": 960,
-      "sha256": "bb43932eaa19b80e4e78ade3389f21a6897cc892f1487558e8dcc817cbe42ab7",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
+      "sha256": "16e6a5ef9a8fed3f20d615e167f8aca23aa2fb3dcb89b3ee4a2f90a65d7aad17",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
       "journey": "api-seeded-then-browser",
-      "account": "manual-student",
+      "account": "manual-student-v231",
       "capture_note": "Step 5 centrality table.",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
+          "name": "OECD ICIO 2023 observed indicators",
           "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66"
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/06-visualization.png",
       "width": 1280,
       "height": 960,
-      "sha256": "92f943a54ff13e4d654db1d7b265891f3d7d0a052eb8f96730e2682f870d4023",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
+      "sha256": "fc9662bcb220b5301d92588bdc0988522c8d1f089d66bac14850166a80f45b35",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
       "journey": "api-seeded-then-browser",
-      "account": "manual-student",
-      "capture_note": "Step 6 trend with automatic material.",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
+      "account": "manual-student-v231",
+      "capture_note": "Step 6 trend; materials were seeded through the public API. Browsing does not automatically replace report materials.",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
+          "name": "OECD ICIO 2023 observed indicators",
           "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66"
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/07-visualization.png",
       "width": 1280,
       "height": 960,
-      "sha256": "60a902799fb49f7f0fe7e6f11ba8c602e59308b7065ce6700b9554b7ab00e08d",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
+      "sha256": "f325761657e5abcdd4243294c1162b1944582cb97382d6a7992d262c602daea2",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
       "journey": "api-seeded-then-browser",
-      "account": "manual-student",
+      "account": "manual-student-v231",
       "capture_note": "Step 7 production chart.",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
+          "name": "OECD ICIO 2023 observed indicators",
           "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66"
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/08-visualization.png",
       "width": 1280,
       "height": 960,
-      "sha256": "871516957d35cea7a52515deee7544fd320b69f0e7b8995da92b88a80e2d3770",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
+      "sha256": "98ad4f77a9faa6c151ab933db8c052645195433275a9a7cd74fe5c88872e0616",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
       "journey": "api-seeded-then-browser",
-      "account": "manual-student",
+      "account": "manual-student-v231",
       "capture_note": "Step 8 forward/backward lengths.",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
+          "name": "OECD ICIO 2023 observed indicators",
           "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66"
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/09-network.png",
       "width": 1280,
       "height": 960,
-      "sha256": "f82275b76a3bd3a374e581e0180210c1adf732452e5561a41fa3fa704a35408e",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
+      "sha256": "130cb7fa41cc52e97a6add2c073a6d98e31c8d81403b040ff6ff91a6449a2cb5",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
       "journey": "api-seeded-then-browser",
-      "account": "manual-student",
+      "account": "manual-student-v231",
       "capture_note": "Step 9 two-country industry comparison.",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
+          "name": "OECD ICIO 2023 observed indicators",
           "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66"
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/10-shocks.png",
       "width": 1280,
       "height": 960,
-      "sha256": "43f53095e826a68f90b5c50777255799ad62f1d34df4bf4b09d6bc3faa2c4c07",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
+      "sha256": "8714d18493103f15b951776df9d936756f32ca91c5d9ba484d7c753a56c1c6f1",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
       "journey": "api-seeded-then-browser",
-      "account": "manual-student",
+      "account": "manual-student-v231",
       "capture_note": "Step 10 year table (Canada vs Australia, motor vehicles: w, τ, X, L1.X and the exchange-rate change) under the example, above the ranking of the taxed countries.",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
-          "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "name": "Course-generated tariff and regression teaching data, not observed policy effects",
+          "production_data": false,
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66",
+          "version": "step10-tariff-teaching-v13"
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/11-regression-result.png",
       "width": 1280,
       "height": 960,
-      "sha256": "e9199773ab72df597d78fec509b9d074b202fdb4f6230d92a338714854c13224",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
+      "sha256": "4e7f6a14d8428272ed183aa614edd8c8d7f1de2fbd42618e7285609a2755093e",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
       "journey": "api-seeded-then-browser",
-      "account": "manual-student",
+      "account": "manual-student-v231",
       "capture_note": "Step 11 after the run: one bar per Y and the two-year headline with its current-year and next-year parts.",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
-          "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "name": "Course-generated tariff and regression teaching data, not observed policy effects",
+          "production_data": false,
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66",
+          "version": "step10-tariff-teaching-v13"
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/11-regression-workbench.png",
       "width": 1280,
       "height": 960,
-      "sha256": "20c6fc24511a00503cfaaaed6bcdeaae1e6a8e4b4bd4ee440a425bcb727cf4b5",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
+      "sha256": "8a0dfc3374e3f4d93a6c0f96b8cd03747ab1ff2abbdfd8bf28aa1fa0b8d25fec",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
       "journey": "api-seeded-then-browser",
-      "account": "manual-student",
+      "account": "manual-student-v231",
       "capture_note": "Step 11 改模型、对比: the 去掉汇率变动 preset beside the default model, with the 课程设定值 row.",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
-          "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "name": "Course-generated tariff and regression teaching data, not observed policy effects",
+          "production_data": false,
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66",
+          "version": "step10-tariff-teaching-v13"
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/15-writing.png",
       "width": 1280,
       "height": 960,
-      "sha256": "febc890a59fab657ae889afdeb0efa3e7dbb0681b3d0580a39ed1adf202b5451",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
+      "sha256": "432664955840dea77eea4491d3ef913190fa370789e3cfe0b4471c3b363bf852",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
       "journey": "api-seeded-then-browser",
-      "account": "manual-student",
+      "account": "manual-student-v231",
       "capture_note": "Step 15 writing area with sentence starters.",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
+          "name": "OECD ICIO 2023 observed indicators",
           "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66"
+        },
+        {
+          "name": "Course-generated tariff and regression teaching data, not observed policy effects",
+          "production_data": false,
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66",
+          "version": "step10-tariff-teaching-v13"
+        },
+        {
+          "name": "Isolated classroom test account, authored report text and example grading",
+          "production_data": false
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/15-report.png",
       "width": 1280,
       "height": 960,
-      "sha256": "33e8c37dfa024cb4e7cec58a5379b044bca69f065f582abeb8ed9bf6f719d995",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
+      "sha256": "bd6b6ea7b701bb56458324642d9760eed65d5c82a3e6b2d79f37d152a3e16b23",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
       "journey": "api-seeded-then-browser",
-      "account": "manual-student",
+      "account": "manual-student-v231",
       "capture_note": "Generated report (draft).",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
+          "name": "OECD ICIO 2023 observed indicators",
           "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66"
+        },
+        {
+          "name": "Course-generated tariff and regression teaching data, not observed policy effects",
+          "production_data": false,
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66",
+          "version": "step10-tariff-teaching-v13"
+        },
+        {
+          "name": "Isolated classroom test account, authored report text and example grading",
+          "production_data": false
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/15-submitted.png",
       "width": 964,
       "height": 74,
-      "sha256": "c1ec5074ff677ff1a5846f7baddd0ac1b19bddb45de32654ad6eb97ebdbd38eb",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
+      "sha256": "3c887a0876c3b8634d836340878c3609e1b2e2488bb3c2e18e1e277d705055ac",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
       "journey": "api-seeded-then-browser",
-      "account": "manual-student",
+      "account": "manual-student-v231",
       "capture_note": "Submitted status line.",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
+          "name": "OECD ICIO 2023 observed indicators",
           "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66"
+        },
+        {
+          "name": "Course-generated tariff and regression teaching data, not observed policy effects",
+          "production_data": false,
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66",
+          "version": "step10-tariff-teaching-v13"
+        },
+        {
+          "name": "Isolated classroom test account, authored report text and example grading",
+          "production_data": false
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     },
     {
+      "captured_on": "2026-10-17",
+      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
+      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "simulation_contract": "step10-tariff-teaching-v13",
+      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
       "file": "screenshots/15-graded.png",
       "width": 964,
-      "height": 162,
-      "sha256": "ec0a69f3366bdc3d1cff3321d5da2a2d7db592e279a089dfc88a587110d7f14c",
-      "captured_on": "2026-10-15",
-      "capture_url": "http://127.0.0.1:5173",
-      "capture_tool": "headless-chrome-cdp",
+      "height": 163,
+      "sha256": "fd4bf471ad332a94b6f596299cc0c30f521fd15c2a3d365da52c088a7d779755",
+      "capture_url": "http://127.0.0.1:5244",
+      "capture_tool": "agent-browser-over-cdp",
       "journey": "api-seeded-then-browser",
-      "account": "manual-student",
+      "account": "manual-student-v231",
       "capture_note": "Graded status with feedback.",
-      "baseline_commit": "b9a1693",
-      "data_release": "8565f226719d4179967f6372dbc7c49e",
-      "simulation_contract": "step10-tariff-teaching-v13",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed classroom release",
+          "name": "OECD ICIO 2023 observed indicators",
           "production_data": true,
-          "release_id": "8565f226719d4179967f6372dbc7c49e"
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66"
+        },
+        {
+          "name": "Course-generated tariff and regression teaching data, not observed policy effects",
+          "production_data": false,
+          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66",
+          "version": "step10-tariff-teaching-v13"
+        },
+        {
+          "name": "Isolated classroom test account, authored report text and example grading",
+          "production_data": false
         }
-      ],
-      "code_state": "commit b9a1693 (plan phases 1–2a merged, phase 3 branch: step 10 untaxed list inside the readings fold)"
+      ]
     }
   ]
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check that every model a student can build in steps 11–14 behaves as the teaching data were built to behave.
+"""Check a representative model grid for steps 11–14 against the teaching data construction.
 
 The teaching panel (gvcsim/regression/teaching.py) generates each Y as
 
@@ -8,18 +8,18 @@ The teaching panel (gvcsim/regression/teaching.py) generates each Y as
 
 (v13 values; the report reads the published gammas) with 人口增长率 and FDI generated but unrelated to Y, no lag-2
 relation, the exchange rate and the two macro paths correlated with the first tariff wave (confounders: GDP in the
-tariff's direction, openness against it), a common year zigzag only the year effects remove, and three ICIO-derived
+tariff's direction, openness against it), a common year zigzag absorbed by year or country×year effects, and three ICIO-derived
 controls that are real data. This script
-fits the workbench's whole model space on the published panel — every X-lag set, every distinct fixed-effect set and a
-structured set of control settings, for every Y a page may choose — with the production estimator, then checks each
+fits every X-lag set and distinct fixed-effect set crossed with 13 representative control settings, for every Y a page
+may choose. It does not enumerate every control subset with independent lag choices. It uses the production estimator and checks each
 result against what that construction implies (recovery of β where the model is right, the designed biases where it
-is wrong, null controls that read as null, identities that hold to the last digit, the library benchmark passing).
+is wrong, false positives for unrelated controls, numerical identities, and agreement with the library benchmark).
 
 Run from the repository root:
 
     PYTHONPATH=. uv run python scripts/check_model_space.py run --out dogfood-output/model-space
     PYTHONPATH=. uv run python scripts/check_model_space.py report --out dogfood-output/model-space \
-        --markdown docs/regression-model-space-check-2026-10-14.md --summary benchmarks/model_space_v12.json
+        --markdown /tmp/model-space-check.md --summary /tmp/model-space-summary.json
 
 ``run`` writes one JSON line per fit (resumable); ``report`` evaluates them. Numbers are for the current release only.
 
@@ -677,6 +677,7 @@ def _report(args: argparse.Namespace, variant: teaching_variants.Variant | None)
     by_id = {record["id"]: record for record in records}
     present = {(record["outcome"], record["key"]) for record in records}
     targets = [item for item in ys() if (item[0], item[1]) in present]
+    spec_count = len({json.dumps(record["spec"], sort_keys=True) for record in records})
     gamma = MACRO_CONTROLS[GDP_COLUMN]["gamma_factor"]
     openness_gamma = MACRO_CONTROLS[OPENNESS_COLUMN]["gamma_factor"]
     where = f"记录中的 release {records[0].get('release')}" if records else "空记录"
@@ -690,10 +691,10 @@ def _report(args: argparse.Namespace, variant: teaching_variants.Variant | None)
         "",
         f"> {evidence_note}",
         "",
-        f"> {where}上，学生可构造的模型（7 种 X 滞后组合 × 13 种固定效应组合 × 13 种控制变量设置）对 {len(targets)} 个 Y 的估计，"
-        "逐项与教学数据的生成规则对照。生成规则见 `gvcsim/regression/teaching.py`，核查脚本见 `scripts/check_model_space.py`。",
+        f"> {where} 上，汇总已有记录中 {len(targets)} 个 Y 的估计，逐项与教学数据的生成规则对照。"
+        "默认扫描网格为 7 种 X 滞后组合 × 13 种固定效应组合 × 13 组代表性控制配置；已有记录可能只覆盖其子集，也不穷举工作台的任意控制及滞后组合。生成规则见 `gvcsim/regression/teaching.py`，核查脚本见 `scripts/check_model_space.py`。",
         "",
-        f"- 估计次数：{len(records)}；设定数：{len(grid())}；Y：{len(targets)}。",
+        f"- 估计次数：{len(records)}；已记录的不同设定数：{spec_count}；Y：{len(targets)}。",
         f"- 生成规则：Y = 单位水平 + β·(0.6·X + 0.4·L1.X) + (−0.0095·β)·汇率变动 + β·({gamma}·ΔGDP对数 + {openness_gamma}·Δ开放度) + 噪声与共同年份趋势；"
         "人口增长率、FDI 与 Y 无关；没有两年后关联；汇率、GDP 增长、开放度上升与第一批加税相关（混杂）。",
         "",
@@ -791,6 +792,7 @@ def _report(args: argparse.Namespace, variant: teaching_variants.Variant | None)
         "provenance": records[0].get("provenance") if records else None,
         "evidence_note": evidence_note,
         "fits": len(records),
+        "specs": spec_count,
         "checks": [
             {
                 "name": check.name,

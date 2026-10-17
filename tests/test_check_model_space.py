@@ -38,6 +38,7 @@ def test_resume_refuses_changed_data_and_report_refuses_mixed_evidence(tmp_path,
     from test_model_spec import _panel
 
     panel = _panel()
+    full_grid = cms.grid
     monkeypatch.setattr(cms, "_load_panel", lambda args: ("release-a", panel))
     monkeypatch.setattr(cms, "grid", lambda: [("default", DEFAULT_SPEC)])
     monkeypatch.setattr(cms, "ys", lambda which="all": [("trade", "FVA_share", -0.55, "share")])
@@ -50,6 +51,14 @@ def test_resume_refuses_changed_data_and_report_refuses_mixed_evidence(tmp_path,
     assert record["provenance"]["release"] == "release-a"
     cms.run(args)
     assert path.read_text() == original
+    # Reporting a partial sweep must count recorded specs, not the configured full grid.
+    monkeypatch.setattr(cms, "grid", full_grid)
+    args.summary = str(tmp_path / "summary.json")
+    args.max_failures = 5
+    cms.report(args)
+    summary = json.loads(Path(args.summary).read_text())
+    assert summary["fits"] == summary["specs"] == 1
+    assert "已记录的不同设定数：1；Y：1" in Path(args.markdown).read_text()
     panel.loc[0, "teaching_y_trade"] += 0.1
     with pytest.raises(ValueError, match="运行证据"):
         cms.run(args)
