@@ -554,6 +554,7 @@ export interface StepStateApi<T = Record<string, unknown>> {
   saveView?: (patch: Partial<T>) => void;
   complete: boolean;
   syncing: boolean;
+  /** Server save error only; local draft backup failures are shown by the workspace banner. */
   syncError: string | null;
   /** This step's material is not yet acknowledged by the server (including debounce). */
   materialPending?: boolean;

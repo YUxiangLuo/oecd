@@ -263,7 +263,7 @@ export function StudentWorkspace({
   const mainContentId = stepMainContentId(step.n);
   const materialChanged = session.hasMaterialChanges(step.n);
   const materialSaving = materialChanged && (session.unsynced || session.syncing);
-  const materialSaveFailed = materialChanged && Boolean(session.syncError);
+  const materialSaveFailed = materialChanged && Boolean(session.saveError);
   const materialStatus = step.lab === "rep"
     ? reportMaterialStatus(session.reportGate, materialSaving, materialSaveFailed)
     : materialStatusForStep(step.n, session.materialGate, materialSaving, materialSaveFailed);

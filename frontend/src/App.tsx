@@ -102,7 +102,7 @@ function AppContent() {
     saveView: (patch) => session.patchStep(current, patch),
     complete: currentCompletion?.complete ?? false,
     syncing: session.syncing,
-    syncError: session.syncError,
+    syncError: session.saveError,
     materialPending: session.hasMaterialChanges(current),
     materialSyncError: session.hasMaterialChanges(current) ? session.saveError : null,
     syncConflict: session.syncConflict,
