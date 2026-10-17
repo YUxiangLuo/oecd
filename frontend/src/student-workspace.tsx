@@ -352,6 +352,7 @@ export function StudentWorkspace({
 
           <div className="workarea">
             <SyncProblemBanner problem={syncProblem} />
+            {session.localViewWarning && <p className="tipbox" role="status">{session.localViewWarning}</p>}
             <StepLinkNotice text={stepNotice} onDismiss={onDismissStepNotice} />
             {user.initial_password && <div className="tipbox student-first-step" role="note">
               <span>{STUDENT_INITIAL_PASSWORD_HINT}</span>

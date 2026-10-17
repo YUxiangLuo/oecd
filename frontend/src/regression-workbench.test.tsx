@@ -340,9 +340,9 @@ function Harness({ initial, onSave, onView, locked = false, defaultResponse = DE
   outdated?: boolean;
   /** The step's saved default run (a bar click on the step can change its Y). */
   defaultResponse?: RegressionResponse;
-  /** Another tab saved a newer record: this step's material is not saved. */
+  /** Saving is paused and this step's material has not been confirmed. */
   conflict?: boolean;
-  /** Another tab saved a newer record, met by another save (a draft): this step's material is unchanged here. */
+  /** Saving is paused by a revision mismatch, but this step's material is unchanged here. */
   staleConflict?: boolean;
 }) {
   const [data, setData] = useState<WorkbenchStepState>(initial ?? {});
@@ -485,7 +485,7 @@ describe("the workbench", () => {
     render(<Harness staleConflict initial={{ experiment: experimentOf(NO_RATE, NO_RATE_RUN) }} />);
     await screen.findByRole("group", { name: "预设实验" });
     expect(tableHeaders()).toEqual(["变量", "默认模型", "已记入报告（可能已过期）：去掉汇率变动"]);
-    expect(screen.getByRole("alert").textContent).toContain("这里显示的可能不是报告里现在的模型");
+    expect(screen.getByRole("alert").textContent).toContain("保存已暂停，当前材料尚未确认");
   });
 
   test("the status line's 计算当前设定 hands the focus to the status line when it leaves", async () => {
@@ -501,7 +501,7 @@ describe("the workbench", () => {
     expect(document.activeElement).toBe(document.querySelector(".reg-custom-status"));
   });
 
-  test("while this step's material is not saved (another tab saved first), the model in the box is not called 已记入报告", async () => {
+  test("while saving is paused and this step's material is unconfirmed, the model in the box is not called 已记入报告", async () => {
     spyOn(api, "regressionOptions").mockResolvedValue(options);
     spyOn(api, "runRegression").mockResolvedValue(NO_RATE_RUN as never);
     render(<Harness conflict initial={{ experiment: experimentOf(NO_RATE, NO_RATE_RUN) }} />);
@@ -510,7 +510,7 @@ describe("the workbench", () => {
     const box = screen.getByRole("region", { name: "记入报告（选做）" });
     expect(box.querySelector(".reg-custom-report-chip")?.textContent).toContain("记入报告（未保存）：去掉汇率变动");
     expect(box.querySelector(".reg-custom-report-chip")?.textContent).not.toContain("已记入报告");
-    expect(screen.getByRole("alert").textContent).toBe("这次改动尚未确认保存成功：服务器版本已变化，保存已暂停，请按页面顶部的说明处理。");
+    expect(screen.getByRole("alert").textContent).toBe("保存已暂停，当前材料尚未确认。请按页面顶部的说明处理。");
   });
 
   test("back on the page with the reported model in the form, its column is said to be that model, not uncomputed", async () => {

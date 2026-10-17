@@ -17,11 +17,10 @@ test("a failed save says whether it will be sent again on its own", () => {
 test("a conflict warns that reloading discards unsaved edits, including in fullscreen", () => {
   for (const compact of [false, true]) {
     const markup = renderToStaticMarkup(<SyncProblemBanner problem={{ ...base, conflict: true }} compact={compact} />);
-    // A restored draft without its old merge base can also block unrelated edits.
-    expect(markup).toContain("服务器版本已变化");
+    expect(markup).toContain("保存需要处理");
     expect(markup).not.toContain("同一份材料");
     expect(markup).toContain("复制");
-    expect(markup).toContain("丢弃本页修改并载入服务器版本");
+    expect(markup).toContain("重新载入（清除待保存草稿）");
     expect(markup).not.toContain("合并保留");
   }
 });

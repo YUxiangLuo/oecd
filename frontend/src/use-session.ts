@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, isApiErrorStatus, RequestTimeoutError } from "./api";
-import { emptySession, isValidSession, mergeSessions, patchStep as patchStoredStep, readStep, sameMaterialContent, sameSessionContent } from "./session-store";
+import { emptySession, isValidSession, sessionData, withSessionViews, patchStep as patchStoredStep, readStep, sameMaterialContent, sameSessionContent } from "./session-store";
 import type { ClassroomReport, CompletionSummary, ExperimentSession, QuizLearningState, ReportGateItem, ReportMutationResponse, SessionSaveResponse } from "./types";
 import { isNetworkFailure, userFacingRequestError } from "./user-facing-error";
 
@@ -71,6 +71,7 @@ export interface SessionApi extends QuizLearningState {
   updatedAt?: string | null;
   syncing: boolean;
   syncError: string | null;
+  localViewWarning?: string | null;
   /** A failed save to the server only (syncError also reports a failed draft backup in this tab). */
   saveError: string | null;
   syncConflict: boolean;
@@ -96,8 +97,6 @@ export interface SessionApi extends QuizLearningState {
 
 interface SaveQueueCallbacks {
   onSaved: (response: SessionSaveResponse, saved: ExperimentSession, hasNewer: boolean) => void;
-  /** Another tab saved first and the two records were merged: the server's version and this tab's merged one. */
-  onMerged: (remote: ExperimentSession, remoteUpdatedAt: string | null, merged: ExperimentSession) => void;
   onError: (cause: unknown) => void;
   onSyncing: (value: boolean) => void;
   onUnsynced: (value: boolean) => void;
@@ -109,21 +108,15 @@ class SessionSaveQueue {
   private saving: Promise<void> | null = null;
   private baseUpdatedAt: string | null = null;
   private confirmed: ExperimentSession | null = null;
-  /** The server's record at `baseUpdatedAt`, when this tab knows it: the base of a merge after a 409. A draft
-   * restored from another load does not know it, and is never merged. */
-  private mergeBase: ExperimentSession | null = null;
   private sent: ExperimentSession | null = null;
   private outcomeUncertain = false;
   private stopped = false;
   constructor(
     private readonly save: (session: ExperimentSession, base: string | null) => Promise<SessionSaveResponse>,
     private readonly callbacks: SaveQueueCallbacks,
-    /** The server's current record, read after a 409 to merge this tab's edits into it. */
-    private readonly load?: () => Promise<{ session: ExperimentSession; updated_at?: string | null }>,
   ) {}
   setBaseUpdatedAt(value: string | null) { this.baseUpdatedAt = value; }
   setConfirmedSession(session: ExperimentSession) { this.confirmed = session; this.sent = null; this.outcomeUncertain = false; }
-  setMergeBase(session: ExperimentSession | null) { this.mergeBase = session; }
   getSentSession() { return this.sent; }
   getBaseUpdatedAt() { return this.baseUpdatedAt; }
   stop() { this.stopped = true; }
@@ -136,8 +129,6 @@ class SessionSaveQueue {
     let run!: Promise<void>;
     run = (async () => {
       this.callbacks.onSyncing(true);
-      // A few merges in a row at most: two tabs saving in turn every second must not loop for ever.
-      let merges = 0;
       try {
         while (this.pending && !this.stopped) {
           const next = this.outcomeUncertain && this.sent ? this.sent : this.pending;
@@ -149,25 +140,6 @@ class SessionSaveQueue {
           try { response = await this.save(next, this.baseUpdatedAt); }
           catch (cause) {
             if (this.stopped) throw cause;
-            // Another tab or device saved first: merge this tab's edits into the server's record and send that,
-            // unless both changed the same material (a real conflict, left to the student).
-            if (isApiErrorStatus(cause, 409) && this.load && this.mergeBase && merges < 3) {
-              const base = this.mergeBase;
-              let remote: { session: ExperimentSession; updated_at?: string | null } | null = null;
-              try { remote = await this.load(); } catch { remote = null; }
-              if (this.stopped) return;
-              const local = this.pending ?? next;
-              const merged = remote ? mergeSessions(base, local, remote.session) : null;
-              if (remote && merged) {
-                merges++;
-                this.baseUpdatedAt = remote.updated_at ?? null;
-                this.setConfirmedSession(remote.session);
-                this.mergeBase = remote.session;
-                this.pending = merged;
-                this.callbacks.onMerged(remote.session, remote.updated_at ?? null, merged);
-                continue;
-              }
-            }
             if (cause instanceof ApiError && [400, 413, 422].includes(cause.status)) {
               this.sent = null;
               this.outcomeUncertain = false;
@@ -182,7 +154,6 @@ class SessionSaveQueue {
           if (this.stopped) return;
           this.baseUpdatedAt = response.updated_at;
           this.setConfirmedSession(next);
-          this.mergeBase = next;
           this.callbacks.onSaved(response, next, this.pending !== null);
         }
       } finally {
@@ -199,7 +170,7 @@ class SessionSaveQueue {
 
 type SaveState = { phase: "saved" | "pending" | "saving" | "failed"; error: string | null; blocked: boolean };
 const SAVED: SaveState = { phase: "saved", error: null, blocked: false };
-const VERSION_ERROR = "服务器版本已变化，系统无法确认能否安全合并本页修改，已暂停保存。本页内容已保留，请先复制需要保留的内容，再放弃本页修改并重新加载。";
+const VERSION_ERROR = "保存状态异常，已暂停保存以保护作业。本页内容仍在，请先复制需要保留的内容，再重新载入。";
 
 export function useSession(enabled: boolean, username?: string): SessionApi {
   const [status, setStatus] = useState<SessionStatus>(enabled ? "loading" : "unavailable");
@@ -218,6 +189,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const [saveState, setSaveState] = useState<SaveState>(SAVED);
   const blocked = useRef(false);
   const [storageFailed, setStorageFailed] = useState(false);
+  const [viewStorageFailed, setViewStorageFailed] = useState(false);
   const [retryAt, setRetryAt] = useState<number | null>(null);
   const retries = useRef(0);
   const timer = useRef<number | null>(null);
@@ -228,14 +200,13 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const quizRevision = useRef(-1);
   const currentQuizzes = useRef<QuizLearningState["quizzes"]>(undefined);
   const reportMutation = useRef(0);
-  // Counts this tab's saves and merges: a record read before one of them must not replace it.
-  const saves = useRef(0);
+  const viewKey = () => `gvcsim_views_v1:${encodeURIComponent(username ?? "")}:${releaseId.current}`;
 
   const persistDraft = useCallback(() => {
     if (!enabled || !username || !releaseId.current || !queue.current) return false;
     const ok = keepEdits(sessionStorage, {
       username, release_id: releaseId.current, base_updated_at: queue.current.getBaseUpdatedAt(),
-      session: sessionRef.current, sent: queue.current.getSentSession() ?? undefined,
+      session: sessionData(sessionRef.current), sent: queue.current.getSentSession() ?? undefined,
     });
     if (mounted.current) setStorageFailed(!ok);
     return ok;
@@ -264,18 +235,8 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       return api.classroom.saveSession({ session: value, base_updated_at: base });
     },
     {
-      onMerged: (remote, remoteUpdatedAt, merged) => {
-        if (!mounted.current) return;
-        saves.current++;
-        // The page shows the merged record at once (another tab's steps, this tab's edits); its save follows.
-        setConfirmed(remote);
-        setUpdatedAt(remoteUpdatedAt);
-        sessionRef.current = merged;
-        setSession(merged);
-      },
       onSaved: (response, snapshot, newer) => {
         if (!mounted.current) return;
-        saves.current++;
         setConfirmed(snapshot);
         setUpdatedAt(response.updated_at);
         applyLearningState(response);
@@ -308,7 +269,6 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         } else setSaveState((old) => old.phase === "saved" ? { ...old, phase: "pending" } : old);
       },
     },
-    () => api.classroom.session(),
   );
 
   useEffect(() => {
@@ -338,24 +298,28 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       releaseId.current = response.release_id;
       queue.current!.setBaseUpdatedAt(response.updated_at ?? null);
       queue.current!.setConfirmedSession(response.session);
-      queue.current!.setMergeBase(response.session);
       setConfirmed(response.session);
       setUpdatedAt(response.updated_at ?? null);
       setReport(response.report);
       applyLearningState(response);
       const kept = username ? readKeptEdits(sessionStorage, username, response.release_id) : null;
-      const dirty = kept && (!sameSessionContent(kept.session, response.session) || kept.sent);
-      sessionRef.current = dirty ? kept.session : response.session;
+      const dirty = kept && (!sameSessionContent(sessionData(kept.session), sessionData(response.session)) || kept.sent);
+      let restored = withSessionViews(dirty ? kept.session : response.session, kept?.session ?? response.session);
+      try {
+        const views: unknown = JSON.parse(sessionStorage.getItem(viewKey()) ?? "null");
+        if (isValidSession(views)) restored = withSessionViews(sessionData(restored), views);
+        sessionStorage.setItem(viewKey(), JSON.stringify(sessionData(restored, true)));
+        setViewStorageFailed(false);
+      } catch { setViewStorageFailed(true); }
+      sessionRef.current = restored;
       setSession(sessionRef.current);
       setSaveState(SAVED);
       blocked.current = false;
       setStatus("ready");
       if (dirty) {
         setRestoredEdits((n) => n + 1);
-        queue.current!.enqueue(kept.session);
+        queue.current!.enqueue(sessionData(kept.session));
         queue.current!.setBaseUpdatedAt(kept.base_updated_at);
-        // The kept draft's base is the server's record only when the versions match; otherwise it is unknown here.
-        if (kept.base_updated_at !== (response.updated_at ?? null)) queue.current!.setMergeBase(null);
         if (kept.sent) {
           queue.current!.restoreSent(kept.sent);
         } else if (kept.base_updated_at !== (response.updated_at ?? null)) {
@@ -391,26 +355,11 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     if (!enabled || status !== "ready") return;
     const ownedQueue = queue.current;
     const reportVersion = reportMutation.current;
-    const savesBefore = saves.current;
     const response = await api.classroom.session();
     if (!mounted.current || queue.current !== ownedQueue || reportMutation.current !== reportVersion) return;
     // Refresh only metadata for the acknowledged snapshot, never overwrite local edits or
     // allow a read overtaken by a save to restore outdated completion/report gates.
     if ((response.updated_at ?? null) !== ownedQueue?.getBaseUpdatedAt()) {
-      // Another tab or device saved meanwhile. With nothing unsaved here, this tab takes the newer record now, so it
-      // neither shows the old one nor meets a conflict on its next edit; with unsaved edits, the next save merges.
-      if (ownedQueue && !ownedQueue.hasUnsynced() && !blocked.current && saves.current === savesBefore) {
-        ownedQueue.setBaseUpdatedAt(response.updated_at ?? null);
-        ownedQueue.setConfirmedSession(response.session);
-        ownedQueue.setMergeBase(response.session);
-        setConfirmed(response.session);
-        setUpdatedAt(response.updated_at ?? null);
-        sessionRef.current = response.session;
-        setSession(response.session);
-        setReport(response.report);
-        applyLearningState(response);
-        return;
-      }
       // The teacher's question bank is independent of the student's saved snapshot.
       applyQuizState(response);
       return;
@@ -438,9 +387,15 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       && (patch.quiz as { version?: string } | undefined)?.version !== currentQuizzes.current[String(step)]?.version) return;
     const next = patchStoredStep(sessionRef.current, step, patch);
     if (sameSessionContent(next, sessionRef.current)) return;
+    const workChanged = !sameSessionContent(sessionData(next), sessionData(sessionRef.current));
+    try {
+      sessionStorage.setItem(viewKey(), JSON.stringify(sessionData(next, true)));
+      setViewStorageFailed(false);
+    } catch { setViewStorageFailed(true); }
     sessionRef.current = next;
     setSession(next);
-    queue.current!.enqueue(next);
+    if (!workChanged) return;
+    queue.current!.enqueue(sessionData(next));
     persistDraft();
     if (timer.current !== null) window.clearTimeout(timer.current);
     if (!blocked.current) timer.current = window.setTimeout(() => { void syncNow().catch(() => {}); }, SYNC_DEBOUNCE_MS);
@@ -480,10 +435,10 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   }, [enabled, persistDraft]);
 
   const resolveSyncConflict = useCallback(async () => {
-    if (!blocked.current || !window.confirm("放弃本页未保存的修改并重新加载？请先复制需要保留的内容。此操作不会合并两份记录。")) return;
+    if (!blocked.current || !window.confirm("重新载入会清除本页待保存草稿。请先复制需要保留的内容，确认重新载入？")) return;
     if (username && releaseId.current) clearKeptEdits(sessionStorage, username, releaseId.current);
     leavingOnPurpose.current = true;
-    // No in-place merge or partially reset workbench: reload the whole student workspace.
+    // Exceptional recovery only; never overwrite server data automatically.
     window.location.reload();
   }, [username]);
 
@@ -491,6 +446,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     status, session, report, updatedAt, completion, reportCurrent, reportGate, materialGate, restoredEdits, ...quizState, refreshLearning,
     syncing: saveState.phase === "saving", unsynced: saveState.phase !== "saved" && status === "ready",
     syncError: saveState.error ?? (storageFailed ? "本标签页草稿备份失败，刷新前请等待服务器保存成功。" : null),
+    localViewWarning: viewStorageFailed ? "本地浏览设置未能备份，刷新后可能需要重新选择；不影响作业保存。" : null,
     saveError: saveState.error,
     syncConflict: saveState.blocked, autoRetry: retryAt !== null,
     getStep: useCallback(<T,>(step: number) => readStep<T>(session, step), [session]),

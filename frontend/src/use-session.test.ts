@@ -55,7 +55,7 @@ test("acknowledging an older save confirms it without replacing newer optimistic
   expect(sessionStorage.getItem(KEPT_EDITS_KEY)).toBeNull();
 });
 
-test("material status ignores browsing saves but stays pending when an in-flight material edit is reverted", async () => {
+test("material status ignores local browsing changes but stays pending when an in-flight material edit is reverted", async () => {
   spyOn(api.classroom, "session").mockResolvedValue(response());
   const first = deferred<SessionSaveResponse>();
   const second = deferred<SessionSaveResponse>();
@@ -64,7 +64,7 @@ test("material status ignores browsing saves but stays pending when an in-flight
   const { result } = renderHook(() => useSession(true, "student"));
   await waitFor(() => expect(result.current.status).toBe("ready"));
   act(() => result.current.patchStep(7, { browse_selection: { first: "JPN" } }));
-  expect(result.current.unsynced).toBe(true);
+  expect(result.current.unsynced).toBe(false);
   expect(result.current.hasMaterialChanges(7)).toBe(false);
   let saving!: Promise<void>;
   act(() => {
@@ -80,7 +80,7 @@ test("material status ignores browsing saves but stays pending when an in-flight
   expect(result.current.hasMaterialChanges(7)).toBe(false);
 });
 
-test("a 409 the server keeps refusing ends in the conflict after a few merges; cancel preserves the draft, confirm clears and reloads", async () => {
+test("an unexpected revision pauses immediately without merging; recovery requires explicit confirmation", async () => {
   const get = spyOn(api.classroom, "session").mockResolvedValue(response());
   const save = spyOn(api.classroom, "saveSession").mockRejectedValue(new ApiError(409, null, "conflict"));
   const confirm = spyOn(window, "confirm").mockReturnValue(false);
@@ -94,13 +94,16 @@ test("a 409 the server keeps refusing ends in the conflict after a few merges; c
     await result.current.syncNow().catch(() => {});
   });
   expect(result.current.syncConflict).toBe(true);
-  // One read and one save per merge, three at most: two tabs saving in turn never loop for ever.
-  expect(get).toHaveBeenCalledTimes(4);
-  expect(save).toHaveBeenCalledTimes(4);
-  act(() => result.current.patchStep(2, { country: "FRA" }));
+  expect(get).toHaveBeenCalledTimes(1);
+  expect(save).toHaveBeenCalledTimes(1);
+  act(() => result.current.patchStep(15, { research_question: "edited while paused" }));
   await act(async () => { await new Promise((done) => setTimeout(done, 950)); });
-  expect(save).toHaveBeenCalledTimes(4); // No delayed overwrite after the conflict.
+  expect(save).toHaveBeenCalledTimes(1); // No delayed overwrite after the error.
+  expect(result.current.getStep<{ research_question: string }>(15)?.research_question).toBe("edited while paused");
   const draft = sessionStorage.getItem(KEPT_EDITS_KEY);
+  expect(JSON.parse(draft!).session.steps["15"].data.research_question).toBe("edited while paused");
+  await act(async () => { await result.current.syncNow().catch(() => {}); });
+  expect(save).toHaveBeenCalledTimes(1); // Explicit retry cannot bypass the pause either.
   await act(async () => { await result.current.resolveSyncConflict(); });
   expect(confirm).toHaveBeenCalled();
   expect(sessionStorage.getItem(KEPT_EDITS_KEY)).toBe(draft);
@@ -113,31 +116,7 @@ test("a 409 the server keeps refusing ends in the conflict after a few merges; c
   expect(reload).toHaveBeenCalled();
 });
 
-test("another tab's save to a different step (or only its browsing) merges with this tab's edit, no conflict", async () => {
-  const other = patchStep(emptySession(), 7, { browse_selection: { first: "JPN" } });
-  let server = response(emptySession());
-  const get = spyOn(api.classroom, "session").mockImplementation(async () => server);
-  const save = spyOn(api.classroom, "saveSession").mockImplementation(async (body) => {
-    if (body.base_updated_at !== server.updated_at) throw new ApiError(409, null, "conflict");
-    return server = response(body.session, "2026-09-10T00:02:00Z");
-  });
-  const { result } = renderHook(() => useSession(true, "student"));
-  await waitFor(() => expect(result.current.status).toBe("ready"));
-  // The other tab: only switched step 7's view, which still moved the record's version.
-  server = response(other, NEWER);
-  await act(async () => {
-    result.current.patchStep(15, { research_question: "mine" });
-    await result.current.syncNow();
-  });
-  expect(result.current.syncConflict).toBe(false);
-  expect(get).toHaveBeenCalledTimes(2);
-  expect(save.mock.calls.at(-1)![0].base_updated_at).toBe(NEWER);
-  expect(server.session.steps["7"].data).toEqual({ browse_selection: { first: "JPN" } });
-  expect(server.session.steps["15"].data).toEqual({ research_question: "mine" });
-  expect(result.current.session).toEqual(server.session);
-});
-
-test("both tabs changing the same step's material is a real conflict: kept here, nothing overwritten", async () => {
+test("an unexpected server revision preserves local material without overwriting the server", async () => {
   let server = response(emptySession());
   spyOn(api.classroom, "session").mockImplementation(async () => server);
   const save = spyOn(api.classroom, "saveSession").mockImplementation(async (body) => {
@@ -166,12 +145,12 @@ test("network failure retries automatically without a new edit or click", async 
   const { result } = renderHook(() => useSession(true, "student"));
   await waitFor(() => expect(result.current.status).toBe("ready"));
   await act(async () => {
-    result.current.patchStep(1, { year: 2020 });
+    result.current.patchStep(15, { research_question: "latest" });
     await result.current.syncNow().catch(() => {});
   });
   expect(result.current.autoRetry).toBe(true);
   await waitFor(() => expect(result.current.unsynced).toBe(false));
-  expect(result.current.getConfirmedStep<{ year: number }>(1)).toEqual({ year: 2020 });
+  expect(result.current.getConfirmedStep<{ research_question: string }>(15)).toEqual({ research_question: "latest" });
   expect(result.current.syncError).toBeNull();
 });
 
@@ -275,7 +254,7 @@ test("refreshing teacher questions preserves unsaved experiment edits and reject
   expect(result.current.getConfirmedStep<{ research_question: string }>(15)).toEqual({ research_question: "尚未保存的研究问题" });
 });
 
-test("a peer save does not prevent question refresh or advance the local save base", async () => {
+test("an unexpected server revision does not prevent question refresh or advance the local save base", async () => {
   const initial = { ...response(), quiz_revision: 0, quizzes: {}, report_current: false };
   const get = spyOn(api.classroom, "session").mockResolvedValue(initial);
   const save = spyOn(api.classroom, "saveSession").mockRejectedValue(new ApiError(409, null, "conflict"));
@@ -283,7 +262,7 @@ test("a peer save does not prevent question refresh or advance the local save ba
   await waitFor(() => expect(result.current.status).toBe("ready"));
   act(() => result.current.patchStep(15, { research_question: "local draft" }));
   const quiz = { version: "v2", questions: [] };
-  get.mockResolvedValue({ ...response(patchStep(emptySession(), 15, { research_question: "peer draft" }), NEWER),
+  get.mockResolvedValue({ ...response(patchStep(emptySession(), 15, { research_question: "newer server record" }), NEWER),
     quiz_revision: 1, quizzes: { "3": quiz }, report_current: true,
     completion: { completed: [15], completed_count: 1, total: 15, steps: [] } });
   await act(async () => { await result.current.refreshLearning!(); });
