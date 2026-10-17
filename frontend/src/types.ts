@@ -548,9 +548,8 @@ export interface StepStateApi<T = Record<string, unknown>> {
   /** 合并写入（与该步已有状态合并，不整份覆盖）。 */
   save: (patch: Partial<T>) => void;
   /**
-   * Saves browsing state that is not report material (the selected countries and view of an exploration-only
-   * chart), so leaving the step and coming back keeps it. The server leaves these keys out of the report
-   * fingerprint, so this also works after the report is submitted.
+   * Keeps browsing settings and unfinished model forms in this tab, isolated by account and release.
+   * They survive step navigation and reload without a server save or changing submitted report material.
    */
   saveView?: (patch: Partial<T>) => void;
   complete: boolean;
@@ -560,7 +559,7 @@ export interface StepStateApi<T = Record<string, unknown>> {
   materialPending?: boolean;
   /** The session's save error, only while this step has material the server does not have yet. */
   materialSyncError?: string | null;
-  /** Another tab saved a newer record: retrying cannot help until the server version is loaded. */
+  /** An unexpected revision paused saving; preserve wanted edits before explicitly reloading. */
   syncConflict?: boolean;
   syncNow: () => void;
   /**

@@ -29,6 +29,76 @@ afterEach(() => {
   delete (document as { visibilityState?: unknown }).visibilityState;
 });
 
+test("views and unfinished models survive refresh locally without being sent with work or quiz results", async () => {
+  const initial = patchStep(emptySession(), 7, { browse_selection: { first: "CAN" }, observations: [17] });
+  let server = response(initial);
+  spyOn(api.classroom, "session").mockImplementation(async () => server);
+  const save = spyOn(api.classroom, "saveSession").mockImplementation(async ({ session }) => server = response(session, NEWER));
+  const first = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(first.result.current.status).toBe("ready"));
+  act(() => {
+    first.result.current.patchStep(7, { browse_selection: { first: "FIN" } });
+    first.result.current.patchStep(11, { custom_draft: { baseline: "DVAex_share", spec: { lags: [0, 2] } } });
+  });
+  await act(async () => { await first.result.current.syncNow(); });
+  expect(save).not.toHaveBeenCalled();
+  expect(first.result.current.unsynced).toBe(false);
+  first.unmount();
+  const next = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(next.result.current.status).toBe("ready"));
+  expect(next.result.current.getStep<Record<string, unknown>>(7)).toEqual({ browse_selection: { first: "FIN" }, observations: [17] });
+  expect(next.result.current.getStep<Record<string, unknown>>(11)).toEqual({ custom_draft: { baseline: "DVAex_share", spec: { lags: [0, 2] } } });
+  await act(async () => {
+    next.result.current.patchStep(7, { observations: [23], quiz: { version: "v1", answers: { q: "a" } } });
+    await next.result.current.syncNow();
+  });
+  expect(server.session.steps).toEqual({ "7": { data: { observations: [23], quiz: { version: "v1", answers: { q: "a" } } } } });
+  expect(next.result.current.getStep<{ browse_selection: unknown }>(7)?.browse_selection).toEqual({ first: "FIN" });
+  next.unmount();
+  const other = renderHook(() => useSession(true, "other"));
+  await waitFor(() => expect(other.result.current.status).toBe("ready"));
+  expect(other.result.current.getStep(11)).toBeUndefined();
+});
+
+test("deleting a local setting stays deleted after refresh even when the old server record contains it", async () => {
+  spyOn(api.classroom, "session").mockResolvedValue(response(patchStep(emptySession(), 11, { custom_draft: { baseline: "old" } })));
+  const save = spyOn(api.classroom, "saveSession");
+  const first = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(first.result.current.status).toBe("ready"));
+  act(() => first.result.current.patchStep(11, { custom_draft: undefined }));
+  first.unmount();
+  const next = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(next.result.current.status).toBe("ready"));
+  expect(next.result.current.getStep(11)).toBeUndefined();
+  expect(save).not.toHaveBeenCalled();
+});
+
+test("local preference storage failure does not become a server save error", async () => {
+  spyOn(api.classroom, "session").mockResolvedValue(response());
+  spyOn(api.classroom, "saveSession").mockImplementation(async ({ session }) => response(session, NEWER));
+  const { result } = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  const original = sessionStorage;
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "sessionStorage")!;
+  Object.defineProperty(globalThis, "sessionStorage", { configurable: true, value: {
+    getItem: (key: string) => original.getItem(key), removeItem: (key: string) => original.removeItem(key),
+    setItem: (key: string, value: string) => {
+      if (key.startsWith("gvcsim_views_v1:")) throw new Error("storage full");
+      original.setItem(key, value);
+    },
+  } });
+  try {
+    await act(async () => {
+      result.current.patchStep(15, { research_question: "saved work" });
+      await result.current.syncNow();
+    });
+    expect(result.current.localViewWarning).toContain("不影响作业保存");
+    expect(result.current.syncError).toBeNull();
+    expect(result.current.unsynced).toBe(false);
+    expect(result.current.getConfirmedStep<Record<string, unknown>>(15)).toEqual({ research_question: "saved work" });
+  } finally { Object.defineProperty(globalThis, "sessionStorage", descriptor); }
+});
+
 test("typing writes a v4 draft immediately; navigation only prompts, then the ordinary debounce saves", async () => {
   spyOn(api.classroom, "session").mockResolvedValue(response());
   const save = spyOn(api.classroom, "saveSession").mockImplementation(async ({ session }) => response(session, NEWER));

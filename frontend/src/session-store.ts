@@ -38,13 +38,13 @@ export function sameSessionContent(first: ExperimentSession, second: ExperimentS
   return sameJsonValue(first, second);
 }
 
-/** Browsing settings and quiz answers: not report material (quiz answers have their own status). */
+/** Local display preferences and unfinished model forms. Quiz results are server data. */
 const VIEW_KEYS = new Set([
   "slice", "year", "country", "chart", "drill", "heat_sort", "heat_coverage",
-  "browse_selection", "network_browse", "custom_draft", "quiz",
+  "browse_selection", "network_browse", "custom_draft",
 ]);
 const materialOf = (data: Record<string, unknown>) => Object.fromEntries(
-  Object.entries(data).filter(([key]) => !VIEW_KEYS.has(key)),
+  Object.entries(data).filter(([key]) => !VIEW_KEYS.has(key) && key !== "quiz"),
 );
 
 /** Material sync excludes browsing settings and quiz answers, which have their own status.
@@ -53,49 +53,25 @@ export function sameMaterialContent(first: Record<string, unknown> = {}, second:
   return sameJsonValue(materialOf(first), materialOf(second));
 }
 
-const recordData = (record: { data: unknown } | undefined): Record<string, unknown> =>
-  typeof record?.data === "object" && record.data !== null ? record.data as Record<string, unknown> : {};
-
-/**
- * One record (a step, or a shared entry) merged from what this tab last saw (`base`), this tab's version (`local`)
- * and the server's (`remote`). A record's material is one unit: whichever side changed it wins, and both changing
- * it differently is a conflict (null). Browsing settings merge field by field; where both changed one, this tab's
- * wins (it is what the student is looking at).
- */
-function mergeRecord(base: Record<string, unknown>, local: Record<string, unknown>, remote: Record<string, unknown>): Record<string, unknown> | null {
-  const [b, l, r] = [materialOf(base), materialOf(local), materialOf(remote)];
-  const localMaterial = !sameJsonValue(l, b), remoteMaterial = !sameJsonValue(r, b);
-  if (localMaterial && remoteMaterial && !sameJsonValue(l, r)) return null;
-  const merged: Record<string, unknown> = { ...(localMaterial ? l : r) };
-  for (const key of VIEW_KEYS) {
-    const value = !sameJsonValue(local[key], base[key]) ? local[key] : remote[key];
-    if (value !== undefined) merged[key] = value;
+/** Separate local preferences from work; omit empty records so browsing cannot create a server edit. */
+export function sessionData(session: ExperimentSession, local = false): ExperimentSession {
+  const steps: ExperimentSession["steps"] = {};
+  for (const [step, record] of Object.entries(session.steps)) {
+    const fields = typeof record.data === "object" && record.data !== null ? record.data : {};
+    const data = Object.fromEntries(Object.entries(fields)
+      .filter(([key]) => VIEW_KEYS.has(key) === local));
+    if (Object.keys(data).length) steps[step] = { data };
   }
-  return merged;
+  return { ...session, steps, shared: local ? {} : session.shared };
 }
 
-/**
- * Two tabs (or devices) of one account saving around each other: the server's newer record and this tab's edits,
- * merged against the record this tab last saw. Edits to different steps, or browsing in one tab while working in
- * another, combine; null only when both changed the same material differently.
- */
-export function mergeSessions(base: ExperimentSession, local: ExperimentSession, remote: ExperimentSession): ExperimentSession | null {
-  const merge = (keys: string[], read: (session: ExperimentSession, key: string) => { data: unknown } | undefined) => {
-    const out: Record<string, { data: Record<string, unknown> }> = {};
-    for (const key of keys) {
-      const [b, l, r] = [read(base, key), read(local, key), read(remote, key)];
-      if (!l && !r) continue;
-      const data = mergeRecord(recordData(b), recordData(l), recordData(r));
-      if (data === null) return null;
-      out[key] = { data };
-    }
-    return out;
-  };
-  const keysOf = (pick: (session: ExperimentSession) => object) => [...new Set([base, local, remote].flatMap((session) => Object.keys(pick(session))))];
-  const steps = merge(keysOf((session) => session.steps), (session, key) => session.steps[key]);
-  const shared = merge(keysOf((session) => session.shared), (session, key) => session.shared[key as SharedSessionKey]);
-  if (!steps || !shared) return null;
-  return { version: remote.version, steps, shared } as ExperimentSession;
+/** Restore local preferences without letting them replace saved evidence. */
+export function withSessionViews(session: ExperimentSession, views: ExperimentSession): ExperimentSession {
+  let result = session;
+  for (const [step, record] of Object.entries(sessionData(views, true).steps)) {
+    result = patchStep(result, Number(step), record.data as Record<string, unknown>);
+  }
+  return result;
 }
 
 export function readStep<T>(session: ExperimentSession, step: number): T | undefined {

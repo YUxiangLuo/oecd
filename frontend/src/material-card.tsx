@@ -5,16 +5,17 @@
  */
 import type { ReactNode } from "react";
 import { MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT, STEP_MATERIAL_ACTION_ID } from "./step-task-card";
+import { SAVE_PAUSED_NOTE } from "./sync-problem";
 
 export type MaterialState = "recorded" | "missing" | "blocked";
 export const MATERIAL_CARD_TITLE = "本步报告材料";
 export const MATERIAL_STATE_LABELS: Record<MaterialState, string> = { recorded: "已记录", missing: "尚未记录", blocked: "暂不能记录" };
 /** A material without server confirmation: not "已记录" until its save is acknowledged. */
 export const MATERIAL_UNSAVED_LABEL = "未保存";
-export const MATERIAL_CONFLICT_NOTE = "本步材料尚未确认保存成功：服务器版本已变化，保存已暂停，请按页面顶部的说明处理。";
-/** Another tab saved a newer record while this step's own material is unchanged here: what it shows may be old. */
+export const MATERIAL_CONFLICT_NOTE = SAVE_PAUSED_NOTE;
+/** A paused save cannot confirm the displayed material. */
 export const MATERIAL_STALE_LABEL = "待同步";
-export const MATERIAL_STALE_NOTE = "你的账号在别处保存了更新的记录，这里显示的可能不是最新的材料；请按页面顶部的说明处理。";
+export const MATERIAL_STALE_NOTE = SAVE_PAUSED_NOTE;
 /** How the automatic steps say it (1–5, 10, 11–14): no button, the record follows the choice. */
 export const AUTO_RECORD_HOW = "随你的选择自动记录，无需另外保存。";
 
@@ -44,10 +45,10 @@ export function MaterialCard({ state, summary, how, action, check, extra, locked
   id?: string;
   cardRef?: (node: HTMLElement | null) => void;
 }) {
-  // Recorded on this page but not saved (another tab saved first, or the network failed): not shown as recorded, and
+  // Recorded on this page but not confirmed: not shown as recorded, and
   // the step's "how" line ("当前例子就是已记录的材料…") is left out; the sync line below says what to do.
   const unsaved = Boolean(syncError) && state === "recorded";
-  // A conflict caused by another save (a draft, another step): this card's record may be the old one.
+  // Saving is paused even if this particular material has not changed.
   const stale = !syncError && syncConflict;
   const saving = pending && state === "recorded" && !unsaved && !stale;
   const unconfirmed = unsaved || stale || saving;

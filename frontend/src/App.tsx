@@ -409,7 +409,7 @@ function AppContent() {
     />
   );
   if (!stepsData || !metaReady || session.status === "loading") return <AppBootSkeleton />;
-  // Without the saved record every edit would be dropped (nothing can be merged or saved), so the
+  // Until the saved record is loaded, edits cannot be accepted or safely saved, so the
   // workspace must not look usable: block it until the record is read.
   if (session.status === "unavailable") return (
     <BootFailure

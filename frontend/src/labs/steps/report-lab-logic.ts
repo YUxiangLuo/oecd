@@ -346,8 +346,7 @@ export function reportWaitLabel(
   syncError: string | null = null,
   syncConflict = false,
 ): string | null {
-  // In a conflict a retry cannot succeed: the student has to load the server version first.
-  if (syncConflict) return "请先载入服务器版本";
+  if (syncConflict) return "请先处理保存异常";
   if (syncError) return "保存失败，请先重试";
   if (sessionStatus !== "ready") return "正在恢复实验记录…";
   if (sessionSyncing || sessionUnsynced) return "正在保存实验记录…";
@@ -367,7 +366,7 @@ export function reportGenerateButtonLabel(
   // The primary button beside this one already says the save failed; this one keeps its own action in the
   // label, so the two never read the same.
   const action = !report ? "生成草稿" : report.state === "draft" ? "重新生成草稿" : "重新生成";
-  if (syncConflict) return `载入服务器版本后才能${action}`;
+  if (syncConflict) return `处理保存异常后才能${action}`;
   if (syncError) return `重试保存后才能${action}`;
   return reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, syncError, syncConflict) ?? reportGenerateLabel(report);
 }

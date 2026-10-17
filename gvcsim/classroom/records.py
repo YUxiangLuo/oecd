@@ -215,8 +215,8 @@ def save_session(
 
     Internal maintenance callers may omit ``expected_updated_at``. The classroom
     HTTP route always supplies the version observed by that browser, including
-    ``None`` when no row existed yet, so two tabs cannot silently overwrite one
-    another.
+    ``None`` when no row existed yet, so a delayed request cannot silently
+    overwrite a newer saved record, including after a single-tab reload.
     """
     release_id = database.current_release_id()
     encoded = json.dumps(session, ensure_ascii=False)
@@ -249,7 +249,7 @@ def save_session(
             (account["id"], release_id, encoded, expected_updated_at, account["id"], release_id, expected_updated_at),
         ).fetchone()
         if saved is None:
-            raise SessionChanged("实验记录已被另一个标签页更新")
+            raise SessionChanged("实验记录版本已变化，本次请求未覆盖服务器内容")
         return saved
 
 

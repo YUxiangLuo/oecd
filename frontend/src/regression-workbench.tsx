@@ -8,6 +8,7 @@ import { ScrollableRegion } from "./a11y";
 import { groupedFixed } from "./format";
 import { POSITION_UNIT_WORDS } from "./regression-verdict";
 import { api, ApiError } from "./api";
+import { SAVE_PAUSED_NOTE } from "./sync-problem";
 import { useAsync } from "./labs/shared";
 import {
   canonicalSpec,
@@ -208,7 +209,7 @@ export function ColumnDetails({ column, options, perPoint, digits }: {
 }
 
 /** A newer server version blocks confirmation; an earlier save may already have committed. */
-const CONFLICT_SAVE_NOTE = "这次改动尚未确认保存成功：服务器版本已变化，保存已暂停，请按页面顶部的说明处理。";
+const CONFLICT_SAVE_NOTE = SAVE_PAUSED_NOTE;
 
 export function ModelComparisonChart({ columns, outcome }: { columns: TableColumn[]; outcome: RegressionOutcome }) {
   const rows: DivergingBarRow[] = [];
@@ -273,12 +274,10 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   // This step's material has no save confirmation (a response may have been lost), so the model in the
   // box cannot yet be called "已记入报告".
   const reportUnsaved = Boolean(state.materialSyncError);
-  // Another save of this page (a draft) met a newer record: the model shown may not be the report's any more.
+  // A session revision mismatch prevents confirmation even if this step's material is unchanged.
   const reportStale = !reportUnsaved && Boolean(state.syncConflict);
   const reportedWord = reportUnsaved ? "记入报告（未保存）" : reportStale ? "已记入报告（可能已过期）" : "已记入报告";
-  const unsavedNote = reportStale
-    ? "你的账号在别处保存了更新的记录，这里显示的可能不是报告里现在的模型；请按页面顶部的说明处理。"
-    : state.syncConflict ? CONFLICT_SAVE_NOTE : "这次改动尚未确认保存成功，请稍后重试同步。";
+  const unsavedNote = state.syncConflict ? CONFLICT_SAVE_NOTE : "这次改动尚未确认保存成功，请稍后重试同步。";
   const draft = state.data?.custom_draft ?? {};
   const stepBaseline = defaultResponse.design.baseline;
   // The Y the models are run on: the step's Y unless the student chose another of the family. The first column is
@@ -480,7 +479,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       spec: latest.design.spec!, ...(yKey !== stepBaseline ? { baseline: yKey } : {}),
       saved_at: new Date().toISOString(), snapshot: snapshotOf(latest),
     } });
-    // With another tab's newer record on the server this save cannot go through: said, not "已把…记入报告".
+    // While saving is paused, announce the recovery instruction rather than successful recording.
     setAnnouncement(state.syncConflict ? CONFLICT_SAVE_NOTE : `已把“${label(latest.design.spec!)}”记入报告${yKey !== stepBaseline ? `（Y：${depvarLabel}）` : ""}。`);
   };
   const removeFromReport = () => {

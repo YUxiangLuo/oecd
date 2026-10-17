@@ -34,13 +34,13 @@ test("a committed save with a lost response stays uncertain when retry conflicts
     session.patchStep(7, material);
     await session.syncNow().catch(() => {});
   });
-  // Another tab preserves this material and saves an unrelated step.
-  server = { ...server, session: patchStep(server.session, 15, { research_question: "other tab" }), updated_at: "2026-09-10T00:02:00Z" };
+  // An unexpected server revision preserves this material but changes an unrelated step.
+  server = { ...server, session: patchStep(server.session, 15, { research_question: "newer server record" }), updated_at: "2026-09-10T00:02:00Z" };
   await act(async () => { await session.syncNow().catch(() => {}); });
   expect(server.session.steps["7"].data).toEqual(material);
   expect(session.syncConflict).toBe(true);
   expect(session.hasMaterialChanges(7)).toBe(true);
-  expect(screen.getByRole("alert").textContent).toContain("尚未确认保存成功");
+  expect(screen.getByRole("alert").textContent).toContain("当前材料尚未确认");
   expect(screen.getByRole("alert").textContent).not.toContain("本步材料没有保存");
 });
 
@@ -182,5 +182,5 @@ test("a conflict caused by another save marks the card as waiting to sync, not a
   expect(card.querySelector(".material-chip")?.textContent).toBe("待同步");
   expect(card.className).toContain("material-card--missing");
   expect(card.querySelector(".material-card-how")).toBeNull();
-  expect(screen.getByRole("alert").textContent).toContain("这里显示的可能不是最新的材料");
+  expect(screen.getByRole("alert").textContent).toContain("保存已暂停，当前材料尚未确认");
 });
