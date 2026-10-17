@@ -19,7 +19,7 @@ from gvcsim.regression.benchmark import summarize_benchmark
 from gvcsim.regression.design import RegressionDesign
 from gvcsim.regression.model import CoefStat, PreparedModel, RegressionResult
 from gvcsim.regression.panel import run_design_with_benchmark
-from gvcsim.regression.spec import DEFAULT_SPEC, EXCHANGE_RATE_COLUMN, ModelSpec
+from gvcsim.regression.spec import DEFAULT_SPEC, EXCHANGE_RATE_COLUMN, ModelSpec, spec_omits_post_treatment
 from gvcsim.report_saved_run import _fixed_design_matches
 from gvcsim.regression_routes import _design_info
 from gvcsim.session import empty_session, make_record
@@ -54,6 +54,34 @@ def test_options_list_every_choice_in_page_order_with_the_default_and_the_limits
     ]
     assert "用作 GDP 代理，并非正式 GDP" in options["controls"][6]["definition"]
     assert [item["source"] for item in options["controls"]] == ["课程生成"] * 5 + ["按 ICIO 计算"] * 3
+    # The default model mixes pre-treatment trends, a post-treatment change and negative controls; the page says which
+    # omission is a confounder and which changes the estimand.
+    assert [item["role"] for item in options["controls"]] == [
+        "post_treatment",
+        "confounder",
+        "negative_control",
+        "confounder",
+        "negative_control",
+        "icio_control",
+        "icio_control",
+        "icio_control",
+    ]
+    assert [item["role_label"] for item in options["controls"]] == [
+        "加税后同期",
+        "加税前趋势",
+        "无关控制",
+        "加税前趋势",
+        "无关控制",
+        "ICIO 派生",
+        "ICIO 派生",
+        "ICIO 派生",
+    ]
+    assert [item["key"] for item in options["control_roles"]] == [
+        "confounder",
+        "post_treatment",
+        "negative_control",
+        "icio_control",
+    ]
     assert [item["lag"] for item in options["control_lags"]] == [0, 1]
     effects = {item["key"]: item for item in options["fixed_effects"]}
     assert list(effects) == ["country", "industry", "country_industry", "year", "country_year"]
@@ -216,6 +244,25 @@ def test_unknown_names_have_bounded_safe_http_errors(student_client, field, name
     assert response.status_code == 400
     assert len(response.content) < 200
     assert name not in response.json()["detail"]
+
+
+def test_estimand_is_partial_only_with_the_post_treatment_control():
+    """The design value is the default model's partial association; leaving out the exchange rate is a total one."""
+    assert not spec_omits_post_treatment(DEFAULT_SPEC)
+    no_rate = ModelSpec(
+        DEFAULT_SPEC.x_lags,
+        tuple((key, lag) for key, lag in DEFAULT_SPEC.controls if key != EXCHANGE_RATE_COLUMN),
+        DEFAULT_SPEC.fixed_effects,
+    )
+    assert spec_omits_post_treatment(no_rate)
+    assert spec_omits_post_treatment(ModelSpec(DEFAULT_SPEC.x_lags, (), DEFAULT_SPEC.fixed_effects))
+    # Dropping a pre-treatment trend does not change the estimand; it adds omitted-trend bias.
+    no_gdp = ModelSpec(
+        DEFAULT_SPEC.x_lags,
+        tuple((key, lag) for key, lag in DEFAULT_SPEC.controls if key != "teaching_log_gdp"),
+        DEFAULT_SPEC.fixed_effects,
+    )
+    assert not spec_omits_post_treatment(no_gdp)
 
 
 def test_a_teacher_cannot_run_a_spec(teaching_db):

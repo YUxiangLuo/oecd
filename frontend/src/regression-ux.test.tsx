@@ -332,7 +332,7 @@ describe("simple regression workbench", () => {
     await screen.findByRole("img", { name: /加税前后/ });
     // One note under the chart: what it mixes in, then the premise.
     expect(document.querySelector(".reg-gap-caption")?.textContent).toStartWith(GROUP_CHART_CAPTION);
-    expect(document.querySelector(".reg-gap-caption")?.textContent).toContain("如果没有关税，扣掉汇率等同期变化后，各组的走势应大致平行");
+    expect(document.querySelector(".reg-gap-caption")?.textContent).toContain("如果没有关税，扣掉加税前趋势（GDP 对数和贸易开放度）后，各组的走势应大致平行");
     expect(document.querySelector(".reg-parallel-note")).toBeNull();
   });
 
@@ -490,7 +490,7 @@ describe("simple regression workbench", () => {
 
   test("the 加税前后 chart states the parallel-trends premise and its two pre-tariff years", () => {
     expect(parallelTrendsNote([2016, 2017, 2018, 2019, 2020], 2018)).toBe(
-      "这张图也用来看回归的前提：如果没有关税，扣掉汇率等同期变化后，两组的走势应大致平行。加税前只有 2016、2017 两年可看，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，控制汇率、GDP 对数和贸易开放度后，这个前提按设计成立。",
+      "这张图也用来看回归的前提：如果没有关税，扣掉加税前趋势（GDP 对数和贸易开放度）后，两组的走势应大致平行。加税前只有 2016、2017 两年可看，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，GDP 和开放度是加税前趋势；汇率是加税后同期变化，不用于识别平行趋势。",
     );
   });
 

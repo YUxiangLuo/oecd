@@ -14,6 +14,8 @@ from typing import Any
 from gvcsim import config
 from gvcsim.regression.spec import (
     CONTROL_LAGS,
+    CONTROL_ROLE_LABELS,
+    CONTROL_ROLE_NOTES,
     CONTROLS,
     DEFAULT_SPEC,
     EXCHANGE_RATE_COLUMN,
@@ -53,12 +55,14 @@ FIXED_EFFECT_DESCRIPTIONS = {
     "country_industry": "每个国家的每个行业一个截距，包含国家 FE 和行业 FE",
     "year": "每年一个截距，扣掉所有单位共同的年度变化",
     "country_year": "每个国家每年一个截距，包含国家 FE 和年份 FE；会吸收本页全部国家层面的控制变量（包括滞后项），省略这些变量但不因其缺失删样本。"
-    "和国家×行业 FE 一起用时，课程数据的混杂都在国家层面，X 合计和默认模型几乎相同：吸收不等于没有控制；"
+    "和国家×行业 FE 一起用时，课程数据里国家层面的控制变量（GDP、开放度、汇率）都被它吸收，X 合计和默认模型几乎相同：吸收不等于没有控制；"
     "不勾国家×行业 FE 时，各国家×行业自身的水平差异没有扣除，结果可能差很多",
 }
 DESIGN_VALUE_NOTE = (
-    "课程数据按设定生成：每个 Y 的两年累计有一个“课程设定值”。默认模型的估计通常落在它附近（偶尔区间不含它，属抽样波动）；"
-    "漏掉同时和 X、Y 相关的变量（混杂变量）时，估计点往往偏离它，但区间可能仍包含它。"
+    "课程数据按设定生成：每个 Y 的两年累计有一个“课程设定值”，对应默认模型（控制汇率等同期变量）的偏关联。"
+    "默认模型的估计通常落在它附近（偶尔区间不含它，属抽样波动）；漏掉加税前就与 X、Y 相关的变量（GDP 对数、贸易开放度）时，"
+    "估计点往往偏离它，但区间可能仍包含它。去掉加税后同期变化的汇率时，估计的是包含汇率渠道的总关联，"
+    "与这个偏关联设定值不是同一个估计量，页面不把它算成偏差。"
 )
 NO_FIXED_EFFECTS_NOTE = "都不勾时模型加常数项，表下的设定写作“无固定效应”。"
 
@@ -68,19 +72,20 @@ def _without(controls: tuple[tuple[str, int], ...], *names: str) -> tuple[tuple[
 
 
 # The preset experiments, in page order, each changing one thing of the default model. The first tier is the three
-# "必看" ones (a confounder left out: the point estimate moves away from the course's design value on v13 data, about
-# 10–15% without the exchange rate, 6–11% without GDP, 4–9% without openness, where some intervals still contain it;
-# docs/regression-model-space-check-2026-10-14.md); the second tier is "进阶". Each is a contrast the course data were built to show, and the question is asked,
-# not answered. Their labels name the experiment in the report. Two changes the page also offers leave the estimate
-# about unchanged by design: country × year effects, explained in the custom form, and L2.X, left for the student to
-# find (its description names the term only).
+# "必看" ones: GDP and openness are pre-treatment trends, so leaving either out moves the point estimate away from the
+# course's design value (6–11% and 4–9% on v13 data; docs/regression-model-space-check-2026-10-14.md); the exchange rate
+# is a post-treatment variable, so leaving it out estimates the total association rather than the default model's partial
+# one (about 13% larger in magnitude, not a bias). The second tier is "进阶". Each is a contrast the course data were
+# built to show, and the question is asked, not answered. Their labels name the experiment in the report. Two changes
+# the page also offers leave the estimate about unchanged by design: country × year effects, explained in the custom
+# form, and L2.X, left for the student to find (its description names the term only).
 PRESET_TIERS = {"core": "必看", "advanced": "进阶"}
 PRESETS: tuple[tuple[str, str, str, str, ModelSpec], ...] = (
     (
         "no_exchange_rate",
         "core",
         "去掉汇率变动",
-        "X 各项合计离课程设定值远了多少？",
+        "去掉汇率渠道后，合计是总关联还是偏关联？",
         ModelSpec(
             DEFAULT_SPEC.x_lags, _without(DEFAULT_SPEC.controls, EXCHANGE_RATE_COLUMN), DEFAULT_SPEC.fixed_effects
         ),
@@ -89,7 +94,7 @@ PRESETS: tuple[tuple[str, str, str, str, ModelSpec], ...] = (
         "no_gdp",
         "core",
         "去掉 GDP 对数",
-        "和去掉汇率变动偏向同一边吗？",
+        "和去掉贸易开放度相比，偏向同一边吗？",
         ModelSpec(DEFAULT_SPEC.x_lags, _without(DEFAULT_SPEC.controls, GDP_COLUMN), DEFAULT_SPEC.fixed_effects),
     ),
     (
@@ -224,8 +229,14 @@ def options() -> dict[str, Any]:
                 "label": info.label,
                 "definition": info.definition,
                 "source": "课程生成" if info.source == "generated" else "按 ICIO 计算",
+                "role": info.role,
+                "role_label": CONTROL_ROLE_LABELS[info.role],
             }
             for key, info in CONTROLS.items()
+        ],
+        "control_roles": [
+            {"key": role, "label": label, "note": CONTROL_ROLE_NOTES[role]}
+            for role, label in CONTROL_ROLE_LABELS.items()
         ],
         "control_lags": [{"lag": lag, "label": CONTROL_LAG_LABELS[lag]} for lag in CONTROL_LAGS],
         "control_lag_note": CONTROL_LAG_NOTE,

@@ -143,8 +143,10 @@ describe("tables", () => {
 
   test("the design-value row says the course's number per point and each column's deviation from it (v13)", () => {
     const row = designValueRow(columns, "trade", "FVA_share", options)!;
-    expect(row.label).toBe("课程设定值（X 每高 1 个百分点）");
-    expect(row.cells.every((cell) => /^-0\.55 个百分点；(?:幅度比设定值[大小] \d+%|与设定值几乎相同|方向与设定值相反)$/.test(cell))).toBe(true);
+    expect(row.label).toBe("课程设定值（默认模型偏关联）");
+    expect(row.cells[0]).toMatch(/^-0\.55 个百分点；(?:幅度比设定值[大小] \d+%|与设定值几乎相同|方向与设定值相反)$/);
+    // The no-exchange column estimates a total association, not the partial design value.
+    expect(row.cells[1]).toBe("总关联；不与偏关联设定值比较");
     expect(designValueRow(columns, "production", "3b_FGY_GVC_C_share", options)!.cells[0]).toBe("设定为 0（与 X 无关）");
     expect(designValueRow(columns, "length", "GVCPs", options)!.cells[0]).toBe("无单一设定值（比值 Y）");
     expect(designValueRow(columns, "trade", "unknown", options)).toBeNull();
@@ -283,8 +285,8 @@ describe("tables", () => {
     const csv = comparisonCsv(named, options, "外国增加值项占比", perPointRow(named, "trade"), designValueRow(named, "trade", "FVA_share", options));
     const lines = csv.slice(1).trimEnd().split("\r\n");
     const labels = lines.map((line) => line.split(",")[0]);
-    expect(labels.indexOf("课程设定值（X 每高 1 个百分点）")).toBe(labels.indexOf("合计：X 每高 1 个百分点") + 1);
-    expect(lines[labels.indexOf("课程设定值（X 每高 1 个百分点）")]).toMatch(/^课程设定值（X 每高 1 个百分点）,-0\.55 个百分点；(?:幅度比设定值[大小] \d+%|与设定值几乎相同|方向与设定值相反),-0\.55 个百分点；幅度比设定值大 \d+%$/);
+    expect(labels.indexOf("课程设定值（默认模型偏关联）")).toBe(labels.indexOf("合计：X 每高 1 个百分点") + 1);
+    expect(lines[labels.indexOf("课程设定值（默认模型偏关联）")]).toMatch(/^课程设定值（默认模型偏关联）,-0\.55 个百分点；(?:幅度比设定值[大小] \d+%|与设定值几乎相同|方向与设定值相反),总关联；不与偏关联设定值比较$/);
   });
 
   test("the CSV has a BOM, two rows per term, the fixed effects, the models and the footnote last", () => {
@@ -410,7 +412,7 @@ describe("the workbench", () => {
     expect(document.querySelector(".reg-custom-design-row")?.textContent).toContain("无单一设定值（比值 Y）");
     await act(async () => { fireEvent.change(select, { target: { value: "PLv_GVC" } }); });
     expect(designNote()).toBe(options.design_value_note);
-    expect(screen.getByRole("button", { name: /^去掉汇率变动/ }).textContent).toContain("离课程设定值");
+    expect(screen.getByRole("button", { name: /^去掉汇率变动/ }).textContent).toContain("总关联还是偏关联");
   });
 
   test("an uncached Y never relabels or exports old numbers while delayed or failed, and recovers on switching", async () => {
@@ -650,6 +652,11 @@ describe("the workbench", () => {
     await screen.findByRole("group", { name: "预设实验" });
     openDetails(document.querySelector(".reg-custom-form-details"));
     await screen.findByText("Y = β₁·X + β₂·L1.X + γ₁·汇率变动 + γ₂·GDP 对数 + γ₃·贸易开放度 + 国家×行业 FE + 年份 FE + ε");
+    // Each control says what it is doing in the course's causal story: post-treatment change, pre-treatment trend,
+    // negative control, or ICIO-derived.
+    expect([...document.querySelectorAll(".reg-control-role")].map((node) => node.textContent)).toEqual([
+      "加税后同期", "加税前趋势", "无关控制", "加税前趋势", "无关控制", "ICIO 派生", "ICIO 派生", "ICIO 派生",
+    ]);
     // 国家×行业 contains 国家 and 行业: shown checked and greyed.
     expect((checkbox(/^国家 FE/) as HTMLInputElement).disabled).toBe(true);
     expect((checkbox(/^国家 FE/) as HTMLInputElement).checked).toBe(true);

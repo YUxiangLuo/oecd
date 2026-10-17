@@ -56,7 +56,7 @@ def test_selected_answers_renders_only_a_fully_correct_current_quiz():
 
 @pytest.mark.parametrize("answer, expected", [("a", False), ("b", True), ("c", False)])
 def test_step_11_checks_percentage_points_with_a_simple_independent_example(answer, expected):
-    answers = {"s11-cumulative-v10": "a", "s11-control-v10": "c", "s11-reading-v10": answer}
+    answers = {"s11-cumulative-v10": "a", "s11-control-v10": "b", "s11-reading-v10": answer}
     passed, _, feedback = quizzes.grade(11, "course-quiz-v11", answers)
     assert passed is expected
     assert feedback[2]["correct"] is expected

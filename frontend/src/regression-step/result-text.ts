@@ -1,6 +1,6 @@
 /** The result card's sentences: the step 10 example's conversion, the course's design value and the lag split. */
 import { groupedFixed, percentagePoints } from "../format";
-import { coversDesignSpan, designDeviation, designDeviationText, shownCoefficient, perPointDigits, perPointReading, xSpanLabel } from "../regression-workbench-table";
+import { coversDesignSpan, designDeviation, designDeviationText, omitsPostTreatment, shownCoefficient, perPointDigits, perPointReading, xSpanLabel } from "../regression-workbench-table";
 import { depvarKind, lagSplitParts, networkDigits, withCountUnit } from "../regression-verdict";
 import { workedNumbers } from "../labs/steps/shock-lab";
 import type { CoefStat, RegressionOutcome, RegressionResponse } from "../types";
@@ -64,6 +64,11 @@ export function designValueSentence(outcome: RegressionOutcome, response: Pick<R
   if (beta === null) return "课程设定：这个 Y 是两项模拟长度之比，没有单一的设定值，估计不与某个数对照。";
   const includesZero = coefficient.ci_low != null && coefficient.ci_high != null && coefficient.ci_low <= 0 && 0 <= coefficient.ci_high;
   if (beta === 0) return includesZero ? "课程设定：这个 Y 与 X 无关（设定值为 0），区间包含 0，与设定一致。" : "课程设定：这个 Y 与 X 无关（设定值为 0）；这次区间不含 0，是抽样波动，不是关联。";
+  // The design value is the default model's partial association. A model without the post-treatment control (or with
+  // no controls at all) estimates a total association: same X terms, different estimand, so no numeric comparison.
+  if (!response.design.spec || omitsPostTreatment(response.design.spec)) {
+    return "这个模型不含汇率变动，估计的是包含汇率渠道的总关联；课程设定值是默认模型（控制汇率）的偏关联，两者不是同一个估计量，不做数值比较。";
+  }
   const source = { depvar_kind: response.design.depvar_kind ?? "", result: { suppressed: true } };
   const digits = perPointDigits(outcome, coefficient, { depvar_kind: source.depvar_kind, result: { suppressed: false } });
   const target = perPointReading(outcome, { coef: beta, ci_low: null, ci_high: null }, source, digits);

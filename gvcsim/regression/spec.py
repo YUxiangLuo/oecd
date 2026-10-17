@@ -25,25 +25,68 @@ X_LAGS = tuple(X_LAG_COLUMNS)
 CONTROL_LAGS = (0, 1)
 
 
+# What a control is doing in the course's causal story. The default model mixes three kinds; the page uses these
+# roles to say which omission is a pre-treatment confounder and which changes the estimand (the exchange rate).
+CONTROL_ROLE_CONFOUNDER = "confounder"
+CONTROL_ROLE_POST_TREATMENT = "post_treatment"
+CONTROL_ROLE_NEGATIVE = "negative_control"
+CONTROL_ROLE_ICIO = "icio_control"
+CONTROL_ROLE_LABELS = {
+    CONTROL_ROLE_CONFOUNDER: "加税前趋势",
+    CONTROL_ROLE_POST_TREATMENT: "加税后同期",
+    CONTROL_ROLE_NEGATIVE: "无关控制",
+    CONTROL_ROLE_ICIO: "ICIO 派生",
+}
+CONTROL_ROLE_NOTES = {
+    CONTROL_ROLE_CONFOUNDER: "加税前就与 X、Y 相关的趋势；漏掉它，估计会偏离课程设定值。",
+    CONTROL_ROLE_POST_TREATMENT: "加税后才变化的同期变量；控制它估计偏关联，不控制是总关联。",
+    CONTROL_ROLE_NEGATIVE: "与 Y 无关，用来练习增加控制变量和看显著性。",
+    CONTROL_ROLE_ICIO: "从 ICIO 计算；课程数据里与模拟的 Y 无关。",
+}
+
+
 @dataclass(frozen=True)
 class ControlInfo:
     label: str
     definition: str
     source: str  # "generated" (made by the course) or "icio" (computed from the ICIO tables)
+    role: str
 
 
 # Order is the order of the page and of a normalised spec.
 CONTROLS: dict[str, ControlInfo] = {
-    EXCHANGE_RATE_COLUMN: ControlInfo("汇率变动", "本币兑美元的年变动率（%，负为贬值）", "generated"),
-    GDP_COLUMN: ControlInfo("GDP 对数", "ln（模拟 GDP，美元）；首年以 ICIO 国家增加值规模校准", "generated"),
-    POPULATION_COLUMN: ControlInfo("人口增长率", "模拟年度人口增长率（%），独立于 GDP 生成", "generated"),
-    OPENNESS_COLUMN: ControlInfo("贸易开放度", "模拟进出口总额 / GDP（%），不是 ICIO 出口强度", "generated"),
-    FDI_COLUMN: ControlInfo("FDI 净流入占比", "模拟外商直接投资净流入 / GDP（%），可为负", "generated"),
-    "manufacturing_va_share": ControlInfo("制造业增加值占比", "制造业增加值 / 增加值总额", "icio"),
-    "log_gdp_proxy": ControlInfo(
-        "增加值总额对数", "ln（国家增加值总额，百万美元）；用作 GDP 代理，并非正式 GDP", "icio"
+    EXCHANGE_RATE_COLUMN: ControlInfo(
+        "汇率变动",
+        "本币兑美元的年变动率（%，负为贬值）；第一批被加税国家 2018 年起额外贬值 8%",
+        "generated",
+        CONTROL_ROLE_POST_TREATMENT,
     ),
-    "export_intensity": ControlInfo("出口强度", "总出口 / 增加值总额", "icio"),
+    GDP_COLUMN: ControlInfo(
+        "GDP 对数",
+        "ln（模拟 GDP，美元）；首年以 ICIO 国家增加值规模校准，第一批国家 2016 年起增长更快",
+        "generated",
+        CONTROL_ROLE_CONFOUNDER,
+    ),
+    POPULATION_COLUMN: ControlInfo(
+        "人口增长率", "模拟年度人口增长率（%），独立于 GDP 生成", "generated", CONTROL_ROLE_NEGATIVE
+    ),
+    OPENNESS_COLUMN: ControlInfo(
+        "贸易开放度",
+        "模拟进出口总额 / GDP（%），不是 ICIO 出口强度；第一批国家 2016 年起上升更多",
+        "generated",
+        CONTROL_ROLE_CONFOUNDER,
+    ),
+    FDI_COLUMN: ControlInfo(
+        "FDI 净流入占比", "模拟外商直接投资净流入 / GDP（%），可为负", "generated", CONTROL_ROLE_NEGATIVE
+    ),
+    "manufacturing_va_share": ControlInfo("制造业增加值占比", "制造业增加值 / 增加值总额", "icio", CONTROL_ROLE_ICIO),
+    "log_gdp_proxy": ControlInfo(
+        "增加值总额对数",
+        "ln（国家增加值总额，百万美元）；用作 GDP 代理，并非正式 GDP",
+        "icio",
+        CONTROL_ROLE_ICIO,
+    ),
+    "export_intensity": ControlInfo("出口强度", "总出口 / 增加值总额", "icio", CONTROL_ROLE_ICIO),
 }
 
 # Fixed effects in page order. A combined effect contains its parts, so checking it makes them redundant.
@@ -81,6 +124,25 @@ def control_column(key: str, lag: int) -> str:
 def control_term_label(key: str, lag: int) -> str:
     label = CONTROLS[key].label
     return label if lag == 0 else f"L{lag}.{label}"
+
+
+def post_treatment_controls() -> tuple[str, ...]:
+    """Controls the course generates after the tariff starts (today: the exchange rate)."""
+    return tuple(key for key, info in CONTROLS.items() if info.role == CONTROL_ROLE_POST_TREATMENT)
+
+
+def spec_omits_post_treatment(spec: ModelSpec) -> bool:
+    """Whether a model leaves out a post-treatment control the default model includes.
+
+    Such a model estimates a total association: the omitted control is a channel of the tariff, not a pre-treatment
+    confounder. Its X coefficient is not the default model's partial association, so the course's design value is not
+    the right comparison (the page says so instead of printing a deviation).
+    """
+    # Only the post-treatment controls the default model carries: a future post-treatment column that is not part of
+    # the course default must not make every model look like a total-association model.
+    default_post = {key for key, _lag in DEFAULT_SPEC.controls if CONTROLS[key].role == CONTROL_ROLE_POST_TREATMENT}
+    chosen = {key for key, _lag in spec.controls}
+    return any(key not in chosen for key in default_post)
 
 
 @dataclass(frozen=True)
