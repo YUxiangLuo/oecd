@@ -222,7 +222,7 @@ def test_seed_records_step_observations_like_the_ui(api):
     )
     assert saved["steps"]["10"]["data"] == {
         "quiz": saved["steps"]["10"]["data"]["quiz"],
-        "compared": ["CHN", "USA"],
+        "compared": ["CHN"],
         "teaching_industry": "C26",
         "teaching_country": "CHN",
         "teaching_year": 2020,

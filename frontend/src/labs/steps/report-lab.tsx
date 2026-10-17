@@ -152,7 +152,7 @@ export function RecordedMaterials({ steps, getStep, blocked, onNavigateStep }: {
               <td><button type="button" className="gate-link" onClick={() => activateReportMaterialDestination(step.n, onNavigateStep)}>步骤 {step.n} · {step.title}</button></td>
               <td><span className={`material-chip material-chip--${recorded ? "recorded" : "missing"}`}>{recorded ? "已记录" : "未记录"}</span></td>
               <td>
-                {recorded ? label : missing.length ? missing.join("；") : "尚未记录"}
+                {recorded ? label?.trim() || "材料已保存，暂无摘要；可点步骤名查看。" : missing.length ? missing.join("；") : "尚未记录"}
                 {experiment && <><br /><small className="muted">{experiment}</small></>}
               </td>
             </tr>

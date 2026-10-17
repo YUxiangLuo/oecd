@@ -330,7 +330,9 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
         raise RuntimeError("Step 10 teaching panel has no complete observation for the selected country and year")
     session["steps"]["10"]["data"].update(
         {
-            "compared": [left, right],
+            # Unlike the real indicators, the teaching sample excludes USA. Record only the country
+            # whose teaching row was fetched above; a single-country example is supported by the UI.
+            "compared": [left],
             "teaching_industry": teaching_row["industry"],
             "teaching_country": teaching_row["country"],
             "teaching_year": teaching_row["year"],
