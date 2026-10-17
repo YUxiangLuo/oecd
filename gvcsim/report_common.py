@@ -19,11 +19,21 @@ _STEP_TITLES = {cast(int, item["n"]): cast(str, item["title"]) for item in STEPS
 _STEP_OUTCOMES = {
     cast(int, item["n"]): cast(str, item["regression_outcome"]) for item in STEPS if item.get("regression_outcome")
 }
+# The data unit "无量纲" (the position indices and the centrality ratios) in words students know, as the pages show it
+# (frontend ``RATIO_UNIT_WORDS``). The saved readings keep "无量纲"; only the printed unit changes.
+RATIO_UNIT_WORDS = "比值，无单位"
+
+
+def unit_text(unit: str) -> str:
+    """A unit as the report prints it: "无量纲" reads "比值，无单位"; every other unit is printed as it is."""
+    return RATIO_UNIT_WORDS if unit == "无量纲" else unit
+
+
 # Keyed by the saved Y's kind, not its family: step 13 can use the GVC position index instead of a length.
 _KIND_DIMENSIONS = {
     "share": "份额（×100 = 百分点）",
     "length": "长度单位（1 个长度单位约等于平均多经过 1 个生产环节）；另附标准差换算（1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化）",
-    "position": "比值，无单位（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化）",
+    "position": f"{RATIO_UNIT_WORDS}（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化）",
     "network": "中心性原始单位（课程生成的分数，高低顺序参照真实网络指标，不是步骤 5、9 的百万美元）；另附标准差换算（1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化）",
 }
 _STUDENT_METRIC_LABELS = {
@@ -312,7 +322,7 @@ def estimate_digits(kind: str, value: float, bounds: tuple[float, float] | None)
 # The unit as named beside a chart or a bar, and as a counted quantity (frontend ``unitName`` / ``countUnit``): the
 # position index is a ratio, "比值，无单位" as step 13 names it (frontend ``POSITION_UNIT_WORDS``), so its amounts
 # are bare numbers ("约低 0.0021").
-UNIT_NAMES = {"share": "百分点", "length": "长度单位", "position": "比值，无单位", "network": "中心性原始单位"}
+UNIT_NAMES = {"share": "百分点", "length": "长度单位", "position": RATIO_UNIT_WORDS, "network": "中心性原始单位"}
 COUNT_UNITS = {"share": "个百分点", "length": "个长度单位", "position": "", "network": "个中心性原始单位"}
 
 

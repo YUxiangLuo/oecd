@@ -285,6 +285,13 @@ describe("trend cards name the empty year and say why (round 12)", () => {
   });
 });
 
+test("a position index's trend chart names its unit 比值，无单位, as step 13 does", () => {
+  const rows = [2016, 2020].map((year) => ({ country: "CHN", year, GVCPs: year === 2016 ? 0.958 : 0.959 }));
+  const view = render(<IndicatorTrendChart rows={rows} countries={["CHN"]} years={[2016, 2020]} metric="GVCPs" label="GVC 位置指数" unit="无量纲" />);
+  expect(view.getByRole("heading", { level: 4 }).textContent).toBe("GVC 位置指数 · 比值，无单位");
+  cleanup();
+});
+
 test("industry ranking bars keep a long country name on one line (HKG 中国香港, round 5)", () => {
   const view = render(
     <IndicatorPairBars countries={["BRN", "IDN", "HKG"]} unit="无量纲"
@@ -297,6 +304,9 @@ test("industry ranking bars keep a long country name on one line (HKG 中国香�
   expect(parseFloat([...widths][0])).toBeGreaterThanOrEqual(7.4);
   expect((rows[2].firstElementChild as HTMLElement).style.whiteSpace).toBe("nowrap");
   expect(rows[2].firstElementChild!.textContent).toBe("HKG 中国香港");
+  // A ratio's unit is named in words students know.
+  expect(view.container.textContent).toContain("单位：比值，无单位。");
+  expect(view.container.textContent).not.toContain("无量纲");
   cleanup();
 });
 

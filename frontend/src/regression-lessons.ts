@@ -68,7 +68,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     priorStep: 4,
     priorLabel: "GVC 长度分解指标",
     // The unit and the standard deviation are said here, before the bars and the task card use them.
-    definition: "前向 GVC 段长度：一国增加值进入跨境生产后，到被最终使用之前平均还要经过的生产环节数（见步骤 4）。单位是长度单位（1 个约等于多经过 1 个生产环节）；条形图另用“个标准差”比较几个 Y：1 个标准差约等于这个 Y 平常上下波动的典型幅度。条形图里另有后向 GVC 段长度（从最终品一侧看的段长度，见步骤 4）和 GVC 位置指数（前向段长度 ÷ 后向段长度，大于 1 表示相对更上游，即更靠近原料、零部件这一端；见步骤 7）。",
+    definition: "前向 GVC 段长度：一国增加值进入跨境生产后，到被最终使用之前平均还要经过的生产环节数（见步骤 4）。单位是长度单位（1 个约等于多经过 1 个生产环节）；条形图另用“个标准差”比较几个 Y：1 个标准差约等于这个 Y 平常上下波动的典型幅度。条形图里另有后向 GVC 段长度（从最终品一侧看的段长度，见步骤 4）和 GVC 位置指数（前向段长度 ÷ 后向段长度，大于 1 表示相对更上游，即更靠近原料、零部件这一端；见步骤 4）。",
     dontClaim: "不要将它与贸易流回归的估计值直接比较：两者单位不同。",
   },
   network: {

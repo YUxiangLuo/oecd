@@ -1014,7 +1014,9 @@ def test_steps_two_to_five_table_prints_the_reading_as_the_step_does():
     sections = "\n".join(_experiment_sections(session)).split("### 步骤 ")
     step = {part[:2].strip(): part for part in sections if part[:2] in ("2 ", "4 ", "5 ")}
     assert "外国增加值项占比 12.345%" in step["2"] and "| % | 12.345 |" in step["2"]
-    assert "后向 GVC 段） 1.000" in step["4"] and "| 无量纲 | 1.000 |" in step["4"]
+    # The position index's unit is printed in words students know, as the pages show it.
+    assert "后向 GVC 段） 1.000" in step["4"] and "| 比值，无单位 | 1.000 |" in step["4"]
+    assert "无量纲" not in step["4"]
     assert "加权总度 <0.001 百万美元" in step["5"] and "| 百万美元 | <0.001 |" in step["5"]
 
 
@@ -1400,7 +1402,15 @@ def test_report_preserves_two_country_industry_trend_years(tmp_path, monkeypatch
     assert "保存的视图" not in section
     assert "DEU" not in section
     assert f"记录的代表指标：{label}" in markdown
-    assert f"记录方式：历年趋势；单位：{unit}" in markdown
+    # A ratio's unit reads 比值，无单位 (the saved readings keep 无量纲).
+    shown_unit = "比值，无单位" if unit == "无量纲" else unit
+    assert f"记录方式：历年趋势；单位：{shown_unit}" in markdown
+    assert "无量纲" not in markdown
+    # Step 9's ratios are network metrics (counted on connections), not the position index the same data unit names
+    # in step 8; amounts get the price sentence instead.
+    assert "本节为位置指数" not in markdown
+    if unit != "百万美元":
+        assert "本节为只看连接、不看金额的网络指标" in markdown
     assert '"type":"line"' in markdown
     assert '"label":"CHN 中国","points":[{"label":"2016","value":31.0},{"label":"2020","value":44.0}]' in markdown
     assert "C26 计算机电子光学" in section

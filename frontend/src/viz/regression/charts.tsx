@@ -1,4 +1,4 @@
-import { stripNegativeZero } from "../../format";
+import { stripNegativeZero, unitText } from "../../format";
 import { cardStyle } from "../shared";
 
 /** Approximate SVG text width (generous, so a clamped label never reaches a neighbour): CJK 1 em, Latin 0.62 em. */
@@ -95,7 +95,7 @@ export function GroupChangeChart({
     <div className="group-change-chart" style={{ ...cardStyle, flex: "1 1 320px", minWidth: 280 }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3a4050" }}>{title}</div>
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
-        纵轴：{baseline}（{unit}）
+        纵轴：{baseline}（{unitText(unit)}）
       </div>
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={description} style={{ display: "block", width: "100%", maxWidth: 760, height: "auto" }}>
         <title>{description}</title>
@@ -131,8 +131,8 @@ export function GroupChangeChart({
       <details className="chart-data-disclosure group-change-table">
         <summary>各组逐年读数</summary>
         <table className="data-table">
-          <caption className="sr-only">{title}：{baseline}（{unit}）</caption>
-          <thead><tr><th scope="col">年份</th>{lines.map((line) => <th key={line.key} scope="col">{line.label}（{unit}）</th>)}</tr></thead>
+          <caption className="sr-only">{title}：{baseline}（{unitText(unit)}）</caption>
+          <thead><tr><th scope="col">年份</th>{lines.map((line) => <th key={line.key} scope="col">{line.label}（{unitText(unit)}）</th>)}</tr></thead>
           <tbody>{years.map((year) => {
             const marker = markers.find((item) => item.year === year);
             return (

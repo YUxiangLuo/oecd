@@ -30,6 +30,8 @@ import { COMPONENT_COLORS } from "./viz/shared";
 import { signedDomain, signedStack } from "./viz/signed-layout";
 import { PATH_UNDEFINED_LABEL } from "./viz/views/network-heat";
 import type { IndustryPage, Meta } from "./types";
+import { segmentIdentityNote } from "./production-length-notes";
+import { NEGATIVE_VALUE_ADDED_CAUSE, NEGATIVE_VALUE_ADDED_NOTE } from "./value-added-notes";
 
 type Row = Record<string, string | number | null>;
 type DecompositionSideData = { countryRows: Row[]; page: IndustryPage };
@@ -95,9 +97,8 @@ export const DECOMP: Record<number, DecompCfg> = {
       { key: "3b_VA_GVC_C", label: "3b_VA_GVC_C 复杂 GVC 增加值", short: "复杂 GVC", color: COMPONENT_COLORS.complexGvc, desc: "增加值至少两次跨越国境。" },
     ],
     negativeNote: "负值表示这部分增加值为负（例如行业亏损），所以其他分项的比重之和可能超过 100%。",
-    note: (_r, values, decimals) =>
-      `GVC 合计（3_VA_GVC）= 简单 GVC + 复杂 GVC = ${sumText(values[2], values[3], decimals)}。` +
-      `也可以反过来，从最终产品在哪国完成来拆分（后向分解，代码 FGY）：在步骤 7 的“四类生产活动”视角选“后向（按最终品）”，查看各类所占份额。`,
+    // The backward decomposition (FGY, step 7) is introduced once, in the method section above.
+    note: (_r, values, decimals) => `GVC 合计（3_VA_GVC）= 简单 GVC + 复杂 GVC = ${sumText(values[2], values[3], decimals)}。`,
   },
   6: {
     title: "各段对总长度的贡献",
@@ -394,6 +395,8 @@ export function IndicatorCalculationDisclosure({ step, row, decimals }: { step: 
           {/* Without a share (a total of 0 or below) the operands still read as the table rows beside them. */}
           = {operands?.numerator ?? disclosureAmount(numerator, decimals)} / {operands?.denominator ?? disclosureAmount(denominator, decimals)} = <b>{operands?.percent ?? disclosureRatioGap(numerator, denominator)}</b>
         </div>
+        {/* "-14.06 / -216.77 = —" (ITA C19 2020) looks computable: say why value added is negative and why no share. */}
+        {step === 5 && denominator != null && denominator < 0 && <p>{NEGATIVE_VALUE_ADDED_NOTE}</p>}
         <p>{step === 4
           ? "FVA 不包括外国重复计算 FDC。分母是下面六项相加得到的总出口，所以这个比例和 OECD TiVA 公布的“出口中外国增加值占比”不完全相同。"
           : "复杂 GVC 只算至少跨境两次的增加值；这个份额反映生产活动的构成，不直接代表技术水平或收益。"}</p>
@@ -579,7 +582,7 @@ function missingDataReason(model: DecompositionModel): boolean {
   return model.reason === "missing-fields" || model.reason === "nonfinite-calculation";
 }
 
-function MiniBackwardBar({ row }: { row: Row }) {
+function MiniBackwardBar({ row, countryLevel = false }: { row: Row; countryLevel?: boolean }) {
   const model = buildDecompositionModel(row, PLY_DECOMP);
   const position = finiteNumber(row.GVCPs);
   if (model.status !== "valid" || !model.values || model.total == null || model.sum == null || model.error == null) {
@@ -600,6 +603,7 @@ function MiniBackwardBar({ row }: { row: Row }) {
   const layout = signedStack(model.values, domain, true, model.total);
   // Lengths are shown to three decimals, as in the forward table above.
   const shownAddsUp = displayedRowsAddUp(model.values, model.sum, 3);
+  const identityNote = segmentIdentityNote(row, countryLevel);
   return (
     <div style={{ marginTop: 14, padding: 12, borderRadius: 10, background: "#f8f9fc" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 11.5, marginBottom: 7 }}>
@@ -622,6 +626,9 @@ function MiniBackwardBar({ row }: { row: Row }) {
         ))}
       </div>
       {hasBackwardSegmentLength(row) && <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>{segmentLengths(row, "后向")}（上面是这些长度乘以最终产品份额后的贡献）。</div>}
+      {/* Equal lengths that would read as an error are explained: forward and backward at country level, the two
+          backward segments for one industry (identities, as step 8 says). */}
+      {identityNote && <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>{identityNote}</div>}
       {domain.negative > 0 && <p className="decomp-table-note">负贡献为抵减项，用斜纹表示并位于零轴左侧；正贡献位于右侧，各段按带符号数值相加得到 PLy，不是都为正的份额。</p>}
       <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>
         {/* Name what the sum is checked against: the PLy computed directly, shown at the right of the heading. As in
@@ -822,6 +829,7 @@ export function DecompositionDemo({
           <div className="decomp-unavailable" role="status">
             <b>当前分解不可用</b>
             <div>{decompositionModelReason(model, cfg.weightTotal, noExports)}</div>
+            {model.reason === "negative-weight-denominator" && cfg.weightTotal === "SVA" && <div>{NEGATIVE_VALUE_ADDED_CAUSE}</div>}
             {unavailableTotalNote(model, cfg) && <div>{unavailableTotalNote(model, cfg)}</div>}
             <div>{unavailableDashNote(model)}</div>
           </div>
@@ -838,7 +846,7 @@ export function DecompositionDemo({
           {step === 6 && hasForwardSegmentLength(row) && (
             <div className="decomp-note">{segmentLengths(row)}（段长度不需要份额，仍可读）。</div>
           )}
-          {step === 6 && <MiniBackwardBar row={row} />}
+          {step === 6 && <MiniBackwardBar row={row} countryLevel={gran === "country"} />}
           {step === 6 && <IndicatorCalculationDisclosure step={step} row={row} />}
         </div>
       );
@@ -915,7 +923,7 @@ export function DecompositionDemo({
           roundingNote={model.total > 0 && precision?.checks === false}
         />
         {cfg.note && sharesAvailable && <div className="decomp-note">{cfg.note(row, model.values, precision?.decimals)}</div>}
-        {step === 6 && <MiniBackwardBar row={row} />}
+        {step === 6 && <MiniBackwardBar row={row} countryLevel={gran === "country"} />}
         {step === 6 && <IndicatorCalculationDisclosure step={step} row={row} />}
       </div>
     );

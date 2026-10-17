@@ -56,7 +56,9 @@ import { AddCountryControl } from "./add-country";
 import { comparisonCards, compositionCards, industryCards, positioningCards, ReadingCards, segmentCards } from "./reading-cards";
 import { Dumbbell, IndustryDotPlot, StackedAreaFacets } from "./theme-charts";
 import { CAT } from "../../../viz/shared";
-import { cjkSpace } from "../../../format";
+import { cjkSpace, unitText } from "../../../format";
+import { DOMESTIC_SEGMENTS_IDENTITY_NOTE } from "../../../production-length-notes";
+import { NEGATIVE_VALUE_ADDED_NOTE } from "../../../value-added-notes";
 import { MaxCountriesNote } from "./add-country";
 import { Year2020Note } from "./scaffold";
 import { carriedCountryNote } from "../indicator/indicator-table";
@@ -432,6 +434,11 @@ export function IndicatorExplorer({
     }
     return [...groups.values()].map((group) => `${joinCountries(group.countries)}${group.when}${group.clause}`);
   })();
+  // More than two clauses (step 8's 段长度对照 of B09: six, one per segment and direction) read as one count instead:
+  // the chart marks each of them 无法计算.
+  const undefinedReadings = metrics.flatMap((key) => missingCountries.flatMap((country) => chartYears.filter((at) =>
+    !pending.some((item) => item.country === country && item.year === at && item.metric === key) && undefinedReason(country, key, at))
+    .map(() => country)));
   const missingOnlyUndefined = missingCountries.length > 0 && missingCountries.every((country) => chartYears.every((at) =>
     metrics.every((key) => pending.some((item) => item.country === country && item.year === at && item.metric === key) || undefinedReason(country, key, at))));
   // A country with no reading in any loaded year: another year range can only help when some years are not loaded.
@@ -474,7 +481,9 @@ export function IndicatorExplorer({
               : view === "industry" && !rankComplete.length && rankGaps.length
                 ? `${year} 年显示的行业里，没有一个行业所有所选国家都有读数（${rankGapText}）；请换国家${rankGapsUndefined || years.length < 2 ? "" : "或换一个年份"}。`
               : missingCountries.length && missingOnlyUndefined && undefinedReasons.length
-                ? `${undefinedReasons.join("；")}（不是缺少数据）；请换一个${industry ? "行业或" : ""}国家。`
+                ? undefinedReasons.length > 2
+                  ? `${joinCountries(selected.filter((country) => undefinedReadings.includes(country)))}共有 ${undefinedReadings.length} 个${view === "segments" ? "段长度" : "读数"}无法计算（${view === "segments" ? "这些段没有对应的生产活动，相关增加值为 0" : "原因见上方图表处的说明"}，不是缺少数据）；请换一个${industry ? "行业或" : ""}国家。`
+                  : `${undefinedReasons.join("；")}（不是缺少数据）；请换一个${industry ? "行业或" : ""}国家。`
               : missingCountries.length
                 ? `${joinCountries(missingCountries)}在${timeView ? "所选年份范围" : ` ${year} 年`}${industry ? `（${sectorLabel(industry)}）` : ""}缺少数据（缺少的数据留空，不当作 0）；请${missingFix.join("、").replace(/、([^、]+)$/, "或$1")}。`
                 : `所选国家没有同一${timeView ? "组年份" : "年份"}的数据，无法并列比较；请${timeView ? "调整年份范围" : "换一个年份"}或换国家。`;
@@ -616,7 +625,7 @@ export function IndicatorExplorer({
               </td>
               <td>{item.year}</td>
               <td>{label(item.metric!)}</td>
-              <td>{item.unit}</td>
+              <td>{unitText(item.unit!)}</td>
               <td>{indicatorNumber(item.value, item.unit!)}</td>
             </tr>
           ))}
@@ -681,6 +690,13 @@ export function IndicatorExplorer({
     const undefinedOnly = groups.every((group) => group.text !== "缺少数据");
     return `另有 ${hidden.length} 个行业没有画出：${groups.map((group) => `${group.rows.map((row) => String(row.industry)).join("、")} ${group.text}`).join("；")}${undefinedOnly ? "，份额无法计算（不是缺少数据）" : ""}。`;
   };
+  // Value added below zero (ITA C19 and several H51 in 2020) is real: whichever view reads it says once why, and why
+  // its shares are left out (四类生产活动 right under the line naming it, the other views under the chart).
+  const negativeValueAdded = topic.key === "production" && selected.some((country) =>
+    (view === "structure" || view === "industry"
+      ? structureRows(country)
+      : scoped.filter((row) => row.country === country && chartYears.includes(row.year as number)))
+      .some((row) => finiteValue(row.SVA) && row.SVA < 0));
   // 行业排名 rows: an undefined reading reads "无法计算" (zero exports), not "缺失".
   const rankGroups = ranked.map((row) => {
     const sector = String(row.industry);
@@ -1138,6 +1154,8 @@ export function IndicatorExplorer({
                   {droppedBars.map((item) => `${countryLabel(item.country)} · ${item.year}：${label(activeComposition.total)}为${item.value === 0 ? " 0" : `负（${textNumber(item.value, "百万美元")} 百万美元）`}`).join("；")}，构成份额无法计算，占比图里不画{droppedHaveParts ? "；切换到“金额”可看各分项" : ""}。
                 </p>
               )}
+              {/* Right under the line that names the negative total (or the bars drawn left of zero in 金额). */}
+              {view === "composition" && negativeValueAdded && <p className="muted">{NEGATIVE_VALUE_ADDED_NOTE}</p>}
               {view === "composition"
                 ? <ReadingCards label="构成读数" cards={compositionCards({ rows: scoped, countries: selected, composition: activeComposition!, totalLabel: label(activeComposition!.total), year, industry, amountShown: amountMode })} />
                 : (() => {
@@ -1165,7 +1183,7 @@ export function IndicatorExplorer({
               {selected.length > 1 && <p className="muted">各国使用同一坐标范围，点的位置可以跨国比较。</p>}
               {/* Summed over a country's industries, the domestic Leontief terms are the same whether read along rows
                   (forward) or columns (backward), so these two pairs coincide by construction (round 21). */}
-              {!industry && <p className="muted">国家整体上，纯国内段与传统贸易段的前向长度和后向长度总是相等，这是恒等关系，不是数据错误：这两段的生产全部在本国内部完成（传统贸易只把最终品出口一次），按增加值来源（前向）和按最终品（后向）汇总的是同一批生产活动。只有 GVC 段涉及外国的生产环节，前后向长度一般不同。</p>}
+              {!industry && <p className="muted">{DOMESTIC_SEGMENTS_IDENTITY_NOTE}</p>}
               {/* Each dumbbell needs about 440px for a readable track: two side by side only when they fit (at 1024
                   two columns squeezed each plot to ~40px), three or more always stacked. */}
               <div className={`comparison-facets ${selected.length > 2 ? "comparison-facets--stacked" : "comparison-facets--roomy"}`}>
@@ -1274,6 +1292,7 @@ export function IndicatorExplorer({
             </>
           )}
           {undefinedNotes.length > 0 && <p className="muted">{undefinedNotes.join("；")}（不是缺少数据，图上留空）。</p>}
+          {view !== "composition" && negativeValueAdded && <p className="muted">{NEGATIVE_VALUE_ADDED_NOTE}</p>}
           </Fragment>
           {/* 定位图 and 行业结构 record nothing and carry their own data tables. */}
           {view !== "positioning" && view !== "structure" && <details className="technical-details">

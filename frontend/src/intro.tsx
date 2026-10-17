@@ -230,7 +230,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
           </button>
           <ul className="intro-card-facts">
             <li>X 由首年对美出口份额和加征税率算出。</li>
-            <li>美国分两批加税：第一批 2018 年起、第二批 2019 年起税率为 25%，此前为 0。</li>
+            <li>课程模拟情景（不是真实政策）：美国分两批加税，第一批 2018 年起、第二批 2019 年起，税率都是 25%，此前为 0。</li>
             <li>Y 是贸易流、生产、长度、网络四类结果指标。</li>
           </ul>
           {openCards.shock && (
@@ -285,7 +285,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
     <div key={3} className="intro-scene">
       <div className="intro-scene-kicker">分析示例</div>
       <h2 className="intro-h2">先看加税前后的差距，再用回归量化</h2>
-      <p className="intro-lede">在步骤 10 选一个例子：它是被加税的国家之一，可再加一个未被加税的对照国家。回归用的是全部国家×行业，结果会换算到你的例子上。</p>
+      <p className="intro-lede">在步骤 10 选一个例子：它是被加税的国家之一，可再加一个未被加税的对照国家。回归用的是整个样本，不按例子挑选，结果会换算到你的例子上。</p>
       <div className="intro-preview-selection" role="group" aria-label="分析对象示意">
         <span><small>国家 A</small>在步骤 10 选择</span>
         <span><small>国家 B</small>在步骤 10 选择</span>

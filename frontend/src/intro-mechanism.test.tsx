@@ -19,7 +19,8 @@ test("mechanism preview follows the example, the group gap and the regression", 
     expect(chart.textContent).toContain("2016");
     expect(chart.textContent).toContain("2020");
     expect(chart.textContent).toContain("X 示意强弱");
-    expect(view.getByText(/回归用的是全部国家×行业，结果会换算到你的例子上/)).toBeTruthy();
+    // The whole sample (not every country×industry: the US, ROW and units without data are out), not the example.
+    expect(view.getByText(/回归用的是整个样本，不按例子挑选，结果会换算到你的例子上/)).toBeTruthy();
     // The example is one of the taxed countries; no default pair is named here (step 10 shows the whole sample).
     expect(view.getByText(/它是被加税的国家之一，可再加一个未被加税的对照国家/)).toBeTruthy();
     expect(view.queryByText(/默认是加拿大和墨西哥|加拿大|墨西哥/)).toBeNull();
@@ -36,7 +37,6 @@ test("mechanism preview follows the example, the group gap and the regression", 
     }
     expect(view.getByText("关税暴露")).toBeTruthy();
     expect(view.getByText("指标结果")).toBeTruthy();
-    expect(view.getByRole("dialog").textContent).not.toContain("模拟");
     expect(view.getByLabelText("四项结果都要汇总").querySelectorAll("span")).toHaveLength(4);
     expect(view.getByText(/方向不确定或没算出估计值，也要如实报告/)).toBeTruthy();
     expect(view.queryByRole("slider")).toBeNull();

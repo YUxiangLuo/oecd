@@ -220,10 +220,12 @@ function stepMaterialStatus(
 }
 
 /** A step's mark, alike in the outline and the footer dots: done, or partial when the quiz is passed but the step's
- * report material is still missing (amber, so a step that still needs something does not read as finished). */
-export function stepProgress(step: Pick<Step, "lab">, done: boolean, materialStatus: MaterialStatus): "done" | "partial" | null {
+ * report material is still missing, or when step 15's handed-in report no longer matches the saved records (amber, so
+ * a step that still needs something does not read as finished). */
+export function stepProgress(step: Pick<Step, "lab">, done: boolean, materialStatus: MaterialStatus, reportOutdated = false): "done" | "partial" | null {
   if (!done) return null;
-  return step.lab !== "rep" && materialStatus === "missing" ? "partial" : "done";
+  if (step.lab === "rep") return reportOutdated ? "partial" : "done";
+  return materialStatus === "missing" ? "partial" : "done";
 }
 
 interface CourseSidebarProps {
@@ -300,7 +302,7 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
               // 你的分析 已完成 / 未完成 (it counts the analysis answers, not report material).
               const material = stepMaterialStatusText(step, materialStatus);
               const materialLabel = `${material.name}${material.value}`;
-              const state = stepProgress(step, done, materialStatus) ?? (step.n === current ? "cur" : "future");
+              const state = stepProgress(step, done, materialStatus, reportCurrent === false) ?? (step.n === current ? "cur" : "future");
               const completionLabel = step.lab === "rep" ? `报告${reportStatusLabel(reportCurrent, reportExists, reportState)}` : (done ? "理解题已完成" : "理解题未完成");
               const accessibleName = [
                 `步骤 ${step.n}：${step.title}`,
@@ -376,6 +378,8 @@ interface StepFooterProps {
   /** As the sidebar's, so a dot is amber where its outline tick is. */
   materialGate?: ReportGateItem[] | null;
   currentMaterialStatus?: MaterialStatus;
+  /** Whether the latest report matches the saved record (server report_current), as the sidebar's. */
+  reportCurrent?: boolean | null;
   onNavigate: (step: number) => void;
 }
 
@@ -388,6 +392,7 @@ export function StepFooter({
   completedSteps,
   materialGate = null,
   currentMaterialStatus,
+  reportCurrent,
   onNavigate,
 }: StepFooterProps) {
   return (
@@ -397,7 +402,7 @@ export function StepFooter({
         {steps.map((item) => {
           const state = item.n === current
             ? "on"
-            : stepProgress(item, completedSteps.has(item.n), stepMaterialStatus(item.n, current, materialGate, currentMaterialStatus));
+            : stepProgress(item, completedSteps.has(item.n), stepMaterialStatus(item.n, current, materialGate, currentMaterialStatus), reportCurrent === false);
           return (
             <button
               type="button"

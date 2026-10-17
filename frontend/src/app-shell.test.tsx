@@ -78,6 +78,30 @@ test("a draft report is not shown as a finished step 15, a submitted one is", ()
   expect(container.textContent).toContain("完成进度 15/15");
 });
 
+test("a handed-in report the records have moved past marks step 15 amber, in the outline and the footer (round 6)", () => {
+  const steps = { ...stepsData, steps: stepsData.steps.map((step) => step.n === 15 ? { ...step, lab: "rep" as const } : step) };
+  const completed = Array.from({ length: 15 }, (_, index) => index + 1);
+  const view = (reportCurrent: boolean) => <>
+    <CourseSidebar stepsData={steps} current={2}
+      completion={{ steps: [], completed, completed_count: 15, total: 15 }}
+      materialGate={null} onNavigate={() => {}} reportExists reportState="graded" reportCurrent={reportCurrent} />
+    <StepFooter steps={steps.steps} step={steps.steps[1]} next={steps.steps[2]} stageName="测试阶段" current={2}
+      completedSteps={new Set(completed)} reportCurrent={reportCurrent} onNavigate={() => {}} />
+  </>;
+  const { container, rerender } = render(view(false));
+  const badge = () => container.querySelector('[aria-label^="步骤 15："] .step-badge')!;
+  const dot = () => container.querySelectorAll<HTMLButtonElement>(".fdot")[14];
+  expect(badge().textContent).toBe("✓");
+  expect(badge().className).toContain("partial");
+  expect(dot().className).toBe("fdot partial");
+  expect(container.querySelector('[aria-label^="步骤 15："] .step-row-status')!.textContent).toContain("报告需更新");
+  // The teacher has a report, so the count stays; the mark says it needs another hand-in.
+  expect(container.textContent).toContain("完成进度 15/15");
+  rerender(view(true));
+  expect(badge().className).toContain("done");
+  expect(dot().className).toBe("fdot done");
+});
+
 test("the sidebar and the task card share one status vocabulary", () => {
   const { container } = render(<CourseSidebar stepsData={stepsData} current={2}
     completion={{ steps: [], completed: [1], completed_count: 1, total: 15 }}

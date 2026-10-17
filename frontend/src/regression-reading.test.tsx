@@ -233,7 +233,7 @@ describe("fixed teaching regression reading", () => {
     const { container } = render(<RegressionResultCard outcome="length" response={data} />);
     expect(container.querySelector(".reg-headline-main")?.textContent)
       .toContain("平均低 0.0021（幅度约 0.012 个标准差）");
-    // A ratio: no unit after its amounts, "无量纲" where a unit is named (as step 7 and the report say).
+    // A ratio: no unit after its amounts, "比值，无单位" where a unit is named (as step 8 and the report print it).
     expect(container.querySelector(".reg-interval-words")?.textContent).toContain("[-0.0030, -0.0012]；约 [");
     expect(container.textContent).not.toContain("位置指数单位");
   });

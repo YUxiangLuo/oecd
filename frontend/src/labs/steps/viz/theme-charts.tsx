@@ -407,10 +407,11 @@ export function Butterfly({ rows, leftLabel, rightLabel, unit, title, onPick }: 
       : []),
   ];
   return (
-    <div ref={wrapRef} className="hover-wrap butterfly" role="region" aria-label={title}>
+    <div ref={wrapRef} className="hover-wrap butterfly" role="region" aria-label={unit === "%" ? title : `${title}（单位：${unit}）`}>
       <div className="butterfly-head" aria-hidden="true">
         <span style={{ color: CAT_TEXT[1] }}>◀ {leftLabel}</span>
-        <span />
+        {/* The values beside the bars are bare numbers: their unit sits between the two column titles. */}
+        <span className="butterfly-unit">{unit === "%" ? "" : `单位：${unit}`}</span>
         <span style={{ color: CAT_TEXT[0] }}>{rightLabel} ▶</span>
       </div>
       {rows.map((row, index) => (

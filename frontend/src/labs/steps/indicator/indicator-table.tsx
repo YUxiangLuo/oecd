@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
+import { RATIO_UNIT_WORDS } from "../../../format";
 import { FullscreenPanel, FullscreenTriggerSlot } from "../../../fullscreen-panel";
 import { ColumnInfo, useMeasuredWidth } from "../../../table-aids";
 import type { IndicatorSchema, IndustryPage, Meta, QuizCompletionState, StepStateApi } from "../../../types";
@@ -359,7 +360,7 @@ export const NETWORK_COLUMN_UNITS: Readonly<Record<string, string>> = {
 };
 
 /** Step 5: the units above the centrality table, so its title names them as the headers do. */
-export const NETWORK_UNITS_NOTE = "单位：加权总度、加权入度、加权出度为百万美元（只算中间品流量）；度、入度、出度为连接数；离心率为步数；介数未归一化（经过该节点的最短路线所占比例，对所有节点对求和），不足 1 时显示“<1”；接近中心性、调和中心性和特征向量中心性是无量纲的比值。";
+export const NETWORK_UNITS_NOTE = `单位：加权总度、加权入度、加权出度为百万美元（只算中间品流量）；度、入度、出度为连接数；离心率为步数；介数未归一化（经过该节点的最短路线所占比例，对所有节点对求和），不足 1 时显示“<1”；接近中心性、调和中心性和特征向量中心性为${RATIO_UNIT_WORDS}。`;
 
 /** A column's header text: its label, with its unit where the table gives one. */
 export function indicatorColumnLabel(column: string, schema?: IndicatorSchema | null, units?: Readonly<Record<string, string>>): string {

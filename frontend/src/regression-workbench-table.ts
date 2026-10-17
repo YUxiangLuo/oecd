@@ -217,6 +217,12 @@ const effectIncluded = (spec: ModelSpec, key: string, options: WorkbenchOptions)
 const yearsText = (snapshot: CustomResultSnapshot) =>
   snapshot.result.years ? `${snapshot.result.years[0]}–${snapshot.result.years[1]}` : "—";
 
+/** The model-comparison chart's axis title. Each bar is a model's X-terms sum; a share, length or network Y names its
+ *  unit at the bar end, while the position index's bare numbers name theirs ("比值，无单位") under the row. */
+export function comparisonAxisTitle(positionY: boolean): string {
+  return `X 每高 1 个百分点，Y 平均相差多少（按各模型的 X 各项合计；${positionY ? "期数和单位见行下" : "期数见行下，单位见条末"}）`;
+}
+
 /** What a column's X-terms sum covers: "两年累计" for X + L1.X, "仅当期 X" for X alone (its coefficient is not the
  *  default's 当年 term, so not "当年"), "三年累计" with L2.X; other
  *  sets name their terms ("仅 L1.X", "X + L2.X 之和"), so one coefficient is never called a sum. */

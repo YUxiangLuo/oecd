@@ -17,6 +17,7 @@ import { Butterfly } from "./theme-charts";
 import { COMPARISON_LETTERS, DEFAULT_MARK, defaultComparison, defaultEntities, defaultMarkFor, MAX_ENTITIES, pickFirst, type YearDistribution } from "./indicator-model";
 import { ScopeCard } from "./scope-card";
 import { NetworkRanking, networkRanking, networkValue } from "./network-ranking";
+import { unitText } from "../../../format";
 
 const COMMON_METRICS = ["weighted degree", "weighted indegree", "weighted outdegree", HEAT_EVIDENCE_METRIC];
 
@@ -223,7 +224,8 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   const savedIndustries = [...new Set(observations.map((item) => item.industry).filter(Boolean))];
   return <section className="reg-section-card" aria-label="行业网络指标趋势">
     <h3>行业的网络位置怎样变化？在全部经济体的同一行业中处于什么位置？</h3>
-    {shownCarriedNote && <p className="muted indicator-carried-note" role="note">{shownCarriedNote}</p>}
+    {/* The note says the country can be changed: only where the country selects are (not the global network). */}
+    {shownCarriedNote && view !== "global-network" && <p className="muted indicator-carried-note" role="note">{shownCarriedNote}</p>}
     {view !== "global-network" && <div className="controls" role="group" aria-label="所选国家">
       <LabeledControl label="国家 A">{(id) => <select id={id} ref={firstRef} name="network-country-a" value={first} onChange={(event) => {
         const next = event.target.value;
@@ -430,7 +432,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
           <tbody>{observations.map((item, index) => <tr key={index}>
             <td>{countryLabel(item.country)} · {sectorLabel(item.industry ?? "")}</td><td>{item.year}</td>
             <td>{schema?.fields[item.metric ?? ""]?.label ?? (item.metric === "weighted degree" ? "加权总度" : item.metric ?? label)}</td>
-            <td>{item.unit ?? unit}</td><td>{indicatorNumber(item.value, item.unit ?? unit)}</td>
+            <td>{unitText(item.unit ?? unit)}</td><td>{indicatorNumber(item.value, item.unit ?? unit)}</td>
           </tr>)}</tbody>
         </table></ScrollableRegion>) } : null}
       syncing={syncing}

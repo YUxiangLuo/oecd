@@ -385,7 +385,9 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
       <div className="login-panel">
         <form className="login-card" onSubmit={submit}>
           <h2>登录实验台</h2>
-          <p className="login-card-sub">用老师发给你的账号登录。</p>
+          {/* With a demo student to offer, the identities below are the way in, not an account from the teacher
+              (demoMode first, so the production bundle carries no demo wording). */}
+          <p className="login-card-sub">{demoMode && demoAccounts.some((account) => account.username !== "teacher") ? "演示环境：选一个身份，再点“登录”。" : "用老师发给你的账号登录。"}</p>
           {/* An expired session is a warning, not a success; a password change is confirmed in green. */}
           {shownNotice && <div className={`${shownNotice.includes("失效") || shownNotice.includes("没有网络") ? "tipbox" : "success-box"} login-notice`} role="status">{shownNotice}</div>}
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatMetric } from "./format";
+import { formatMetric, RATIO_UNIT_WORDS, unitText } from "./format";
 
 describe("formatMetric", () => {
   test("uses one precision contract for percentages, amounts and scalar metrics", () => {
@@ -41,5 +41,13 @@ describe("formatMetric", () => {
     expect(formatMetric(-1e-9, "number")).toBe("0.000");
     // 真正的负数不受影响
     expect(formatMetric(-0.5, "amount")).toBe("-0.500");
+  });
+});
+
+describe("unitText", () => {
+  test("the data unit 无量纲 is shown in words students know; other units as they are", () => {
+    expect(unitText("无量纲")).toBe(RATIO_UNIT_WORDS);
+    expect(RATIO_UNIT_WORDS).toBe("比值，无单位");
+    for (const unit of ["%", "百万美元", "长度单位", "连接数", "未归一化介数", "路径长度"]) expect(unitText(unit)).toBe(unit);
   });
 });

@@ -299,7 +299,9 @@ test("step 5: the centrality headers and caption name their units; a small betwe
   const headers = [...view.container.querySelectorAll("thead th")].map((th) => th.textContent);
   expect(headers).toEqual(["国家", "加权总度（百万美元）", "度（连接数）", "介数（未归一化）", "接近中心性"]);
   expect(view.container.querySelector("caption")?.textContent).toContain("加权出度为百万美元");
-  expect(NETWORK_UNITS_NOTE).toContain("无量纲");
+  // The centrality ratios are named in words students know, as step 9 and the report name them ("无量纲" is not one).
+  expect(NETWORK_UNITS_NOTE).toContain("特征向量中心性为比值，无单位。");
+  expect(NETWORK_UNITS_NOTE).not.toContain("无量纲");
   expect([...view.container.querySelectorAll("tbody td")].map((td) => td.textContent)).toEqual(["1,235", "12", "<1", "0.500"]);
   cleanup();
 });

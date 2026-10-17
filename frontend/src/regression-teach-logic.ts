@@ -97,11 +97,13 @@ export function regressionSummaryRows(getStep?: (step: number) => SiblingStepDat
 export function decompositionParts(
   decomposition: FirstWaveDecomposition, metric: string, scale: number, unit: string, digits: number,
 ): { lead: string; parts: { label: string; value: string; tariff: boolean }[]; tail: string } {
-  // "8.4 个百分点", "0.320 个长度单位": the chart's unit, counted.
-  const counted = unit.startsWith("个") ? unit : `个${unit}`;
-  const amount = (value: number) => `${(value * scale).toFixed(digits)} ${counted}`;
+  // "8.4 个百分点", "0.320 个长度单位": the chart's unit, counted; a ratio ("无量纲") has none, so it reads as a bare
+  // number, as the result card prints the position index.
+  const counted = unit === "无量纲" ? "" : unit.startsWith("个") ? unit : `个${unit}`;
+  const withCounted = (text: string) => (counted ? `${text} ${counted}` : text);
+  const amount = (value: number) => withCounted((value * scale).toFixed(digits));
   // Each part with its unit, as the total: a bare "−1.6" read as a number of nothing.
-  const signedAmount = (value: number) => `${value >= 0 ? "+" : "-"}${Math.abs(value * scale).toFixed(digits)} ${counted}`;
+  const signedAmount = (value: number) => withCounted(`${value >= 0 ? "+" : "-"}${Math.abs(value * scale).toFixed(digits)}`);
   const observed = decomposition.observed;
   const direction = observed < 0 ? "低" : "高";
   // "与 GDP 对数同步" keeps a space before a Latin name, "与汇率变动同步" none.

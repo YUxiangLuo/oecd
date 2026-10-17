@@ -1,6 +1,7 @@
 import type {
   CoefStat, DepvarKind, RegressionOutcome, RegressionResponse, RegressionStatus, TreatmentSupport,
 } from "./types";
+import { RATIO_UNIT_WORDS } from "./format";
 
 export type EvidenceState = "negative" | "positive" | "insufficient" | "suppressed";
 
@@ -69,7 +70,8 @@ export const signed = (value: number, digits = 3) => {
 };
 
 const DEFAULT_KINDS: Record<RegressionOutcome, DepvarKind> = { trade: "share", production: "share", length: "length", network: "network" };
-/** The unit as named beside a chart, a column or a bar ("长度单位"); the position index is a ratio: "无量纲", as on step 7. */
+/** The unit as named beside a chart, a column or a bar ("长度单位"); the position index is a ratio: "无量纲" in the data
+ *  (step 8), shown as {@link POSITION_UNIT_WORDS}. */
 const KIND_UNITS: Record<DepvarKind, string> = { share: "个百分点", length: "长度单位", position: "无量纲", network: "中心性原始单位" };
 
 /** The unit name under a bar's Y in 个标准差 charts ("长度单位"); the position index, a ratio, in plain words
@@ -77,11 +79,11 @@ const KIND_UNITS: Record<DepvarKind, string> = { share: "个百分点", length: 
 export function unitName(kind: DepvarKind): string {
   return kind === "position" ? POSITION_UNIT_WORDS : KIND_UNITS[kind].replace(/^个/, "");
 }
-export const POSITION_UNIT_WORDS = "比值，无单位";
+export const POSITION_UNIT_WORDS = RATIO_UNIT_WORDS;
 
 /**
  * The unit as a counted quantity ("个百分点", "个长度单位"), used wherever an amount of it is stated; the position
- * index has none, so its amounts are bare numbers ("平均低 0.0021"), as step 7 prints the index itself.
+ * index has none, so its amounts are bare numbers ("平均低 0.0021"), as step 8 prints the index itself.
  */
 export function countUnit(kind: DepvarKind): string {
   return kind === "share" ? KIND_UNITS.share : kind === "position" ? "" : `个${KIND_UNITS[kind]}`;

@@ -65,3 +65,22 @@ def test_chart_readings_state_changes_in_the_chart_unit():
     assert _change(0.0, 2.5, "未归一化介数") == "+3"
     assert _card_reading(-2.4995, "百万美元") == "-2.500"
     assert _reading(232.5, "未归一化介数") == "233"
+
+
+def test_ratio_unit_is_printed_in_words_students_know():
+    from gvcsim.report_common import RATIO_UNIT_WORDS, unit_text
+
+    # Frontend unitText: the saved readings keep 无量纲; the report prints 比值，无单位, as steps 8 and 13 show it.
+    assert unit_text("无量纲") == RATIO_UNIT_WORDS == "比值，无单位"
+    for unit in ("%", "百万美元", "长度单位", "连接数", "未归一化介数", "路径长度", "未记录"):
+        assert unit_text(unit) == unit
+
+
+def test_chart_readings_use_the_data_unit_not_the_axis_words():
+    from gvcsim.report_observed import _chart_unit
+
+    # The axis prints a ratio as 比值，无单位; the readings still get the data unit it was drawn in.
+    assert _chart_unit({"y_label": "比值，无单位", "_unit": "无量纲"}) == "无量纲"
+    assert _chart_unit({"y_label": "百分比（%）", "_unit": "%"}) == "%"
+    # Charts built without it (the composition shares) still read their unit from the axis label.
+    assert _chart_unit({"y_label": "占总出口的百分比（%）"}) == "%"

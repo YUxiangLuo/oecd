@@ -504,7 +504,9 @@ export function DbSliceTable({
     >
       <table className="data-table db-table">
         <caption>
-          {`${cjkJoin(activeTable.label, "数据表")} · 单位：百万美元。`}
+          {/* Sticky on the inner span (as the column-axis label above the headers): a sticky <caption> itself
+              scrolls away with the table in Chrome, cutting "中间投入 Z 数据表" to "入 Z 数据表". */}
+          <span className="db-caption-text">{`${cjkJoin(activeTable.label, "数据表")} · 单位：百万美元。`}</span>
         </caption>
         <thead>
           <tr className="db-axis-row">
@@ -972,7 +974,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
         <span>
           {/* The locked notice is already in the strip above; this line only says what a click does. */}
           {state.materialLocked
-            ? `点击数值只会选中这个单元格${table === "accounts" ? "" : "（表格会放大到全屏）"}；要换成报告材料，请再点上方出现的确认按钮。`
+            ? `点击数值只会选中这个单元格${table === "accounts" ? "" : "（表格会放大到全屏）"}；要换成报告材料，请再点表格下方出现的“改为记录”按钮。`
             : `点击任一数值即可记录这个单元格${table === "accounts" ? "" : "，表格会放大到全屏，方便核对方向"}。`}
           {table === "accounts" ? "行是国家×行业，列是账户项" : `行是供给方，列是${table === "y" ? "最终需求" : "使用方"}`}；单位：百万美元。
         </span>

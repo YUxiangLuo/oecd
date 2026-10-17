@@ -297,7 +297,9 @@ describe("Step 1 bounded roving cell focus", () => {
     expect(html.match(/class="db-observation-cell[^>]*tabindex="-1"/g)).toHaveLength(1124);
     expect(html).toContain('role="region" tabindex="-1"');
     // 界面不展示任何键盘操作说明（caption 只保留表名与单位）
-    const caption = html.match(/<caption>([^<]*)<\/caption>/)?.[1] ?? "";
+    // The caption text sits in a sticky span (it stays in view while the table scrolls sideways).
+    const caption = (html.match(/<caption>(.*?)<\/caption>/)?.[1] ?? "").replace(/<[^>]+>/g, "");
+    expect(html).toContain('<caption><span class="db-caption-text">');
     expect(caption).toContain("单位：百万美元");
     expect(caption).not.toMatch(/Tab|方向键|Enter|空格/);
     expect(html).toContain('<th scope="row"');

@@ -4,7 +4,7 @@ import { useHoverTip, type TipLine } from "../../../viz/hover";
 import { CAT, CAT_TEXT } from "../../../viz/shared";
 import { changeReading, finiteValue, NO_OUTPUT, NO_RANK, NO_RANK_NOTE, rankText, readingDigits, type YearDistribution } from "./indicator-model";
 import { integerDomain, niceDomain } from "../../../viz/nice-ticks";
-import { stripNegativeZero } from "../../../format";
+import { stripNegativeZero, unitText } from "../../../format";
 import type { Row } from "./scaffold";
 import { CardGrid } from "./card-grid";
 
@@ -537,7 +537,7 @@ export function IndicatorTrendChart({
   return (
     <section aria-label={`${label}趋势图`}>
       <h4>
-        {label} · {unit}
+        {label} · {unitText(unit)}
       </h4>
       <div className="trend-legend" style={{ justifyContent: context ? "flex-start" : "flex-end" }}>
         {legend.map((item) => (
@@ -1258,7 +1258,7 @@ export function IndicatorPairBars({
           ))}
         </div>
       ))}
-      <p className="muted">单位：{unit}。各国从同一个 0 起画，负值画在左边，缺少或无法计算的数据留空。</p>
+      <p className="muted">单位：{unitText(unit)}。各国从同一个 0 起画，负值画在左边，缺少或无法计算的数据留空。</p>
       {Tip}
     </div>
   );

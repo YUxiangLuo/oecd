@@ -178,6 +178,22 @@ describe("Steps 6-9 chart semantic data equivalents", () => {
     expect(overlaps({ x0: lx0, x1: lx0 + 21, y0: ly - 8.5, y1: ly + 1.5 })).toBe(false);
   });
 
+  test("定位图: the always-named CHN/USA/DEU/JPN are said to be references, not the student's pick (round 6)", () => {
+    // 30 economies: too many to name every point, so only the selected and the four key economies are named.
+    const many = Array.from({ length: 26 }, (_, i) => ({ country: `E${String(i).padStart(2, "0")}`, x: i, y: 30 - i }));
+    const points = [...many, ...["CHN", "USA", "DEU", "JPN"].map((country, i) => ({ country, x: 5 + i * 4, y: 6 + i * 3 }))];
+    const note = (highlight: string[]) => {
+      const root = document.createElement("div");
+      root.innerHTML = renderToStaticMarkup(<QuadrantScatter rows={points} xKey="x" yKey="y" xLabel="横轴" yLabel="纵轴" highlight={new Set(highlight)} />);
+      return [...root.querySelectorAll(".muted")].map((node) => node.textContent).find((text) => text?.includes("参照经济体"));
+    };
+    expect(note(["USA", "E03"])).toBe("CHN 中国、DEU 德国、JPN 日本是图上固定标出的参照经济体，不是你选的国家；你选的国家画成彩色点。");
+    expect(note(["CHN", "USA", "DEU", "JPN"])).toBeUndefined();
+    // With every point named there is nothing special about the four.
+    const few = renderToStaticMarkup(<QuadrantScatter rows={points.slice(10)} xKey="x" yKey="y" xLabel="横轴" yLabel="纵轴" highlight={new Set(["E12"])} />);
+    expect(few).not.toContain("参照经济体");
+  });
+
   test("composition table exposes signed segments and a distinct sort metric", () => {
     const html = renderToStaticMarkup(
       <CompositionBar

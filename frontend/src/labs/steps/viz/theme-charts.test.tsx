@@ -176,6 +176,9 @@ describe("dumbbell and butterfly", () => {
     fireEvent.focus(row);
     expect(screen.getByRole("status").textContent).toContain("卖出占比");
     expect(screen.getByRole("status").textContent).toContain("25.000%");
+    // The values beside the bars are bare numbers: the unit stands between the column titles (round 6).
+    expect(document.querySelector(".butterfly-head .butterfly-unit")?.textContent).toBe("单位：百万美元");
+    expect(screen.getByRole("region", { name: "买入与卖出（单位：百万美元）" })).toBeTruthy();
   });
 
   test("butterfly rows without pick buttons are one Tab stop; the arrow keys move between rows", () => {

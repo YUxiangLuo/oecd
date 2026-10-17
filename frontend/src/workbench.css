@@ -513,6 +513,9 @@ button.dot-plot-label:hover, button.dot-plot-label:focus-visible { text-decorati
 .butterfly-head span { white-space: nowrap; }
 .butterfly-head span:empty { display: none; }
 .butterfly-head span:last-child { margin-left: auto; text-align: right; }
+/* The unit takes the space between the two titles, centred there; a panel too narrow for all three moves the right title
+   to the next line, as before. */
+.butterfly-head .butterfly-unit { flex: 1 1 auto; text-align: center; font-weight: 400; color: #596173; }
 .butterfly-row { min-height: 26px; border-radius: 6px; padding: 1px 0; }
 .butterfly-row[data-hovered], .butterfly-row:focus-visible { background: #f4f6fb; outline: none; }
 .butterfly-row:focus-visible { box-shadow: inset 0 0 0 2px #4b47e0; }

@@ -311,6 +311,11 @@ describe("the sentence under the three-group chart (v13)", () => {
     expect(text).toContain("与关税 X 相关 -1.6 个百分点，与汇率变动同步 -4.1 个百分点，与 GDP 对数同步 -5.0 个百分点，与贸易开放度同步 +4.9 个百分点，其余（各年共同的变化与噪声） -2.6 个百分点");
     expect(decompositionSentence({ group: "first", wave_start: 2018, year: 2020, pre_years: [2016, 2017], observed: -0.32, x_mean: null, terms: [], remainder: -0.32 }, "前向 GVC 段长度", 1, "长度单位", 3))
       .toContain("年平均）低 0.320 个长度单位");
+    // A ratio has no unit to count: bare numbers, as the result card prints the position index (not "个无量纲").
+    const ratio = decompositionSentence({ group: "first", wave_start: 2018, year: 2020, pre_years: [2016, 2017], observed: -0.02, x_mean: null, terms: [{ name: "x_terms", label: "关税 X", change: -0.005 }], remainder: -0.015 }, "GVC 位置指数", 1, "无量纲", 3);
+    expect(ratio).toContain("年平均）低 0.020。");
+    expect(ratio).toContain("与关税 X 相关 -0.005，其余（各年共同的变化与噪声） -0.015");
+    expect(ratio).not.toContain("无量纲");
     // What the regression's result is of the split; no causal story for the second wave.
     // The mean X it multiplies is given, so the part can be checked by hand (-0.55 × 2.9 ≈ -1.6).
     expect(text).toContain("回归结论只对应第一项：它约等于两年累计的系数 × 第一批国家 2020 年的平均 X（2.9 个百分点，按全部行业平均，非货物行业的 X 为 0，所以比步骤 10 的货物行业平均小）。");

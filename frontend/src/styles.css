@@ -618,7 +618,7 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
 /* 有界滚动表（全屏与否）都固定列名：表在自己的 540px 滚动盒里滚动，列名滚走就读不出数。 */
 .bounded-data-table .data-table thead th {
   position: sticky; top: 0; z-index: 3; background: #fafbfd;
-  box-shadow: inset 0 -1px #e8eaf0;
+  box-shadow: inset 0 -1px var(--table-head-rule, #e8eaf0);
 }
 .bounded-data-table .data-table thead th:first-child { z-index: 5 !important; }
 .fullscreen-panel--table.fullscreen-panel--expanded .db-fullscreen-note { display: none; }
@@ -1005,8 +1005,18 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
   margin: 8px 0; padding: 10px 12px; border: 1px solid #e3e6f0; border-radius: 9px; background: #f8faff;
   color: #2b3240; font-size: 13px; line-height: 1.7;
 }
-/* The step 1 caption sits at the table's left edge, not centred over a table thousands of pixels wide. */
-.db-table caption { text-align: left; position: sticky; left: 0; padding: 8px 12px; }
+/* The step 1 caption sits at the table's left edge, not centred over a table thousands of pixels wide; its text stays
+   in view while the table scrolls sideways. */
+.db-table caption { text-align: left; padding: 8px 12px; }
+.db-caption-text { position: sticky; left: 12px; display: inline-block; }
+/* The frozen row-name column ends in one rule on its right edge: scrolled sideways, the cell it partly covers reads as
+   covered, so 228.07 is not taken for "28.07". Each cell draws its part inside itself, and with no border spacing the
+   parts join into one line from the corner down; the corner keeps its header rule underneath. */
+.db-table { --frozen-col-rule: #c9d0dc; }
+.db-table tbody th[scope="row"], .db-table tfoot th[scope="row"] { box-shadow: inset -1px 0 var(--frozen-col-rule); }
+.bounded-data-table .db-table thead tr.db-axis-row th:first-child {
+  box-shadow: inset 0 -1px var(--table-head-rule, #e8eaf0), inset -1px 0 var(--frozen-col-rule);
+}
 
 /* Start-up failure pages (connection, course data, saved record): one centred card with a heading. */
 .boot-failure { display: grid; place-items: center; min-height: 100vh; padding: 32px; background: var(--bg, #f5f6fa); }

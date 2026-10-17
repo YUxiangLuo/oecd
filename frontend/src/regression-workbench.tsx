@@ -36,6 +36,7 @@ import {
   xSum,
   xSpanLabel,
   experimentReportChanged,
+  comparisonAxisTitle,
 } from "./regression-workbench-table";
 import { DivergingBarChart, type DivergingBarRow } from "./viz/regression/diverging-bars";
 import { formatPValue } from "./regression-statistics";
@@ -246,7 +247,7 @@ export function ModelComparisonChart({ columns, outcome }: { columns: TableColum
     <h4>同一个 Y，换模型后怎样变？</h4>
     <p className="muted">每行一个模型：X 各项合计及 95% 区间，行下注明所含期数和样本。</p>
     {samplesDiffer(columns) && <p className="reg-stale-note">这几列的样本不同，差异有一部分来自样本，而不只是设定。</p>}
-    {rows.length > 0 && <DivergingBarChart rows={rows} title="同一 Y 的模型比较" unitTitle="X 每高 1 个百分点，X 各项合计的 Y 平均相差（期数见行下，单位见条末）" />}
+    {rows.length > 0 && <DivergingBarChart rows={rows} title="同一 Y 的模型比较" unitTitle={comparisonAxisTitle(columns.some((column) => column.snapshot.depvar_kind === "position"))} />}
     {columns.some((column) => column.chartName && column.chartName !== column.name) && (
       <p className="muted">图中较长的自定义模型只写改动处数，完整设定见下方结果表的列名（行的顺序与列相同）。</p>
     )}

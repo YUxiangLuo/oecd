@@ -232,6 +232,10 @@ describe("step 1 after the report is submitted", () => {
     const card = document.getElementById("step-material-action")!;
     expect(card.className).toContain("material-card--recorded");
     expect(card.querySelector(".material-card-how")!.textContent).toContain("点击单元格只会选中，要换成报告材料请点下面的按钮。");
+    // The line above the table points down to the same button: it is under the table, not above it (round 6).
+    const actionLine = document.querySelector(".db-reading > span")!.textContent;
+    expect(actionLine).toContain("要换成报告材料，请再点表格下方出现的“改为记录”按钮。");
+    expect(actionLine).not.toContain("上方");
     expect(card.querySelector(".material-card-how")!.textContent).toContain("报告已提交：浏览不再自动改动报告材料。");
     const replaceButton = screen.getByRole("button", { name: /^改为记录 .*→ CHN 中国·D01T02[^（]*（列·使用方） = 10 百万美元（之后需在步骤 15 更新报告）$/ });
     expect(replaceButton.className).toContain("material-card-action");

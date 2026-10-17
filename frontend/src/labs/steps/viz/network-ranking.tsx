@@ -5,6 +5,7 @@ import { indicatorNumber } from "./indicator-charts";
 import { NO_OUTPUT, rankText } from "./indicator-model";
 import type { Row } from "./scaffold";
 import { PATH_UNDEFINED_LABEL, pathMetricUndefined } from "../../../viz/views/network-heat";
+import { unitText } from "../../../format";
 
 /** `undefinedAt[i]`: country i's value is not missing but undefined (an industry with no outgoing links). */
 export interface NetworkRankRow { industry: string; values: (number | null)[]; undefinedAt?: boolean[] }
@@ -44,7 +45,7 @@ export function NetworkRanking({ rows, countries, unit, onIndustry, reference = 
   const withReference = rows.some((row) => reference.has(row.industry));
   return <>
     <p className="muted">
-      行业按 {countryLabel(countries[0])} 从高到低排列，所选国家使用同一组行业、同一顺序和从 0 开始的刻度。条长与数值成比例，单位：{unit}。缺少或无法定义的数据留空，不当作 0。点击行业名查看历年变化。
+      行业按 {countryLabel(countries[0])} 从高到低排列，所选国家使用同一组行业、同一顺序和从 0 开始的刻度。条长与数值成比例，单位：{unitText(unit)}。缺少或无法定义的数据留空，不当作 0。点击行业名查看历年变化。
       {withReference && "灰色竖线是该行业在全部经济体中的中位数；“全球第 N 位”是每个国家这一行业在全部经济体同一行业中的排名（从高到低）。"}
     </p>
     <ScrollableRegion label="行业排名条形图" className="bounded-data-table" style={{ padding: 12 }}>

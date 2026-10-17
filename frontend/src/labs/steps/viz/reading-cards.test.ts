@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { comparisonCards, compositionCards, gapReading, positioningCards, segmentCards } from "./reading-cards";
+import { comparisonCards, compositionCards, gapReading, industryCards, positioningCards, segmentCards } from "./reading-cards";
 import { textNumber } from "./indicator-charts";
 
 describe("段长度对照 cards name an undefined GVC length (round 12)", () => {
@@ -169,5 +169,17 @@ describe("定位图 reading cards", () => {
   test("too few distinct readings among many economies are named as such", () => {
     const [card] = cards(["CHN", "USA", "DEU", "JPN", "KOR", "FRA"].map((country, i) => [country, i % 2, 0]));
     expect(card.small).toBe("图上 6 个经济体只有 2 个不同位置，不比较中位数");
+  });
+});
+
+describe("行业排名 cards read a ratio as a bare number", () => {
+  test("GVC 位置指数: no \"无量纲\" after the readings, as its gaps read; amounts keep 百万美元", () => {
+    const groups = [{ key: "C26", label: "C26 计算机电子光学", values: [1.284, 0.913] }, { key: "C29", label: "C29 汽车及零部件", values: [0.958, 1.002] }];
+    const ratio = industryCards({ groups, countries: ["CHN", "USA"], label: "GVC 位置指数", unit: "无量纲" });
+    expect(ratio[0].small).toBe("1.284；按 CHN 中国 降序，只在显示的行业中比较");
+    expect(ratio[1].small).toBe("CHN 中国 比它高 0.371（1.284 对 0.913）");
+    expect(ratio.map((card) => card.small).join("")).not.toContain("无量纲");
+    const amount = industryCards({ groups: [{ key: "C26", label: "C26 计算机电子光学", values: [33672, 4005] }], countries: ["CHN"], label: "加权总度", unit: "百万美元" });
+    expect(amount[0].small).toBe("33,672 百万美元；按 CHN 中国 降序，只在显示的行业中比较");
   });
 });

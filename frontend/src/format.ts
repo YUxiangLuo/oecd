@@ -3,6 +3,15 @@ export function stripNegativeZero(formatted: string): string {
   return /^-0([.,]0+)?%?$/.test(formatted) ? formatted.slice(1) : formatted;
 }
 
+/** The data unit "无量纲" (the position indices and the centrality ratios) in words students know, as steps 5–9 and
+ *  13–15 show it. The data keep "无量纲"; only what is shown changes. */
+export const RATIO_UNIT_WORDS = "比值，无单位";
+
+/** A unit as the pages show it: "无量纲" reads "比值，无单位"; every other unit is shown as it is. */
+export function unitText(unit: string): string {
+  return unit === "无量纲" ? RATIO_UNIT_WORDS : unit;
+}
+
 /**
  * A number with fixed decimals and thousands separators: 1382.4 → "1,382" (0 digits), -12.5 → "-12.50" (2); a value
  * that rounds to zero reads "0.00", never "-0.00".

@@ -28,6 +28,7 @@ from gvcsim.regression.spec import (
 )
 from gvcsim.regression.teaching import baseline, default_baseline
 from gvcsim.report_common import (
+    RATIO_UNIT_WORDS,
     UNIT_NAMES,
     _depvar_kind,
     _no_negative_zero,
@@ -439,7 +440,7 @@ def _omitted_groups(omitted: list[dict[str, Any]]) -> list[str]:
 _NATIVE_UNIT_NOTES = {
     "share": "份额转换为百分点",
     "length": "长度单位",
-    "position": "位置指数是比值，无单位",
+    "position": f"位置指数是{RATIO_UNIT_WORDS}",
     "network": "中心性原始单位",
 }
 

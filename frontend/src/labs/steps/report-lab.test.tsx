@@ -882,12 +882,45 @@ test("the writing area shows the autosave state and says formatting marks stay a
     const target = screen.getByRole("link", { name: label }).getAttribute("href")!;
     expect(document.querySelector(target)?.getAttribute("tabindex")).toBe("-1");
   }
-  expect(screen.getByText(/Y 以报告各节“结果指标 Y”为准；显式记入报告的选做模型见附录/)).toBeTruthy();
+  expect(screen.getByText(/四步回归写默认模型的两年累计结果；方向不确定或没算出估计值时写明原因/)).toBeTruthy();
   expect(screen.getByText(/“#”“\*\*”等符号不会变成标题或粗体/)).toBeTruthy();
   rerender(<ReportLab {...finishProps} sessionSyncing />);
   expect(screen.getByText("保存中…")).toBeTruthy();
   rerender(<ReportLab {...finishProps} sessionStatus="loading" />);
   expect(screen.queryByText("已保存")).toBeNull();
+});
+
+test("the 结果解释 hint keeps to the default model; what to say about a model experiment shows once one is in the report", () => {
+  const hint = (key: string) => document.querySelector(`#report-hint-${key}`)?.textContent ?? "";
+  const starter = () => screen.getByRole("textbox", { name: "结果解释" }).getAttribute("placeholder") ?? "";
+  const plain = render(<ReportLab {...finishProps} />);
+  expect(hint("evidence_interpretation")).toBe("引用保存的数字，写明对象、年份、指标、方向和区间，并标明是真实指标还是模拟回归。四步回归写默认模型的两年累计结果；方向不确定或没算出估计值时写明原因，不要写成“没有关联”。");
+  expect(starter()).not.toContain("模型实验");
+  // The whole sample, not "every country×industry" (the US, ROW and units without data are out).
+  expect(hint("research_question")).toContain("回归用的是整个样本，不按步骤 10 的例子挑选，例子只用来换算展示");
+  expect(hint("research_question")).not.toContain("样本筛选");
+  plain.unmount();
+  // Step 11 holds a model experiment put into the report (the options request is left pending).
+  const options = spyOn(api, "regressionOptions").mockImplementation(() => new Promise(() => {}));
+  const experiment = {
+    spec: { x_lags: [0, 1] },
+    snapshot: { depvar_label: "外国增加值项占比", depvar_kind: "share", result: { n_obs: 16000, years: [2016, 2020], cumulative: null, coefs: [] } },
+  };
+  try {
+    render(<ReportLab {...finishProps} getStep={((step: number) => (step === 11 ? { experiment } : undefined)) as never} />);
+    expect(hint("evidence_interpretation")).toContain("你还把模型实验记入了报告：写明改了什么、X 各项合计怎样变、样本是否相同");
+    expect(hint("evidence_interpretation")).toContain("样本是否相同（不同时写明原因）");
+    expect(hint("evidence_interpretation")).toContain("跨度照“你的模型实验”表中“X 各项合计”一栏括号里的写");
+    expect(hint("evidence_interpretation")).toContain("不要一律写两年累计");
+    expect(starter()).toContain("95% 区间为……；模型实验“……”的 X 各项合计为……，与默认模型相比……。");
+    // The span rule is said in the hint only: the experiments table above the writing box carries the spans, not the
+    // rule, and the general note it replaced is gone.
+    const table = document.querySelector(".reg-reported-models")?.textContent ?? "";
+    expect(table).not.toMatch(/跨度|不要一律/);
+    expect(document.body.textContent).not.toContain("自定义模型的解释跨度");
+    // A sum the table cannot show ("—") still names its span, which the hint points to.
+    expect(table).toContain("—（两年累计）");
+  } finally { options.mockRestore(); }
 });
 
 test("a blocked generate click marks the short analysis fields invalid at once; the gated hint is not contradicted", () => {

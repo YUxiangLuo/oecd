@@ -12,6 +12,7 @@ import type { SessionStatus } from "../../use-session";
 import { userFacingRequestError } from "../../user-facing-error";
 import { recordedShockMaterialLabel } from "../../material-label";
 import { useAsync } from "../shared";
+import { REGRESSION_FAMILIES } from "../../regression-lessons";
 import {
   REFLECTION_MAX_LENGTH, REPORT_REFLECTION_TITLE_ID, activateReportGateDestination, activateReportMaterialDestination,
   codePointLength, gradedExportRefusal, limitInsertion, pasteCutMessage, reflectionCountLabel, reflectionLength,
@@ -32,12 +33,24 @@ const REFLECTION_FIELDS: {
   key: keyof Pick<ReportReflectionState, "research_question" | "evidence_interpretation" | "limitations">;
   label: string;
   prompt: string;
+  /** Said only to a student who put a model experiment in the report (most did not), after the prompt. */
+  experimentPrompt?: string;
   /** Sentence starter shown only as placeholder text; never written into the report. */
   starter: string;
+  /** Inserted before the starter's closing "。" for a student with a model experiment in the report. */
+  experimentStarter?: string;
   min: number;
 }[] = [
-  { key: "research_question", label: "研究问题", prompt: "我比较了哪些国家、行业和年份？我想了解哪项指标的变化？请区分步骤 1–9 的真实 ICIO 指标探索与步骤 10–14 的课程模拟关税回归；所选例子不是回归样本筛选。", starter: "句式参考：本实验用真实 ICIO 指标比较了……和……的……，想了解……；再用课程模拟回归看关税暴露 X 每高 1 个百分点，Y 在默认模型中两年累计平均高还是低。", min: 12 },
-  { key: "evidence_interpretation", label: "结果解释", prompt: "引用保存的数字，注明对象、年份、指标、方向和区间，并标明是真实指标还是模拟回归。比较四步已保存材料的默认模型两年累计结果，Y 以报告各节“结果指标 Y”为准；显式记入报告的选做模型见附录，注明指标名称。自定义模型按所选 X 滞后覆盖跨度（仅当期 X／两年累计／三年累计）解释，不能一律写两年累计。方向不确定或没算出估计值时写明原因，不要写成“没有关联”。改过模型时，写明改了什么、X 各项合计怎样变、样本是否相同及原因。", starter: "句式参考：真实 ICIO 指标探索的步骤……显示，……在……年的……为……；课程模拟的步骤 11 默认模型估计 X 每高 1 个百分点，Y 两年累计平均高（或低）……，95% 区间为……；自定义模型覆盖……，合计为……。", min: 40 },
+  { key: "research_question", label: "研究问题", prompt: "我比较了哪些国家、行业和年份？我想了解哪项指标的变化？请把步骤 1–9 的真实 ICIO 指标比较和步骤 10–14 的课程模拟关税回归分开写；回归用的是整个样本，不按步骤 10 的例子挑选，例子只用来换算展示。", starter: "句式参考：本实验用真实 ICIO 指标比较了……和……的……，想了解……；再用课程模拟回归看关税暴露 X 每高 1 个百分点，Y 在默认模型中两年累计平均高还是低。", min: 12 },
+  {
+    key: "evidence_interpretation",
+    label: "结果解释",
+    prompt: "引用保存的数字，写明对象、年份、指标、方向和区间，并标明是真实指标还是模拟回归。四步回归写默认模型的两年累计结果；方向不确定或没算出估计值时写明原因，不要写成“没有关联”。",
+    experimentPrompt: "你还把模型实验记入了报告：写明改了什么、X 各项合计怎样变、样本是否相同（不同时写明原因）；换了因变量的写明是哪个指标；跨度照“你的模型实验”表中“X 各项合计”一栏括号里的写（如“仅当期 X”“三年累计”），不要一律写两年累计。",
+    starter: "句式参考：真实 ICIO 指标探索的步骤……显示，……在……年的……为……；课程模拟的步骤 11 默认模型估计 X 每高 1 个百分点，Y 两年累计平均高（或低）……，95% 区间为……。",
+    experimentStarter: "；模型实验“……”的 X 各项合计为……，与默认模型相比……",
+    min: 40,
+  },
   { key: "limitations", label: "局限与反思", prompt: "真实指标比较和模拟回归各有哪些限制？模拟结果不能当作真实政策效应；选例子换算也不是对该国家行业单独估计。控制变量、固定效应、滞后期及样本变化会怎样影响结论？下一步需要什么真实数据或检验？", starter: "句式参考：课程模拟回归展示 X 与 Y 的关联，不能推出真实政策效应；换一种固定效应或去掉……后结论会……；真实指标比较只覆盖……；若要进一步验证，需要……。", min: 30 },
 ];
 
@@ -292,6 +305,8 @@ export function ReportLab({
 
   const reflection = (state.data ?? {}) as ReportReflectionState;
   const writtenCount = REFLECTION_FIELDS.filter((field) => reflectionLength(String(reflection[field.key] ?? "")) >= field.min).length;
+  // What to say about a model experiment is asked only of a student who put one in the report.
+  const hasExperiment = REGRESSION_FAMILIES.some(({ step }) => Boolean(getStep?.(step)?.experiment));
   // A paste beyond the limit is cut by the browser; say so instead of losing the end silently.
   const [pasteCut, setPasteCut] = useState<{ key: string; wide: boolean; replaced?: boolean; none?: boolean } | null>(null);
   // A new report was generated from the text as it stands: the earlier paste's cut warning no longer applies.
@@ -557,7 +572,7 @@ export function ReportLab({
         <RegressionSummaryBars getStep={getStep} />
         <RegressionEvidenceMatrix getStep={getStep} />
         <ReportedExperiments getStep={getStep} onNavigateStep={onNavigateStep} />
-        <p className="muted">课程模拟回归按你的例子换算的结果在步骤 11–14，不是该例子的单独估计；步骤 6–9 的真实 ICIO 图表读数会自动写进报告。这里只列出已保存的结果，结论要你自己写；自定义模型的解释跨度以所选 X 滞后为准。</p>
+        <p className="muted">课程模拟回归按你的例子换算的结果在步骤 11–14，不是该例子的单独估计；步骤 6–9 的真实 ICIO 图表读数会自动写进报告。这里只列出已保存的结果，结论要你自己写。</p>
       </details>
       <section className="report-reflection" aria-labelledby={REPORT_REFLECTION_TITLE_ID}>
         <div>
@@ -572,6 +587,8 @@ export function ReportLab({
             <span>① 点名比较对象　② 引用具体数字　③ 解释方向与区间　④ 说明不能推出什么</span>
           </div>
           {REFLECTION_FIELDS.map((field, index) => {
+            const prompt = hasExperiment && field.experimentPrompt ? `${field.prompt}${field.experimentPrompt}` : field.prompt;
+            const starter = hasExperiment && field.experimentStarter ? field.starter.replace(/。$/, `${field.experimentStarter}。`) : field.starter;
             const value = String(reflection[field.key] ?? "");
             const length = reflectionLength(value);
             const countId = `report-count-${field.key}`;
@@ -579,7 +596,7 @@ export function ReportLab({
             return (
               <label key={field.key}>
                 <span><b>{index + 1}. {field.label}</b><small id={countId}>{reflectionCountLabel(length, field.min, REFLECTION_MAX_LENGTH, codePointLength(value) >= REFLECTION_MAX_LENGTH, codePointLength(value))}</small></span>
-                <small id={`report-hint-${field.key}`} className="report-writing-hint">{field.prompt}</small>
+                <small id={`report-hint-${field.key}`} className="report-writing-hint">{prompt}</small>
                 <textarea
                   aria-label={field.label}
                   data-report-field={field.key}
@@ -588,7 +605,7 @@ export function ReportLab({
                   value={value}
                   // Tall enough for the two-line placeholder (a starter sentence and “（输入后自动保存）”).
                   rows={field.key === "research_question" ? 3 : 4}
-                  placeholder={`${field.starter}\n（输入后自动保存）`}
+                  placeholder={`${starter}\n（输入后自动保存）`}
                   data-report-reflection-incomplete={length < field.min ? "true" : undefined}
                   disabled={busy}
                   onChange={(event) => {

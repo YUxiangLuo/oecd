@@ -66,6 +66,7 @@ describe("demo-mode login UI source behavior", () => {
       expect(inputValue("login-user")).toBe("");
       expect(inputValue("login-pass")).toBe("");
       expect(screen.queryByRole("group", { name: "演示账号快捷登录" })).toBeNull();
+      expect(document.querySelector(".login-card-sub")?.textContent).toBe("用老师发给你的账号登录。");
     });
   });
 
@@ -87,6 +88,8 @@ describe("demo-mode login UI source behavior", () => {
 
         expect(screen.getByRole("group", { name: "演示账号快捷登录" })).toBeDefined();
         expect(screen.getByRole("button", { name: /学生身份/ })).toBeDefined();
+        // The line under the title points at the identities, not at an account from the teacher (round 6).
+        expect(document.querySelector(".login-card-sub")?.textContent).toBe("演示环境：选一个身份，再点“登录”。");
         fireEvent.click(screen.getByRole("button", { name: /教师身份/ }));
         expect(inputValue("login-user")).toBe("teacher");
         expect(inputValue("login-pass")).toBe("gvclab2026");
@@ -133,6 +136,8 @@ describe("demo-mode login UI source behavior", () => {
         await waitFor(() => expect(inputValue("login-user")).toBe(""));
         expect(inputValue("login-pass")).toBe("");
         expect(screen.getByText(/演示账号都在使用中/)).toBeDefined();
+        // No student identity to pick: the line goes back to the teacher's accounts, as the hint below says.
+        expect(document.querySelector(".login-card-sub")?.textContent).toBe("用老师发给你的账号登录。");
         // The teacher shortcut is still offered.
         expect(screen.getByRole("button", { name: /教师身份/ })).toBeDefined();
       });

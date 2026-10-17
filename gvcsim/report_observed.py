@@ -16,6 +16,7 @@ from gvcsim.report_common import (
     page_fixed,
     reading_digits,
     reading_number,
+    unit_text,
 )
 from gvcsim.report_gate import (
     _indicator_material_complete,
@@ -123,7 +124,11 @@ def _chart_value(observation: dict[str, Any]) -> float:
 
 
 def _chart_unit(chart: dict[str, Any]) -> str:
-    """The reading unit of a chart; percentage charts all end their axis label with “（%）”."""
+    """The reading unit of a chart: the data unit it was drawn in (``_unit``, dropped before the chart is printed), not
+    its axis label, which names a ratio in words ("比值，无单位"); otherwise from the axis label, where percentage
+    charts all end with “（%）”."""
+    if "_unit" in chart:
+        return str(chart["_unit"])
     y_label = str(chart.get("y_label") or "")
     return "%" if y_label.endswith("（%）") else y_label
 
@@ -399,7 +404,9 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
     source = str(observations[0]["source"])
     units = {str(item["unit"]) for item in observations}
     unit = next(iter(units)) if len(units) == 1 else "按图例所示单位"
-    y_label = "百分比（%）" if unit == "%" else unit
+    # The axis names a ratio "比值，无单位", as the pages do; the data unit itself travels as ``_unit`` (read back by
+    # _chart_unit), so a rule keyed on "无量纲" still sees it.
+    y_label = "百分比（%）" if unit == "%" else unit_text(unit)
     title = f"步骤 {step} · {_STEP_TITLES[step]}"
     if source in {"explicit-indicator-trend", "explicit-network-trend"}:
         available_metrics = list(dict.fromkeys(str(item["metric"]) for item in observations))
@@ -448,6 +455,7 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
                 "title": f"{title}：{context}{metric_label}历年趋势",
                 "x_label": "年份",
                 "y_label": y_label,
+                "_unit": unit,
                 "series": series,
             }
         median_series, references = reference
@@ -457,6 +465,7 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
             "title": f"{title}：{context}{metric_label}历年趋势（含全球中位数）",
             "x_label": "年份",
             "y_label": y_label,
+            "_unit": unit,
             "series": [*series, median_series],
             "_context": {"references": references, "scope": rank_scope},
         }
@@ -538,6 +547,7 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
             "type": "bar",
             "title": f"{title}：{scope}{metric_label}：所选国家与全球中位数",
             "y_label": y_label,
+            "_unit": unit,
             "items": items,
             "_context": {"references": {str(selected_years[0]): same_year_reference}},
         }
@@ -552,7 +562,7 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
         name = f"{scope}{metric_label}国家比较"
     else:
         name = f"{scope}国家比较"
-    return {"version": 1, "type": "bar", "title": f"{title}：{name}", "y_label": y_label, "items": items}
+    return {"version": 1, "type": "bar", "title": f"{title}：{name}", "y_label": y_label, "_unit": unit, "items": items}
 
 
 def _observed_charts(data: dict[str, Any], step: int, observations: list[dict[str, Any]]) -> list[dict[str, Any]]:

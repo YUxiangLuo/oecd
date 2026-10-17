@@ -429,6 +429,7 @@ export function StudentWorkspace({
               completedSteps={presentationCompletedSteps}
               materialGate={session.materialGate}
               currentMaterialStatus={materialStatus}
+              reportCurrent={session.reportCurrent}
               onNavigate={(n) => {
                 // The footer sits below the step: after moving on, keyboard focus starts at the new step's top.
                 onNavigateStep(n);

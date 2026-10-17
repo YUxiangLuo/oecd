@@ -1,7 +1,7 @@
 import { ScrollableRegion } from "../../a11y";
 import { niceDomain } from "../nice-ticks";
 import { cjkSpace, formatMetric, stripNegativeZero } from "../../format";
-import { CAT, KEY_ECONOMIES, Legend, type Row, cardStyle, num, rowLabel, rowName, useTip } from "../shared";
+import { CAT, KEY_ECONOMIES, Legend, type Row, cardStyle, joinCountries, num, rowLabel, rowName, useTip } from "../shared";
 import { signedDomain, signedStack } from "../signed-layout";
 
 /* ---------------- 步骤6-9 自由探索:排序条形图 / 散点图 ---------------- */
@@ -329,6 +329,9 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
   const xRef = refMode === "mean" ? avg(referenceXs) : median(referenceXs);
   const yRef = refMode === "mean" ? avg(referencePts.map((p) => p.y)) : median(referencePts.map((p) => p.y));
   const showLabels = pts.length <= 24;
+  // Without a label on every point, CHN/USA/DEU/JPN keep theirs as fixed references: the note under the chart says so,
+  // or a student who did not pick China wonders why it is named.
+  const referenceNames = showLabels ? [] : [...KEY_ECONOMIES].filter((code) => pts.some((p) => p.tag === code && !highlight?.has(p.c)));
   // 四角标签坐标:[右上, 左上, 左下, 右下]
   const corners: { x: number; y: number; anchor: "start" | "end" }[] = [
     { x: W - m.r - 6, y: m.t + 12, anchor: "end" },
@@ -444,6 +447,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
       )}
       {equalityLine && pts.length > 0 && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}><span style={{ color: "var(--text-warning)", fontWeight: 700 }}>橙色虚线是等长线（前向 = 后向）</span>：线上方前向 GVC 段更长（GVC 位置指数 &gt; 1，更偏上游）；线下方更偏下游。{showReference && "灰色虚线是中位数，只表示相对高低。"}</div>}
       {pts.length > 0 && !showReference && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>{skipReference}，不画中位数和象限。</div>}
+      {pts.length > 0 && referenceNames.length > 0 && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>{joinCountries(referenceNames)}是图上固定标出的参照经济体{highlight?.size ? "，不是你选的国家；你选的国家画成彩色点" : ""}。</div>}
       <ChartDataDisclosure
         label={`${dataLabel ? `${dataLabel} · ` : ""}${yLabel}与${xLabel}散点`}
         columns={[{ key: "entity", label: "对象" }, { key: "x", label: xLabel }, { key: "y", label: yLabel }]}

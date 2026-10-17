@@ -267,9 +267,10 @@ export function segmentCards({ rows, countries, year, industry, segments, reason
   return cards;
 }
 
-/** A level reading with its unit spelled out ("33,672 百万美元"); shares already carry "%". */
+/** A level reading with its unit spelled out ("33,672 百万美元"); shares already carry "%", and a ratio ("无量纲")
+ *  reads as a bare number, as {@link gapReading} writes its gaps. */
 const amountWithUnit = (value: number, unit: string) =>
-  unit === "%" || !unit ? textNumber(value, unit) : `${textNumber(value, unit)} ${unit}`;
+  unit === "%" || unit === "无量纲" || !unit ? textNumber(value, unit) : `${textNumber(value, unit)} ${unit}`;
 
 /** 行业排名: the observed country's top industry and, per comparison country, the industry with the widest gap. */
 export function industryCards({ groups, countries, label, unit }: {

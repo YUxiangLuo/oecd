@@ -38,6 +38,7 @@ from gvcsim.report_common import (
     format_metric,
     reading_number,
     share_size,
+    unit_text,
     shown_per_point,
     with_count_unit,
     y_display,
@@ -144,10 +145,14 @@ _NETWORK_UNITS = {"未归一化介数", "连接数", "路径长度", "中心性�
 _INDICATOR_FIELDS = cast(dict[str, dict[str, Any]], INDICATOR_SCHEMA["fields"])
 
 
-def _unit_kinds(observations: list[dict[str, Any]]) -> str:
-    """What a section without amounts holds, from its recorded units: "份额", "长度和位置指数", "网络指标"."""
+def _unit_kinds(observations: list[dict[str, Any]], step: int) -> str:
+    """What a section without amounts holds, from its recorded units: "份额", "长度和位置指数", "网络指标".
+
+    Step 9 records network metrics only: its ratios (接近、调和、特征向量中心性, saved as 无量纲 like step 8's position
+    index) are counted on connections, not amounts, so they are network metrics there, not a position index.
+    """
     units = list(dict.fromkeys(str(item.get("unit") or "") for item in observations))
-    if units and all(unit in _NETWORK_UNITS for unit in units):
+    if units and (step == 9 or all(unit in _NETWORK_UNITS for unit in units)):
         return "只看连接、不看金额的网络指标"
     kinds = list(dict.fromkeys(_UNIT_KINDS.get(unit, "比值或指数") for unit in units))
     return "和".join(kinds) or "比值或指数"
@@ -342,7 +347,7 @@ def _experiment_sections(session: dict[str, Any], scenario: dict[str, Any] | Non
             price_note = (
                 "金额按当年价格计，变化可能包含价格因素。"
                 if has_amounts
-                else f"本节为{_unit_kinds(observations)}，不直接受价格水平影响，但仍受下述结构外推影响。"
+                else f"本节为{_unit_kinds(observations, step)}，不直接受价格水平影响，但仍受下述结构外推影响。"
             )
             lines.append(
                 f"- **2020 年：现价与疫情期外推限制**。{price_note}"
@@ -362,7 +367,9 @@ def _experiment_sections(session: dict[str, Any], scenario: dict[str, Any] | Non
                 if observations[0]["source"] == "explicit-network-trend"
                 else "行业排名（按国家 A 降序，记录展示范围）"
             )
-            lines.append(f"- 记录方式：{view_label}；单位：{_safe(observations[0].get('unit', '未记录'))}")
+            lines.append(
+                f"- 记录方式：{view_label}；单位：{_safe(unit_text(str(observations[0].get('unit', '未记录'))))}"
+            )
             lines.append(
                 "- 行业指标来自完整国家×行业中间品网络，不对应国家贸易概览的位置；加权流量为当年价格；"
                 "介数等只看连接、不看金额的指标，数值高不等于经济上更重要。"
@@ -404,7 +411,7 @@ def _experiment_sections(session: dict[str, Any], scenario: dict[str, Any] | Non
                 f"| {_safe(_entity_label(item))} | "
                 f"{_safe(item.get('year', '—'))} | "
                 f"{_STUDENT_METRIC_LABELS.get(str(item.get('metric')), _safe(item.get('metric', '—')))} | "
-                f"{_safe(item.get('unit', '—'))} | "
+                f"{_safe(unit_text(str(item.get('unit', '—'))))} | "
                 f"{shown} |"
             )
         lines.append("")

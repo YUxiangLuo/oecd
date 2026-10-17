@@ -6,6 +6,7 @@ const productionForbidden = [
   "学生身份",
   "教师身份",
   "已为你预填一个空闲的演示学生账号",
+  "演示环境：选一个身份",
 ];
 const demoRequired = [
   customDemoPassword,
@@ -13,6 +14,7 @@ const demoRequired = [
   "学生身份",
   "教师身份",
   "已为你预填一个空闲的演示学生账号",
+  "演示环境：选一个身份",
 ];
 
 async function runBuild(script: "build" | "build:demo", extraEnv: Record<string, string> = {}): Promise<void> {

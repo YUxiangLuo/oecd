@@ -919,6 +919,21 @@ describe("one column's full numbers", () => {
   });
 });
 
+test("the comparison chart's title says where the unit is: at the bar end, or under the row for the position index", () => {
+  const length = snapshotOf(response(DEFAULT, { teaching_tariff_exposure: -120, teaching_tariff_exposure_lag1: -60 }));
+  length.depvar_kind = "length";
+  const lengthView = render(<ModelComparisonChart outcome="length" columns={[{ name: "长度模型", spec: DEFAULT, snapshot: length }]} />);
+  expect(lengthView.getByRole("img").textContent).toContain("期数见行下，单位见条末");
+  lengthView.unmount();
+  const position = { ...length, depvar_kind: "position" as const };
+  render(<ModelComparisonChart outcome="length" columns={[{ name: "位置模型", spec: DEFAULT, snapshot: position }]} />);
+  const image = screen.getByRole("img");
+  // The position index's bars read bare numbers; its unit is in the row's second line.
+  expect(image.textContent).toContain("期数和单位见行下");
+  expect(image.textContent).not.toContain("单位见条末");
+  expect(image.textContent).toContain("比值，无单位");
+});
+
 test("model comparison uses native units, names nonconsecutive lags, and never plots unavailable estimates as zero", () => {
   const native = snapshotOf(response(DEFAULT, { teaching_tariff_exposure: -120, teaching_tariff_exposure_lag1: -60 }));
   native.depvar_kind = "length";

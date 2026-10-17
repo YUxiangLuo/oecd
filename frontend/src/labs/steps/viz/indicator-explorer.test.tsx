@@ -18,6 +18,7 @@ import {
   RECORDED_CHART_LABEL,
   REPLACE_MATERIAL_ACTION,
 } from "../../../step-task-card";
+import { NEGATIVE_VALUE_ADDED_CAUSE, NEGATIVE_VALUE_ADDED_NOTE } from "../../../value-added-notes";
 
 /** The one 本步报告材料 card under the chart: its chip says the state, its one button records the chart on screen. */
 type Queries = Pick<ReturnType<typeof render>, "getByRole">;
@@ -712,6 +713,8 @@ describe("readouts and the record button follow the chart on screen (round 10)",
       expect(cards.textContent).toContain("为负");
       expect(cards.textContent).not.toContain("对比国家构成不完整");
       expect(view.getByText(/构成份额无法计算，占比图里不画/)).toBeTruthy();
+      // Only value added explains itself as a loss; step 6's export total is another matter.
+      expect(view.container.textContent).not.toContain(NEGATIVE_VALUE_ADDED_CAUSE);
       const card = materialCard(view);
       expect(materialChip(view)).toBe(MATERIAL_STATE_LABELS.blocked);
       expect(card.textContent).toContain("当前图表暂不能记录：");
@@ -858,6 +861,8 @@ test("step 7 行业结构 says how many industries it leaves out and why (round 
     await view.findByRole("button", { name: "四类生产活动" });
     fireEvent.click(view.getByRole("button", { name: "行业结构" }));
     await waitFor(() => expect(view.getAllByText("另有 2 个行业没有画出：H51 总增加值为负；B09 总增加值为 0（没有这类生产活动），份额无法计算（不是缺少数据）。")).toHaveLength(2));
+    // Why value added is negative is said once under the two countries' charts (round 6).
+    expect(view.getAllByText(NEGATIVE_VALUE_ADDED_NOTE)).toHaveLength(1);
   } finally { rows.mockRestore(); perCountry.mockRestore(); schema.mockRestore(); }
 });
 
@@ -913,6 +918,9 @@ test("step 7 占比 says nothing about red negative parts when the only negative
     const view = setup(ProductionVizStep);
     await view.findByText(/构成份额无法计算，占比图里不画/);
     expect(view.container.textContent).not.toContain("负分项画成红色");
+    // A share of a negative total would read as a share of value added: the page says why it has none, right under
+    // the line that names the negative total (round 6).
+    expect(view.getByText(NEGATIVE_VALUE_ADDED_NOTE).previousElementSibling?.textContent).toContain("占比图里不画");
     fireEvent.click(view.getByRole("button", { name: "金额" }));
     await waitFor(() => expect(view.container.textContent).toContain("负分项画在零轴左侧"));
   } finally { rows.mockRestore(); schema.mockRestore(); }
@@ -1024,6 +1032,32 @@ describe("undefined lengths and medians that say nothing (round 11)", () => {
       await waitFor(() => expect(material.textContent).toContain("USA 美国在所选年份该行业没有 GVC 生产（GVC 增加值为 0），前向 GVC 段长度无法计算；"));
       expect(material.textContent).toContain("CHN 中国 与 USA 美国在所选年份该行业没有后向 GVC 生产（最终品中的 GVC 增加值为 0），后向 GVC 段长度无法计算（不是缺少数据）");
       expect(material.textContent).not.toContain("CHN 中国 与 USA 美国在所选年份该行业没有 GVC 生产");
+    } finally { rows.mockRestore(); perCountry.mockRestore(); schema.mockRestore(); }
+  });
+
+  test("step 8 段长度对照: more than two reasons read as one count, not six clauses (B09, round 6)", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
+    // CHN plays MLT B09 (forward segments only, nothing backward); USA plays LUX B09 (no segment at all).
+    const perCountry = spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => ({
+      rows: [country === "CHN"
+        ? { country, industry: "A", year, PLv_D: 3.2, PLv_RT: 3.5, PLv_GVC: 5.6, PLy_D: null, PLy_RT: null, PLy_GVC: null,
+          "1_VA_D": 1, "2_VA_RT": 1, "3_VA_GVC": 1.67, "1_FGY_D": 0, "2_FGY_RT": 0, "3_FGY_GVC": 0 }
+        : { country, industry: "A", year, PLv_D: null, PLv_RT: null, PLv_GVC: null, PLy_D: null, PLy_RT: null, PLy_GVC: null,
+          "1_VA_D": 0, "2_VA_RT": 0, "3_VA_GVC": 0, "1_FGY_D": 0, "2_FGY_RT": 0, "3_FGY_GVC": 0 }],
+      total: 1, page: 1, page_size: 200,
+    }));
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const view = setup(LengthVizStep);
+      await view.findByRole("button", { name: "前后向位置" });
+      fireEvent.click(view.getByRole("button", { name: "段长度对照" }));
+      fireEvent.change(view.getByLabelText("比较范围"), { target: { value: "A" } });
+      const material = materialCard(view);
+      await waitFor(() => expect(material.textContent).toContain(
+        "当前图表暂不能记录：CHN 中国 与 USA 美国共有 9 个段长度无法计算（这些段没有对应的生产活动，相关增加值为 0，不是缺少数据）；请换一个行业或国家。",
+      ));
+      expect(material.textContent).not.toContain("后向纯国内段长度无法计算");
+      expect(materialChip(view)).toBe(MATERIAL_STATE_LABELS.blocked);
     } finally { rows.mockRestore(); perCountry.mockRestore(); schema.mockRestore(); }
   });
 

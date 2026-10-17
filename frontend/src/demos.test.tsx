@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api";
 import { buildDecompositionModel, type DecompositionModel, type DecompositionSpec } from "./decomposition-model";
+import { NEGATIVE_VALUE_ADDED_CAUSE, NEGATIVE_VALUE_ADDED_NOTE } from "./value-added-notes";
 import {
   ClosenessPathTable,
   DECOMP,
@@ -34,6 +35,8 @@ import {
   zeroTotalDecompositionHint,
 } from "./demos";
 import type { Meta } from "./types";
+import { IndicatorMethodIntro } from "./labs/steps/indicator/indicator-method-intro";
+import { BACKWARD_SEGMENTS_IDENTITY_NOTE, DOMESTIC_SEGMENTS_IDENTITY_NOTE, segmentIdentityNote } from "./production-length-notes";
 
 const meta: Meta = {
   years: [2019, 2020],
@@ -157,6 +160,10 @@ describe("indicator calculation disclosure", () => {
       <IndicatorCalculationDisclosure step={5} row={{ "3b_VA_GVC_C": -0.197, SVA: -1.268 }} />,
     );
     expect(negative).toContain("= -0.197 / -1.268 = <b>—（总量为负，无法计算比重）</b>");
+    // Two negatives divide: the box says why value added is negative and why that is no share (round 6).
+    expect(negative).toContain(`<p>${NEGATIVE_VALUE_ADDED_NOTE}</p>`);
+    const positive = renderToStaticMarkup(<IndicatorCalculationDisclosure step={5} row={{ "3b_VA_GVC_C": 1, SVA: 4 }} />);
+    expect(positive).not.toContain(NEGATIVE_VALUE_ADDED_CAUSE);
     const missing = renderToStaticMarkup(
       <IndicatorCalculationDisclosure step={5} row={{ "3b_VA_GVC_C": null, SVA: 4 }} />,
     );
@@ -202,6 +209,9 @@ describe("indicator calculation disclosure", () => {
       // Round 12: the headline length is defined, only its share-weighted split is not; "—" is not missing data.
       const box = view.getByText("当前分解不可用").parentElement!.textContent ?? "";
       expect(box).toContain("SVA 小于 0，无法按份额加权平均。");
+      // Round 6: why value added is negative, without step 3's sentence about the parts' shares.
+      expect(box).toContain(NEGATIVE_VALUE_ADDED_CAUSE);
+      expect(box).not.toContain(NEGATIVE_VALUE_ADDED_NOTE);
       expect(box).toContain("前向总生产长度 PLv = 1.643 仍有定义");
       expect(box).toContain("“—”表示这一项无法计算（不是缺少数据）");
       expect(box).not.toContain("表示没有数据");
@@ -282,6 +292,44 @@ describe("step 4: the sum line says ≈ when the shown lengths do not add up to 
     }
   });
 
+  test("the equal lengths are explained as identities: forward and backward for the country, the backward pair for one industry", async () => {
+    // Lengths as the identities make them (CHN 2020 country level, CHN A01_02 2020 for the industry); shares made up.
+    const shares = { SVA: 1, "1_VA_D": 0.6, "2_VA_RT": 0.1, "3_VA_GVC": 0.3, FGY: 1, "1_FGY_D": 0.5, "2_FGY_RT": 0.25, "3_FGY_GVC": 0.25 };
+    const country = { ...shares, country: "CHN", year: 2017, PLv: 3.013, PLv_D: 2.212, PLv_RT: 2.642, PLv_GVC: 4.739, PLy: 3.002, PLy_D: 2.212, PLy_RT: 2.642, PLy_GVC: 4.942, GVCPs: 0.959 };
+    const industry = { ...shares, country: "CHN", year: 2017, PLv: 3.2, PLv_D: 2.811, PLv_RT: 3.674, PLv_GVC: 4.5, PLy: 3.0, PLy_D: 2.173, PLy_RT: 2.173, PLy_GVC: 4.923, GVCPs: 0.914 };
+    const countryRequest = spyOn(api, "countryIndicatorsForCountry").mockResolvedValue([{ ...country, industry: null }]);
+    const industryRequest = spyOn(api, "industryIndicatorsAll").mockResolvedValue({ total: 1, page: 1, page_size: 200, rows: [{ ...industry, industry: "A" }] });
+    try {
+      const view = render(
+        <DecompositionDemo step={6} meta={{ years: [2017], countries: ["CHN"], sectors: ["A"], dataset: null }} primaryYear={2017} primaryCountry="CHN" />,
+      );
+      await waitFor(() => expect(view.container.textContent).toContain("后向各段长度：纯国内 2.212、传统贸易 2.642、GVC 4.942"));
+      // Step 8's sentence, plus why the position index defined here compares only the GVC segments.
+      expect(view.container.textContent).toContain(`${DOMESTIC_SEGMENTS_IDENTITY_NOTE}所以 GVC 位置指数只比较 GVC 段。`);
+      expect(view.container.textContent).not.toContain(BACKWARD_SEGMENTS_IDENTITY_NOTE);
+      fireEvent.click(view.getByRole("button", { name: "单个行业" }));
+      expect(view.getByRole("button", { name: "单个行业" }).getAttribute("aria-pressed")).toBe("true");
+      await waitFor(() => {
+        const text = view.container.textContent ?? "";
+        expect(text).toContain("后向各段长度：纯国内 2.173、传统贸易 2.173、GVC 4.923");
+        expect(text).toContain(BACKWARD_SEGMENTS_IDENTITY_NOTE);
+        expect(text).not.toContain(DOMESTIC_SEGMENTS_IDENTITY_NOTE);
+      });
+    } finally {
+      countryRequest.mockRestore();
+      industryRequest.mockRestore();
+      cleanup();
+    }
+  });
+
+  test("an identity note needs every length it speaks of: a segment shown as “—” has nothing to be equal to", () => {
+    const both = { PLv_D: 2.212, PLy_D: 2.212, PLv_RT: 2.642, PLy_RT: 2.642 };
+    expect(segmentIdentityNote(both, true)).toContain(DOMESTIC_SEGMENTS_IDENTITY_NOTE);
+    expect(segmentIdentityNote({ ...both, PLy_RT: null }, true)).toBeNull();
+    expect(segmentIdentityNote({ PLy_D: 2.173, PLy_RT: 2.173 }, false)).toBe(BACKWARD_SEGMENTS_IDENTITY_NOTE);
+    expect(segmentIdentityNote({ PLy_D: 2.173, PLy_RT: Number.NaN }, false)).toBeNull();
+  });
+
   test("the backward PLy line also reads ≈ when the shown contributions do not add up (CHN 2018, round 5)", async () => {
     // Contributions 1.8134 + 0.1814 + 0.5104 = 2.5052: the rows read 1.813 + 0.181 + 0.510 = 2.504 against 2.505.
     const row = {
@@ -325,10 +373,13 @@ test("backward signed contributions have visible values, a zero axis and a signe
 });
 
 describe("step 3 points to where the backward split is charted in step 7 (round 21)", () => {
-  test("the 四类生产活动 view with 后向（按最终品）, not the amount options marked （后向）", () => {
+  test("the 四类生产活动 view with 后向（按最终品）, not the amount options marked （后向）, said once", () => {
+    const method = renderToStaticMarkup(<IndicatorMethodIntro topic="production" />);
+    expect(method).toContain("在步骤 7 的“四类生产活动”视角选“后向（按最终品）”，查看各类所占份额。");
+    expect(method).not.toContain("选带“（后向）”的指标");
+    // The hands-on split below the method section no longer repeats the pointer.
     const note = DECOMP[5].note!({}, [4, 3, 2, 1], 0);
-    expect(note).toContain("在步骤 7 的“四类生产活动”视角选“后向（按最终品）”，查看各类所占份额。");
-    expect(note).not.toContain("选带“（后向）”的指标");
+    expect(note).toBe("GVC 合计（3_VA_GVC）= 简单 GVC + 复杂 GVC = 2 + 1 = 3。");
   });
 });
 

@@ -120,7 +120,8 @@ export function ReportedExperiments({ getStep, onNavigateStep }: {
                         {omittedSummary(experiment.snapshot, options).map((text) => <p className="muted" key={text}>{text}</p>)}
                       </> : "…"}</td>
                       <td>
-                        {sum ? `${perPointReading(outcome, sum, experiment.snapshot, digits)}（${xSpanLabel(experiment.spec)}）` : "—"}
+                        {/* The span is named even without a sum ("—"): the writing prompt sends the student to this bracket. */}
+                        {`${sum ? perPointReading(outcome, sum, experiment.snapshot, digits) : "—"}（${xSpanLabel(experiment.spec)}）`}
                         {/* The writing prompt asks whether the samples are the same: each number names its sample. */}
                         <br /><small className="muted">{sampleText(experiment.snapshot.result)}{defaultSample && sampleText(defaultSample) !== sampleText(experiment.snapshot.result) ? "（与默认模型不同）" : ""}</small>
                       </td>
