@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { RegressionResultCard } from "./regression-step/result-card";
-import { exampleXText } from "./regression-step/result-text";
+import { designValueSentence, exampleXText } from "./regression-step/result-text";
 import { TEACHING_MODEL_VERSION } from "./regression-step/saved-run";
 import { BASELINE_LESSONS, GENERATED_Y_DISCLOSURE, REGRESSION_LESSONS } from "./regression-lessons";
 import type { RegressionResponse } from "./types";
@@ -256,21 +256,41 @@ describe("fixed teaching regression reading", () => {
 describe("the course's design value on the result card (v13)", () => {
   test("a recovered design value reads as covered with its deviation; the zero-effect Y and the ratio say so", () => {
     const run = response();
-    const html = renderToStaticMarkup(<RegressionResultCard outcome="trade" response={run} />);
-    expect(html).toContain("课程数据设定的两年累计为");
-    expect(html).toContain("区间包含设定值（与设定值几乎相同）");
+    // The design value is the default model's partial association: keep the post-treatment control in the spec.
+    run.design.spec = {
+      x_lags: [0, 1],
+      controls: [{ name: "teaching_exchange_rate_change", lag: 0 }],
+      fixed_effects: ["country_industry", "year"],
+    };
+    const coefficient = { ...run.result.coefs[0], coef: 2, ci_low: 1, ci_high: 3 };
+    expect(designValueSentence("trade", run, coefficient)).toContain("课程数据设定的两年累计为");
+    expect(designValueSentence("trade", run, coefficient)).toContain("区间包含设定值（与设定值几乎相同）");
+
     const zero = response();
     zero.model_snapshot!.beta = 0;
-    zero.result.coefs[0] = { ...zero.result.coefs[0], coef: 0.01, ci_low: -0.02, ci_high: 0.04 };
-    expect(renderToStaticMarkup(<RegressionResultCard outcome="production" response={zero} />)).toContain("设定值为 0），区间包含 0，与设定一致");
+    const zeroCoefficient = { ...zero.result.coefs[0], coef: 0.01, ci_low: -0.02, ci_high: 0.04 };
+    expect(designValueSentence("production", zero, zeroCoefficient)).toContain("设定值为 0），区间包含 0，与设定一致");
+
     const ratio = response();
     ratio.model_snapshot!.beta = null;
-    expect(renderToStaticMarkup(<RegressionResultCard outcome="length" response={ratio} />)).toContain("没有单一的设定值");
+    expect(designValueSentence("length", ratio, ratio.result.coefs[0])).toContain("没有单一的设定值");
+
     // X terms spanning other years than the two-year total are not compared with it.
     const span = response();
-    span.design.spec = { x_lags: [2], controls: [], fixed_effects: ["year"] };
-    const spanHtml = renderToStaticMarkup(<RegressionResultCard outcome="trade" response={span} />);
-    expect(spanHtml).toContain("跨度不同，不是同一个估计量，不与设定值比较");
-    expect(spanHtml).not.toMatch(/幅度比设定值|与设定值几乎相同|方向与设定值相反/);
+    span.design.spec = {
+      x_lags: [2],
+      controls: [{ name: "teaching_exchange_rate_change", lag: 0 }],
+      fixed_effects: ["year"],
+    };
+    const spanCoefficient = { ...span.result.coefs[0], name: "teaching_tariff_exposure_lag2" };
+    expect(designValueSentence("trade", span, spanCoefficient)).toContain("跨度不同，不是同一个估计量，不与设定值比较");
+    expect(designValueSentence("trade", span, spanCoefficient)).not.toMatch(/幅度比设定值|与设定值几乎相同|方向与设定值相反/);
+
+    // Without the post-treatment control the model estimates a total association, not the partial design value.
+    const total = response();
+    total.design.spec = { x_lags: [0, 1], controls: [], fixed_effects: ["country_industry", "year"] };
+    expect(designValueSentence("trade", total, coefficient)).toContain("这个模型不含汇率变动");
+    expect(designValueSentence("trade", total, coefficient)).toContain("同一个估计量，不做数值比较");
+    expect(designValueSentence("trade", total, coefficient)).not.toMatch(/幅度比设定值|与设定值几乎相同|方向与设定值相反/);
   });
 });

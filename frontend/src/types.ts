@@ -959,7 +959,9 @@ export interface WorkbenchOptions {
   default_spec: ModelSpec;
   x_lags: { lag: number; label: string; description: string }[];
   x_lag_note: string;
-  controls: { name: string; label: string; definition: string; source: string }[];
+  controls: { name: string; label: string; definition: string; source: string; role: string; role_label: string }[];
+  /** What each control role means: pre-treatment trend, post-treatment change, negative control, ICIO-derived. */
+  control_roles: { key: string; label: string; note: string }[];
   control_lags: { lag: number; label: string }[];
   control_lag_note: string;
   fixed_effects: { key: string; label: string; description: string; includes: string[] }[];

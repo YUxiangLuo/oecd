@@ -97,16 +97,17 @@ export function waveMarkers(years: readonly number[]): { year: number; label: st
  * years, which the regression separates; said without telling which way, so the student still finds it in the
  * workbench.
  */
-export const GROUP_CHART_CAPTION = "图上的变化混有同一时期的其他变化（如汇率），回归会把它们分开，所以计算后下方的回归数字不必等于图上各组线之间的距离。";
+export const GROUP_CHART_CAPTION = "图上的变化混有同一时期的其他变化（如汇率）。默认模型控制汇率，估计的是扣除汇率渠道后的偏关联；不控制汇率，估计的是包含该渠道的总关联。计算后下方的回归数字不必等于图上各组线之间的距离。";
 
-/** Under the 加税前后 chart: the premise the regression rests on, and how little the chart can show of it. In teaching
- *  data v10 it holds by design only once the exchange-rate change is controlled (the chart's lines are not parallel). */
+/** Under the 加税前后 chart: the premise the regression rests on, and how little the chart can show of it. GDP and
+ *  openness are generated pre-trends; the exchange rate is a post-treatment change, so the note claims conditional
+ *  parallel trends only on the pre-treatment trends. */
 export function parallelTrendsNote(years: readonly number[], policyYear: number | null | undefined, groups = 2): string {
   const before = policyYear == null ? [] : years.filter((year) => year < policyYear);
   const count = ["", "一", "两", "三", "四", "五"][before.length] ?? String(before.length);
   const pre = before.length ? `加税前只有 ${before.join("、")} ${count}年可看` : "加税前的年份很少";
   const who = groups > 2 ? "各组" : "两组";
-  return `这张图也用来看回归的前提：如果没有关税，扣掉汇率等同期变化后，${who}的走势应大致平行。${pre}，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，控制汇率、GDP 对数和贸易开放度后，这个前提按设计成立。`;
+  return `这张图也用来看回归的前提：如果没有关税，扣掉加税前趋势（GDP 对数和贸易开放度）后，${who}的走势应大致平行（图上的线不会平行：汇率等同期变化也在动）。${pre}，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，GDP 和开放度是加税前趋势；汇率是加税后同期变化，不用于识别平行趋势。`;
 }
 
 /** Step 14: weighted degree is in-degree + out-degree in every row (the report says the same under its chart). */

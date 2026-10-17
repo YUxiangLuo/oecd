@@ -19,7 +19,7 @@ from gvcsim.regression.benchmark import summarize_benchmark
 from gvcsim.regression.design import RegressionDesign
 from gvcsim.regression.model import CoefStat, PreparedModel, RegressionResult
 from gvcsim.regression.panel import run_design_with_benchmark
-from gvcsim.regression.spec import DEFAULT_SPEC, EXCHANGE_RATE_COLUMN, ModelSpec
+from gvcsim.regression.spec import DEFAULT_SPEC, EXCHANGE_RATE_COLUMN, ModelSpec, spec_omits_post_treatment
 from gvcsim.report_saved_run import _fixed_design_matches
 from gvcsim.regression_routes import _design_info
 from gvcsim.session import empty_session, make_record
@@ -54,6 +54,34 @@ def test_options_list_every_choice_in_page_order_with_the_default_and_the_limits
     ]
     assert "用作 GDP 代理，并非正式 GDP" in options["controls"][6]["definition"]
     assert [item["source"] for item in options["controls"]] == ["课程生成"] * 5 + ["按 ICIO 计算"] * 3
+    # The default model mixes pre-treatment trends, a post-treatment change and negative controls; the page says which
+    # omission is a confounder and which changes the estimand.
+    assert [item["role"] for item in options["controls"]] == [
+        "post_treatment",
+        "confounder",
+        "negative_control",
+        "confounder",
+        "negative_control",
+        "icio_control",
+        "icio_control",
+        "icio_control",
+    ]
+    assert [item["role_label"] for item in options["controls"]] == [
+        "加税后同期",
+        "加税前趋势",
+        "无关控制",
+        "加税前趋势",
+        "无关控制",
+        "ICIO 派生",
+        "ICIO 派生",
+        "ICIO 派生",
+    ]
+    assert [item["key"] for item in options["control_roles"]] == [
+        "confounder",
+        "post_treatment",
+        "negative_control",
+        "icio_control",
+    ]
     assert [item["lag"] for item in options["control_lags"]] == [0, 1]
     effects = {item["key"]: item for item in options["fixed_effects"]}
     assert list(effects) == ["country", "industry", "country_industry", "year", "country_year"]
@@ -216,6 +244,25 @@ def test_unknown_names_have_bounded_safe_http_errors(student_client, field, name
     assert response.status_code == 400
     assert len(response.content) < 200
     assert name not in response.json()["detail"]
+
+
+def test_estimand_is_partial_only_with_the_post_treatment_control():
+    """The design value is the default model's partial association; leaving out the exchange rate is a total one."""
+    assert not spec_omits_post_treatment(DEFAULT_SPEC)
+    no_rate = ModelSpec(
+        DEFAULT_SPEC.x_lags,
+        tuple((key, lag) for key, lag in DEFAULT_SPEC.controls if key != EXCHANGE_RATE_COLUMN),
+        DEFAULT_SPEC.fixed_effects,
+    )
+    assert spec_omits_post_treatment(no_rate)
+    assert spec_omits_post_treatment(ModelSpec(DEFAULT_SPEC.x_lags, (), DEFAULT_SPEC.fixed_effects))
+    # Dropping a pre-treatment trend does not change the estimand; it adds omitted-trend bias.
+    no_gdp = ModelSpec(
+        DEFAULT_SPEC.x_lags,
+        tuple((key, lag) for key, lag in DEFAULT_SPEC.controls if key != "teaching_log_gdp"),
+        DEFAULT_SPEC.fixed_effects,
+    )
+    assert not spec_omits_post_treatment(no_gdp)
 
 
 def test_a_teacher_cannot_run_a_spec(teaching_db):
@@ -565,6 +612,42 @@ def test_report_design_value_row_compares_only_models_covering_the_two_year_tota
         "与设定值几乎相同",
         "方向与设定值相反",
     ]
+
+
+def test_saved_run_catalog_units_stay_compatible_with_saved_runs():
+    """report_saved_run compares the saved variable catalog exactly; changing a control's definition would
+    silently invalidate every run saved before the change. The catalog unit is therefore kept stable and the
+    teaching timing lives in the control role, the options and the report method text."""
+    from gvcsim.regression.teaching import variable_catalog
+
+    units = {item["name"]: item["unit"] for item in variable_catalog("trade", "FVA_share") if item["role"] == "control"}
+    assert units == {
+        "teaching_exchange_rate_change": "本币兑美元的年变动率（%，负为贬值）",
+        "teaching_log_gdp": "ln（模拟 GDP，美元）；首年以 ICIO 国家增加值规模校准",
+        "teaching_trade_openness": "模拟进出口总额 / GDP（%），不是 ICIO 出口强度",
+    }
+
+
+def test_report_design_value_row_does_not_compare_a_total_association():
+    """A model without the post-treatment control estimates the total association, not a biased partial one."""
+    from gvcsim import report_workbench
+
+    no_rate = ModelSpec(
+        DEFAULT_SPEC.x_lags,
+        tuple((key, lag) for key, lag in DEFAULT_SPEC.controls if key != EXCHANGE_RATE_COLUMN),
+        DEFAULT_SPEC.fixed_effects,
+    )
+    total = {"coef": -0.62, "ci_low": -0.64, "ci_high": -0.60}
+    column = {
+        "spec": no_rate,
+        "run": {
+            "design": {"outcome": "trade", "baseline": "FVA_share", "depvar_kind": "share"},
+            "result": {"coefs": [], "cumulative": total},
+        },
+    }
+    [row] = report_workbench._design_value_rows([column])
+    assert "总关联；不与偏关联设定值比较" in row
+    assert "幅度比设定值" not in row
 
 
 def test_the_page_and_the_report_print_the_same_generated_data_note():

@@ -127,7 +127,11 @@ function ModelForm({ options, spec, onChange, disabled = false }: {
               <label className="reg-custom-choice">
                 <input type="checkbox" checked={Boolean(chosen)} onChange={() => toggleControl(item.name)}
                   aria-label={item.label} aria-describedby={`${uid}-c-${item.name}`} />
-                <span><b>{item.label}</b><small id={`${uid}-c-${item.name}`}>{item.definition} · {item.source}</small></span>
+                <span>
+                  <b>{item.label}</b>
+                  <span className={`reg-control-role reg-control-role-${item.role}`}>{item.role_label}</span>
+                  <small id={`${uid}-c-${item.name}`}>{item.definition} · {item.source} · {item.role_label}</small>
+                </span>
               </label>
               {chosen && (
                 <select aria-label={`${item.label}的期数`} value={chosen.lag} onChange={(event) => setControlLag(item.name, Number(event.target.value))}>
@@ -138,7 +142,7 @@ function ModelForm({ options, spec, onChange, disabled = false }: {
           );
         })}
         <p className="muted reg-custom-note">{options.control_lag_note}</p>
-        <p className="reg-custom-note">控制变量不是越多越好：本身会受关税影响的变量（如按 ICIO 计算的制造业增加值占比、出口强度）放进模型，可能把 X 的一部分关联“控制掉”。课程数据里这些变量与 Y 无关，加上后结果几乎不变；真实研究中要先想清楚因果顺序。</p>
+        <p className="reg-custom-note">控制变量不是越多越好：GDP 对数和贸易开放度是加税前趋势，漏掉它们，估计会偏离课程设定值；汇率是加税后同期变化，控制它估计的是扣除汇率渠道的偏关联，去掉它估计的是包含该渠道的总关联；人口增长率和 FDI 与 Y 无关，用来练习增加控制。按 ICIO 计算的制造业增加值占比、出口强度在课程数据里与 Y 无关，加上后结果几乎不变，但真实研究中要先想清楚因果顺序。</p>
       </fieldset>
       <fieldset>
         <legend>固定效应（FE）</legend>
@@ -320,7 +324,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
   // The model being computed, named by the status line (the form is locked meanwhile, but a preset sets it too).
   const [runningSpec, setRunningSpec] = useState<ModelSpec | null>(null);
   // Each preset's total as computed in this visit, by Y: the next preset's question compares with an earlier one
-  // ("和去掉汇率变动偏向同一边吗？"), whose column has left the table by then.
+  // ("和去掉贸易开放度相比，偏向同一边吗？"), whose column has left the table by then.
   const [presetTotals, setPresetTotals] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const rateLimitMessage = useRef<string | null>(null);

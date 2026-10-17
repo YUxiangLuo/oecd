@@ -56,7 +56,7 @@ def test_selected_answers_renders_only_a_fully_correct_current_quiz():
 
 @pytest.mark.parametrize("answer, expected", [("a", False), ("b", True), ("c", False)])
 def test_step_11_checks_percentage_points_with_a_simple_independent_example(answer, expected):
-    answers = {"s11-cumulative-v10": "a", "s11-control-v10": "c", "s11-reading-v10": answer}
+    answers = {"s11-cumulative-v10": "a", "s11-control-v10": "b", "s11-reading-v10": answer}
     passed, _, feedback = quizzes.grade(11, "course-quiz-v11", answers)
     assert passed is expected
     assert feedback[2]["correct"] is expected
@@ -69,6 +69,14 @@ def test_step_11_checks_percentage_points_with_a_simple_independent_example(answ
         assert feedback[2]["explanation"] == quizzes.HINTS["s11-reading-v10"]
         assert "低 2 个百分点" not in feedback[2]["explanation"]
     assert len(quizzes.public_quiz(11)["questions"]) == 3
+    control = quizzes.public_quiz(11)["questions"][1]
+    assert "控制它之后" in control["prompt"] and "X 的系数" in control["prompt"]
+    assert {option["label"] for option in control["options"]} == {
+        "包含汇率渠道的总关联",
+        "扣除汇率渠道后的偏关联",
+        "不会改变估计，因为汇率不是 X 的一部分",
+    }
+    assert "加税后才变化" in quizzes.HINTS["s11-control-v10"]
 
 
 def test_regression_defaults_cover_basic_concepts_without_optional_model_experiments():

@@ -594,7 +594,7 @@ export function ShockLab({ meta, step: _step, state }: {
     <section className="reg-run-card">
       <span className="reg-section-step">控制变量</span>
       <h3>回归还控制汇率变动、GDP 对数和贸易开放度</h3>
-      <p className="teaching-one-line">它们和加税同时变化，也会影响步骤 11–14 的 Y，所以默认模型把它们作为控制变量（由课程生成）。{shownExample ? "下图是例子国家每年的汇率变动。" : ""}</p>
+      <p className="teaching-one-line">GDP 对数和贸易开放度是加税前就存在的趋势；汇率变动是第一批加税后发生的同期变化。默认模型把三者都放进去，估计的是扣除这些变化后的偏关联；去掉汇率，估计的是包含汇率渠道的总关联（由课程生成）。{shownExample ? "下图是例子国家每年的汇率变动。" : ""}</p>
       {shownExample && exampleLaterWave && firstWave && (
         <p className="muted teaching-one-line">课程设定的汇率贬值只发生在第一批被加税国家（{firstWave} 年起）；这个例子没有第一批国家，所以加税那年看不出汇率变化。</p>
       )}
@@ -616,15 +616,15 @@ export function ShockLab({ meta, step: _step, state }: {
         <dl className="teaching-variables" aria-label="步骤 11–14 的默认控制变量">
           <div>
             <dt>汇率变动</dt>
-            <dd>本币兑美元的年变动率（%，负为贬值），每个国家每年一个值<span className="sr-only">（来源：</span><span className="source-tag">课程生成</span><span className="sr-only">）</span>。</dd>
+            <dd>本币兑美元的年变动率（%，负为贬值），每个国家每年一个值；第一批被加税国家 2018 年起额外贬值 8%<span className="sr-only">（来源：</span><span className="source-tag">课程生成</span><span className="sr-only">）</span>。</dd>
           </div>
           <div>
             <dt>GDP 对数与贸易开放度</dt>
-            <dd>GDP 对数为 ln（模拟 GDP，美元），开放度为模拟进出口总额 / GDP（%）<span className="sr-only">（来源：</span><span className="source-tag">课程生成</span><span className="sr-only">）</span>。</dd>
+            <dd>GDP 对数为 ln（模拟 GDP，美元），开放度为模拟进出口总额 / GDP（%）；两者都是加税前就存在的趋势<span className="sr-only">（来源：</span><span className="source-tag">课程生成</span><span className="sr-only">）</span>。</dd>
           </div>
           <div>
             <dt>可选控制</dt>
-            <dd>步骤 11–14 的“改模型、对比”里还可加入人口增长率、FDI 净流入占比<span className="sr-only">（来源：</span><span className="source-tag">课程生成</span><span className="sr-only">）</span>和制造业增加值占比等<span className="sr-only">（来源：</span><span className="source-tag">按 ICIO 计算</span><span className="sr-only">）</span>。控制变量不是越多越好：本身受关税影响的变量不应作为控制。</dd>
+            <dd>步骤 11–14 的“改模型、对比”里还可加入人口增长率、FDI 净流入占比<span className="sr-only">（来源：</span><span className="source-tag">课程生成</span><span className="sr-only">）</span>和制造业增加值占比等<span className="sr-only">（来源：</span><span className="source-tag">按 ICIO 计算</span><span className="sr-only">）</span>。控制变量不是越多越好：默认模型控制汇率，是为了估计扣除汇率渠道的偏关联；如果目标是总关联，就不控制它。其他受关税影响的变量也不应直接作为控制。</dd>
           </div>
         </dl>
       </details>

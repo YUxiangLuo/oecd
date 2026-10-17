@@ -24,6 +24,7 @@ from gvcsim.regression.spec import (
     ModelSpec,
     control_column,
     control_term_label,
+    spec_omits_post_treatment,
     x_term_label,
 )
 from gvcsim.regression.teaching import baseline, default_baseline
@@ -328,9 +329,10 @@ def _shared_digits(columns: list[dict[str, Any]], kind: str) -> int:
 
 
 def _design_value_rows(columns: list[dict[str, Any]]) -> list[str]:
-    """The row "课程设定值": the two-year total the course data were built around, in the step's unit, and how far
-    each column's X-terms sum is from it (+ larger in size, − smaller; a sign flip reads as more than −100%).
-    A column whose X terms span other years is not compared."""
+    """The row "课程设定值": the default model's two-year partial association, in the step's unit, and how far each
+    column's X-terms sum is from it (+ larger in size, − smaller; a sign flip reads as more than −100%). A column
+    whose X terms span other years, or that leaves out the post-treatment control (a total association), is not
+    compared."""
 
     def x_sum(column: dict[str, Any]) -> dict[str, Any] | None:
         run = column["run"]
@@ -357,13 +359,18 @@ def _design_value_rows(columns: list[dict[str, Any]]) -> list[str]:
         if total is None:
             cells.append("")
             continue
+        # A model without the post-treatment control estimates a total association, not the default model's partial
+        # one; its number is not a deviation from the course's partial-association design value.
+        if spec_omits_post_treatment(column["spec"]):
+            cells.append("总关联；不与偏关联设定值比较")
+            continue
         if not _covers_design_span(column["spec"]):
             cells.append(f"{target}（两年累计）；本列跨度不同，不计偏差")
             continue
         # Between the numbers as shown (the page's shownCoefficient), so equal readings give equal deviations.
         shown = round(float(total["coef"]) * scale, digits) / scale
         cells.append(f"{target}；{_deviation_text(design_deviation(shown, round(beta * scale, digits) / scale))}")
-    return [f"| 课程设定值（X 每高 1 个百分点） | {' | '.join(cells)} |"]
+    return [f"| 课程设定值（默认模型偏关联） | {' | '.join(cells)} |"]
 
 
 def design_deviation(value: float, beta: float) -> float:

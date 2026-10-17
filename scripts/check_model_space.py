@@ -21,7 +21,9 @@ Run from the repository root:
     PYTHONPATH=. uv run python scripts/check_model_space.py report --out dogfood-output/model-space \
         --markdown docs/regression-model-space-check-2026-10-14.md --summary benchmarks/model_space_v12.json
 
-``run`` writes one JSON line per fit (resumable); ``report`` evaluates them. Numbers are for the current release only.
+``run`` writes one JSON line per fit (resumable); ``report`` evaluates them. Numbers are for the current release only;
+``report`` also writes a ``binding`` block naming the release/panel computed on and validated against (checked by
+``scripts/check_benchmark_binding.py``).
 
 ``--variant NAME`` (run and report) uses a candidate generator setting from scripts/teaching_variants.py instead of the
 published panel, and ``--ys default`` limits the sweep to the four default Ys and the zero-effect Y. ``distinct`` reads a
@@ -48,6 +50,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import teaching_variants  # noqa: E402
 
+from gvcsim.regression import benchmark_binding
 from gvcsim.regression.design import RegressionDesign
 from gvcsim.regression.panel import run_design_with_benchmark
 from gvcsim.regression.spec import CONTROLS, DEFAULT_SPEC, FIXED_EFFECT_LABELS, FIXED_EFFECTS, ModelSpec
@@ -754,8 +757,39 @@ def _report(args: argparse.Namespace, variant: teaching_variants.Variant | None)
             notes = previous[start : end + len("<!-- notes-end -->")]
             text = text.replace("\n## 1. 逐项核查", f"\n{notes}\n\n## 1. 逐项核查", 1)
     target.write_text(text, encoding="utf-8")
+    computed_release = records[0].get("release") if records else None
+    summary_path = Path(args.summary)
+    binding = None
+    # A documented equivalent rebuild survives a regeneration on the same records; do not silently replace it with
+    # an unvalidated current binding.
+    if summary_path.is_file():
+        try:
+            previous = json.loads(summary_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            previous = {}
+        candidate = previous.get("binding") if isinstance(previous, dict) else None
+        if (
+            isinstance(candidate, dict)
+            and isinstance(candidate.get("computed"), dict)
+            and candidate["computed"].get("release") == computed_release
+        ):
+            binding = candidate
+    if binding is None:
+        current = benchmark_binding.current_binding(panel_name="panel_teaching.csv")
+        if current is not None and current["release"] == computed_release:
+            binding = benchmark_binding.binding_from_current(
+                current, note="Computed and validated on the same processed release."
+            )
+        elif current is not None:
+            print(
+                f"warning: records were produced on {computed_release}, current release is {current['release']}; "
+                "binding not set (re-run the sweep to bind the new release)",
+                file=sys.stderr,
+            )
     summary = {
-        "release": records[0].get("release") if records else None,
+        "release": computed_release,
+        "release_id": computed_release,
+        "binding": binding,
         "fits": len(records),
         "checks": [
             {
@@ -769,7 +803,7 @@ def _report(args: argparse.Namespace, variant: teaching_variants.Variant | None)
         ],
         "extras": extras,
     }
-    Path(args.summary).write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(text)
 
 

@@ -23,6 +23,24 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from db_guard import ALLOW_ENV, database_problem
+
+# The teaching_db fixture drops the public schema. Refuse to collect when the
+# resolved DSN does not look like a dedicated test database: this catches
+# `source .env.local` leaving GVCSIM_PG_DSN on the classroom database.
+_database_problem = database_problem(
+    os.environ.get("GVCSIM_PG_DSN"),
+    os.environ.get("GVCSIM_PG_DSN_TEST"),
+    allow_reset=os.environ.get(ALLOW_ENV),
+    app_env=os.environ.get("GVCSIM_ENV"),
+)
+if _database_problem:
+    raise pytest.UsageError(
+        f"{_database_problem}\n"
+        "pytest 的 teaching_db 夹具会 DROP SCHEMA public CASCADE。"
+        f"请把 GVCSIM_PG_DSN 指向专用测试库；如确认目标是一次性库，设置 {ALLOW_ENV}=1 后重试。",
+    )
+
 # 检出目录的原始数据形态决定数据集分支。CI 合成夹具必须同时带上生成器要求的
 # 两道环境闸门，否则 ``artifact_data_sources`` / ``dimension_contract_for`` 会
 # fail-closed，而真实数据断言又会跑在 15×24 的合成表上。显式设置的值优先；
@@ -34,7 +52,7 @@ if (
     os.environ.setdefault("CI", "true")
     os.environ.setdefault("GVCSIM_CI_SYNTHETIC", "1")
 
-from gvcsim.config import RAW_DATA_DIR
+from gvcsim.config import RAW_DATA_DIR  # noqa: E402
 
 REGIONS = ["AAA", "BBB"]
 SECTORS = ["s1", "s2"]

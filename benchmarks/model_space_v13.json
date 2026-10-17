@@ -1,5 +1,22 @@
 {
   "release": "8565f226719d4179967f6372dbc7c49e",
+  "release_id": "8565f226719d4179967f6372dbc7c49e",
+  "binding": {
+    "kind": "benchmark-release-binding",
+    "version": 1,
+    "computed": {
+      "release": "8565f226719d4179967f6372dbc7c49e",
+      "panel": "panel_teaching.csv",
+      "panel_sha256": "520c93423e76c353d8a5a56c51736e98198001e84ba1ffeff23bbe53cee058c3"
+    },
+    "validated": {
+      "release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "panel": "panel_teaching.csv",
+      "panel_sha256": "02f1ce87ab5a4c60af469e1807e94377bc3901053324d59c80cdb3dd413eccd4"
+    },
+    "status": "documented-equivalent-rebuild",
+    "note": "20,111 fits were computed on release 8565 (panel_teaching.csv 520c9342…). Release 88063 is the 2026-10-16 rebuild that changed only the exchange-rate unit label; the files differ only in 1e-13 betweenness values (README; docs/review-pr59-2026-10-12.md). Re-run scripts/check_model_space.py run on a new release to bind new fits."
+  },
   "fits": 20111,
   "checks": [
     {

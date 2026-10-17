@@ -335,8 +335,28 @@ export function summaryRows(columns: TableColumn[], options: WorkbenchOptions): 
   ];
 }
 
+/** The control the course generates after the tariff starts. A model without it estimates the total association,
+ *  not the default model's partial one; its number is not a deviation from the partial design value. */
+export const POST_TREATMENT_CONTROL = "teaching_exchange_rate_change";
+
+/** Whether a model leaves out a post-treatment control (the exchange rate) that the default model includes.
+ *  ``options`` knows the role; without it, the one known post-treatment control is used. */
+export function omitsPostTreatment(
+  spec: Pick<ModelSpec, "controls">,
+  options?: Pick<WorkbenchOptions, "controls" | "default_spec">,
+): boolean {
+  const names = options
+    ? options.controls
+      .filter((item) => item.role === "post_treatment"
+        && options.default_spec.controls.some((chosen) => chosen.name === item.name))
+      .map((item) => item.name)
+    : [POST_TREATMENT_CONTROL];
+  return names.some((name) => !spec.controls.some((item) => item.name === name));
+}
+
 /** How an estimate's size compares with the design value, in words (the sign of a percentage was easy to misread):
- *  "幅度比设定值大 13%", "幅度比设定值小 6%", "与设定值几乎相同", or "方向与设定值相反". */
+ *  "幅度比设定值大 13%", "幅度比设定值小 6%", "与设定值几乎相同", or "方向与设定值相反".
+ *  Only for models that keep the post-treatment controls: the design value is the default model's partial association. */
 export function designDeviationText(deviation: number): string {
   if (deviation < -1) return "方向与设定值相反";
   const percent = Math.round(Math.abs(deviation) * 100);
@@ -374,6 +394,7 @@ export function coversDesignSpan(spec: Pick<ModelSpec, "x_lags">): boolean {
 /**
  * "课程设定值": the two-year total the course data were built around, read per percentage point like the row above,
  * and how far each column's X-terms sum is from it; a column whose X terms span other years is not compared.
+ * A column that leaves out the post-treatment control estimates a total association, so it is not compared either.
  * Null when the server sent no design value for this Y.
  */
 export function designValueRow(columns: TableColumn[], outcome: RegressionOutcome, baseline: string, options: WorkbenchOptions): SummaryRow | null {
@@ -387,10 +408,12 @@ export function designValueRow(columns: TableColumn[], outcome: RegressionOutcom
   const target = perPointReading(outcome, { coef: design, ci_low: null, ci_high: null }, { depvar_kind: first.snapshot.depvar_kind, result: { suppressed: true } }, digits);
   return {
     key: "design",
-    label: "课程设定值（X 每高 1 个百分点）",
+    label: "课程设定值（默认模型偏关联）",
     cells: columns.map(({ spec, snapshot }) => {
       const sum = xSum(snapshot, spec);
       if (!sum) return "";
+      // A total-association model is a different estimand, not a biased estimate of the partial design value.
+      if (omitsPostTreatment(spec, options)) return "总关联；不与偏关联设定值比较";
       if (!coversDesignSpan(spec)) return `${target}（两年累计）；本列跨度不同，不计偏差`;
       const kind = snapshot.depvar_kind;
       const deviation = designDeviation(shownCoefficient(sum.coef, kind, digits), shownCoefficient(design, kind, digits));

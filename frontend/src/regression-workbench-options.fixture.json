@@ -30,7 +30,7 @@
       "tier": "core",
       "tier_label": "必看",
       "label": "去掉汇率变动",
-      "question": "X 各项合计离课程设定值远了多少？",
+      "question": "去掉汇率渠道后，合计是总关联还是偏关联？",
       "spec": {
         "x_lags": [
           0,
@@ -57,7 +57,7 @@
       "tier": "core",
       "tier_label": "必看",
       "label": "去掉 GDP 对数",
-      "question": "和去掉汇率变动偏向同一边吗？",
+      "question": "和去掉贸易开放度相比，偏向同一边吗？",
       "spec": {
         "x_lags": [
           0,
@@ -266,7 +266,7 @@
       "closnesscentrality": -0.5
     }
   },
-  "design_value_note": "课程数据按设定生成：每个 Y 的两年累计有一个“课程设定值”。默认模型的估计通常落在它附近（偶尔区间不含它，属抽样波动）；漏掉同时和 X、Y 相关的变量（混杂变量）时，估计点往往偏离它，但区间可能仍包含它。",
+  "design_value_note": "课程数据按设定生成：每个 Y 的两年累计有一个“课程设定值”，对应默认模型（控制汇率等同期变量）的偏关联。默认模型的估计通常落在它附近（偶尔区间不含它，属抽样波动）；漏掉加税前就与 X、Y 相关的变量（GDP 对数、贸易开放度）时，估计点往往偏离它，但区间可能仍包含它。去掉加税后同期变化的汇率时，估计的是包含汇率渠道的总关联，与这个偏关联设定值不是同一个估计量，页面不把它算成偏差。",
   "x_lags": [
     {
       "lag": 0,
@@ -290,49 +290,87 @@
       "name": "teaching_exchange_rate_change",
       "label": "汇率变动",
       "definition": "本币兑美元的年变动率（%，负为贬值）",
-      "source": "课程生成"
+      "source": "课程生成",
+      "role": "post_treatment",
+      "role_label": "加税后同期"
     },
     {
       "name": "teaching_log_gdp",
       "label": "GDP 对数",
       "definition": "ln（模拟 GDP，美元）；首年以 ICIO 国家增加值规模校准",
-      "source": "课程生成"
+      "source": "课程生成",
+      "role": "confounder",
+      "role_label": "加税前趋势"
     },
     {
       "name": "teaching_population_growth",
       "label": "人口增长率",
       "definition": "模拟年度人口增长率（%），独立于 GDP 生成",
-      "source": "课程生成"
+      "source": "课程生成",
+      "role": "negative_control",
+      "role_label": "无关控制"
     },
     {
       "name": "teaching_trade_openness",
       "label": "贸易开放度",
       "definition": "模拟进出口总额 / GDP（%），不是 ICIO 出口强度",
-      "source": "课程生成"
+      "source": "课程生成",
+      "role": "confounder",
+      "role_label": "加税前趋势"
     },
     {
       "name": "teaching_fdi_gdp",
       "label": "FDI 净流入占比",
       "definition": "模拟外商直接投资净流入 / GDP（%），可为负",
-      "source": "课程生成"
+      "source": "课程生成",
+      "role": "negative_control",
+      "role_label": "无关控制"
     },
     {
       "name": "manufacturing_va_share",
       "label": "制造业增加值占比",
       "definition": "制造业增加值 / 增加值总额",
-      "source": "按 ICIO 计算"
+      "source": "按 ICIO 计算",
+      "role": "icio_control",
+      "role_label": "ICIO 派生"
     },
     {
       "name": "log_gdp_proxy",
       "label": "增加值总额对数",
       "definition": "ln（国家增加值总额，百万美元）；用作 GDP 代理，并非正式 GDP",
-      "source": "按 ICIO 计算"
+      "source": "按 ICIO 计算",
+      "role": "icio_control",
+      "role_label": "ICIO 派生"
     },
     {
       "name": "export_intensity",
       "label": "出口强度",
       "definition": "总出口 / 增加值总额",
-      "source": "按 ICIO 计算"
+      "source": "按 ICIO 计算",
+      "role": "icio_control",
+      "role_label": "ICIO 派生"
+    }
+  ],
+  "control_roles": [
+    {
+      "key": "confounder",
+      "label": "加税前趋势",
+      "note": "加税前就与 X、Y 相关的趋势；漏掉它，估计会偏离课程设定值。"
+    },
+    {
+      "key": "post_treatment",
+      "label": "加税后同期",
+      "note": "加税后才变化的同期变量；控制它估计偏关联，不控制是总关联。"
+    },
+    {
+      "key": "negative_control",
+      "label": "无关控制",
+      "note": "与 Y 无关，用来练习增加控制变量和看显著性。"
+    },
+    {
+      "key": "icio_control",
+      "label": "ICIO 派生",
+      "note": "从 ICIO 计算；课程数据里与模拟的 Y 无关。"
     }
   ],
   "control_lags": [
@@ -377,7 +415,7 @@
     {
       "key": "country_year",
       "label": "国家×年份 FE",
-      "description": "每个国家每年一个截距，包含国家 FE 和年份 FE；会吸收本页全部国家层面的控制变量（包括滞后项），省略这些变量但不因其缺失删样本。和国家×行业 FE 一起用时，课程数据的混杂都在国家层面，X 合计和默认模型几乎相同：吸收不等于没有控制；不勾国家×行业 FE 时，各国家×行业自身的水平差异没有扣除，结果可能差很多",
+      "description": "每个国家每年一个截距，包含国家 FE 和年份 FE；会吸收本页全部国家层面的控制变量（包括滞后项），省略这些变量但不因其缺失删样本。和国家×行业 FE 一起用时，课程数据里国家层面的控制变量（GDP、开放度、汇率）都被它吸收，X 合计和默认模型几乎相同：吸收不等于没有控制；不勾国家×行业 FE 时，各国家×行业自身的水平差异没有扣除，结果可能差很多",
       "includes": [
         "country",
         "year"
