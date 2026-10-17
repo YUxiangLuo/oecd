@@ -159,9 +159,14 @@ describe("indicator calculation disclosure", () => {
     const negative = renderToStaticMarkup(
       <IndicatorCalculationDisclosure step={5} row={{ "3b_VA_GVC_C": -0.197, SVA: -1.268 }} />,
     );
-    expect(negative).toContain("= -0.197 / -1.268 = <b>—（总量为负，无法计算比重）</b>");
+    expect(negative).toContain("= -0.197 / -1.268 = <b>—（总量为负，本页面不展示比重）</b>");
     // Two negatives divide: the box says why value added is negative and why that is no share (round 6).
     expect(negative).toContain(`<p>${NEGATIVE_VALUE_ADDED_NOTE}</p>`);
+    expect(negative).toContain("基本价产出减去购买者价中间消耗");
+    expect(negative).toContain("OUT − Z 列合计 − TLS");
+    expect(negative).toContain("不等于利润");
+    expect(negative).toContain("仍可计算有符号比率和加权贡献");
+    expect(negative).not.toContain("无法计算比重");
     const positive = renderToStaticMarkup(<IndicatorCalculationDisclosure step={5} row={{ "3b_VA_GVC_C": 1, SVA: 4 }} />);
     expect(positive).not.toContain(NEGATIVE_VALUE_ADDED_CAUSE);
     const missing = renderToStaticMarkup(
@@ -208,12 +213,12 @@ describe("indicator calculation disclosure", () => {
       expect(disclosure.textContent).toContain("3.324 / 3.545 = 0.937");
       // Round 12: the headline length is defined, only its share-weighted split is not; "—" is not missing data.
       const box = view.getByText("当前分解不可用").parentElement!.textContent ?? "";
-      expect(box).toContain("SVA 小于 0，无法按份额加权平均。");
+      expect(box).toContain("SVA 小于 0，有符号加权贡献仍可计算，但本页面不展示该加权分解。");
       // Round 6: why value added is negative, without step 3's sentence about the parts' shares.
       expect(box).toContain(NEGATIVE_VALUE_ADDED_CAUSE);
       expect(box).not.toContain(NEGATIVE_VALUE_ADDED_NOTE);
       expect(box).toContain("前向总生产长度 PLv = 1.643 仍有定义");
-      expect(box).toContain("“—”表示这一项无法计算（不是缺少数据）");
+      expect(box).toContain("“—”表示本页面不展示负分母下的加权贡献（不是无法计算或缺少数据）");
       expect(box).not.toContain("表示没有数据");
       // Round 27: the segment lengths are defined without shares, so they are still listed (ITA·C19 2020).
       expect(view.container.textContent).toContain("前向各段长度：纯国内 1.061、传统贸易 1.061、GVC 3.324（段长度不需要份额，仍可读）。");
@@ -423,7 +428,7 @@ describe("the unavailable step 4 split names undefined parts as such (round 12)"
 
   test("MLT H51: a negative SVA leaves PLv defined and says so", () => {
     expect(unavailableTotalNote(model("negative-weight-denominator", 2.1310588), cfg)).toBe(
-      "前向总生产长度 PLv = 2.131 仍有定义：总长度由投入产出关系直接算出，不需要份额；无法计算的只是按 SVA 份额加权的各段贡献，因此只是无法按段分解。",
+      "前向总生产长度 PLv = 2.131 仍有定义：总长度由投入产出关系直接算出；按 SVA 非零负分母计算的有符号加权贡献也有定义，本页面仅不展示该按段分解。",
     );
   });
 });
@@ -842,7 +847,7 @@ test("the negative-part note only appears beside shares it explains, in the step
   expect(withoutShares).not.toContain("decomp-table-note");
   const ownWords = renderToStaticMarkup(
     <DecompositionDetailTable caption="X" parts={parts} values={[5, -1]} shares={[125, -25]} unit="amount"
-      negativeNote="负值表示这部分增加值为负（例如行业亏损），所以其他分项的比重之和可能超过 100%。" />,
+      negativeNote="负值表示这部分增加值为负，不等于利润为负，所以其他分项的比重之和可能超过 100%。" />,
   );
   expect(ownWords).toContain("负值表示这部分增加值为负");
   expect(ownWords).not.toContain("净补贴");
@@ -927,7 +932,7 @@ describe("small amounts read with the precision of the table rows (round 10)", (
           primaryYear={2020} primaryCountry="MLT" />,
       );
       fireEvent.click(view.getByRole("button", { name: "单个行业" }));
-      await waitFor(() => expect(view.container.textContent).toContain("总量为负，无法算比重"));
+      await waitFor(() => expect(view.container.textContent).toContain("总量为负，有符号比率仍可计算，但本页面不展示比重"));
       expect(view.container.textContent).not.toContain("数值太小");
     } finally {
       countryRequest.mockRestore();
@@ -947,12 +952,12 @@ describe("small amounts read with the precision of the table rows (round 10)", (
         <DecompositionDemo step={5} meta={{ years: [2017], countries: ["ISL"], sectors: ["C21"], dataset: null }}
           primaryYear={2017} primaryCountry="ISL" initialView={{ level: "sector", industry: "C21" }} />,
       );
-      await waitFor(() => expect(view.container.textContent).toContain("总量为负，无法算比重"));
+      await waitFor(() => expect(view.container.textContent).toContain("总量为负，有符号比率仍可计算，但本页面不展示比重"));
       const text = view.container.textContent ?? "";
       expect([...view.container.querySelectorAll(".decomp-table tbody tr .dt-val")].map((cell) => cell.textContent))
         .toEqual(["-10.104", "-0.262", "-0.114", "-0.058"]);
       expect(text).toContain("总增加值 SVA = -10.538");
-      expect(text).toContain("= -0.058 / -10.538 = —（总量为负，无法计算比重）");
+      expect(text).toContain("= -0.058 / -10.538 = —（总量为负，本页面不展示比重）");
       expect(text).toContain("4 项金额相加 = -10.538，等于总量。");
       expect(view.container.querySelector(".decomp-bar")).toBeNull();
     } finally {

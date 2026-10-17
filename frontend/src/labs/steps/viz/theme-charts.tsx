@@ -46,22 +46,22 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
     const negative = point.shares.filter((share) => share < 0).reduce((sum, share) => sum + share, 0);
     return [positive, negative];
   }));
-  // A total of 0 or below leaves that year's shares undefined, which is not missing data.
+  // Zero totals have undefined shares; negative totals are not displayed as shares on this page.
   const nonPositive = (row: Row | undefined) => Boolean(row) && finiteValue(row![total]) && (row![total] as number) <= 0;
   const allUndefined = facets.every((facet) => years.every((year) => nonPositive(facet.rows.find((item) => item.year === year))));
-  /** "2020 年总增加值为负，构成份额无法计算，图中留空。" for a facet whose area stops early (ITA·C19). */
+  /** Explain each omitted year without calling a negative denominator mathematically undefined. */
   const undefinedNote = (rows: Row[]) => {
     const clauses = (["为负", "为 0"] as const).flatMap((word) => {
       const at = years.filter((year) => {
         const value = rows.find((item) => item.year === year)?.[total];
         return finiteValue(value) && (word === "为负" ? value < 0 : value === 0);
       });
-      return at.length ? [`${at.join("、")} 年${totalLabel}${word}`] : [];
+      return at.length ? [`${at.join("、")} 年${totalLabel}${word}，${word === "为负" ? "本页面不展示比重" : "构成份额无法计算"}`] : [];
     });
-    return clauses.length ? `${clauses.join("，")}，构成份额无法计算，图中留空。` : null;
+    return clauses.length ? `${clauses.join("；")}，图中留空。` : null;
   };
   if (!extremes.length) return <p role="status">{allUndefined
-    ? `没有可画出的历年构成：所选年份的${totalLabel}都为 0 或为负，份额无法计算（不是缺少数据）；请换一个行业或国家。`
+    ? `没有可画出的历年构成：所选年份的${totalLabel}都为 0 或为负，为 0 时构成份额无法计算，为负时本页面不展示比重（不是缺少数据）；请换一个行业或国家。`
     : "没有可画出的历年构成，请更换国家、行业或年份（缺少的数据留空，不当作 0）。"}</p>;
   const axis = niceDomain(Math.min(0, ...extremes), Math.max(0, ...extremes));
   const W = 420, H = 230, left = 56, right = 14, top = 14, bottom = 30;
@@ -69,11 +69,12 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
   const y = (value: number) => top + ((axis.hi - value) / (axis.hi - axis.lo || 1)) * (H - top - bottom);
   const linesFor = (facet: typeof facetData[number], year: number): TipLine[] => {
     const point = facet.points.find((item) => item.year === year);
+    const base = facet.rows.find((item) => item.year === year)?.[total];
     return [
       ["", `${facet.label} · ${year}`],
       ...(point?.shares
         ? segments.map((segment, index): TipLine => [segment.name, pct(point.shares![index]), point.shares![index] < 0 ? NEGATIVE : segment.color])
-        : [["构成", nonPositive(facet.rows.find((item) => item.year === year)) ? `无法计算（${totalLabel}为 0 或为负）` : "缺失", undefined] as TipLine]),
+        : [["构成", base === 0 ? `无法计算（${totalLabel}为 0）` : finiteValue(base) && base < 0 ? `本页面不展示比重（${totalLabel}为负）` : "缺失", undefined] as TipLine]),
       ...(point?.total != null ? [[totalLabel, `${indicatorNumber(point.total, "百万美元")} 百万美元`] as TipLine] : []),
     ];
   };

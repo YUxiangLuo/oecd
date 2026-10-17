@@ -231,14 +231,15 @@ describe("trend cards name the empty year and say why (round 12)", () => {
     { country: "MLT", year: 2016, value: 0.1 }, { country: "MLT", year: 2020, value: null },
   ];
 
-  test("step 7 MLT H51: a negative 2020 total is undefined, not missing, and 2020 is named", () => {
+  test("step 7 MLT H51: a negative 2020 total is hidden, not undefined or missing", () => {
     const view = render(
       <TrendSummary readings={readings} countries={["CHN", "MLT"]} years={[2016, 2020]} unit="%"
-        reasonFor={(country, year) => (country === "MLT" && year === 2020 ? "该行业总增加值为负，复杂 GVC 生产份额无法计算（不是缺少数据）" : null)} />,
+        reasonFor={(country, year) => (country === "MLT" && year === 2020 ? "该行业总增加值为负，本页面不展示比重（不是缺少数据）" : null)} />,
     );
     const text = view.getByLabelText("趋势读数").textContent ?? "";
-    expect(text).toContain("期间读数无法计算");
-    expect(text).toContain("2020 年该行业总增加值为负，复杂 GVC 生产份额无法计算（不是缺少数据），暂不比较差距");
+    expect(text).toContain("期间读数未完整展示");
+    expect(text).toContain("2020 年该行业总增加值为负，本页面不展示比重（不是缺少数据），暂不比较差距");
+    expect(text).not.toContain("无法计算");
     expect(text).not.toContain("2016 或 2020");
     expect(text).not.toContain("缺失");
   });

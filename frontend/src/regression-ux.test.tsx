@@ -256,6 +256,9 @@ describe("simple regression workbench", () => {
     const section = model.closest("section")!;
     expect(section.querySelector(".reg-section-step")?.textContent).toBe("默认模型");
     expect(section.querySelector(".model-eq-terms")?.textContent).toContain("两者之和是两年累计关联");
+    expect(section.querySelector(".model-eq-terms")?.textContent).toContain("X 仅当期提高后恢复时的两期关联之和");
+    expect(section.querySelector(".model-eq-terms")?.textContent).toContain("X 持续提高时第二期的关联");
+    expect(section.querySelector(".model-eq-terms")?.textContent).toContain("不是因果效应");
     expect(section.querySelector(".model-eq-terms")?.textContent).toContain("γ·汇率变动");
     // The model comes before its run button, and nothing of the change-the-model section shows before a result.
     expect(model.compareDocumentPosition(screen.getByRole("button", { name: /计算贸易流回归/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -524,7 +527,10 @@ describe("simple regression workbench", () => {
         cumulative: { ...run.result.coefs[0], name: "cumulative", coef: -0.55, ci_low: -0.57, ci_high: -0.53 },
       },
     };
-    expect(lagSplit("trade", twoYear as never)).toBe("其中当年 -0.33 个百分点，次年再 -0.22 个百分点，两者相加就是两年累计；“平均”指对所有国家×行业取平均。");
+    expect(lagSplit("trade", twoYear as never)).toContain("其中当年 -0.33 个百分点，次年 -0.22 个百分点");
+    expect(lagSplit("trade", twoYear as never)).toContain("共同条件斜率，不是所有国家×行业的等权平均");
+    expect(lagSplit("trade", twoYear as never)).toContain("不是两个年份的 Y 变化相加");
+    expect(lagSplit("trade", twoYear as never)).toContain("不代表因果效应");
     expect(lagSplit("trade", run as never)).toBeNull();
     render(<RegressionResultCard outcome="trade" response={{ ...twoYear, benchmark } as never} />);
     expect(screen.getByRole("heading", { level: 3 }).textContent).toContain("两年累计平均低 0.55 个百分点");
@@ -543,7 +549,7 @@ describe("simple regression workbench", () => {
         cumulative: { ...twoYear.result.cumulative, coef: 0.0743, ci_low: 0.061, ci_high: 0.0876 },
       },
     };
-    expect(lagSplit("trade", small as never)).toBe("其中当年 +0.041 个百分点，次年再 +0.033 个百分点，两者相加就是两年累计；“平均”指对所有国家×行业取平均。");
+    expect(lagSplit("trade", small as never)).toContain("其中当年 +0.041 个百分点，次年 +0.033 个百分点");
     // "两年累计" is said for X + L1.X only: a sum of other terms is not over the tariff's year and the next.
     render(<RegressionResultCard outcome="trade" response={{ ...twoYear, design: { ...twoYear.design, spec: { x_lags: [0, 2], controls: [], fixed_effects: ["year"] } }, benchmark } as never} />);
     expect(screen.getByRole("heading", { level: 3 }).textContent).not.toContain("两年累计");

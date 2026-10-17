@@ -5,7 +5,7 @@
  */
 
 /** Why value added can be negative (step 4 says only this: its lengths need the shares, not the parts). */
-export const NEGATIVE_VALUE_ADDED_CAUSE = "增加值为负不是数据错误：增加值是产出减去中间投入后的余额，为负说明这一年该行业的产出还抵不上它用掉的中间投入，多见于严重亏损的年份。";
+export const NEGATIVE_VALUE_ADDED_CAUSE = "增加值为负不一定是数据错误：增加值是基本价产出减去购买者价中间消耗。项目的 Z 按基本价记录，产品税减补贴 TLS 单列，因此纯增加值约为 OUT − Z 列合计 − TLS。增加值包含劳动报酬等，不等于利润，负增加值也不能直接称为亏损。";
 
-/** And why its shares are left out although two negatives divide: a share of a loss is not a share of value added. */
-export const NEGATIVE_VALUE_ADDED_NOTE = `${NEGATIVE_VALUE_ADDED_CAUSE}这时各分项也随之为负，两个负数相除虽然能得到正数，但那只是亏损怎样分到各分项，不是增加值的构成，所以不算比重。`;
+/** Negative nonzero denominators allow signed ratios; omitting them is a display policy, not a mathematical limit. */
+export const NEGATIVE_VALUE_ADDED_NOTE = `${NEGATIVE_VALUE_ADDED_CAUSE}总增加值为负且非零时，仍可计算有符号比率和加权贡献；但不宜按通常的非负构成份额解读，本页面不展示这类比重或加权分解。分母为零时才无法作除法。`;

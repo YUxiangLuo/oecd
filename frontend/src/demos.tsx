@@ -96,7 +96,7 @@ export const DECOMP: Record<number, DecompCfg> = {
       { key: "3a_VA_GVC_S", label: "3a_VA_GVC_S 简单 GVC 增加值", short: "简单 GVC", color: COMPONENT_COLORS.simpleGvc, desc: "增加值随中间品跨境一次后，在国外被最终使用。" },
       { key: "3b_VA_GVC_C", label: "3b_VA_GVC_C 复杂 GVC 增加值", short: "复杂 GVC", color: COMPONENT_COLORS.complexGvc, desc: "增加值至少两次跨越国境。" },
     ],
-    negativeNote: "负值表示这部分增加值为负（例如行业亏损），所以其他分项的比重之和可能超过 100%。",
+    negativeNote: "负值表示这部分增加值为负，不等于利润为负，所以其他分项的比重之和可能超过 100%。",
     // The backward decomposition (FGY, step 7) is introduced once, in the method section above.
     note: (_r, values, decimals) => `GVC 合计（3_VA_GVC）= 简单 GVC + 复杂 GVC = ${sumText(values[2], values[3], decimals)}。`,
   },
@@ -118,7 +118,7 @@ export const DECOMP: Record<number, DecompCfg> = {
 const FORWARD_SEGMENTS = [["PLv_D", "1_VA_D", "纯国内"], ["PLv_RT", "2_VA_RT", "传统贸易"], ["PLv_GVC", "3_VA_GVC", "GVC"]] as const;
 const BACKWARD_SEGMENTS = [["PLy_D", "1_FGY_D", "纯国内"], ["PLy_RT", "2_FGY_RT", "传统贸易"], ["PLy_GVC", "3_FGY_GVC", "GVC"]] as const;
 
-/** Step 4: some forward segment has a length, even where SVA ≤ 0 leaves the share-weighted split undefined. */
+/** Step 4: segment lengths remain readable where SVA ≤ 0 blocks the displayed share-weighted split. */
 export const hasForwardSegmentLength = (r: Row) => FORWARD_SEGMENTS.some(([lengthKey]) => finiteNumber(r[lengthKey]) != null);
 const hasBackwardSegmentLength = (r: Row) => BACKWARD_SEGMENTS.some(([lengthKey]) => finiteNumber(r[lengthKey]) != null);
 
@@ -372,7 +372,7 @@ function disclosureRatio(numerator: number | null, denominator: number | null): 
 /** Why a share has no value: the reason the student can check against the total line above it. */
 function disclosureRatioGap(numerator: number | null, denominator: number | null): string {
   if (numerator == null || denominator == null) return "—（缺数据，无法计算）";
-  return denominator < 0 ? "—（总量为负，无法计算比重）" : "—（总量为 0，无法计算比重）";
+  return denominator < 0 ? "—（总量为负，本页面不展示比重）" : "—（总量为 0，无法计算比重）";
 }
 
 /** `decimals`: beside a decomposition table, the panel's amount precision ({@link panelAmountDecimals}). */
@@ -540,7 +540,7 @@ export function decompositionModelReason(model: DecompositionModel, weightLabel?
     return cjkJoin(weight, "为 0（没有这类活动），无法计算加权长度。");
   }
   if (model.reason === "negative-weight-denominator") {
-    return cjkJoin(weight, "小于 0，无法按份额加权平均。");
+    return cjkJoin(weight, "小于 0，有符号加权贡献仍可计算，但本页面不展示该加权分解。");
   }
   if (model.reason === "missing-fields") {
     return `分解数据不完整${model.missingFields.length ? `（缺 ${model.missingFields.join("、")}）` : ""}，暂时无法拆分。`;
@@ -559,21 +559,21 @@ export function decompositionModelReason(model: DecompositionModel, weightLabel?
     }
     return "总量为 0，无法算比重。";
   }
-  return "总量为负，无法算比重。";
+  return "总量为负，有符号比率仍可计算，但本页面不展示比重。";
 }
 
-/** A weight of 0 or below makes the weighted parts undefined, not missing: the "—" line says which. */
+/** Distinguish undefined zero-denominator contributions from intentionally hidden signed contributions. */
 export function unavailableDashNote(model: DecompositionModel): string {
-  return model.reason === "zero-weight-denominator" || model.reason === "negative-weight-denominator"
+  if (model.reason === "negative-weight-denominator") return "“—”表示本页面不展示负分母下的加权贡献（不是无法计算或缺少数据），不按 0 计算。";
+  return model.reason === "zero-weight-denominator"
     ? "“—”表示这一项无法计算（不是缺少数据），不按 0 计算。"
     : "“—”表示没有数据，不按 0 计算。";
 }
 
-/** A total that is still defined while its share-weighted split is not (MLT H51 2020: SVA -1.268, PLv 2.131):
- * the headline length comes straight from the input–output relations; only the weighted parts need SVA > 0. */
+/** A negative nonzero weight leaves both total and signed contributions defined; only display is suppressed. */
 export function unavailableTotalNote(model: DecompositionModel, cfg: Pick<DecompCfg, "totalLabel" | "unit" | "weightTotal">): string | null {
   if (model.reason !== "negative-weight-denominator" || model.total == null || !cfg.weightTotal) return null;
-  return `${cfg.totalLabel} = ${fmt(model.total, cfg.unit)} 仍有定义：总长度由投入产出关系直接算出，不需要份额；无法计算的只是按 ${cfg.weightTotal} 份额加权的各段贡献，因此只是无法按段分解。`;
+  return `${cfg.totalLabel} = ${fmt(model.total, cfg.unit)} 仍有定义：总长度由投入产出关系直接算出；按 ${cfg.weightTotal} 非零负分母计算的有符号加权贡献也有定义，本页面仅不展示该按段分解。`;
 }
 
 /** Only missing data can change later ("暂时无法拆分"); a weight of 0 or below (LUX B09: FGY = 0, no final goods) is
@@ -588,7 +588,7 @@ function MiniBackwardBar({ row, countryLevel = false }: { row: Row; countryLevel
   if (model.status !== "valid" || !model.values || model.total == null || model.sum == null || model.error == null) {
     return (
       <div className="decomp-unavailable" role="status" style={{ marginTop: 14 }}>
-        <b>后向 PLy · {missingDataReason(model) ? "暂时无法拆分" : "无法拆分"}</b>
+        <b>后向 PLy · {model.reason === "negative-weight-denominator" ? "不展示加权分解" : missingDataReason(model) ? "暂时无法拆分" : "无法拆分"}</b>
         <div>{decompositionModelReason(model, "FGY")}</div>
         <div>PLy = {model.total == null ? "—（无法计算）" : fmt(model.total, "number")}；GVCPs = {position?.toFixed(3) ?? "—（无法计算）"}</div>
         <div>{PLY_DECOMP.parts.map((part, index) => (

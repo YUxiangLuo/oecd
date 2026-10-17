@@ -13,6 +13,22 @@ const segments = [
 ];
 
 describe("stacked area facets", () => {
+  test("keyboard readouts distinguish hidden negative shares, zero denominators and missing data", () => {
+    const view = render(<StackedAreaFacets
+      facets={[{ key: "ITA", label: "ITA 意大利", rows: [100, -10, 0, null].map((total, index) => ({ year: 2017 + index, total, value: total })) }]}
+      years={[2017, 2018, 2019, 2020]} segments={[{ key: "value", name: "增加值", color: "blue" }]}
+      total="total" totalLabel="总增加值" />);
+    const chart = view.container.querySelector<HTMLElement>('[tabindex="0"]')!;
+    fireEvent.keyDown(chart, { key: "Home" });
+    fireEvent.keyDown(chart, { key: "ArrowRight" });
+    expect(screen.getByText("本页面不展示比重（总增加值为负）")).toBeTruthy();
+    expect(screen.queryByText("无法计算（总增加值为 0 或为负）")).toBeNull();
+    fireEvent.keyDown(chart, { key: "ArrowRight" });
+    expect(screen.getByText("无法计算（总增加值为 0）")).toBeTruthy();
+    fireEvent.keyDown(chart, { key: "ArrowRight" });
+    expect(screen.getByText("缺失")).toBeTruthy();
+  });
+
   test("adjacent bands share the same boundary through every other part's zero crossing", () => {
     const view = render(<StackedAreaFacets facets={[{ key: "X", label: "X", rows: [0.6, -0.2, 0.7].map((a, i) => ({ year: 2018 + i, total: 1, a, b: [0.4, 1.2, 0.3][i] })) }]}
       years={[2018, 2019, 2020]} segments={[{ key: "a", name: "a", color: "blue" }, { key: "b", name: "b", color: "orange" }]} total="total" totalLabel="总值" />);
@@ -227,12 +243,18 @@ describe("undefined values in the theme charts read as such (round 12)", () => {
       years={[2016, 2019, 2020]} segments={segments} total="total" totalLabel="总增加值" />);
     const notes = view.getAllByRole("note");
     expect(notes).toHaveLength(1);
-    expect(notes[0].textContent).toBe("2020 年总增加值为负，构成份额无法计算，图中留空。");
+    expect(notes[0].textContent).toBe("2020 年总增加值为负，本页面不展示比重，图中留空。");
   });
 
   test("历年构成 whose total is negative in every year says the shares are undefined", () => {
     const rows: Row[] = [2016, 2020].map((year) => ({ country: "MLT", year, total: -1.268, DVAex: -0.6, FVA: -0.4, taxsub: -0.268 }));
     render(<StackedAreaFacets facets={[{ key: "MLT", label: "MLT 马耳他", rows }]} years={[2016, 2020]} segments={segments} total="total" totalLabel="总增加值" />);
-    expect(screen.getByRole("status").textContent).toContain("总增加值都为 0 或为负，份额无法计算（不是缺少数据）");
+    expect(screen.getByRole("status").textContent).toContain("为 0 时构成份额无法计算，为负时本页面不展示比重（不是缺少数据）");
+  });
+
+  test("历年构成 distinguishes zero and negative totals in mixed omitted years", () => {
+    const rows: Row[] = [2016, 2019, 2020].map((year) => ({ country: "ITA", year, total: year === 2016 ? 100 : year === 2019 ? 0 : -10, DVAex: 70, FVA: 25, taxsub: 5 }));
+    const view = render(<StackedAreaFacets facets={[{ key: "ITA", label: "ITA 意大利", rows }]} years={[2016, 2019, 2020]} segments={segments} total="total" totalLabel="总增加值" />);
+    expect(view.getByRole("note").textContent).toBe("2020 年总增加值为负，本页面不展示比重；2019 年总增加值为 0，构成份额无法计算，图中留空。");
   });
 });

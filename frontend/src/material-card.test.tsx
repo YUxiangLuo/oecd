@@ -1,9 +1,88 @@
-import { afterEach, expect, test } from "bun:test";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, expect, mock, spyOn, test } from "bun:test";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AUTO_RECORD_HOW, MATERIAL_CONFLICT_NOTE, MaterialCard } from "./material-card";
 import { MATERIAL_LOCKED_NOTE, MATERIAL_RECHOSEN_NEXT } from "./step-task-card";
+import { api, ApiError } from "./api";
+import { emptySession } from "./session-store";
+import { useSession } from "./use-session";
+import type { SessionResponse, SessionSaveResponse } from "./types";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); mock.restore(); sessionStorage.clear(); });
+
+for (const outcome of ["success", "error"] as const) {
+  test(`material waits through debounce and an unresolved server save, then shows ${outcome}`, async () => {
+    const response: SessionResponse & SessionSaveResponse = {
+      session: emptySession(), updated_at: "2026-09-10T00:00:00Z", release_id: "a".repeat(32), report: null,
+      completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_current: false, report_gate: [], material_gate: [],
+    };
+    spyOn(api.classroom, "session").mockResolvedValue(response);
+    let resolve!: (value: SessionSaveResponse) => void;
+    let reject!: (cause: Error) => void;
+    const request = new Promise<SessionSaveResponse>((done, fail) => { resolve = done; reject = fail; });
+    const save = spyOn(api.classroom, "saveSession").mockImplementation(() => request);
+    let session!: ReturnType<typeof useSession>;
+    function StudentMaterial() {
+      session = useSession(true, "student");
+      return <MaterialCard state={session.hasMaterialChanges(7) || session.getStep<{ observations?: unknown[] }>(7)?.observations?.length ? "recorded" : "missing"}
+        summary="JPN 9.891%" how={AUTO_RECORD_HOW} pending={session.hasMaterialChanges(7)} syncing={session.syncing}
+        syncError={session.hasMaterialChanges(7) ? session.saveError : null} syncConflict={session.syncConflict}
+        onRetrySync={() => { void session.syncNow().catch(() => {}); }} />;
+    }
+    render(<StudentMaterial />);
+    await waitFor(() => expect(session.status).toBe("ready"));
+    act(() => session.patchStep(7, { observations: [{ country: "JPN", value: 9.891 }] }));
+    const card = screen.getByRole("region", { name: "本步报告材料" });
+    expect(save).not.toHaveBeenCalled();
+    expect(card.querySelector(".material-chip")?.textContent).toBe("等待保存");
+    expect(card.querySelector(".material-card-how")).toBeNull();
+    let saving!: Promise<void>;
+    act(() => { saving = session.syncNow().catch(() => {}); });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(session.syncing).toBe(true);
+    expect(card.querySelector(".material-chip")?.textContent).toBe("等待保存");
+    expect(card.className).not.toContain("material-card--recorded");
+    await act(async () => {
+      if (outcome === "success") resolve({ ...response, updated_at: "2026-09-10T00:01:00Z" });
+      else reject(new ApiError(400, null, "save refused"));
+      await saving;
+    });
+    expect(card.querySelector(".material-chip")?.textContent).toBe(outcome === "success" ? "已记录" : "未保存");
+    if (outcome === "success") {
+      expect(card.querySelector(".material-card-how")?.textContent).toBe(AUTO_RECORD_HOW);
+      expect(screen.queryByRole("alert")).toBeNull();
+    } else {
+      expect(screen.getByRole("alert").textContent).toContain("材料还没保存成功");
+      expect(screen.getByRole("button", { name: "重试同步" })).toBeTruthy();
+      expect(card.querySelector(".material-card-how")).toBeNull();
+    }
+  });
+}
+
+test("pending material replaces the recorded action; unrelated syncing does not demote a saved card", () => {
+  const props = { state: "recorded" as const, summary: "JPN 9.891%", how: AUTO_RECORD_HOW,
+    check: { label: "核对已记录的读数 · 1 条", content: "JPN 9.891%" },
+    action: { label: "已记录为本步报告材料", disabled: true } };
+  const view = render(<MaterialCard {...props} pending syncing />);
+  const card = screen.getByRole("region", { name: "本步报告材料" });
+  expect((screen.getByRole("button", { name: "等待保存为本步报告材料" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(card.querySelector("summary")?.textContent).toBe("核对本步材料读数");
+  view.rerender(<MaterialCard {...props} pending syncing syncError="offline" />);
+  expect(card.querySelector(".material-chip")?.textContent).toBe("未保存");
+  expect(screen.getByRole("alert").textContent).toContain("材料还没保存成功");
+  expect(screen.queryByRole("button", { name: "已记录为本步报告材料" })).toBeNull();
+  expect(screen.getByRole("button", { name: "本步报告材料尚未确认保存" })).toBeTruthy();
+  expect(card.querySelector("summary")?.textContent).toBe("核对本步材料读数");
+  view.rerender(<MaterialCard {...props} pending syncing syncError="conflict" syncConflict />);
+  expect(screen.getByRole("alert").textContent).toBe(MATERIAL_CONFLICT_NOTE);
+  expect(screen.queryByRole("button", { name: "重试同步" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "已记录为本步报告材料" })).toBeNull();
+  expect(screen.getByRole("button", { name: "本步报告材料尚未确认保存" })).toBeTruthy();
+  expect(card.querySelector("summary")?.textContent).toBe("核对本步材料读数");
+  view.rerender(<MaterialCard {...props} syncing />);
+  expect(card.querySelector(".material-chip")?.textContent).toBe("已记录");
+  expect(screen.getByRole("button", { name: "已记录为本步报告材料" })).toBeTruthy();
+  expect(card.querySelector("summary")?.textContent).toBe(props.check.label);
+});
 
 test("the card names itself the same on every step, with a chip for its state and the one summary sentence", () => {
   render(<MaterialCard state="recorded" summary="2020 年 外国增加值项占比：CHN 中国 11.730%" how={AUTO_RECORD_HOW} />);

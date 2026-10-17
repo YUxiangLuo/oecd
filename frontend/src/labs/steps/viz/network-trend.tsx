@@ -32,7 +32,7 @@ export function networkTrendPoints(rows: Row[], years: number[], countries: stri
   }));
 }
 
-export function NetworkTrend({ meta, schema, initialCountry, initialCountries = [], initialBrowse, onBrowse, carriedNote = null, observations = [], savedLabel, syncing = false, syncError = null, syncConflict = false, onRetrySync, onRecord, locked = false, extraLenses = [], renderExtra, renderTable }: {
+export function NetworkTrend({ meta, schema, initialCountry, initialCountries = [], initialBrowse, onBrowse, carriedNote = null, observations = [], savedLabel, pending = false, syncing = false, syncError = null, syncConflict = false, onRetrySync, onRecord, locked = false, extraLenses = [], renderExtra, renderTable }: {
   meta: Meta;
   schema?: IndicatorSchema | null;
   initialCountry: string;
@@ -45,6 +45,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   /** "沿用步骤 n 的国家，可以更换。" while the opening countries are the carried ones. */
   carriedNote?: string | null;
   observations?: VizObservation[];
+  pending?: boolean;
   syncing?: boolean;
   syncError?: string | null;
   syncConflict?: boolean;
@@ -436,6 +437,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
           </tr>)}</tbody>
         </table></ScrollableRegion>) } : null}
       syncing={syncing}
+      pending={pending}
       syncError={syncError}
       syncConflict={syncConflict}
       onRetrySync={onRetrySync}

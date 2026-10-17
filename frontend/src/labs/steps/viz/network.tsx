@@ -185,6 +185,7 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
         observations={observations}
         savedLabel={state.data?.material_label as string | undefined}
         syncing={state.syncing}
+        pending={state.materialPending}
         syncError={state.materialSyncError ?? null}
         syncConflict={state.syncConflict}
         onRetrySync={state.syncNow}

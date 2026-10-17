@@ -556,6 +556,8 @@ export interface StepStateApi<T = Record<string, unknown>> {
   complete: boolean;
   syncing: boolean;
   syncError: string | null;
+  /** This step's material is not yet acknowledged by the server (including debounce). */
+  materialPending?: boolean;
   /** The session's save error, only while this step has material the server does not have yet. */
   materialSyncError?: string | null;
   /** Another tab saved a newer record: retrying cannot help until the server version is loaded. */

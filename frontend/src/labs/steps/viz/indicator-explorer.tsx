@@ -476,7 +476,7 @@ export function IndicatorExplorer({
             ? "趋势至少需要两个年份；请把起始年份和结束年份设为不同年份。"
             : !completeComposition
               ? totalIssues.length
-                ? `${joinCountries([...new Set(totalIssues.map((item) => item.country))])}${industry ? `在 ${sectorLabel(industry)}` : ""}的${label(activeComposition!.total)}${totalIssues.every((item) => item.value === 0) ? "为 0" : totalIssues.every((item) => item.value < 0) ? "为负" : "为 0 或为负"}，构成份额无法计算（不是缺少数据）；请换一个${industry ? "行业或" : ""}国家${timeView && !totalIssueEveryYear ? "，或调整年份范围" : ""}。`
+                ? `${joinCountries([...new Set(totalIssues.map((item) => item.country))])}${industry ? `在 ${sectorLabel(industry)}` : ""}的${label(activeComposition!.total)}${totalIssues.every((item) => item.value === 0) ? "为 0，构成份额无法计算" : totalIssues.every((item) => item.value < 0) ? "为负，本页面不展示比重" : "为 0 或为负：为 0 时构成份额无法计算，为负时本页面不展示比重"}（不是缺少数据）；请换一个${industry ? "行业或" : ""}国家${timeView && !totalIssueEveryYear ? "，或调整年份范围" : ""}。`
                 : "构成图需要每个分项都有数据，且总量大于 0；请换国家、行业或年份。"
               : view === "industry" && !rankComplete.length && rankGaps.length
                 ? `${year} 年显示的行业里，没有一个行业所有所选国家都有读数（${rankGapText}）；请换国家${rankGapsUndefined || years.length < 2 ? "" : "或换一个年份"}。`
@@ -683,12 +683,11 @@ export function IndicatorExplorer({
       && (row[total] as number) > 0 && structureComposition.segments.every((segment) => finiteValue(row[segment.key]))));
     if (!hidden.length) return null;
     const groups = [
-      { text: `${label(total)}为负`, rows: hidden.filter((row) => finiteValue(row[total]) && (row[total] as number) < 0) },
-      { text: `${label(total)}为 0（没有这类生产活动）`, rows: hidden.filter((row) => row[total] === 0) },
+      { text: `${label(total)}为负，本页面不展示比重（不是缺少数据）`, rows: hidden.filter((row) => finiteValue(row[total]) && (row[total] as number) < 0) },
+      { text: `${label(total)}为 0，份额无法计算（不是缺少数据）`, rows: hidden.filter((row) => row[total] === 0) },
       { text: "缺少数据", rows: hidden.filter((row) => !finiteValue(row[total]) || (row[total] as number) > 0) },
     ].filter((group) => group.rows.length);
-    const undefinedOnly = groups.every((group) => group.text !== "缺少数据");
-    return `另有 ${hidden.length} 个行业没有画出：${groups.map((group) => `${group.rows.map((row) => String(row.industry)).join("、")} ${group.text}`).join("；")}${undefinedOnly ? "，份额无法计算（不是缺少数据）" : ""}。`;
+    return `另有 ${hidden.length} 个行业没有画出：${groups.map((group) => `${group.rows.map((row) => String(row.industry)).join("、")} ${group.text}`).join("；")}。`;
   };
   // Value added below zero (ITA C19 and several H51 in 2020) is real: whichever view reads it says once why, and why
   // its shares are left out (四类生产活动 right under the line naming it, the other views under the chart).
@@ -1151,7 +1150,7 @@ export function IndicatorExplorer({
               )}
               {droppedBars.length > 0 && (
                 <p className="muted">
-                  {droppedBars.map((item) => `${countryLabel(item.country)} · ${item.year}：${label(activeComposition.total)}为${item.value === 0 ? " 0" : `负（${textNumber(item.value, "百万美元")} 百万美元）`}`).join("；")}，构成份额无法计算，占比图里不画{droppedHaveParts ? "；切换到“金额”可看各分项" : ""}。
+                  {droppedBars.map((item) => `${countryLabel(item.country)} · ${item.year}：${label(activeComposition.total)}为${item.value === 0 ? " 0，构成份额无法计算，占比图里不画" : `负（${textNumber(item.value, "百万美元")} 百万美元），本页面不展示比重，占比图里不画`}`).join("；")}{droppedHaveParts ? "；切换到“金额”可看各分项" : ""}。
                 </p>
               )}
               {/* Right under the line that names the negative total (or the bars drawn left of zero in 金额). */}
@@ -1167,11 +1166,11 @@ export function IndicatorExplorer({
                       return { country, year: value, value: finiteValue(total) && total > 0 && finiteValue(part) ? part / total : null };
                     }));
                     const focusLabel = activeComposition!.focusLabel ?? activeComposition!.segments.find((segment) => segment.key === focus)?.name;
-                    // A total of 0 or below leaves the share undefined in that year, not missing.
+                    // Zero leaves shares undefined; negative totals are deliberately not displayed.
                     const totalReason = (country: string, at: number) => {
                       const total = scoped.find((item) => item.country === country && item.year === at)?.[activeComposition!.total];
                       return finiteValue(total) && total <= 0
-                        ? `${industry ? "该行业" : "该国"}${label(activeComposition!.total)}${total === 0 ? "为 0" : "为负"}，${focusLabel ?? "构成份额"}无法计算（不是缺少数据）`
+                        ? `${industry ? "该行业" : "该国"}${label(activeComposition!.total)}${total === 0 ? `为 0，${focusLabel ?? "构成份额"}无法计算` : "为负，本页面不展示比重"}（不是缺少数据）`
                         : null;
                     };
                     return <TrendSummary readings={readings} countries={selected} years={chartYears} unit="%" metricLabel={focusLabel} industry={industry} reasonFor={totalReason} />;
@@ -1337,6 +1336,7 @@ export function IndicatorExplorer({
           : { label: state.materialLocked && saved.length ? REPLACE_MATERIAL_ACTION : RECORD_CHART_ACTION, onClick: () => { setRechosen(Boolean(state.materialLocked)); recordCurrent(); } }}
         check={saved.length ? { label: `核对已记录的读数 · ${saved.length} 条`, content: table(saved) } : null}
         syncing={state.syncing}
+        pending={state.materialPending}
         syncError={state.materialSyncError ?? null}
         syncConflict={state.syncConflict}
         onRetrySync={state.syncNow}

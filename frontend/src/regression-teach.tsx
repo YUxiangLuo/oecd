@@ -1,10 +1,10 @@
 import { displayBaselineLabel, familyDirectionLabel, lessonFor, REGRESSION_FAMILIES } from "./regression-lessons";
-import { BAR_UNIT_TITLES, depvarKind, SD_DEFINITION, standardizedDigits, standardizedEffect } from "./regression-verdict";
+import { BAR_UNIT_TITLES, chartDisplayScale, depvarKind, SD_DEFINITION, signed, standardizedDigits, standardizedEffect, withCountUnit } from "./regression-verdict";
 import { api } from "./api";
 import { useAsync } from "./labs/shared";
 import { decompositionParts, familyRun, familyVerdict, lagParts, regressionSummaryRows, type SiblingStepData } from "./regression-teach-logic";
 import { experimentLabel, omittedSummary, perPointDigits, perPointReading, snapshotOf, specSummary, xSpanLabel, xSum, type PerPointSource } from "./regression-workbench-table";
-import type { FirstWaveDecomposition, RegressionOutcome, TeachingOverviewResponse, WorkbenchOptions } from "./types";
+import type { CoefStat, FirstWaveDecomposition, RegressionOutcome, TeachingOverviewResponse, WorkbenchOptions } from "./types";
 import { DivergingBarChart } from "./viz/regression/diverging-bars";
 
 
@@ -62,6 +62,21 @@ export function RegressionEvidenceMatrix({
   );
 }
 
+/** Read the saved interval in the same units and precision as the estimate, without reconstructing it. */
+function SumInference({ outcome, stat, source }: { outcome: RegressionOutcome; stat: Pick<CoefStat, "coef" | "ci_low" | "ci_high"> | null; source: PerPointSource | null }) {
+  if (!stat || !source) return <small className="muted">95% 区间：—；方向不确定（缺少估计值）</small>;
+  if (source.result.suppressed) return <small className="muted">95% 区间：—；{familyDirectionLabel("suppressed")}</small>;
+  const { coef, ci_low: low, ci_high: high } = stat;
+  if (low == null || high == null || ![coef, low, high].every(Number.isFinite) || low > coef || coef > high) {
+    return <small className="muted">95% 区间：—；{familyDirectionLabel("insufficient")}</small>;
+  }
+  const { scale } = chartDisplayScale(outcome, source);
+  const digits = perPointDigits(outcome, stat, source);
+  const interval = withCountUnit(`[${signed(low * scale, digits)}, ${signed(high * scale, digits)}]`, depvarKind(outcome, source));
+  const direction = low > 0 ? "positive" : high < 0 ? "negative" : "insufficient";
+  return <small className="muted">95% 区间：{interval}；{familyDirectionLabel(direction)}</small>;
+}
+
 /**
  * Step 15: the model experiment each of steps 11–14 put into the report, with its X-terms sum next to the step's
  * default model (the report's appendix recomputes both). Each links back to its step.
@@ -105,8 +120,7 @@ export function ReportedExperiments({ getStep, onNavigateStep }: {
                   } : null);
                   const defaultSum = stepDefault?.result.cumulative ?? (estimate?.coef != null
                     ? { coef: estimate.coef, ci_low: estimate.ci_low, ci_high: estimate.ci_high } : null);
-                  // Both numbers at the default's decimals, so the two read alike.
-                  const digits = defaultSum && defaultSource ? perPointDigits(outcome, defaultSum, defaultSource) : undefined;
+                  // Each model's estimate and interval use that model's required precision.
                   return (
                     <tr key={step}>
                       <th scope="row">
@@ -121,12 +135,14 @@ export function ReportedExperiments({ getStep, onNavigateStep }: {
                       </> : "…"}</td>
                       <td>
                         {/* The span is named even without a sum ("—"): the writing prompt sends the student to this bracket. */}
-                        {`${sum ? perPointReading(outcome, sum, experiment.snapshot, digits) : "—"}（${xSpanLabel(experiment.spec)}）`}
+                        {`${sum ? perPointReading(outcome, sum, experiment.snapshot) : "—"}（${xSpanLabel(experiment.spec)}）`}
+                        <br /><SumInference outcome={outcome} stat={sum} source={experiment.snapshot} />
                         {/* The writing prompt asks whether the samples are the same: each number names its sample. */}
                         <br /><small className="muted">{sampleText(experiment.snapshot.result)}{defaultSample && sampleText(defaultSample) !== sampleText(experiment.snapshot.result) ? "（与默认模型不同）" : ""}</small>
                       </td>
                       <td>
-                        {defaultSum && defaultSource ? perPointReading(outcome, defaultSum, defaultSource, digits) : !sameY && overviewQuery.status === "loading" ? "…" : "—"}
+                        {defaultSum && defaultSource ? perPointReading(outcome, defaultSum, defaultSource) : !sameY && overviewQuery.status === "loading" ? "…" : "—"}
+                        <br /><SumInference outcome={outcome} stat={defaultSum} source={defaultSource} />
                         {defaultSample && <><br /><small className="muted">{sampleText(defaultSample)}</small></>}
                       </td>
                     </tr>

@@ -103,6 +103,7 @@ function AppContent() {
     complete: currentCompletion?.complete ?? false,
     syncing: session.syncing,
     syncError: session.syncError,
+    materialPending: session.hasMaterialChanges(current),
     materialSyncError: session.hasMaterialChanges(current) ? session.saveError : null,
     syncConflict: session.syncConflict,
     syncNow: () => { void session.syncNow().catch(() => {}); },

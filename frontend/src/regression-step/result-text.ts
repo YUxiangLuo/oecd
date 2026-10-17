@@ -85,6 +85,6 @@ export function designValueSentence(outcome: RegressionOutcome, response: Pick<R
 export function lagSplit(outcome: RegressionOutcome, response: Pick<RegressionResponse, "design" | "result">): string | null {
   const parts = lagSplitParts(outcome, response);
   // The model box above the run button says what the two terms are; here only the split.
-  // "累计" and "平均" in the headline say two things: the two years added up, each an average over the records.
-  return parts ? `其中当年 ${parts[0]}，次年再 ${parts[1]}，两者相加就是两年累计；“平均”指对所有国家×行业取平均。` : null;
+  // This is a common conditional slope, not an equal-weight average of unit-specific effects.
+  return parts ? `其中当年 ${parts[0]}，次年 ${parts[1]}，两者相加是两年累计关联：X 仅当期提高后恢复时的两期关联之和，也对应 X 持续提高时第二期的关联；不是两个年份的 Y 变化相加。“平均”指控制模型中其他变量和固定效应后的共同条件斜率，不是所有国家×行业的等权平均，也不代表因果效应。` : null;
 }

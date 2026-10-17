@@ -354,6 +354,7 @@ export function RegressionRunLab({ step, meta, state, getStep, reportCustomResul
         extra={result ? experimentLine : null}
         how={result ? "计算后自动保存，无需另外操作。" : undefined}
         syncing={state.syncing}
+        pending={state.materialPending}
         syncError={state.materialSyncError ?? null}
         syncConflict={state.syncConflict}
         onRetrySync={state.syncNow}

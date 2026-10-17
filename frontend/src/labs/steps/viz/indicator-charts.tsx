@@ -116,8 +116,7 @@ export function TrendSummary({
   sameIndustry?: boolean;
   /** The indicator the cards read, where no chart title names it (历年构成: 外国增加值项占比, 后向复杂 GVC 生产份额). */
   metricLabel?: string;
-  /** Why a reading is empty when it is undefined rather than missing, as a whole clause ("该行业总增加值为负，
-   *  复杂 GVC 生产份额无法计算（不是缺少数据）"); null when the data is really missing. */
+  /** Why a reading is undefined or deliberately hidden, as a whole clause; null for missing data. */
   reasonFor?: (country: string, year: number) => string | null;
 }) {
   const value = (country: string, year: number) =>
@@ -135,7 +134,8 @@ export function TrendSummary({
     return {
       text: grouped.join("；"),
       undefinedOnly,
-      word: undefinedOnly && parts.every((part) => part.reason!.includes("无法定义")) ? "无法定义" : "无法计算",
+      word: parts.some((part) => part.reason?.includes("不展示")) ? "未完整展示"
+        : undefinedOnly && parts.every((part) => part.reason!.includes("无法定义")) ? "无法定义" : "无法计算",
     };
   };
   // 起始 = 结束: one year is a choice, not missing data.

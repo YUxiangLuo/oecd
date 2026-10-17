@@ -114,13 +114,13 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
   // The cards show the focus part's share, so they carry the indicator's name, not the part's.
   const focusLabel = composition.focusLabel ?? focusName;
   const ownShares = segments.map((segment) => ({ segment, share: share(first, segment.key) }));
-  // A total of zero (an industry that does not export at all) or below (negative value added) is not missing
-  // data: the shares are undefined, and the card says why.
+  // Zero leaves shares undefined; negative totals are deliberately not shown as ordinary composition shares.
+  // Neither case is missing data.
   const totalCard = (country: string, comparison: boolean): ReadingCard | null => {
     const total = valueOf(rows, country, year, composition.total, industry);
     const prefix = comparison ? `与对比国家 ${countryLabel(country)} · ${focusLabel}` : `${scopeLabel(country, industry)} · ${year}`;
     if (total === 0) return { eyebrow: prefix, big: `${comparison ? `${countryLabel(country)} ` : ""}${totalLabel}为 0`, small: "没有可分解的总量，构成份额无定义；可换一个行业或国家" };
-    if (total !== null && total < 0) return { eyebrow: prefix, big: `${comparison ? `${countryLabel(country)} ` : ""}${totalLabel}为负`, small: `总量为负（${textNumber(total, "百万美元")} 百万美元），无法算比重${amountShown ? "" : "；切到“金额”可看各分项"}` };
+    if (total !== null && total < 0) return { eyebrow: prefix, big: `${comparison ? `${countryLabel(country)} ` : ""}${totalLabel}为负`, small: `总量为负（${textNumber(total, "百万美元")} 百万美元），本页面不展示比重${amountShown ? "" : "；切到“金额”可看各分项"}` };
     return null;
   };
   if (ownShares.some((item) => item.share === null)) {

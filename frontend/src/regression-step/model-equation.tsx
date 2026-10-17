@@ -48,7 +48,7 @@ export function DesignEquation({ design, expanded = true }: { design: Regression
         {/* What the formula is about and its subscripts first, before any term uses them. */}
         <li><b>Y</b> 是{yLabel}；下标 i = 国家，j = 行业，t = 年份。</li>
         {lagged
-          ? <li><b>β₁·X + β₂·L1.X</b>：当年和上一年的关税暴露。Y 与关税暴露的关联可能分两年出现：β₁ 是加税当年的关联，β₂ 是上一年的 X 在今年对应的关联（即加税第二年再出现的部分），<b>两者之和是两年累计关联</b>，即本步的主结果。累计的是系数，不是把图上两个年份的 Y 变化相加。</li>
+          ? <li><b>β₁·X + β₂·L1.X</b>：当年和上一年的关税暴露。β₁ 是当期 X 的条件关联，β₂ 是上一年的 X 在今年对应的条件关联。<b>两者之和是两年累计关联</b>：X 仅当期提高后恢复时的两期关联之和，也对应 X 持续提高时第二期的关联。累计的是系数，不是把图上两个年份的 Y 变化相加；这些是控制其他变量和固定效应后的共同条件斜率，不是国家×行业的等权平均，也不是因果效应。</li>
           : <li><b>β·X</b>：关税暴露（首年对美出口份额 w × 加征税率 τ）；β 是 X 每高 1 个百分点时 Y 平均相差多少。</li>}
         {controls.length > 0 && (
           <li><b>γ·{controls.join("、")}</b>：控制变量。{controls.length > 1 ? "它们" : "它"}与加税同时变化、又与 Y 有关，放进模型是为了不把与{controls.length > 1 ? "它们" : "它"}相关的变化算到 X 上。</li>

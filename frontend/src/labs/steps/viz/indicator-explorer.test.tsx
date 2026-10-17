@@ -712,19 +712,33 @@ describe("readouts and the record button follow the chart on screen (round 10)",
       const cards = await view.findByLabelText("构成读数");
       expect(cards.textContent).toContain("为负");
       expect(cards.textContent).not.toContain("对比国家构成不完整");
-      expect(view.getByText(/构成份额无法计算，占比图里不画/)).toBeTruthy();
+      expect(view.getByText(/本页面不展示比重，占比图里不画/)).toBeTruthy();
       // Only value added explains itself as a loss; step 6's export total is another matter.
       expect(view.container.textContent).not.toContain(NEGATIVE_VALUE_ADDED_CAUSE);
       const card = materialCard(view);
       expect(materialChip(view)).toBe(MATERIAL_STATE_LABELS.blocked);
       expect(card.textContent).toContain("当前图表暂不能记录：");
-      expect(card.textContent).toContain("为负，构成份额无法计算（不是缺少数据）");
+      expect(card.textContent).toContain("为负，本页面不展示比重（不是缺少数据）");
       expect(within(card).queryByRole("button")).toBeNull();
       // In the 金额 view the card does not send the student to the view they are already in.
       expect(cards.textContent).toContain("切到“金额”可看各分项");
       fireEvent.click(view.getByRole("button", { name: "金额" }));
       await waitFor(() => expect(view.getByLabelText("构成读数").textContent).not.toContain("切到“金额”"));
-      expect(view.getByLabelText("构成读数").textContent).toContain("无法算比重");
+      expect(view.getByLabelText("构成读数").textContent).toContain("本页面不展示比重");
+    } finally { rows.mockRestore(); schema.mockRestore(); }
+  });
+
+  test("mixed zero and negative totals keep their distinct explanations in the chart and blocked material", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) =>
+      countryRows(year).map((row) => ({ ...row, gross_exports: row.country === "USA" ? -5 : 0 })));
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const view = setup();
+      const note = await view.findByText(/本页面不展示比重，占比图里不画/);
+      expect(note.textContent).toContain("为 0，构成份额无法计算，占比图里不画");
+      expect(note.textContent).toContain("为负（-5.000 百万美元），本页面不展示比重");
+      expect(materialCard(view).textContent).toContain("为 0 或为负：为 0 时构成份额无法计算，为负时本页面不展示比重");
+      expect(view.saves).toHaveLength(0);
     } finally { rows.mockRestore(); schema.mockRestore(); }
   });
 
@@ -860,7 +874,7 @@ test("step 7 行业结构 says how many industries it leaves out and why (round 
     const view = setup(ProductionVizStep);
     await view.findByRole("button", { name: "四类生产活动" });
     fireEvent.click(view.getByRole("button", { name: "行业结构" }));
-    await waitFor(() => expect(view.getAllByText("另有 2 个行业没有画出：H51 总增加值为负；B09 总增加值为 0（没有这类生产活动），份额无法计算（不是缺少数据）。")).toHaveLength(2));
+    await waitFor(() => expect(view.getAllByText("另有 2 个行业没有画出：H51 总增加值为负，本页面不展示比重（不是缺少数据）；B09 总增加值为 0，份额无法计算（不是缺少数据）。")).toHaveLength(2));
     // Why value added is negative is said once under the two countries' charts (round 6).
     expect(view.getAllByText(NEGATIVE_VALUE_ADDED_NOTE)).toHaveLength(1);
   } finally { rows.mockRestore(); perCountry.mockRestore(); schema.mockRestore(); }
@@ -916,7 +930,7 @@ test("step 7 占比 says nothing about red negative parts when the only negative
   const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
   try {
     const view = setup(ProductionVizStep);
-    await view.findByText(/构成份额无法计算，占比图里不画/);
+    await view.findByText(/本页面不展示比重，占比图里不画/);
     expect(view.container.textContent).not.toContain("负分项画成红色");
     // A share of a negative total would read as a share of value added: the page says why it has none, right under
     // the line that names the negative total (round 6).

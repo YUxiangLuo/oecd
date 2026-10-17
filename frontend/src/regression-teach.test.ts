@@ -210,16 +210,16 @@ describe("ReportedExperiments", () => {
         }));
         const defaultCell = () => view.container.querySelectorAll("tbody tr td")[3]?.textContent;
         // The default model's sample is the family's one, known from the step's run; its number waits for the overview.
-        expect(defaultCell()).toBe("…样本 N = 10");
+        expect(defaultCell()).toContain("…95% 区间：—；方向不确定");
         expect(view.container.textContent).not.toContain("-0.55");
         if (fails) reject(new Error("offline"));
         else resolve({ version: "test", disclaimer: "", outcomes: { trade: [
           { key: "FVA_share", label: "wrong Y", kind: "share", default: true, coef: -99, ci_low: -100, ci_high: -98, p: 0.01, status: "ok", suppress_inference: false, depvar_std: 1, depvar_mean: 1, n_obs: 10 },
           { key: "DVAex_share", label: "selected Y", kind: "share", default: false, coef: 2.37, ci_low: 2.1, ci_high: 2.6, p: 0.01, status: "ok", suppress_inference: false, depvar_std: 1, depvar_mean: 1, n_obs: 10 },
         ], production: [], length: [], network: [] } });
-        await waitFor(() => expect(defaultCell()).toBe(fails ? "—样本 N = 10" : "+2.37 个百分点样本 N = 10"));
+        await waitFor(() => expect(defaultCell()).toContain(fails ? "—95% 区间：—" : "+2.37 个百分点95% 区间：[+2.10, +2.60] 个百分点；方向明确：X 越高，Y 越高"));
         // The total, then its sample on the next line.
-        expect(view.container.querySelectorAll("tbody tr td")[2]?.textContent).toBe("+1.73 个百分点（两年累计）样本 N = 10");
+        expect(view.container.querySelectorAll("tbody tr td")[2]?.textContent).toBe("+1.73 个百分点（两年累计）95% 区间：[+1.60, +1.90] 个百分点；方向明确：X 越高，Y 越高样本 N = 10");
         expect(view.container.textContent).toContain("同一 Y 的默认模型");
       } finally { cleanup(); options.mockRestore(); overview.mockRestore(); }
     });
@@ -243,11 +243,64 @@ describe("ReportedExperiments", () => {
       expect(rows[0][0]).toBe("步骤 11 · 贸易流");
       expect(rows[0][2]).toContain("X + L1.X；GDP 对数、贸易开放度；国家×行业 + 年份 FE");
       // The model's sum says which years it covers; both read at the default's decimals.
-      expect(rows[0][3]).toBe("-0.70 个百分点（两年累计）样本 N = 10");
-      expect(rows[0][4]).toBe("-0.55 个百分点样本 N = 10");
+      expect(rows[0][3]).toBe("-0.70 个百分点（两年累计）95% 区间：[-0.75, -0.65] 个百分点；方向明确：X 越高，Y 越低样本 N = 10");
+      expect(rows[0][4]).toBe("-0.55 个百分点95% 区间：[-0.57, -0.53] 个百分点；方向明确：X 越高，Y 越低样本 N = 10");
       expect(overview).not.toHaveBeenCalled();
     } finally { cleanup(); options.mockRestore(); overview.mockRestore(); }
   });
+  }
+
+  test("a narrow custom interval retains the precision of its own point estimate", () => {
+    const run = withSum(-0.55, -0.57, -0.53);
+    const custom = withSum(-0.5546, -0.5547, -0.5545);
+    const html = renderToStaticMarkup(createElement(ReportedExperiments, {
+      getStep: (step: number) => step === 11 ? { run, experiment: {
+        spec: noRateSpec, snapshot: snapshotOf(custom), saved_at: "test",
+      } } : undefined,
+    }));
+    const cells = html.match(/<td>([^]*?)<\/td>/g)!;
+    expect(cells[2]).toContain("-0.5546 个百分点（两年累计）");
+    expect(cells[2]).toContain("95% 区间：[-0.5547, -0.5545] 个百分点");
+    expect(cells[3]).toContain("-0.55 个百分点");
+    expect(cells[3]).toContain("95% 区间：[-0.57, -0.53] 个百分点");
+  });
+
+  for (const mode of ["cross-zero", "missing-ci", "suppressed", "missing-sum", "single-lag", "three-years"] as const) {
+    test(`experiment inference handles ${mode} without borrowing the default interval`, () => {
+      const run = withSum(-0.55, -0.57, -0.53);
+      const custom = withSum(0.1, -0.2, 0.4);
+      const snapshot = snapshotOf(custom);
+      const spec = { ...noRateSpec, x_lags: mode === "single-lag" ? [0] : mode === "three-years" ? [0, 1, 2] : [0, 1] };
+      if (mode === "missing-ci") snapshot.result.cumulative!.ci_low = null;
+      if (mode === "suppressed") snapshot.result.suppressed = true;
+      if (mode === "missing-sum") snapshot.result.cumulative = null;
+      const html = renderToStaticMarkup(createElement(ReportedExperiments, {
+        getStep: (step: number) => step === 11 ? { run, experiment: { spec, snapshot, saved_at: "test" } } : undefined,
+      }));
+      const cell = html.match(/<td>([^]*?)<\/td>/g)![2];
+      expect(cell).toContain(mode === "single-lag" ? "仅当期 X" : mode === "three-years" ? "三年累计" : "两年累计");
+      expect(cell).toContain("方向不确定");
+      expect(cell).toContain(["missing-ci", "suppressed", "missing-sum"].includes(mode) ? "95% 区间：—" : "95% 区间：[-0.20, +0.40]");
+      expect(cell).not.toContain("-0.57");
+    });
+  }
+
+  for (const [outcome, step, kind, interval] of [
+    ["length", 13, "length", "[-0.0020, +0.0040]"],
+    ["length", 13, "position", "[-0.0020, +0.0040]"],
+    ["network", 14, "network", "[-0.0020, +0.0040]"],
+  ] as const) {
+    test(`experiment interval uses ${kind} units rather than percentage points`, () => {
+      const run = response(outcome, coefficient(0.1, -0.2, 0.4));
+      run.design.depvar_kind = kind;
+      run.result.cumulative = coefficient(0.1, -0.2, 0.4);
+      const html = renderToStaticMarkup(createElement(ReportedExperiments, {
+        getStep: (n: number) => n === step ? { run, experiment: { spec: noRateSpec, snapshot: snapshotOf(run), saved_at: "test" } } : undefined,
+      }));
+      expect(html).toContain(`95% 区间：${interval}`);
+      expect(html).toContain("方向不确定");
+      expect(html).not.toContain(`${interval} 个百分点`);
+    });
   }
 
   test("discloses selected controls omitted from the actual saved estimate", async () => {
