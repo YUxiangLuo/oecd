@@ -31,6 +31,37 @@ def test_grid_spans_every_x_set_every_distinct_effect_set_and_each_control_setti
     assert len(cms.ys()) == 17
 
 
+def test_resume_refuses_changed_data_and_report_refuses_mixed_evidence(tmp_path, monkeypatch):
+    import json
+    from types import SimpleNamespace
+
+    from test_model_spec import _panel
+
+    panel = _panel()
+    monkeypatch.setattr(cms, "_load_panel", lambda args: ("release-a", panel))
+    monkeypatch.setattr(cms, "grid", lambda: [("default", DEFAULT_SPEC)])
+    monkeypatch.setattr(cms, "ys", lambda which="all": [("trade", "FVA_share", -0.55, "share")])
+    args = SimpleNamespace(out=str(tmp_path), ys="default", keys=[], markdown=str(tmp_path / "report.md"))
+    cms.run(args)
+    path = tmp_path / "runs.jsonl"
+    original = path.read_text()
+    record = json.loads(original)
+    assert record["status"] != "error"
+    assert record["provenance"]["release"] == "release-a"
+    cms.run(args)
+    assert path.read_text() == original
+    panel.loc[0, "teaching_y_trade"] += 0.1
+    with pytest.raises(ValueError, match="运行证据"):
+        cms.run(args)
+    assert path.read_text() == original
+    record["release"] = "release-b"
+    path.write_text(original + json.dumps(record) + "\n")
+    with pytest.raises(ValueError, match="不能混用"):
+        cms._report(args, None)
+    with pytest.raises(ValueError, match="不能混用"):
+        cms.distinct(args)
+
+
 def test_well_specified_means_unit_and_year_effects_with_the_confounders_in_or_absorbed():
     default = _record(DEFAULT_SPEC)
     assert cms._well_specified(default)

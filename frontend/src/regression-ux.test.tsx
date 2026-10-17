@@ -387,6 +387,8 @@ describe("simple regression workbench", () => {
     expect(unitTitle).toBe("X 每高 1 个百分点，Y 两年累计平均相差（个百分点）");
     const weak = rows.find((row) => row.key === "3b_FGY_GVC_C_share")!;
     expect([weak.uncertain, weak.valueLabel, weak.intervalLabel]).toEqual([true, "+0.008", "[-0.011, +0.026] 个百分点"]);
+    expect(barPreviewText(weak, "复杂 GVC 生产份额")).toContain("固定课堂弱效应示例经过筛选");
+    expect(barPreviewText(rows[0], "复杂 GVC 生产份额")).not.toContain("经过筛选");
     expect(rows.filter((row) => row.uncertain)).toHaveLength(1);
     expect(forwardShareIdentity(items)).toBe("纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（0.00）；前向 GVC 生产总份额 = 简单 + 复杂（按未取整的原值精确相加，条旁取整后的数字可能相差末位 1）。本步默认的“复杂 GVC 生产份额”按增加值来源（前向）计算；“后向复杂 GVC 生产份额”按最终品（后向）计算，是另一项指标。");
     expect(forwardShareIdentity(items.slice(0, 3))).toBeNull();

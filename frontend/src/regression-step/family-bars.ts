@@ -1,5 +1,5 @@
 /** The family bars of a regression step (every Y of the family) and the 加税前后 chart's lines, markers and notes. */
-import { displayBaselineLabel } from "../regression-lessons";
+import { displayBaselineLabel, WEAK_EXAMPLE_NOTE } from "../regression-lessons";
 import {
   BAR_UNIT_TITLES,
   barFigures,
@@ -141,5 +141,6 @@ export function familyBarsTitle(count: number): string {
 
 /** Under the bars after a click on another Y: its reading, and that the step's material stays the default Y. */
 export function barPreviewText(row: DivergingBarRow, defaultLabel: string): string {
-  return `预览 · ${spokenBar(row)}。本步的结论和报告材料仍是${defaultLabel}。`;
+  const note = row.key === "3b_FGY_GVC_C_share" ? WEAK_EXAMPLE_NOTE : "";
+  return `预览 · ${spokenBar(row)}。本步的结论和报告材料仍是${defaultLabel}。${note}`;
 }

@@ -6,6 +6,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ScrollableRegion } from "./a11y";
 import { groupedFixed } from "./format";
+import { WEAK_EXAMPLE_NOTE } from "./regression-lessons";
 import { POSITION_UNIT_WORDS } from "./regression-verdict";
 import { api, ApiError } from "./api";
 import { SAVE_PAUSED_NOTE } from "./sync-problem";
@@ -638,6 +639,7 @@ export function RegressionModelWorkbench({ stepNumber, outcome, defaultResponse,
       {noDesignValue
         ? <p className="muted reg-design-note">当前 Y 是比值指标，没有单一的课程设定值：只和同一 Y 的默认模型比较 X 各项合计及区间。</p>
         : <p className="muted reg-design-note">{options.design_value_note}</p>}
+      {outcome === "production" && yKey === "3b_FGY_GVC_C_share" && <p className="muted">{WEAK_EXAMPLE_NOTE}</p>}
 
       {!defaultForY && reportBox}
       {defaultForY && <>

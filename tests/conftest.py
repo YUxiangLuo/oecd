@@ -110,8 +110,16 @@ def teaching_db(monkeypatch):
     # demo-pool test expands this to the production default of 50 once.
     monkeypatch.setattr(demo_accounts, "DEMO_STUDENT_COUNT", 1)
 
+    from db_guard import authorize_reset
+
+    host, port, database, user = authorize_reset(config.PG_DSN)
     db.shutdown()
     with psycopg.connect(config.PG_DSN, autocommit=True) as connection:
+        actual = connection.execute("SELECT current_database(), current_user").fetchone()
+        # A local Docker port can map to a different server address/port. Verify the client endpoint and
+        # the server-reported database/user, rather than comparing the container's internal address.
+        if (connection.info.host, str(connection.info.port)) != (host, port) or actual != (database, user):
+            raise ValueError("实际连接不是批准的一次性测试库，拒绝重置")
         connection.execute("DROP SCHEMA public CASCADE")
         connection.execute("CREATE SCHEMA public")
     db._schema_ready = False

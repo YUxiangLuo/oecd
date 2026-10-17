@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import itertools
 import json
 import math
@@ -145,12 +146,27 @@ def run(args: argparse.Namespace) -> None:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     release, panel = _load_panel(args)
+    # Bind the actual loaded values, not a later filesystem snapshot or a release label alone.
+    provenance = {
+        "release": release,
+        "panel_sha256": hashlib.sha256(panel.to_csv(index=False).encode()).hexdigest(),
+        "implementation_sha256": hashlib.sha256(
+            b"".join(
+                path.name.encode() + b"\0" + hashlib.sha256(path.read_bytes()).digest()
+                for path in sorted(Path(__file__).resolve().parents[1].joinpath("gvcsim/regression").glob("*.py"))
+                + [Path(__file__).resolve(), Path(teaching_variants.__file__).resolve()]
+            )
+        ).hexdigest(),
+    }
     lines = out / "runs.jsonl"
     done: set[str] = set()
     if lines.exists():
         with lines.open(encoding="utf-8") as handle:
             for raw in handle:
-                done.add(json.loads(raw)["id"])
+                previous = json.loads(raw)
+                if previous.get("provenance") != provenance:
+                    raise ValueError("运行证据与当前数据或代码不一致（或缺失）；请使用新输出目录重新运行")
+                done.add(previous["id"])
     specs = grid()
     targets = [item for item in ys(args.ys) if not args.keys or item[1] in args.keys]
     total = len(specs) * len(targets)
@@ -167,6 +183,7 @@ def run(args: argparse.Namespace) -> None:
                 record: dict[str, Any] = {
                     "id": identity,
                     "release": release,
+                    "provenance": provenance,
                     "outcome": outcome,
                     "key": key,
                     "beta": beta,
@@ -645,18 +662,33 @@ def report(args: argparse.Namespace) -> None:
         _report(args, variant)
 
 
-def _report(args: argparse.Namespace, variant: teaching_variants.Variant | None) -> None:
-    out = Path(args.out)
+def _read_records(out: Path) -> list[dict[str, Any]]:
+    """Keep both report entry points from silently combining runs across inputs or implementations."""
     records = [json.loads(line) for line in (out / "runs.jsonl").open(encoding="utf-8")]
+    identities = {json.dumps([row.get("release"), row.get("provenance")], sort_keys=True) for row in records}
+    if len(identities) > 1:
+        raise ValueError("报告不能混用不同数据或实现的运行记录")
+    return records
+
+
+def _report(args: argparse.Namespace, variant: teaching_variants.Variant | None) -> None:
+    records = _read_records(Path(args.out))
     checks, extras = evaluate(records)
     by_id = {record["id"]: record for record in records}
     present = {(record["outcome"], record["key"]) for record in records}
     targets = [item for item in ys() if (item[0], item[1]) in present]
     gamma = MACRO_CONTROLS[GDP_COLUMN]["gamma_factor"]
     openness_gamma = MACRO_CONTROLS[OPENNESS_COLUMN]["gamma_factor"]
-    where = f"候选生成规则 {variant.key}（{variant.title}）" if variant else "当前 release"
+    where = f"记录中的 release {records[0].get('release')}" if records else "空记录"
+    evidence_note = (
+        "运行时已记录数据与代码指纹；本报告仅汇总这些记录，不代表在当前版本重新运行或验证等价。"
+        if records and records[0].get("provenance")
+        else "历史记录缺少运行时数据／代码指纹，不能认证其适用于当前版本。"
+    )
     lines = [
         "# 步骤 11–14 模型空间核查" + (f"（{variant.key}）" if variant else ""),
+        "",
+        f"> {evidence_note}",
         "",
         f"> {where}上，学生可构造的模型（7 种 X 滞后组合 × 13 种固定效应组合 × 13 种控制变量设置）对 {len(targets)} 个 Y 的估计，"
         "逐项与教学数据的生成规则对照。生成规则见 `gvcsim/regression/teaching.py`，核查脚本见 `scripts/check_model_space.py`。",
@@ -756,6 +788,8 @@ def _report(args: argparse.Namespace, variant: teaching_variants.Variant | None)
     target.write_text(text, encoding="utf-8")
     summary = {
         "release": records[0].get("release") if records else None,
+        "provenance": records[0].get("provenance") if records else None,
+        "evidence_note": evidence_note,
         "fits": len(records),
         "checks": [
             {
@@ -826,8 +860,7 @@ def _moves() -> list[tuple[str, str, ModelSpec]]:
 
 def distinct(args: argparse.Namespace) -> None:
     """How far each single change to the default model moves the two-year total, per Y, plus the whole grid's spread."""
-    out = Path(args.out)
-    records = [json.loads(line) for line in (out / "runs.jsonl").open(encoding="utf-8")]
+    records = _read_records(Path(args.out))
     by_id = {record["id"]: record for record in records}
     present = {(record["outcome"], record["key"]) for record in records}
     targets = [item for item in ys() if (item[0], item[1]) in present and item[2]]

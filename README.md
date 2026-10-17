@@ -60,7 +60,7 @@ v12 升级到 v13（以及之前的 v11 → v12）必须重建 release，不能�
 
 ## 测试与检查
 
-**`tests/conftest.py` 会删除目标数据库的 `public` schema。** 运行 pytest 前必须把 `GVCSIM_PG_DSN` 指向专用的一次性测试库，不得使用课堂库或开发库。
+**`tests/conftest.py` 会删除目标数据库的 `public` schema。** 数据库测试必须显式设置 `GVCSIM_PG_DSN_TEST` 为专用的一次性测试库；如另设 `GVCSIM_PG_DSN`，两者的主机、端口、库名和用户必须相同。只允许显式本机 IP（127.0.0.1 或 ::1）、端口、用户和以 `_test` 结尾的库名；禁止 service/hostaddr 隐式重定向。生产环境始终拒绝重置，没有 override。名字本身不能保证安全，仍须确认该库可销毁，不得使用课堂库或开发库。
 
 ```bash
 uv run ruff check . && uv run ruff format --check .

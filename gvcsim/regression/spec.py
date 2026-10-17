@@ -175,7 +175,15 @@ class ModelSpec:
             if self.fixed_effects
             else "无固定效应"
         )
-        return f"{x_part}；{controls}；{effects}"
+        if "country_year" in self.fixed_effects:
+            rate = "同期汇率由国家×年份 FE 吸收（不论是否勾选）"
+        elif (EXCHANGE_RATE_COLUMN, 0) in self.controls:
+            rate = "显式加入同期汇率；实际省略情况见结果"
+        elif any(key == EXCHANGE_RATE_COLUMN for key, _ in self.controls):
+            rate = "仅加入滞后汇率，不等于控制同期汇率"
+        else:
+            rate = "未加入同期汇率控制项"
+        return f"{x_part}；{controls}；{effects}；{rate}"
 
     def equation(self, depvar: str = "Y") -> str:
         """``Y = β₁·X + β₂·L1.X + γ₁·汇率变动 + 国家×行业 FE + 年份 FE + ε``."""

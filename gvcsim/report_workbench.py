@@ -347,7 +347,7 @@ def _design_value_rows(columns: list[dict[str, Any]]) -> list[str]:
         return ["| 课程设定值 | " + " | ".join("无单一设定值（比值 Y）" for _ in columns) + " |"]
     kind = _depvar_kind(outcome, design)
     if beta == 0:
-        return ["| 课程设定值 | " + " | ".join("设定为 0（与 X 无关）" for _ in columns) + " |"]
+        return ["| 课程设定值 | " + " | ".join("生成方程中 X 的系数设为 0" for _ in columns) + " |"]
     scale = 1.0 if kind == "share" else 0.01
     digits = _shared_digits(columns, kind)
     target = with_count_unit(_signed(beta * scale, digits), kind)

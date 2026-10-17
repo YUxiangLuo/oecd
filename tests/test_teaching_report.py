@@ -2971,7 +2971,7 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     failing["steps"]["11"]["data"]["experiment"] = _experiment(ModelSpec((0,), (), ("year",)))
     lines = build(failing, "同学").markdown.split("## 附录：模型实验", 1)[1]
     assert (
-        "- 自定义（去掉 L1\\.X；去掉汇率变动；去掉 GDP 对数；去掉贸易开放度；固定效应：年份 FE）：X；无控制变量；年份 FE。"
+        "- 自定义（去掉 L1\\.X；去掉汇率变动；去掉 GDP 对数；去掉贸易开放度；固定效应：年份 FE）：X；无控制变量；年份 FE；未加入同期汇率控制项。"
         "这次没能重算：关税暴露 X 在这个设定下无法估计" in lines
     )
     # The rest of this test reads a teaching-shaped panel with two tariff waves.
@@ -3019,7 +3019,7 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     assert not any(line.startswith("|  |") for line in appendix.splitlines())
     # The exchange rate is absorbed by country × year effects and said so; the default column's model is summarised.
     assert (
-        f"- {escaped_name}：X + L1.X；汇率变动；国家×行业 + 国家×年份 FE；已省略（被国家×年份 FE 吸收：汇率变动）"
+        f"- {escaped_name}：X + L1.X；汇率变动；国家×行业 + 国家×年份 FE；同期汇率由国家×年份 FE 吸收（不论是否勾选）；已省略（被国家×年份 FE 吸收：汇率变动）"
         in step11
     )
     assert "- 默认模型：X + L1.X；汇率变动、GDP 对数、贸易开放度；国家×行业 + 年份 FE" in step11

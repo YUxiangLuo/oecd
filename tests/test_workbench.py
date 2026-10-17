@@ -85,7 +85,7 @@ def test_options_list_every_choice_in_page_order_with_the_default_and_the_limits
     assert options["design_values"]["trade"]["FVA_share"] == -0.55
     assert options["design_values"]["production"]["3b_FGY_GVC_C_share"] == 0.0
     assert options["design_values"]["length"]["GVCPs"] is None
-    assert options["design_value_note"].startswith("课程数据按设定生成")
+    assert "不是因果识别评分" in options["design_value_note"]
     specs = [json.dumps(item["spec"], sort_keys=True) for item in presets]
     assert len(set(specs)) == len(specs) and json.dumps(DEFAULT_SPEC.to_dict(), sort_keys=True) not in specs
     assert all(item["question"].endswith("？") and ModelSpec.from_dict(item["spec"]) for item in presets)

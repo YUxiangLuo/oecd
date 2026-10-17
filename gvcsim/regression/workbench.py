@@ -53,12 +53,13 @@ FIXED_EFFECT_DESCRIPTIONS = {
     "country_industry": "每个国家的每个行业一个截距，包含国家 FE 和行业 FE",
     "year": "每年一个截距，扣掉所有单位共同的年度变化",
     "country_year": "每个国家每年一个截距，包含国家 FE 和年份 FE；会吸收本页全部国家层面的控制变量（包括滞后项），省略这些变量但不因其缺失删样本。"
-    "和国家×行业 FE 一起用时，课程数据的混杂都在国家层面，X 合计和默认模型几乎相同：吸收不等于没有控制；"
+    "和国家×行业 FE 一起用时，生成方程中的宏观控制项都在国家层面，X 合计和默认模型几乎相同：吸收不等于没有控制；"
     "不勾国家×行业 FE 时，各国家×行业自身的水平差异没有扣除，结果可能差很多",
 }
 DESIGN_VALUE_NOTE = (
-    "课程数据按设定生成：每个 Y 的两年累计有一个“课程设定值”。默认模型的估计通常落在它附近（偶尔区间不含它，属抽样波动）；"
-    "漏掉同时和 X、Y 相关的变量（混杂变量）时，估计点往往偏离它，但区间可能仍包含它。"
+    "课程设定值是模拟生成方程的系数（比值 Y 没有单一设定值），不是现实政策效应。"
+    "表中差异用于观察模型是否恢复生成设定；一次估计与设定值的差异不等于统计偏差，也不是因果识别评分。"
+    "改变控制项、固定效应或样本都可能改变估计；删除控制项不等于删除经济渠道。"
 )
 NO_FIXED_EFFECTS_NOTE = "都不勾时模型加常数项，表下的设定写作“无固定效应”。"
 
@@ -68,7 +69,7 @@ def _without(controls: tuple[tuple[str, int], ...], *names: str) -> tuple[tuple[
 
 
 # The preset experiments, in page order, each changing one thing of the default model. The first tier is the three
-# "必看" ones (a confounder left out: the point estimate moves away from the course's design value on v13 data, about
+# "必看" ones (a generator covariate left out: the point estimate moves away from the course's design value on v13 data, about
 # 10–15% without the exchange rate, 6–11% without GDP, 4–9% without openness, where some intervals still contain it;
 # docs/regression-model-space-check-2026-10-14.md); the second tier is "进阶". Each is a contrast the course data were built to show, and the question is asked,
 # not answered. Their labels name the experiment in the report. Two changes the page also offers leave the estimate
@@ -80,7 +81,7 @@ PRESETS: tuple[tuple[str, str, str, str, ModelSpec], ...] = (
         "no_exchange_rate",
         "core",
         "去掉汇率变动",
-        "X 各项合计离课程设定值远了多少？",
+        "删除控制项并不删除数据中的汇率变化：X 各项合计、区间和样本有没有变化？",
         ModelSpec(
             DEFAULT_SPEC.x_lags, _without(DEFAULT_SPEC.controls, EXCHANGE_RATE_COLUMN), DEFAULT_SPEC.fixed_effects
         ),
@@ -89,21 +90,21 @@ PRESETS: tuple[tuple[str, str, str, str, ModelSpec], ...] = (
         "no_gdp",
         "core",
         "去掉 GDP 对数",
-        "和去掉汇率变动偏向同一边吗？",
+        "与默认模型的差异，和去掉汇率控制项时方向相同吗？",
         ModelSpec(DEFAULT_SPEC.x_lags, _without(DEFAULT_SPEC.controls, GDP_COLUMN), DEFAULT_SPEC.fixed_effects),
     ),
     (
         "no_openness",
         "core",
         "去掉贸易开放度",
-        "这次往哪边偏？",
+        "X 各项合计和区间如何变化？",
         ModelSpec(DEFAULT_SPEC.x_lags, _without(DEFAULT_SPEC.controls, OPENNESS_COLUMN), DEFAULT_SPEC.fixed_effects),
     ),
     (
         "current_x_only",
         "advanced",
         "只放当期 X（去掉 L1.X）",
-        "少了上一年那一项，合计少了多少？",
+        "当期 X 的系数如何变化？它还等于默认模型的当期系数吗？",
         ModelSpec((0,), DEFAULT_SPEC.controls, DEFAULT_SPEC.fixed_effects),
     ),
     (

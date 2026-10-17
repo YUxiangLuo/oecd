@@ -1,5 +1,6 @@
 /** The result card's sentences: the step 10 example's conversion, the course's design value and the lag split. */
 import { groupedFixed, percentagePoints } from "../format";
+import { WEAK_EXAMPLE_NOTE } from "../regression-lessons";
 import { coversDesignSpan, designDeviation, designDeviationText, shownCoefficient, perPointDigits, perPointReading, xSpanLabel } from "../regression-workbench-table";
 import { depvarKind, lagSplitParts, networkDigits, withCountUnit } from "../regression-verdict";
 import { workedNumbers } from "../labs/steps/shock-lab";
@@ -63,7 +64,14 @@ export function designValueSentence(outcome: RegressionOutcome, response: Pick<R
   if (beta === undefined) return "";
   if (beta === null) return "课程设定：这个 Y 是两项模拟长度之比，没有单一的设定值，估计不与某个数对照。";
   const includesZero = coefficient.ci_low != null && coefficient.ci_high != null && coefficient.ci_low <= 0 && 0 <= coefficient.ci_high;
-  if (beta === 0) return includesZero ? "课程设定：这个 Y 与 X 无关（设定值为 0），区间包含 0，与设定一致。" : "课程设定：这个 Y 与 X 无关（设定值为 0）；这次区间不含 0，是抽样波动，不是关联。";
+  if (beta === 0) {
+    const interval = coefficient.ci_low == null || coefficient.ci_high == null
+      ? "区间不完整，无法判断是否包含 0。"
+      : includesZero
+        ? "本次区间包含 0，与零设定相容，但不显著不等于证明没有关联。"
+        : "本次区间不含 0；样本中的显著结果不改变生成方程的零设定，也不证明因果效应。";
+    return `课程生成方程中 X 的系数设为 0。${interval}${WEAK_EXAMPLE_NOTE}`;
+  }
   const source = { depvar_kind: response.design.depvar_kind ?? "", result: { suppressed: true } };
   const digits = perPointDigits(outcome, coefficient, { depvar_kind: source.depvar_kind, result: { suppressed: false } });
   const target = perPointReading(outcome, { coef: beta, ci_low: null, ci_high: null }, source, digits);

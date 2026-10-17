@@ -64,7 +64,7 @@ function openDetails(details: Element | null, open = true) {
 
 describe("model wording (the server's ModelSpec.summary and equation)", () => {
   test("a spec reads as the report prints it, contained effects dropped", () => {
-    expect(specSummary(DEFAULT, options)).toBe("X + L1.X；汇率变动、GDP 对数、贸易开放度；国家×行业 + 年份 FE");
+    expect(specSummary(DEFAULT, options)).toBe("X + L1.X；汇率变动、GDP 对数、贸易开放度；国家×行业 + 年份 FE；显式加入同期汇率；实际省略情况见结果");
     expect(equationPreview(DEFAULT, options)).toBe("Y = β₁·X + β₂·L1.X + γ₁·汇率变动 + γ₂·GDP 对数 + γ₃·贸易开放度 + 国家×行业 FE + 年份 FE + ε");
     const messy: ModelSpec = {
       x_lags: [2, 0], controls: [{ name: "log_gdp_proxy", lag: 1 }, { name: ER, lag: 0 }],
@@ -73,9 +73,11 @@ describe("model wording (the server's ModelSpec.summary and equation)", () => {
     expect(canonicalSpec(messy, options)).toEqual({
       x_lags: [0, 2], controls: [{ name: ER, lag: 0 }, { name: "log_gdp_proxy", lag: 1 }], fixed_effects: ["industry", "country_year"],
     });
-    expect(specSummary(messy, options)).toBe("X + L2.X；汇率变动、L1.增加值总额对数；行业 + 国家×年份 FE");
+    expect(specSummary(messy, options)).toBe("X + L2.X；汇率变动、L1.增加值总额对数；行业 + 国家×年份 FE；同期汇率由国家×年份 FE 吸收（不论是否勾选）");
     expect(equationPreview({ x_lags: [0], controls: [], fixed_effects: [] }, options)).toBe("Y = β₁·X + 常数项 + ε");
-    expect(specSummary({ x_lags: [0], controls: [], fixed_effects: [] }, options)).toBe("X；无控制变量；无固定效应");
+    expect(specSummary({ x_lags: [0], controls: [], fixed_effects: [] }, options)).toBe("X；无控制变量；无固定效应；未加入同期汇率控制项");
+    expect(specSummary({ ...DEFAULT, controls: [{ name: ER, lag: 1 }] }, options)).toContain("仅加入滞后汇率");
+    expect(specSummary({ ...DEFAULT, controls: [], fixed_effects: ["country_year"] }, options)).toContain("同期汇率由国家×年份 FE 吸收");
   });
 
   test("a combined effect contains its parts", () => {
@@ -145,7 +147,7 @@ describe("tables", () => {
     const row = designValueRow(columns, "trade", "FVA_share", options)!;
     expect(row.label).toBe("课程设定值（X 每高 1 个百分点）");
     expect(row.cells.every((cell) => /^-0\.55 个百分点；(?:幅度比设定值[大小] \d+%|与设定值几乎相同|方向与设定值相反)$/.test(cell))).toBe(true);
-    expect(designValueRow(columns, "production", "3b_FGY_GVC_C_share", options)!.cells[0]).toBe("设定为 0（与 X 无关）");
+    expect(designValueRow(columns, "production", "3b_FGY_GVC_C_share", options)!.cells[0]).toBe("生成方程中 X 的系数设为 0");
     expect(designValueRow(columns, "length", "GVCPs", options)!.cells[0]).toBe("无单一设定值（比值 Y）");
     expect(designValueRow(columns, "trade", "unknown", options)).toBeNull();
     // Only a model whose X terms cover the two-year total is compared with it; L2.X (0 by design) may be added.
@@ -171,7 +173,7 @@ describe("tables", () => {
       "去掉汇率变动", "去掉 GDP 对数", "去掉贸易开放度", "只放当期 X（去掉 L1.X）", "去掉年份固定效应", "固定效应改为国家 + 行业 + 年份", "加上人口增长率和 FDI 净流入占比",
     ]);
     expect(options.x_lags[2].description).toBe("滞后 2 期：两年前的 X");
-    expect(options.design_value_note).toContain("区间可能仍包含它");
+    expect(options.design_value_note).toContain("一次估计与设定值的差异不等于统计偏差");
     expect(options.fixed_effects.find((item) => item.key === "country_year")?.description).toContain("吸收不等于没有控制");
     // Only on top of country × industry effects: alone they leave each unit's level in.
     expect(options.fixed_effects.find((item) => item.key === "country_year")?.description).toContain("和国家×行业 FE 一起用时");
@@ -298,7 +300,7 @@ describe("tables", () => {
     expect(lines).toContain("国家×年份 FE,否,否");
     expect(lines).toContain("合计：X 每高 1 个百分点,-0.55 个百分点（两年累计）,-0.70 个百分点（两年累计）");
     expect(lines).toContain("F（自由度）,\"2,076.70（3, 74）\",\"462.88（2, 74）\"");
-    expect(lines.at(-2)).toBe("设定,X + L1.X；汇率变动、GDP 对数、贸易开放度；国家×行业 + 年份 FE,X + L1.X；GDP 对数、贸易开放度；国家×行业 + 年份 FE");
+    expect(lines.at(-2)).toBe("设定,X + L1.X；汇率变动、GDP 对数、贸易开放度；国家×行业 + 年份 FE；显式加入同期汇率；实际省略情况见结果,X + L1.X；GDP 对数、贸易开放度；国家×行业 + 年份 FE；未加入同期汇率控制项");
     expect(options.footnote).toContain("括号内为按国家聚类的标准误");
     expect(lines.at(-1)).toBe(`"${options.footnote.replace("括号内为按国家聚类的标准误", "“标准误”一行为按国家聚类的标准误")}"`);
     expect(csv).not.toMatch(/,\(\d/);
@@ -410,7 +412,7 @@ describe("the workbench", () => {
     expect(document.querySelector(".reg-custom-design-row")?.textContent).toContain("无单一设定值（比值 Y）");
     await act(async () => { fireEvent.change(select, { target: { value: "PLv_GVC" } }); });
     expect(designNote()).toBe(options.design_value_note);
-    expect(screen.getByRole("button", { name: /^去掉汇率变动/ }).textContent).toContain("离课程设定值");
+    expect(screen.getByRole("button", { name: /^去掉汇率变动/ }).textContent).toContain("区间和样本有没有变化");
   });
 
   test("an uncached Y never relabels or exports old numbers while delayed or failed, and recovers on switching", async () => {

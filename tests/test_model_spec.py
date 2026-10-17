@@ -88,7 +88,13 @@ def test_spec_normalisation_drops_contained_effects_and_orders_terms():
     assert ModelSpec((0,), (), ("country_year", "year", "country")).canonical().fixed_effects == ("country_year",)
     both = ModelSpec((0,), (), ("country_year", "country_industry", "year", "industry")).canonical()
     assert both.fixed_effects == ("country_industry", "country_year")
-    assert spec.summary() == "X + L1.X；汇率变动、L1.增加值总额对数；国家×行业 + 年份 FE"
+    assert (
+        spec.summary()
+        == "X + L1.X；汇率变动、L1.增加值总额对数；国家×行业 + 年份 FE；显式加入同期汇率；实际省略情况见结果"
+    )
+    assert "仅加入滞后汇率" in ModelSpec((0, 1), ((EXCHANGE_RATE_COLUMN, 1),), ("year",)).summary()
+    for controls in ((), ((EXCHANGE_RATE_COLUMN, 0),), ((EXCHANGE_RATE_COLUMN, 1),)):
+        assert "同期汇率由国家×年份 FE 吸收" in ModelSpec((0, 1), controls, ("country_year",)).summary()
     assert ModelSpec.from_dict(spec.to_dict()) == spec
 
 

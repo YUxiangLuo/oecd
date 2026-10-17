@@ -76,7 +76,14 @@ export function specSummary(spec: ModelSpec, options: WorkbenchOptions): string 
   const effects = canonical.fixed_effects.length
     ? `${canonical.fixed_effects.map((key) => effectName(options, key)).join(" + ")} FE`
     : "无固定效应";
-  return `${x}；${controls}；${effects}`;
+  const rate = canonical.fixed_effects.includes("country_year")
+    ? "同期汇率由国家×年份 FE 吸收（不论是否勾选）"
+    : canonical.controls.some((item) => item.name === "teaching_exchange_rate_change" && item.lag === 0)
+      ? "显式加入同期汇率；实际省略情况见结果"
+      : canonical.controls.some((item) => item.name === "teaching_exchange_rate_change")
+        ? "仅加入滞后汇率，不等于控制同期汇率"
+        : "未加入同期汇率控制项";
+  return `${x}；${controls}；${effects}；${rate}`;
 }
 
 /** "Y = β₁·X + β₂·L1.X + γ₁·汇率变动 + 国家×行业 FE + 年份 FE + ε" (the server's ModelSpec.equation). */
@@ -382,7 +389,7 @@ export function designValueRow(columns: TableColumn[], outcome: RegressionOutcom
   const first = columns.find(({ snapshot, spec }) => xSum(snapshot, spec));
   if (!first) return null;
   if (design === null) return { key: "design", label: "课程设定值", cells: columns.map(() => "无单一设定值（比值 Y）") };
-  if (design === 0) return { key: "design", label: "课程设定值", cells: columns.map(() => "设定为 0（与 X 无关）") };
+  if (design === 0) return { key: "design", label: "课程设定值", cells: columns.map(() => "生成方程中 X 的系数设为 0") };
   const digits = sharedPerPointDigits(columns, outcome)!;
   const target = perPointReading(outcome, { coef: design, ci_low: null, ci_high: null }, { depvar_kind: first.snapshot.depvar_kind, result: { suppressed: true } }, digits);
   return {

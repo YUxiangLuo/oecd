@@ -262,7 +262,11 @@ describe("the course's design value on the result card (v13)", () => {
     const zero = response();
     zero.model_snapshot!.beta = 0;
     zero.result.coefs[0] = { ...zero.result.coefs[0], coef: 0.01, ci_low: -0.02, ci_high: 0.04 };
-    expect(renderToStaticMarkup(<RegressionResultCard outcome="production" response={zero} />)).toContain("设定值为 0），区间包含 0，与设定一致");
+    expect(renderToStaticMarkup(<RegressionResultCard outcome="production" response={zero} />)).toContain("本次区间包含 0，与零设定相容");
+    zero.result.coefs[0] = { ...zero.result.coefs[0], coef: 0.05, ci_low: 0.02, ci_high: 0.08 };
+    const zeroHtml = renderToStaticMarkup(<RegressionResultCard outcome="production" response={zero} />);
+    expect(zeroHtml).toContain("样本中的显著结果不改变生成方程的零设定");
+    expect(zeroHtml).toContain("固定课堂弱效应示例经过筛选");
     const ratio = response();
     ratio.model_snapshot!.beta = null;
     expect(renderToStaticMarkup(<RegressionResultCard outcome="length" response={ratio} />)).toContain("没有单一的设定值");
