@@ -614,6 +614,28 @@ def test_report_design_value_row_compares_only_models_covering_the_two_year_tota
     ]
 
 
+def test_report_design_value_row_does_not_compare_a_total_association():
+    """A model without the post-treatment control estimates the total association, not a biased partial one."""
+    from gvcsim import report_workbench
+
+    no_rate = ModelSpec(
+        DEFAULT_SPEC.x_lags,
+        tuple((key, lag) for key, lag in DEFAULT_SPEC.controls if key != EXCHANGE_RATE_COLUMN),
+        DEFAULT_SPEC.fixed_effects,
+    )
+    total = {"coef": -0.62, "ci_low": -0.64, "ci_high": -0.60}
+    column = {
+        "spec": no_rate,
+        "run": {
+            "design": {"outcome": "trade", "baseline": "FVA_share", "depvar_kind": "share"},
+            "result": {"coefs": [], "cumulative": total},
+        },
+    }
+    [row] = report_workbench._design_value_rows([column])
+    assert "总关联；不与偏关联设定值比较" in row
+    assert "幅度比设定值" not in row
+
+
 def test_the_page_and_the_report_print_the_same_generated_data_note():
     """The page keeps its own copy of the sentence (regression-lessons.ts); the report prints this one."""
     import re

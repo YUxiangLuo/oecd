@@ -3003,6 +3003,8 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     assert f"| 变量 | 默认模型 | {escaped_name} |" in appendix
     assert "### 步骤 13 · 长度回归（Y：" in appendix
     assert "| 变量 | 默认模型 | 去掉汇率变动 |" in appendix
+    # The step 13 experiment cannot be recomputed on this fixture, so its design-value row is not printed here;
+    # test_workbench covers the no-exchange (total-association) branch directly.
     assert "### 步骤 12" not in appendix and "### 步骤 14" not in appendix
     assert (
         "控制变量都是国家层面的逐年数值：汇率变动 = 本币兑美元的年变动率（%，负为贬值）；第一批被加税国家 2018 年起额外贬值 8%（课程生成）"

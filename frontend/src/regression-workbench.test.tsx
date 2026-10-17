@@ -7,6 +7,7 @@ import { experimentReportChanged } from "./regression-workbench-table";
 import {
   canonicalSpec, coefficientRows, comparisonCsv, designDeviation, designDeviationText, designValueRow, effectiveEffects, equationPreview, experimentLabel, includedBy, omittedSummary, perPointReading,
   perPointRow, samplesDiffer, shownCoefficient, shownModelLabel, chartModelLabel, significanceStars, snapshotOf, specSummary, summaryRows, termLabel,
+  POST_TREATMENT_CONTROL,
   type TableColumn,
 } from "./regression-workbench-table";
 import optionsFixture from "./regression-workbench-options.fixture.json";
@@ -174,6 +175,8 @@ describe("tables", () => {
     ]);
     expect(options.x_lags[2].description).toBe("滞后 2 期：两年前的 X");
     expect(options.design_value_note).toContain("区间可能仍包含它");
+    // The result card's fallback constant must name the control the server marks as post-treatment.
+    expect(options.controls.find((item) => item.name === POST_TREATMENT_CONTROL)?.role).toBe("post_treatment");
     expect(options.fixed_effects.find((item) => item.key === "country_year")?.description).toContain("吸收不等于没有控制");
     // Only on top of country × industry effects: alone they leave each unit's level in.
     expect(options.fixed_effects.find((item) => item.key === "country_year")?.description).toContain("和国家×行业 FE 一起用时");

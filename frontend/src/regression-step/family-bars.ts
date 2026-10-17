@@ -107,7 +107,7 @@ export function parallelTrendsNote(years: readonly number[], policyYear: number 
   const count = ["", "一", "两", "三", "四", "五"][before.length] ?? String(before.length);
   const pre = before.length ? `加税前只有 ${before.join("、")} ${count}年可看` : "加税前的年份很少";
   const who = groups > 2 ? "各组" : "两组";
-  return `这张图也用来看回归的前提：如果没有关税，扣掉加税前趋势（GDP 对数和贸易开放度）后，${who}的走势应大致平行。${pre}，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，GDP 和开放度是加税前趋势；汇率是加税后同期变化，不用于识别平行趋势。`;
+  return `这张图也用来看回归的前提：如果没有关税，扣掉加税前趋势（GDP 对数和贸易开放度）后，${who}的走势应大致平行（图上的线不会平行：汇率等同期变化也在动）。${pre}，能检验的证据有限；被加税名单按对美货物顺差确定，不是随机分配。本课程的 Y 按设定生成，GDP 和开放度是加税前趋势；汇率是加税后同期变化，不用于识别平行趋势。`;
 }
 
 /** Step 14: weighted degree is in-degree + out-degree in every row (the report says the same under its chart). */

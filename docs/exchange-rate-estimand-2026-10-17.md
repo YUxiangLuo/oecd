@@ -62,14 +62,20 @@ GDP 对数和贸易开放度不同：它们从 2016 年起分化，是加税前�
 - **B. 保留 DGP，改口径（本次采用）**：不重建数据；把汇率叫处理后变量，区分偏关联/总关联；GDP 和开放度继续承担“遗漏变量偏误”的教学例子。
 - **C. 默认模型去掉汇率**：默认估总关联；但课程设定值 β 是偏关联，设定值机制要整体重做，且总关联随批次异质，不推荐。
 
-## 6. 验证
+## 6. 既有材料
+
+- 已提交的报告保留原文，不因本次文案改动重写；需要新表述时由学生重新生成，教师按历史材料阅读。
+- 已保存的步骤 11–14 模型实验不需要重算：报告生成时按保存的 `spec` 重算，设计值行按同一规则判断是否比较。
+- 已有教学库的步骤 11 第 2 题仍是旧题；教师需在“理解题”页对步骤 11 点“恢复默认”并保存，学生按新题重新作答。
+
+## 7. 验证
 
 - `uv run ruff check .`、`uv run ruff format --check .`、`uv run mypy`。
 - `cd frontend && bunx tsc --noEmit -p . && bun run test:unit`。
 - 后端定向：`pytest tests/test_quizzes.py tests/test_workbench.py tests/test_teaching_report.py tests/test_teaching_regression.py tests/test_steps.py tests/test_route_adapters.py`（需要一次性测试库；`teaching_db` 会清空所连库的 `public` schema）。
 - 手工：步骤 10 控制卡、步骤 11–14 预设/设定值行/结果卡、步骤 15 报告附录；确认不含汇率的列写“总关联；不与偏关联设定值比较”。
 
-## 7. 后续
+## 8. 后续
 
 - 把 benchmark 绑定到当前 release（`release_id` + panel SHA-256），避免“当前 release”证据与提交物脱节。
 - 在教师手册/生成规则说明里写明弱效应 Y 的噪声 draw 是课程挑选的零效应示例。
