@@ -3059,7 +3059,7 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     assert cells[0] in {f"{total:+.2f} 个百分点（当期＋滞后合计）", f"{total:+.3f} 个百分点（当期＋滞后合计）"}
     assert cells[0] != cells[1]
     (chart,) = [json.loads(block) for block in re.findall(r"```gvcsim-chart\n(.*?)\n```", step11, re.S)]
-    assert [item["label"] for item in chart["items"]] == ["默认模型", custom_name]
+    assert [item["label"] for item in chart["items"]] == ["默认模型", "自定义（3 处改动）"]
     for bar, spec in zip(chart["items"], (DEFAULT_SPEC, country_year), strict=True):
         recomputed = regression_service.cached_run(panel, RegressionDesign("trade", teaching=True, spec=spec))
         for key, source in (("value", "coef"), ("ci_low", "ci_low"), ("ci_high", "ci_high")):

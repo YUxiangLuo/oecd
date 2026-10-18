@@ -135,8 +135,9 @@ def test_regression_stage_task_goals_match_the_beginner_workflow():
         assert "Y₃" not in by_number[step]["goal"]
         assert "Y₄" not in by_number[step]["goal"]
         assert "固定模型" not in by_number[step]["goal"]
-    # Contract v6 reads an association across country×industry records, not a change over time.
+    # The cumulative reading starts in the second year of sustained exposure, not a one-year change.
     for step in (11, 12, 13, 14):
         shown = " ".join([by_number[step]["goal"], *by_number[step]["tasks"]])
-        assert "X 每高 1 个百分点" in by_number[step]["goal"]
+        assert "X 持续高 1 个百分点" in by_number[step]["goal"]
+        assert "从第二年起" in by_number[step]["goal"]
         assert "每增加" not in shown and "平均变化" not in shown and "X 增加" not in shown
