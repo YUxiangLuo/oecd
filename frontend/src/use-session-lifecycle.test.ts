@@ -11,7 +11,7 @@ const STAMP = "2026-09-10T00:00:00Z";
 const NEWER = "2026-09-10T00:01:00Z";
 function response(session: ExperimentSession = emptySession(), updated_at = STAMP): SessionResponse & SessionSaveResponse {
   return { session, updated_at, release_id: RELEASE, report: null,
-    completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_current: false, report_gate: [], material_gate: [] };
+    completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_current: false, report_updated_at: null, report_gate: [], material_gate: [] };
 }
 const edited = (text: string) => patchStep(emptySession(), 15, { research_question: text });
 function draft(session = edited("draft"), extra: Record<string, unknown> = {}) {

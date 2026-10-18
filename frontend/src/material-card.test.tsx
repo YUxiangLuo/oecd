@@ -12,7 +12,7 @@ afterEach(() => { cleanup(); mock.restore(); sessionStorage.clear(); });
 test("a committed save with a lost response stays uncertain when retry conflicts and reading the newer version fails", async () => {
   let server: SessionResponse & SessionSaveResponse = {
     session: emptySession(), updated_at: "2026-09-10T00:00:00Z", release_id: "a".repeat(32), report: null,
-    completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_current: false, report_gate: [], material_gate: [],
+    completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_current: false, report_updated_at: null, report_gate: [], material_gate: [],
   };
   spyOn(api.classroom, "session").mockResolvedValueOnce(server).mockRejectedValue(new TypeError("read response lost"));
   spyOn(api.classroom, "saveSession").mockImplementation(async (body) => {
@@ -48,7 +48,7 @@ for (const outcome of ["success", "error"] as const) {
   test(`material waits through debounce and an unresolved server save, then shows ${outcome}`, async () => {
     const response: SessionResponse & SessionSaveResponse = {
       session: emptySession(), updated_at: "2026-09-10T00:00:00Z", release_id: "a".repeat(32), report: null,
-      completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_current: false, report_gate: [], material_gate: [],
+      completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_current: false, report_updated_at: null, report_gate: [], material_gate: [],
     };
     spyOn(api.classroom, "session").mockResolvedValue(response);
     let resolve!: (value: SessionSaveResponse) => void;

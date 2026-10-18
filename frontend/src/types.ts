@@ -654,6 +654,8 @@ export interface SessionResponse extends QuizLearningState {
 export interface SessionSaveResponse extends QuizLearningState {
   /** Acknowledges the submitted snapshot without retransmitting its contents. */
   updated_at: string;
+  /** The report whose validity this acknowledgment describes. */
+  report_updated_at: string | null;
   completion: CompletionSummary;
   /** Whether the latest report was generated from this record. */
   report_current: boolean;

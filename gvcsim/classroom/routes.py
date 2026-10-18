@@ -227,6 +227,7 @@ def _saved_session_response(username: str, payload: dict[str, Any], updated_at: 
     report = db.latest_report(username)
     return {
         "updated_at": updated_at,
+        "report_updated_at": report["updated_at"] if report else None,
         **_learning_state(payload, report=report),
     }
 

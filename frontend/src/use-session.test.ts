@@ -12,7 +12,7 @@ const NEWER = "2026-09-10T00:01:00Z";
 const delays = [...SAVE_RETRY_DELAYS_MS];
 function response(session: ExperimentSession = emptySession(), updated_at = STAMP): SessionResponse & SessionSaveResponse {
   return { session, updated_at, release_id: RELEASE, report: null,
-    completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_current: false, report_gate: [], material_gate: [] };
+    completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_current: false, report_updated_at: null, report_gate: [], material_gate: [] };
 }
 function deferred<T>() {
   let resolve!: (value: T) => void;

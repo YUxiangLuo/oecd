@@ -186,6 +186,7 @@ def test_session_contract_uses_optimistic_concurrency(teaching_db):
     saved = client.put("/api/classroom/session", json={"session": first, "base_updated_at": initial["updated_at"]})
     assert set(saved.json()) == {
         "updated_at",
+        "report_updated_at",
         "completion",
         "report_current",
         "report_gate",
@@ -193,6 +194,7 @@ def test_session_contract_uses_optimistic_concurrency(teaching_db):
         "quiz_revision",
         "quizzes",
     }
+    assert saved.json()["report_updated_at"] is None
     assert client.get("/api/classroom/session").json()["session"] == first
 
     second = empty_session()
@@ -252,8 +254,11 @@ def test_numeric_equivalent_retry_keeps_report_current(teaching_db):
     assert retry.status_code == 200
     assert retry.json()["updated_at"] == saved.json()["updated_at"]
     assert retry.json()["report_current"] is True
-    assert client.get("/api/classroom/session").json()["report_current"] is True
-    assert client.post("/api/classroom/report/submit").status_code == 200
+    workspace = client.get("/api/classroom/session").json()
+    assert workspace["report_current"] is True
+    assert retry.json()["report_updated_at"] == workspace["report"]["updated_at"]
+    submitted = client.post("/api/classroom/report/submit")
+    assert submitted.status_code == 200
     # A genuine numeric change still needs a current version and invalidates the report.
     session["steps"]["2"]["data"]["observations"][0]["value"] = 1.25
     assert client.put("/api/classroom/session", json={"session": session, "base_updated_at": None}).status_code == 409
@@ -262,6 +267,7 @@ def test_numeric_equivalent_retry_keeps_report_current(teaching_db):
     )
     assert changed.status_code == 200
     assert changed.json()["report_current"] is False
+    assert changed.json()["report_updated_at"] == submitted.json()["report"]["updated_at"]
 
 
 def test_new_session_race_rejects_second_null_version_write(teaching_db):

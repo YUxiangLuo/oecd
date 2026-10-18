@@ -72,7 +72,7 @@ test("a failed local draft backup does not label a pending server save as failed
   window.history.replaceState(null, "", "/?step=15");
   const releaseId = "d".repeat(32);
   const response = { release_id: releaseId, session: emptySession(), updated_at: null, report: null,
-    completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_current: false, report_gate: [], material_gate: [],
+    completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_current: false, report_updated_at: null, report_gate: [], material_gate: [],
   };
   const me = spyOn(api, "me").mockResolvedValue({ username: "backup-student", name: "学生", role: "student" });
   const meta = spyOn(api, "meta").mockResolvedValue({ years: [2020], countries: ["CHN"], sectors: ["C26"], dataset: { years: [2020], release_id: releaseId } });
