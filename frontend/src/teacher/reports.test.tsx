@@ -1,9 +1,9 @@
 import { mockReports } from "./report-api-fixture";
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { api, ApiError } from "../api";
 import { TeacherWorkspace } from "../app-shell";
-import type { TeacherReport } from "../types";
+import type { StudentRow, TeacherReport } from "../types";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   GRADE_RUBRIC, GradeView, RELOADED_OVER_REVIEW_NOTE, RELOADED_REVIEW_NOTE, REPORT_FILTER_LABELS, ReportRowAction, STALE_REVIEW_HINT, UNCHANGED_REVIEW_HINT, reportRowAction, reportsEmptyState,
@@ -604,6 +604,60 @@ describe("moving through the list while grading", () => {
       fireEvent.click(await screen.findByRole("button", { name: "评阅报告：学生8" }));
       fireEvent.click(await screen.findByRole("button", { name: "← 返回列表" }));
       expect(await screen.findByRole("button", { name: "评阅报告：学生8" })).toBeTruthy();
+    } finally {
+      spies.forEach((spy) => spy.mockRestore());
+    }
+  });
+
+  test.each(["back", "grade"] as const)("student list keeps search, class and sort after %s from a review", async (action) => {
+    const enrollment = { term_id: 1, term_name: "秋季", class_id: 2, class_name: "一班" };
+    let students: StudentRow[] = queue.map((item) => ({
+      id: item.account_id, username: item.username, display_name: item.display_name, student_no: item.student_no,
+      demo_seed: false, last_login_at: null, created_at: item.generated_at,
+      report_state: "pending", report_outdated: false, score: null, submitted_at: item.submitted_at,
+      verified_completed_count: 15, verified_total_steps: 15, verified_completed_steps: [], completion_missing: [],
+      last_valid_activity: null, enrollments: item.account_id === 7 ? [] : [enrollment],
+    }));
+    students.push({ ...students[1], id: 10, username: "other", display_name: "其他学生", student_no: "other", report_state: null });
+    const studentList = spyOn(api.classroom, "students").mockImplementation(async () => ({ students }));
+    const grade = spyOn(api.classroom, "grade").mockImplementation(async (accountId, score, feedback) => {
+      students = students.map((item) => item.id === accountId ? { ...item, report_state: "graded", score } : item);
+      return { ...queue.find((item) => item.account_id === accountId)!, state: "graded", score, feedback };
+    });
+    const spies = [
+      studentList, grade, mockReports(queue),
+      spyOn(api.classroom, "reportDetail").mockImplementation(async (accountId) => queue.find((item) => item.account_id === accountId)!),
+      spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [{
+        id: 1, name: "秋季", is_active: true, created_at: report.generated_at, student_count: 3,
+        classes: [{ id: 2, term_id: 1, name: "一班", is_active: true, created_at: report.generated_at, student_count: 3 }],
+      }] }),
+    ];
+    try {
+      renderWorkspace();
+      await screen.findByText("学生9");
+      fireEvent.change(screen.getByRole("textbox", { name: "搜索" }), { target: { value: "学生" } });
+      fireEvent.change(screen.getByRole("combobox", { name: "筛选学期" }), { target: { value: "1" } });
+      fireEvent.change(screen.getByRole("combobox", { name: "筛选班级" }), { target: { value: "2" } });
+      // Pick a search that excludes the extra member, and keep descending order for the review queue.
+      fireEvent.change(screen.getByRole("textbox", { name: "搜索" }), { target: { value: "s" } });
+      fireEvent.click(screen.getByRole("button", { name: "姓名" }));
+      fireEvent.click(screen.getByRole("button", { name: "姓名" }));
+      fireEvent.click(screen.getByRole("button", { name: "待评阅，打开报告：学生9（s9）" }));
+      await screen.findByRole("heading", { level: 3, name: "学生9（s9）" });
+      expect(screen.getByText("第 1 / 2 份")).toBeTruthy();
+      if (action === "grade") {
+        fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "82" } });
+        fireEvent.click(screen.getByRole("button", { name: "提交评阅" }));
+      } else {
+        fireEvent.click(screen.getByRole("button", { name: "← 返回学生与进度" }));
+      }
+      const rowAction = await screen.findByRole("button", { name: `${action === "grade" ? "已评阅" : "待评阅"}，打开报告：学生9（s9）` });
+      expect((screen.getByRole("textbox", { name: "搜索" }) as HTMLInputElement).value).toBe("s");
+      expect((screen.getByRole("combobox", { name: "筛选学期" }) as HTMLSelectElement).value).toBe("1");
+      expect((screen.getByRole("combobox", { name: "筛选班级" }) as HTMLSelectElement).value).toBe("2");
+      expect(screen.getByRole("columnheader", { name: "姓名" }).getAttribute("aria-sort")).toBe("descending");
+      expect([...document.querySelectorAll("tbody .student-name-cell")].map((cell) => cell.textContent)).toEqual(["学生9", "学生8"]);
+      if (action === "grade") expect(within(rowAction.closest("tr")!).getByRole("cell", { name: "82" })).toBeTruthy();
     } finally {
       spies.forEach((spy) => spy.mockRestore());
     }

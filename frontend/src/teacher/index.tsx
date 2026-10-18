@@ -5,7 +5,7 @@ import type { AuthUser } from "../types";
 import { ReportsTab } from "./reports";
 import { QuizzesTab } from "./quizzes";
 import { SemestersTab } from "./semesters";
-import { StudentsTab } from "./students";
+import { StudentsTab, useStudentListView } from "./students";
 import { useTeacherReviewGuard } from "./review-guard";
 import { useRefetchOnVisible } from "./ui";
 
@@ -38,6 +38,7 @@ export const INITIAL_PASSWORD_HINT = "你还在使用部署时设置的初始密
 export function TeacherDashboard({ user, onChangePassword }: { user: AuthUser; onChangePassword?: () => void }) {
   const [tab, setTab] = useState<TabKey>("students");
   const [reviewBump, setReviewBump] = useState(0);
+  const studentView = useStudentListView();
   // A report opened from the student table: 报告评阅 starts on it, with the table's order for 上一份/下一份.
   const [reportRequest, setReportRequest] = useState<{ accountId: number; queue: number[] } | null>(null);
   const { data } = useAsync(() => api.classroom.reportSummary(), [tab, reviewBump], { keepPreviousData: true });
@@ -115,7 +116,7 @@ export function TeacherDashboard({ user, onChangePassword }: { user: AuthUser; o
             <button type="button" className="sm" onClick={onChangePassword}>立即修改密码</button>
           </div>}
           {tab === "quizzes" ? <QuizzesTab /> : tab === "semesters" ? <SemestersTab /> : tab === "students" ? (
-            <StudentsTab onOpenReport={(accountId, queue) => { setReportRequest({ accountId, queue }); setTab("reports"); }}
+            <StudentsTab viewState={studentView} onOpenReport={(accountId, queue) => { setReportRequest({ accountId, queue }); setTab("reports"); }}
               onGoToSemesters={() => setTab("semesters")} onRefresh={() => setReviewBump((value) => value + 1)} />
           ) : (
             <ReportsTab user={user} initialReview={reportRequest ?? undefined}

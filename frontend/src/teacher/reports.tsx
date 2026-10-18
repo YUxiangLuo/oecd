@@ -383,7 +383,34 @@ export function GradeView({ data, grader, semesters = [], backLabel = BACK_TO_LI
   const reloadedRef = useRef<HTMLParagraphElement>(null);
   const scoreRef = useRef<HTMLInputElement>(null);
   const rubricRef = useRef<HTMLDetailsElement>(null);
+  const splitRef = useRef<HTMLDivElement>(null);
   const saveErrorRef = useModalErrorFocus(saveError);
+  useLayoutEffect(() => {
+    const split = splitRef.current;
+    const pane = split?.closest<HTMLElement>(".teacher-main");
+    const content = split?.closest<HTMLElement>(".teacher-content");
+    if (!split || !pane || !content) return;
+    const header = pane.querySelector<HTMLElement>(".dash-header");
+    const panelHead = split.querySelector<HTMLElement>(".grade-panel-head");
+    const measure = () => {
+      // Follow the report's start until the card sticks below the heading. The first screen includes
+      // the password notice and wrapped names; scrolling past them gives the form more room.
+      const top = Math.max(split.getBoundingClientRect().top - pane.getBoundingClientRect().top, (header?.offsetHeight ?? 0) + 8);
+      split.style.setProperty("--grade-panel-max-h", `${Math.max(0, pane.clientHeight - top - 8)}px`);
+      if (panelHead) split.style.setProperty("--grade-panel-head-h", `${panelHead.offsetHeight}px`);
+    };
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(pane);
+    observer?.observe(content);
+    if (header) observer?.observe(header);
+    if (panelHead) observer?.observe(panelHead);
+    pane.addEventListener("scroll", measure, { passive: true });
+    return () => {
+      observer?.disconnect();
+      pane.removeEventListener("scroll", measure);
+    };
+  }, []);
   // Opening a review puts focus on the student's heading (it was on the list button that just unmounted);
   // after a reload, on the note saying the typed draft was kept.
   useEffect(() => {
@@ -450,7 +477,7 @@ export function GradeView({ data, grader, semesters = [], backLabel = BACK_TO_LI
       {data.report_outdated && <p className="muted">{OUTDATED_REPORT_NOTE}</p>}
       {/* Paper only (teacher.css): the grading panel is not printed, so the review goes on top of the report, read-only. */}
       <GradePrintSummary data={data} score={score} feedback={feedback} dirty={dirty} grader={grader} />
-      <div className="grade-split">
+      <div ref={splitRef} className="grade-split">
         <div className="grade-doc"><ReportMarkdown markdown={data.markdown} /></div>
         <aside className="grade-side"><div className="panel grade-panel">
           <div className="grade-panel-head">

@@ -312,18 +312,20 @@
 /* ---------- 报告评阅:左右双栏 ---------- */
 .review-topbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
 .back-btn { font-weight: 600; }
-.grade-split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; align-items: start; }
+.grade-split {
+  --grade-panel-max-h: calc(var(--teacher-pane-h, calc(100vh - 56px)) - var(--dash-header-h, 88px) - 24px - 52px);
+  --grade-panel-head-h: 106px;
+  --grade-panel-body-min-h: 72px;
+  display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; align-items: start;
+}
 .grade-doc { min-width: 0; }
 .grade-doc-title { margin: 0 0 6px; font-size: 17px; }
-/* 评阅卡贴在页头下方，底边始终在窗口内：高度按 .teacher-main 的可视高度和页头高度计算
-   （两者由 index.tsx 量出；后备值按 56px 顶栏、约 88px 页头）。卡片分三段：头部（学生、第 k / n 份）、
-   中间可独立滚动的评语与评分参考（评语在前，1024×768 下不必滚动就能看到整个评语框）、底部固定的分数与
-   保存按钮——无论窗口多矮，保存按钮都看得见。 */
+/* 评阅卡贴在页头下方。reports.tsx 按卡片的实际起始位置量出可用高度，包含改密提示和换行的顶栏。
+   卡片分三段：学生与队列、中间可滚动的评语与评分参考、底部的分数和保存按钮。 */
 .grade-side { position: sticky; top: calc(var(--dash-header-h, 88px) + 8px); }
 .grade-side .grade-panel {
   display: flex; flex-direction: column; padding: 0; overflow: hidden;
-  /* Also leave room for the review top bar above it, so the card's foot is inside the window before it sticks. */
-  max-height: calc(var(--teacher-pane-h, calc(100vh - 56px)) - var(--dash-header-h, 88px) - 24px - 52px);
+  max-height: var(--grade-panel-max-h);
 }
 .grade-panel-head { flex: none; padding: 14px 18px 10px; border-bottom: 1px solid #eef0f5; }
 .grade-panel-head h3.panel-head { margin-bottom: 4px; }
@@ -332,7 +334,7 @@
 .grade-queue { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
 .grade-queue-count { font-size: 12px; color: #5a6070; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .grade-panel-body {
-  flex: 1 1 auto; min-height: 72px; overflow-y: auto; overscroll-behavior: contain;
+  flex: 1 1 auto; min-height: var(--grade-panel-body-min-h); overflow-y: auto; overscroll-behavior: contain;
   padding: 12px 18px; scrollbar-gutter: stable;
 }
 /* Scroll cue: while more of the rubric or the 评语 box is below, the bottom edge fades out. The strip sits after
@@ -342,9 +344,14 @@
   background: linear-gradient(rgba(255, 255, 255, 0), #fff 80%); pointer-events: none;
 }
 .grade-panel-foot {
-  flex: none; max-height: 70%; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+  flex: none;
+  /* Reserve the head, a usable part of the feedback box, and the panel's two 1px borders. */
+  max-height: max(0px, calc(var(--grade-panel-max-h) - var(--grade-panel-head-h) - var(--grade-panel-body-min-h) - 2px));
+  overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
   padding: 12px 18px 14px; border-top: 1px solid #eef0f5; background: #fff;
 }
+/* Long conflict/error messages scroll with the actions instead of clipping or compressing them. */
+.grade-panel-foot > * { flex-shrink: 0; }
 .grade-panel-foot .grade-field, .grade-panel-foot .error-box, .grade-panel-foot p { margin: 0; }
 /* 分数 sits beside its label: one row, so the foot leaves the 评语 box room in a 768px-high window. */
 .grade-panel-foot .grade-score { flex-direction: row; align-items: center; gap: 10px; }

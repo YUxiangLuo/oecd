@@ -113,6 +113,13 @@ type ModalState = null | { type: "student" } | { type: "batch" } | { type: "name
 export type StudentSortKey = "name" | "student_no" | "progress" | "report" | "score" | "activity" | "login";
 export type StudentSort = { key: StudentSortKey; direction: "ascending" | "descending" } | null;
 
+/** The dashboard keeps this view while a student report is open; rows are fetched again on return. */
+export function useStudentListView() {
+  return useState<{ query: string; semesterId: number | null; classId: number | null; sort: StudentSort }>({
+    query: "", semesterId: null, classId: null, sort: null,
+  });
+}
+
 /** 未生成 → 草稿 → 待评阅 → 已评阅: ascending puts the students furthest from handing in first. */
 const REPORT_RANK = { none: 0, draft: 1, pending: 2, graded: 3 } as const;
 
@@ -326,7 +333,8 @@ export function enrollmentToast(student: StudentRow, semesters: readonly Academi
   return `已把 ${student.display_name} 分到“${semester!.name} · ${group.name}”`;
 }
 
-export function StudentsTab({ onOpenReport, onGoToSemesters, onRefresh }: {
+export function StudentsTab({ viewState, onOpenReport, onGoToSemesters, onRefresh }: {
+  viewState?: ReturnType<typeof useStudentListView>;
   /** Open a submitted report in 报告评阅; `queue` is the table's submitted reports in their current order. */
   onOpenReport?: (accountId: number, queue: number[]) => void;
   /** Switch to 学期与班级, where the first semester and classes are made. */
@@ -346,10 +354,8 @@ export function StudentsTab({ onOpenReport, onGoToSemesters, onRefresh }: {
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
   }, []);
-  const [query, setQuery] = useState("");
-  const [semesterId, setSemesterId] = useState<number | null>(null);
-  const [classId, setClassId] = useState<number | null>(null);
-  const [sort, setSort] = useState<StudentSort>(null);
+  const localView = useStudentListView();
+  const [{ query, semesterId, classId, sort }, setView] = viewState ?? localView;
   const [modal, setModal] = useState<ModalState>(null);
   // Keep the table while it reloads after an edit: clearing it flashed "暂无学生" and lost the scroll position.
   const { data: loaded, error, status, retry } = useAsync<{ students: StudentRow[] }>(() => api.classroom.students(), [refresh], { keepPreviousData: true });
@@ -398,7 +404,7 @@ export function StudentsTab({ onOpenReport, onGoToSemesters, onRefresh }: {
   // The batch import starts in the class being looked at, when it can still take students.
   const batchClassId = classId != null && classId !== UNASSIGNED_CLASS && batchClassOptions(semesters).some((option) => option.id === classId) ? classId : null;
   const header = (label: string, key: StudentSortKey, extra: { className?: string; title?: string; describedBy?: string } = {}) =>
-    <SortableHeader label={label} sortKey={key} sort={sort} onSort={(next) => setSort((current) => nextStudentSort(current, next))} {...extra} />;
+    <SortableHeader label={label} sortKey={key} sort={sort} onSort={(next) => setView((current) => ({ ...current, sort: nextStudentSort(current.sort, next) }))} {...extra} />;
 
   return (
     <div>
@@ -409,13 +415,13 @@ export function StudentsTab({ onOpenReport, onGoToSemesters, onRefresh }: {
         {onGoToSemesters && <button type="button" className="sm" onClick={onGoToSemesters}>去“学期与班级”</button>}
       </div>}
       <Toolbar>
-        <SearchInput value={query} onChange={setQuery} placeholder="搜索姓名、用户名或学号" />
+        <SearchInput value={query} onChange={(query) => setView((current) => ({ ...current, query }))} placeholder="搜索姓名、用户名或学号" />
         <AcademicFilters
           semesters={semesters}
           semesterId={semesterId}
           classId={classId}
-          onSemesterChange={setSemesterId}
-          onClassChange={setClassId}
+          onSemesterChange={(semesterId) => setView((current) => ({ ...current, semesterId }))}
+          onClassChange={(classId) => setView((current) => ({ ...current, classId }))}
         />
         <div className="toolbar-actions">
           <button type="button" onClick={() => { setRefresh((value) => value + 1); onRefresh?.(); }}>刷新列表</button>
