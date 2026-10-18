@@ -3,8 +3,8 @@ import {
   RegressionRunLab,
 } from "./regression";
 import type { SiblingStepData } from "./regression-teach-logic";
-import type { ClassroomReport, Meta, ReportGateItem, ReportMutationResponse, Step, StepStateApi } from "./types";
-import type { SessionStatus } from "./use-session";
+import type { ClassroomReport, Meta, ReportGateItem, Step, StepStateApi } from "./types";
+import type { ReportActions, SessionStatus } from "./use-session";
 import type { ReactNode } from "react";
 
 interface LabRouterProps {
@@ -16,14 +16,12 @@ interface LabRouterProps {
   meta: Meta | null;
   state: StepStateApi;
   report: ClassroomReport | null;
-  sessionUpdatedAt?: string | null;
   reportCurrent?: boolean | null;
   reportGate: ReportGateItem[] | null;
   sessionStatus: SessionStatus;
   sessionUnsynced: boolean;
   sessionSyncing: boolean;
-  onFlushSession: () => Promise<void>;
-  onReportChanged: (response: ReportMutationResponse) => void;
+  reportActions: ReportActions;
   onNavigateStep: (step: number) => void;
   getStep?: <T>(step: number) => T | undefined;
   getConfirmedStep?: <T>(step: number) => T | undefined;
@@ -35,14 +33,12 @@ export function LabRouter({
   meta,
   state,
   report,
-  sessionUpdatedAt,
   reportCurrent,
   reportGate,
   sessionStatus,
   sessionUnsynced,
   sessionSyncing,
-  onFlushSession,
-  onReportChanged,
+  reportActions,
   onNavigateStep,
   getStep,
   getConfirmedStep,
@@ -76,15 +72,13 @@ export function LabRouter({
         steps={steps}
         state={state}
         report={report}
-        sessionUpdatedAt={sessionUpdatedAt}
         reportCurrent={reportCurrent}
         reportGate={reportGate}
         sessionStatus={sessionStatus}
         sessionUnsynced={sessionUnsynced}
         sessionSyncing={sessionSyncing}
-        onFlushSession={onFlushSession}
+        reportActions={reportActions}
         onNavigateStep={onNavigateStep}
-        onReportChanged={onReportChanged}
         getStep={getConfirmedStep
           ? (n) => getConfirmedStep<SiblingStepData>(n)
           : getStep ? (n) => getStep<SiblingStepData>(n) : undefined}

@@ -2,7 +2,7 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { api, ApiError } from "./api";
 import { emptySession, patchStep } from "./session-store";
-import type { ClassroomReport, ExperimentSession, SessionResponse, SessionSaveResponse } from "./types";
+import type { ClassroomReport, ExperimentSession, ReportMutationResponse, SessionResponse, SessionSaveResponse } from "./types";
 import { keptEditsKey, SAVE_RETRY_DELAYS_MS, useSession } from "./use-session";
 
 const RELEASE = "a".repeat(32);
@@ -318,7 +318,7 @@ test("an old step's saved callback cannot overwrite answers after the teacher ch
   expect(result.current.getStep<{ quiz: unknown }>(1)?.quiz).toEqual(newQuiz);
 });
 
-test("a delayed learning read cannot undo report submission with the same session timestamp", async () => {
+test.each(["submit", "generate-submit"] as const)("a delayed learning read cannot undo %s with the same session timestamp", async (operation) => {
   const initial = { ...response(), quiz_revision: 0, quizzes: {}, report_current: false };
   const get = spyOn(api.classroom, "session").mockResolvedValue(initial);
   const { result } = renderHook(() => useSession(true, "student"));
@@ -331,14 +331,16 @@ test("a delayed learning read cannot undo report submission with the same sessio
     generated_at: NEWER, updated_at: NEWER, submitted_at: NEWER, graded_at: null,
     provenance: { session_version: "test", generated_at: NEWER, years: [2020], session_fingerprint: "test", runs: [], custom_results: [] },
   };
-  act(() => result.current.applyReportMutation({ ...initial, report, report_current: true, completion: { completed: [15], completed_count: 1, total: 15, steps: [] } }));
+  spyOn(api.classroom, "generateReport").mockResolvedValue({ ...initial, report: { ...report, state: "draft", submitted_at: null }, report_current: true });
+  spyOn(api.classroom, "submitReport").mockResolvedValue({ ...initial, report, report_current: true, completion: { completed: [15], completed_count: 1, total: 15, steps: [] } });
+  await act(async () => { await result.current.runReport(operation); });
   await act(async () => { stale.resolve(initial); await refreshing; });
   expect(result.current.report).toEqual(report);
   expect(result.current.completion?.completed).toEqual([15]);
   expect(result.current.reportCurrent).toBe(true);
 });
 
-test.each([false, true])("report metadata applies only to its saved session (newer save: %s)", async (newerSave) => {
+test("a generated report for another saved session is not accepted as current", async () => {
   const initial = response();
   spyOn(api.classroom, "session").mockResolvedValue(initial);
   const saved = {
@@ -349,24 +351,224 @@ test.each([false, true])("report metadata applies only to its saved session (new
   spyOn(api.classroom, "saveSession").mockResolvedValue(saved);
   const { result } = renderHook(() => useSession(true, "student"));
   await waitFor(() => expect(result.current.status).toBe("ready"));
-  // A report step can unmount while its request retains this callback.
-  const changed = result.current.applyReportMutation;
   const report: ClassroomReport = {
     state: "draft", markdown: "generated from the earlier record", score: null, feedback: "", graded_by: null,
     generated_at: NEWER, updated_at: NEWER, submitted_at: null, graded_at: null,
     provenance: { session_version: "test", generated_at: NEWER, years: [2020], session_fingerprint: "test", runs: [], custom_results: [] },
   };
   const generated = { ...initial, report, report_current: true };
-  if (newerSave) {
-    await act(async () => {
-      result.current.patchStep(15, { research_question: "new edit" });
-      await result.current.syncNow();
-    });
-  }
-  act(() => changed(generated));
-  expect(result.current.report).toEqual(report);
-  expect(result.current.reportCurrent).toBe(!newerSave);
-  expect(result.current.completion).toEqual(newerSave ? saved.completion : generated.completion);
-  expect(result.current.reportGate).toEqual(newerSave ? saved.report_gate : generated.report_gate);
-  if (newerSave) expect(result.current.getStep<{ research_question: string }>(15)).toEqual({ research_question: "new edit" });
+  spyOn(api.classroom, "generateReport").mockResolvedValue(generated);
+  const refresh = deferred<SessionResponse>();
+  spyOn(api.classroom, "session").mockImplementation(() => refresh.promise);
+  await act(async () => {
+    result.current.patchStep(15, { research_question: "new edit" });
+    await expect(result.current.runReport("generate")).rejects.toThrow("实验记录已变化");
+  });
+  expect(result.current.report).toBeNull();
+  expect(result.current.reportCurrent).toBeNull();
+  expect(result.current.completion).toEqual(saved.completion);
+  expect(result.current.reportGate).toEqual(saved.report_gate);
+  expect(result.current.getStep<{ research_question: string }>(15)).toEqual({ research_question: "new edit" });
+  await act(async () => { refresh.resolve({ ...saved, report: null }); });
+});
+
+function reportResponse(state: ClassroomReport["state"], stamp = NEWER): ReportMutationResponse {
+  return {
+    ...response(), report_current: true,
+    completion: { completed: [15], completed_count: 1, total: 15, steps: [] },
+    report: { state, markdown: `# ${state} ${stamp}`, score: state === "graded" ? 93 : null,
+      feedback: state === "graded" ? "证据链完整" : "", graded_by: state === "graded" ? "teacher" : null,
+      generated_at: stamp, updated_at: stamp, submitted_at: state === "draft" ? null : stamp,
+      graded_at: state === "graded" ? stamp : null,
+      provenance: { session_version: "test", generated_at: stamp, years: [2020], session_fingerprint: "test", runs: [], custom_results: [] } },
+  };
+}
+
+test("one-click finish waits for saved material, blocks overlapping operations, and exposes draft until submit acknowledgement", async () => {
+  spyOn(api.classroom, "session").mockResolvedValue(response());
+  const saving = deferred<SessionSaveResponse>();
+  const generating = deferred<ReportMutationResponse>();
+  const submitting = deferred<ReportMutationResponse>();
+  let stored = emptySession();
+  spyOn(api.classroom, "saveSession").mockImplementation(async ({ session }) => {
+    const acknowledgement = await saving.promise;
+    stored = session;
+    return acknowledgement;
+  });
+  const generate = spyOn(api.classroom, "generateReport").mockImplementation(() => {
+    expect(stored.steps["15"].data).toEqual({ research_question: "saved before generation" });
+    return generating.promise;
+  });
+  const submit = spyOn(api.classroom, "submitReport").mockImplementation(() => submitting.promise);
+  const { result } = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  let operation!: Promise<ClassroomReport | undefined>;
+  act(() => {
+    result.current.patchStep(15, { research_question: "saved before generation" });
+    operation = result.current.runReport("generate-submit");
+  });
+  expect(generate).not.toHaveBeenCalled();
+  expect(result.current.reportOperation).toBe("generate-submit");
+  await act(async () => { saving.resolve(response()); });
+  await act(async () => {
+    result.current.patchStep(15, { research_question: "must not replace the generating snapshot" });
+    expect(await result.current.runReport("generate")).toBeUndefined();
+  });
+  expect(result.current.getStep<{ research_question: string }>(15)).toEqual({ research_question: "saved before generation" });
+  expect(generate).toHaveBeenCalledTimes(1);
+  const draft = reportResponse("draft");
+  await act(async () => { generating.resolve(draft); });
+  expect(result.current.report).toEqual(draft.report);
+  expect(submit).toHaveBeenCalledTimes(1);
+  expect(result.current.reportOperation).toBe("generate-submit");
+  const pending = reportResponse("pending", "2026-09-10T00:02:00Z");
+  await act(async () => { submitting.resolve(pending); expect(await operation).toEqual(pending.report); });
+  expect(result.current.report).toEqual(pending.report);
+  expect(result.current.reportOperation).toBeNull();
+});
+
+test("failed flush prevents generation and keeps the existing graded report", async () => {
+  const graded = reportResponse("graded");
+  spyOn(api.classroom, "session").mockResolvedValue({ ...response(), ...graded });
+  spyOn(api.classroom, "saveSession").mockRejectedValue(new ApiError(422, null, "invalid"));
+  const generate = spyOn(api.classroom, "generateReport");
+  const { result } = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  await act(async () => {
+    result.current.patchStep(15, { research_question: "invalid" });
+    await expect(result.current.runReport("generate-submit", graded.report.updated_at)).rejects.toThrow();
+  });
+  expect(generate).not.toHaveBeenCalled();
+  expect(result.current.report).toEqual(graded.report);
+  expect(result.current.unsynced).toBe(true);
+  expect(result.current.reportOperation).toBeNull();
+});
+
+test("submit failure preserves generated draft; retry submits it without regenerating", async () => {
+  spyOn(api.classroom, "session").mockResolvedValue(response());
+  const draft = reportResponse("draft"); const pending = reportResponse("pending");
+  const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(draft);
+  spyOn(api.classroom, "submitReport").mockRejectedValueOnce(new TypeError("Failed to fetch")).mockResolvedValue(pending);
+  const { result } = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  await act(async () => { await expect(result.current.runReport("generate-submit")).rejects.toThrow("草稿"); });
+  expect(result.current.report).toEqual(draft.report);
+  expect(result.current.reportCurrent).toBe(true);
+  expect(result.current.reportOperation).toBeNull();
+  await act(async () => { expect(await result.current.runReport("submit")).toEqual(pending.report); });
+  expect(result.current.report?.state).toBe("pending");
+  expect(generate).toHaveBeenCalledTimes(1);
+});
+
+test("regenerating an already submitted report accepts server resubmission without submitting twice", async () => {
+  const pending = reportResponse("pending");
+  spyOn(api.classroom, "session").mockResolvedValue({ ...response(), ...pending });
+  const generated = reportResponse("pending", "2026-09-10T00:02:00Z");
+  const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(generated);
+  const submit = spyOn(api.classroom, "submitReport");
+  const { result } = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  await act(async () => { await result.current.runReport("generate-submit", pending.report.updated_at); });
+  expect(result.current.report).toEqual(generated.report);
+  expect(generate).toHaveBeenCalledWith(pending.report.updated_at);
+  expect(submit).not.toHaveBeenCalled();
+});
+
+test.each(["graded", "pending"] as const)("409 refreshes %s report and all learning metadata without retrying generation or overwriting answers", async (state) => {
+  const initial = reportResponse(state === "graded" ? "pending" : "draft", STAMP);
+  const local = patchStep(emptySession(), 15, { research_question: "我的研究问题" });
+  const get = spyOn(api.classroom, "session").mockResolvedValue({ ...response(local), ...initial, session: local });
+  const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new ApiError(409, "报告已更新", "Conflict"));
+  const submit = spyOn(api.classroom, "submitReport");
+  const { result } = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  const latest = { ...response(), ...reportResponse(state), quiz_revision: 7, quizzes: { "2": { version: "new", questions: [] } }, report_gate: [{ step: 2, title: "新题", missing: ["完成理解题"] }] };
+  get.mockResolvedValue(latest);
+  await act(async () => { await expect(result.current.runReport("generate-submit")).rejects.toThrow(state === "graded" ? "老师刚刚评阅" : "已在别处提交"); });
+  expect(result.current.report).toEqual(latest.report);
+  expect(result.current.quizzes).toEqual(latest.quizzes);
+  expect(result.current.reportGate).toEqual(latest.report_gate);
+  expect(result.current.completion).toEqual(latest.completion);
+  expect(result.current.getStep<{ research_question: string }>(15)?.research_question).toBe("我的研究问题");
+  expect(generate).toHaveBeenCalledTimes(1); expect(submit).not.toHaveBeenCalled();
+});
+
+test("concurrent explicit, learning and focus refreshes share a request and preserve local edits", async () => {
+  const get = spyOn(api.classroom, "session").mockResolvedValue(response());
+  const { result } = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  const reading = deferred<SessionResponse>(); get.mockImplementation(() => reading.promise);
+  let first!: ReturnType<typeof result.current.refreshReport>;
+  let second!: ReturnType<typeof result.current.refreshReport>;
+  let learning!: Promise<void>;
+  act(() => {
+    result.current.patchStep(15, { research_question: "local" });
+    first = result.current.refreshReport(); second = result.current.refreshReport();
+    learning = result.current.refreshLearning!(); window.dispatchEvent(new Event("focus"));
+  });
+  expect(first).toBe(second);
+  expect(get).toHaveBeenCalledTimes(2);
+  const latest = { ...response(), ...reportResponse("graded") };
+  await act(async () => { reading.resolve(latest); expect(await first).toEqual(latest.report); await learning; });
+  expect(result.current.report).toEqual(latest.report);
+  expect(result.current.getStep<{ research_question: string }>(15)?.research_question).toBe("local");
+  expect(result.current.unsynced).toBe(true);
+});
+
+test("save validity bound to another report version leaves old body unverified until refresh recovers it", async () => {
+  const old = reportResponse("draft", STAMP);
+  const get = spyOn(api.classroom, "session").mockResolvedValue({ ...response(), ...old });
+  const { result } = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  const newer = reportResponse("pending");
+  const stale = deferred<SessionResponse>();
+  const reading = deferred<SessionResponse>();
+  get.mockImplementationOnce(() => stale.promise).mockImplementation(() => reading.promise);
+  const oldRead = result.current.refreshReport();
+  spyOn(api.classroom, "saveSession").mockResolvedValue({ ...response(undefined, NEWER), report_current: true, report_updated_at: newer.report.updated_at });
+  await act(async () => { result.current.patchStep(15, { research_question: "changed" }); await result.current.syncNow(); });
+  expect(result.current.report).toEqual(old.report);
+  expect(result.current.reportCurrent).toBeNull();
+  const latest = { ...response(undefined, NEWER), ...newer, updated_at: NEWER };
+  await act(async () => { reading.resolve(latest); });
+  expect(result.current.report).toEqual(newer.report);
+  expect(result.current.reportCurrent).toBe(true);
+  await act(async () => { stale.resolve({ ...response(), ...old }); await oldRead; });
+  expect(result.current.report).toEqual(newer.report);
+  expect(result.current.reportCurrent).toBe(true);
+});
+
+test.each(["refresh", "generate"] as const)("old %s response and retained actions are ignored after account/queue replacement", async (path) => {
+  const get = spyOn(api.classroom, "session").mockResolvedValue(response());
+  const { result, rerender } = renderHook(({ username }) => useSession(true, username), { initialProps: { username: "student" } });
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  const stale = deferred<SessionResponse & ReportMutationResponse>();
+  if (path === "refresh") get.mockImplementationOnce(() => stale.promise);
+  else spyOn(api.classroom, "generateReport").mockImplementationOnce(() => stale.promise);
+  const oldRun = result.current.runReport;
+  let pending!: Promise<ClassroomReport | null | undefined>;
+  await act(async () => { pending = path === "refresh" ? result.current.refreshReport() : result.current.runReport("generate"); });
+  const other = { ...response(), ...reportResponse("graded", "2026-09-10T00:03:00Z") };
+  get.mockResolvedValue(other);
+  rerender({ username: "other" });
+  await waitFor(() => expect(result.current.report).toEqual(other.report));
+  await act(async () => { stale.resolve({ ...response(), ...reportResponse("draft") }); expect(await pending).toBeUndefined(); });
+  expect(result.current.report).toEqual(other.report);
+  expect(result.current.reportOperation).toBeNull();
+  await act(async () => { expect(await oldRun("generate")).toBeUndefined(); });
+  expect(result.current.report).toEqual(other.report);
+});
+
+test("logging out invalidates an in-flight report without waiting for another account to load", async () => {
+  spyOn(api.classroom, "session").mockResolvedValue(response());
+  const generated = deferred<ReportMutationResponse>();
+  spyOn(api.classroom, "generateReport").mockImplementation(() => generated.promise);
+  const { result, rerender } = renderHook(({ enabled }) => useSession(enabled, "student"), { initialProps: { enabled: true } });
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  let pending!: Promise<ClassroomReport | undefined>;
+  await act(async () => { pending = result.current.runReport("generate"); });
+  rerender({ enabled: false });
+  await act(async () => { generated.resolve(reportResponse("draft")); expect(await pending).toBeUndefined(); });
+  expect(result.current.report).toBeNull();
+  expect(result.current.reportOperation).toBeNull();
 });

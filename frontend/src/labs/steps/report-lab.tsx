@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { api, isApiErrorStatus } from "../../api";
+import { api } from "../../api";
 import { RegressionEvidenceMatrix, RegressionSummaryBars, ReportedExperiments } from "../../regression-teach";
 import type { SiblingStepData } from "../../regression-teach-logic";
 import { scrollIntoCourseContent } from "../../content-scroll";
@@ -7,8 +7,8 @@ import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-laz
 import { ReportOutro } from "../../report-outro";
 import { clearToasts, showToast } from "../../toast";
 import { ConfirmModal } from "../../teacher/ui";
-import type { ClassroomReport, ReportGateItem, ReportMutationResponse, Step, StepStateApi, TeachingCountriesResponse } from "../../types";
-import type { SessionStatus } from "../../use-session";
+import type { ClassroomReport, ReportGateItem, Step, StepStateApi, TeachingCountriesResponse } from "../../types";
+import type { ReportActions, ReportOperation, SessionStatus } from "../../use-session";
 import { userFacingRequestError } from "../../user-facing-error";
 import { recordedShockMaterialLabel } from "../../material-label";
 import { useAsync } from "../shared";
@@ -16,8 +16,8 @@ import { REGRESSION_FAMILIES } from "../../regression-lessons";
 import {
   REFLECTION_MAX_LENGTH, REPORT_REFLECTION_TITLE_ID, activateReportGateDestination, activateReportMaterialDestination,
   codePointLength, gradedExportRefusal, limitInsertion, pasteCutMessage, reflectionCountLabel, reflectionLength,
-  reportAutosaveLabel, reportConflictMessage, reportGateVerb, reportGenerateButtonLabel, reportOutdatedAdvice,
-  reportPrintTitle, reportStatusChanged, reportWaitLabel, revealWithOffset, summarizeReportGate,
+  reportAutosaveLabel, reportGateVerb, reportGenerateButtonLabel, reportOutdatedAdvice,
+  reportPrintTitle, reportWaitLabel, revealWithOffset, summarizeReportGate,
 } from "./report-lab-logic";
 
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
@@ -195,37 +195,33 @@ export function ReportPrintGrade({ report }: { report: ClassroomReport }) {
 export function ReportLab({
   state,
   report,
-  sessionUpdatedAt,
   reportCurrent,
   reportGate,
   sessionStatus,
   sessionUnsynced,
   sessionSyncing,
-  onFlushSession,
+  reportActions,
   onNavigateStep,
-  onReportChanged,
   getStep,
   steps,
 }: {
   state: StepStateApi;
   report: ClassroomReport | null;
-  sessionUpdatedAt?: string | null;
   /** Server verdict (step 15 completion): the report was built from the session's current report inputs. */
   reportCurrent?: boolean | null;
   reportGate: ReportGateItem[] | null;
   sessionStatus: SessionStatus;
   sessionUnsynced: boolean;
   sessionSyncing: boolean;
-  onFlushSession: () => Promise<void>;
+  reportActions: ReportActions;
   onNavigateStep: (step: number) => void;
-  onReportChanged: (response: ReportMutationResponse) => void;
   getStep?: (step: number) => SiblingStepData | undefined;
   /** The course's steps (titles for 你记录的材料). */
   steps?: Pick<Step, "n" | "title" | "lab">[];
 }) {
   const [blocked, setBlocked] = useState<ReportGateItem[]>([]);
-  const [generating, setGenerating] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const generating = reportActions.reportOperation === "generate" || reportActions.reportOperation === "generate-submit";
+  const submitting = reportActions.reportOperation === "submit";
   const [printing, setPrinting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outro, setOutro] = useState<ClassroomReport | null>(null);
@@ -328,7 +324,7 @@ export function ReportLab({
   // Same split as the gate summary below: steps 1–14, plus global conditions (step 0) counted apart.
   const materialMissing = visibleBlocked.filter((item) => item.step > 0 && item.step < 15);
   const globalMissing = visibleBlocked.filter((item) => item.step <= 0).length;
-  const busy = generating || submitting || printing;
+  const busy = generating || submitting || printing || sessionStatus !== "ready";
   // The saved records still miss items: generating cannot succeed, so the generate buttons say why and point
   // to the list instead (while the session is saving, the list may be out of date and the click goes through).
   const gated = visibleBlocked.length > 0 && sessionStatus === "ready" && !sessionUnsynced && !sessionSyncing;
@@ -341,55 +337,11 @@ export function ReportLab({
       showGate();
       return;
     }
-    void generate(submitAfter);
+    void run(submitAfter ? "generate-submit" : "generate");
   };
-  // The server compares content fingerprints, so typing and deleting a character (or changing a view-only
-  // setting) leaves the report current; the timestamp is only a fallback before the server has answered.
+  // Only the server's content verdict can enable exporting ungraded work. Unknown is not current.
   const reportOutdated = Boolean(report && (sessionUnsynced || sessionSyncing
-    || (typeof reportCurrent === "boolean"
-      ? !reportCurrent
-      : sessionUpdatedAt && Date.parse(sessionUpdatedAt) > Date.parse(report.generated_at))));
-  const readyRef = useRef(sessionStatus === "ready");
-  readyRef.current = sessionStatus === "ready";
-  const flushRef = useRef(onFlushSession);
-  flushRef.current = onFlushSession;
-  const reportRef = useRef(report);
-  reportRef.current = report;
-  const reportChangedRef = useRef(onReportChanged);
-  reportChangedRef.current = onReportChanged;
-
-  /**
-   * Read the server's report (a cheap GET of the session) and show it when it differs from this page's: another
-   * tab may have regenerated it (clearing the grade) or the teacher may have graded it. Never applies the session
-   * itself, so unsaved edits here stay. Resolves with the server's report, or undefined when the request failed.
-   */
-  const refreshReport = async (): Promise<ClassroomReport | null | undefined> => {
-    const seen = reportRef.current;
-    const latest = await api.classroom.session().catch(() => null);
-    if (!latest) return undefined;
-    // A generate or submit started meanwhile owns the report; its own response is newer than this read.
-    if (latest.report && !operationRef.current && reportRef.current === seen && reportStatusChanged(seen, latest.report)) {
-      reportChangedRef.current({ ...latest, report: latest.report });
-    }
-    return latest.report;
-  };
-  const refreshReportRef = useRef(refreshReport);
-  refreshReportRef.current = refreshReport;
-  // A tab left open on step 15 catches up when the student comes back to it.
-  useEffect(() => {
-    let inFlight = false;
-    const onReturn = () => {
-      if (document.visibilityState === "hidden" || inFlight || operationRef.current) return;
-      inFlight = true;
-      void refreshReportRef.current().finally(() => { inFlight = false; });
-    };
-    window.addEventListener("focus", onReturn);
-    document.addEventListener("visibilitychange", onReturn);
-    return () => {
-      window.removeEventListener("focus", onReturn);
-      document.removeEventListener("visibilitychange", onReturn);
-    };
-  }, []);
+    || reportCurrent !== true));
 
   // A refused regeneration: its reason is brought into view, clear of the scroller's upper edge.
   useEffect(() => {
@@ -402,53 +354,20 @@ export function ReportLab({
     return () => window.cancelAnimationFrame(frame);
   }, [error]);
 
-  const waitUntilReady = async () => {
-    if (readyRef.current) return;
-    const deadline = Date.now() + 15_000;
-    await new Promise<void>((resolve, reject) => {
-      const tick = () => {
-        if (readyRef.current) {
-          resolve();
-          return;
-        }
-        if (Date.now() >= deadline) {
-          reject(new Error("实验记录仍在恢复，请稍后再试"));
-          return;
-        }
-        window.setTimeout(tick, 50);
-      };
-      tick();
-    });
-  };
-
-  const generate = async (submitAfter = false) => {
+  const run = async (operation: ReportOperation) => {
     if (busy || operationRef.current) return;
-    // Hold the guard while the confirmation is open, so a second click cannot start another run
-    // (which would replace the pending resolver and leave this call suspended).
+    // This guard owns only the confirmation dialog; the session owns the request across step changes.
     operationRef.current = true;
-    if (report?.state === "graded" && !(await askRegenerate())) {
+    if (operation !== "submit" && report?.state === "graded" && !(await askRegenerate())) {
       operationRef.current = false;
       return;
     }
-    setGenerating(true);
     setError(null);
     setBlocked([]);
-    let generated = false;
     try {
-      await waitUntilReady();
-      await flushRef.current();
-      // Bind replacement to the report the student saw (and, if graded, confirmed).
-      const response = await api.classroom.generateReport(report?.updated_at ?? null);
-      generated = true;
-      revealPreviewAfterDraft.current = !submitAfter;
-      onReportChanged(response);
-      let finalReport = response.report;
-      if (submitAfter && response.report.state === "draft") {
-        setSubmitting(true);
-        const submitted = await api.classroom.submitReport();
-        onReportChanged(submitted);
-        finalReport = submitted.report;
-      }
+      revealPreviewAfterDraft.current = operation === "generate";
+      const finalReport = await reportActions.runReport(operation, report?.updated_at ?? null);
+      if (!finalReport) return;
       if (finalReport.state !== "draft") {
         clearToasts();
         outroOpener.current = null;
@@ -464,42 +383,12 @@ export function ReportLab({
         // Mark the short analysis fields for assistive technology once a submit was refused for them.
         if (requestError.blocked.some((item) => item.step === 15)) setAttemptedIncomplete(true);
       }
-      else if (!generated && isApiErrorStatus(cause, 409)) {
-        // The report changed under us: the teacher graded it, or it was submitted or regenerated in another
-        // tab. Show the current state instead of a stale page, and say which of these happened.
-        const latest = await api.classroom.session().catch(() => null);
-        if (latest?.report) onReportChanged({ ...latest, report: latest.report });
-        const reason = reportConflictMessage(report, latest?.report ?? null) ?? userFacingRequestError(cause, "报告生成失败");
-        setError(reason);
+      else {
+        setError(userFacingRequestError(cause, "报告操作失败"));
         revealConflict.current = "error";
-      } else setError(userFacingRequestError(cause, generated ? "报告已生成为草稿，但提交给老师失败，请重试提交" : "报告生成失败"));
-    } finally {
-      setGenerating(false);
-      setSubmitting(false);
-      operationRef.current = false;
-    }
-  };
-
-  const submit = async () => {
-    if (busy || operationRef.current) return;
-    operationRef.current = true;
-    setSubmitting(true);
-    setError(null);
-    try {
-      await waitUntilReady();
-      await flushRef.current();
-      const response = await api.classroom.submitReport();
-      onReportChanged(response);
-      if (response.report.state !== "draft") {
-        clearToasts();
-        outroOpener.current = null;
-        setOutro(response.report);
       }
-      else showToast("报告仍为草稿，请核对后重试提交");
-    } catch (cause) {
-      setError(userFacingRequestError(cause, "报告提交失败"));
+      revealPreviewAfterDraft.current = false;
     } finally {
-      setSubmitting(false);
       operationRef.current = false;
     }
   };
@@ -525,7 +414,7 @@ export function ReportLab({
       // A graded PDF carries the grade: check the server still has it (another tab may have regenerated the
       // report, which clears it). When the check itself fails, the version shown is exported.
       if (report.state === "graded") {
-        const latest = await refreshReport();
+        const latest = await reportActions.refreshReport().catch(() => undefined);
         if (latest !== undefined && (latest?.state !== "graded" || latest.graded_at !== report.graded_at || latest.updated_at !== report.updated_at)) {
           setError(gradedExportRefusal(latest));
           revealConflict.current = "error";
@@ -638,7 +527,7 @@ export function ReportLab({
       {/* Only an outdated snapshot needs a notice; the generation time is also on the status card below. */}
       {report && reportOutdated && (
         <div className="report-version-notice outdated" role="status">
-          <b>报告尚未包含最新修改</b>
+          <b>{reportCurrent == null ? "报告状态待核对，请联网后重试" : "报告尚未包含最新修改"}</b>
           {/* The server keeps one report: regenerating a submitted one replaces it and submits it again in the same
               step (records.save_generated_report), so there is no draft-only update once it is submitted. */}
           <p>生成时间：{fmtTime(report.generated_at)}。实验记录自动保存不会更新报告。{reportOutdatedAdvice(report.state)}</p>
@@ -660,7 +549,7 @@ export function ReportLab({
               : reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, state.syncError, Boolean(state.syncConflict)) ?? (report ? "更新报告并提交给老师" : "生成并提交报告")}
           </button>}
           {report?.state === "draft" && !reportOutdated && (
-            <button type="button" className="primary" disabled={busy} onClick={() => { void submit(); }}>
+            <button type="button" className="primary" disabled={busy} onClick={() => { void run("submit"); }}>
               {submitting ? "提交中…" : reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, state.syncError, Boolean(state.syncConflict)) ?? "提交报告给老师"}
             </button>
           )}

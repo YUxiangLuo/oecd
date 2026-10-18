@@ -323,7 +323,7 @@ export function StudentWorkspace({
 
   return (
     <SyncProblemContext.Provider value={syncProblem}>
-      <div className="layout" inert={showIntro ? true : undefined}>
+      <div className="layout" inert={showIntro || session.reportOperation ? true : undefined}>
         <StudentWorkspaceSkipLink targetId={mainContentId} targetRef={contentRef} />
         {/* Always mounted, so a step change is announced even though focus stays in the sidebar. */}
         <span className="sr-only" role="status" aria-live="polite">已进入步骤 {step.n}：{step.title}</span>
@@ -400,14 +400,12 @@ export function StudentWorkspace({
                         meta={meta}
                         state={labState}
                         report={session.report}
-                        sessionUpdatedAt={session.updatedAt}
                         reportCurrent={session.reportCurrent}
                         reportGate={session.reportGate}
                         sessionStatus={session.status}
                         sessionUnsynced={session.unsynced}
                         sessionSyncing={session.syncing}
-                        onFlushSession={session.syncNow}
-                        onReportChanged={session.applyReportMutation}
+                        reportActions={session}
                         onNavigateStep={onNavigateStep}
                         getStep={session.getStep}
                         getConfirmedStep={session.getConfirmedStep}
@@ -442,6 +440,16 @@ export function StudentWorkspace({
         {/* 学生端 ToastHost:与教师端实例互斥,任一时刻只挂载一个。 */}
         <ToastHost />
       </div>
+      {session.reportOperation && (
+        <div className="modal-scrim">
+          <div className="modal-card" role="status" tabIndex={-1} ref={(node) => node?.focus()}>
+            <div className="modal-body">
+              <b>{session.reportOperation === "submit" ? "正在提交报告…" : "正在保存并生成报告…"}</b>
+              <p>请稍候，完成前暂不能修改材料或切换步骤。</p>
+            </div>
+          </div>
+        </div>
+      )}
       {showIntro && (
         <IntroOverlay
           user={user}

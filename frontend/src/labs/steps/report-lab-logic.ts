@@ -309,12 +309,6 @@ export function reportConflictMessage(seen: ClassroomReport | null, latest: Clas
   return null;
 }
 
-/** The server's report differs from the one this page shows (another tab regenerated it, or the teacher graded it). */
-export function reportStatusChanged(seen: ClassroomReport | null, latest: ClassroomReport): boolean {
-  return !seen || seen.updated_at !== latest.updated_at || seen.state !== latest.state
-    || seen.graded_at !== latest.graded_at || seen.score !== latest.score;
-}
-
 /** Said instead of exporting a graded version the server no longer has (it was regenerated or regraded elsewhere). */
 export function gradedExportRefusal(latest: ClassroomReport | null): string {
   return latest?.state === "graded"

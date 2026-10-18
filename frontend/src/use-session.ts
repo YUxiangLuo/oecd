@@ -3,6 +3,7 @@ import { api, ApiError, isApiErrorStatus, RequestTimeoutError } from "./api";
 import { emptySession, isValidSession, sessionData, withSessionViews, patchStep as patchStoredStep, readStep, sameMaterialContent, sameSessionContent } from "./session-store";
 import type { ClassroomReport, CompletionSummary, ExperimentSession, QuizLearningState, ReportGateItem, ReportMutationResponse, SessionSaveResponse } from "./types";
 import { isNetworkFailure, userFacingRequestError } from "./user-facing-error";
+import { reportConflictMessage } from "./labs/steps/report-lab-logic";
 
 const SYNC_DEBOUNCE_MS = 800;
 const KEPT_EDITS_PREFIX = "gvcsim_kept_edits_v4:";
@@ -58,13 +59,19 @@ export function expiredLoginNotice(editsKept: boolean): string {
 }
 
 export type SessionStatus = "loading" | "ready" | "unavailable";
+export type ReportOperation = "generate" | "generate-submit" | "submit";
+export interface ReportActions {
+  reportOperation: ReportOperation | null;
+  runReport: (operation: ReportOperation, expectedReportUpdatedAt?: string | null) => Promise<ClassroomReport | undefined>;
+  refreshReport: () => Promise<ClassroomReport | null | undefined>;
+}
 export const SAVE_RETRY_DELAYS_MS = [5_000, 15_000, 30_000, 60_000];
 export function isTransientSaveFailure(cause: unknown): boolean {
   if (cause instanceof ApiError) return [408, 429, 500, 502, 503, 504].includes(cause.status);
   return cause instanceof RequestTimeoutError || isNetworkFailure(cause);
 }
 
-export interface SessionApi extends QuizLearningState {
+export interface SessionApi extends QuizLearningState, ReportActions {
   status: SessionStatus;
   session: ExperimentSession;
   report: ClassroomReport | null;
@@ -91,7 +98,6 @@ export interface SessionApi extends QuizLearningState {
   loadAttempts: number;
   keepUnsavedEdits: () => boolean;
   resolveSyncConflict: () => Promise<void>;
-  applyReportMutation: (response: ReportMutationResponse) => void;
   refreshLearning?: () => Promise<void>;
 }
 
@@ -199,7 +205,15 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const [quizState, setQuizState] = useState<QuizLearningState>({});
   const quizRevision = useRef(-1);
   const currentQuizzes = useRef<QuizLearningState["quizzes"]>(undefined);
-  const reportMutation = useRef(0);
+  const workspaceRevision = useRef(0);
+  const reportRef = useRef(report);
+  const [reportOperation, setReportOperation] = useState<ReportOperation | null>(null);
+  const operating = useRef(false);
+  const refreshFlight = useRef<Promise<ClassroomReport | null | undefined> | null>(null);
+  const storeReport = (value: ClassroomReport | null) => {
+    reportRef.current = value;
+    setReport(value);
+  };
   const viewKey = () => `gvcsim_views_v1:${encodeURIComponent(username ?? "")}:${releaseId.current}`;
 
   const persistDraft = useCallback(() => {
@@ -223,7 +237,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     return true;
   };
   const applyLearningState = (response: Pick<SessionSaveResponse, "completion" | "report_current" | "report_gate" | "material_gate" | "quiz_revision" | "quizzes">) => {
-    if (!applyQuizState(response)) return;
+    if (!applyQuizState(response)) { setReportCurrent(null); return; }
     setCompletion(response.completion);
     setReportCurrent(response.report_current);
     setReportGate(response.report_gate);
@@ -237,9 +251,14 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     {
       onSaved: (response, snapshot, newer) => {
         if (!mounted.current) return;
+        workspaceRevision.current++;
+        refreshFlight.current = null;
         setConfirmed(snapshot);
         setUpdatedAt(response.updated_at);
         applyLearningState(response);
+        if ((response.report_updated_at ?? null) !== (reportRef.current?.updated_at ?? null)) {
+          setReportCurrent(null);
+        }
         setSaveState({ ...SAVED, phase: newer ? "saving" : "saved" });
         retries.current = 0;
         setRetryAt(null);
@@ -278,6 +297,8 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
 
   useEffect(() => {
     setStatus(enabled ? "loading" : "unavailable");
+    operating.current = false;
+    setReportOperation(null);
     setSaveState(SAVED);
     setRetryAt(null);
     retries.current = 0;
@@ -293,6 +314,9 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     let live = true;
     const ownedQueue = createQueue();
     queue.current = ownedQueue;
+    operating.current = false;
+    setReportOperation(null);
+    refreshFlight.current = null;
     api.classroom.session().then((response) => {
       if (!live) return;
       releaseId.current = response.release_id;
@@ -300,7 +324,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       queue.current!.setConfirmedSession(response.session);
       setConfirmed(response.session);
       setUpdatedAt(response.updated_at ?? null);
-      setReport(response.report);
+      storeReport(response.report);
       applyLearningState(response);
       const kept = username ? readKeptEdits(sessionStorage, username, response.release_id) : null;
       const dirty = kept && (!sameSessionContent(sessionData(kept.session), sessionData(response.session)) || kept.sent);
@@ -340,6 +364,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     return () => {
       live = false;
       ownedQueue.stop();
+      if (queue.current === ownedQueue) queue.current = null;
       if (timer.current !== null) window.clearTimeout(timer.current);
     };
   }, [enabled, username, loadAttempt]);
@@ -351,36 +376,106 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     await queue.current!.drain();
   }, [status]);
 
-  const refreshLearning = useCallback(async () => {
-    if (!enabled || status !== "ready") return;
+  const reportOwner = queue.current;
+  const refreshReport = useCallback((duringOperation = false): Promise<ClassroomReport | null | undefined> => {
+    if (!enabled || status !== "ready" || queue.current !== reportOwner
+      || (operating.current && !duringOperation)) return Promise.resolve(undefined);
+    if (refreshFlight.current) return refreshFlight.current;
     const ownedQueue = queue.current;
-    const reportVersion = reportMutation.current;
-    const response = await api.classroom.session();
-    if (!mounted.current || queue.current !== ownedQueue || reportMutation.current !== reportVersion) return;
-    // Refresh only metadata for the acknowledged snapshot, never overwrite local edits or
-    // allow a read overtaken by a save to restore outdated completion/report gates.
-    if ((response.updated_at ?? null) !== ownedQueue?.getBaseUpdatedAt()) {
-      // The teacher's question bank is independent of the student's saved snapshot.
-      applyQuizState(response);
-      return;
+    const revision = workspaceRevision.current;
+    const flight = api.classroom.session().then((response) => {
+      if (!mounted.current || queue.current !== ownedQueue || workspaceRevision.current !== revision) return undefined;
+      // Never replace local edits, or combine a report with metadata for another saved record.
+      if ((response.updated_at ?? null) !== ownedQueue?.getBaseUpdatedAt()) {
+        applyQuizState(response);
+        return undefined;
+      }
+      storeReport(response.report);
+      applyLearningState(response);
+      return response.report;
+    }).finally(() => { if (refreshFlight.current === flight) refreshFlight.current = null; });
+    refreshFlight.current = flight;
+    return flight;
+  }, [enabled, status, reportOwner]);
+
+  const refreshLearning = useCallback(async () => { await refreshReport(); }, [refreshReport]);
+
+  useEffect(() => {
+    if (reportCurrent === null) void refreshReport().catch(() => {});
+  }, [reportCurrent, reportOperation, updatedAt, refreshReport]);
+
+  const runReport = useCallback(async (operation: ReportOperation, expectedReportUpdatedAt: string | null = null) => {
+    if (operating.current || queue.current !== reportOwner) return undefined;
+    const ownedQueue = queue.current;
+    const seen = reportRef.current;
+    operating.current = true;
+    setReportOperation(operation);
+    workspaceRevision.current++;
+    refreshFlight.current = null;
+    const live = () => mounted.current && queue.current === ownedQueue;
+    const accept = (response: ReportMutationResponse) => {
+      if (!live()) return false;
+      if ((response.updated_at ?? null) !== ownedQueue?.getBaseUpdatedAt()) {
+        setReportCurrent(null);
+        throw new Error("实验记录已变化，请核对最新报告后重试。");
+      }
+      storeReport(response.report);
+      applyLearningState(response);
+      return true;
+    };
+    let generated = false;
+    try {
+      await syncNow();
+      if (!live()) return undefined;
+      let response: ReportMutationResponse;
+      if (operation === "submit") response = await api.classroom.submitReport();
+      else {
+        response = await api.classroom.generateReport(expectedReportUpdatedAt);
+        generated = true;
+      }
+      if (!accept(response)) return undefined;
+      if (operation === "generate-submit" && response.report.state === "draft") {
+        response = await api.classroom.submitReport();
+        if (!accept(response)) return undefined;
+      }
+      return response.report;
+    } catch (cause) {
+      if (!live()) return undefined;
+      // A conflicting write may mean the teacher graded the report. Never retry replacement automatically.
+      if (isApiErrorStatus(cause, 409)) {
+        const latest = await refreshReport(true).catch(() => undefined);
+        if (!live()) return undefined;
+        const message = latest !== undefined ? reportConflictMessage(seen, latest) : null;
+        if (message) throw new Error(message);
+      }
+      if ((cause as { blocked?: ReportGateItem[] })?.blocked) throw cause;
+      throw new Error(userFacingRequestError(cause, generated
+        ? "报告已生成为草稿，但提交结果未确认，请重试提交"
+        : operation === "submit" ? "报告提交结果未确认，请重试提交" : "报告生成失败"));
+    } finally {
+      if (live()) {
+        operating.current = false;
+        setReportOperation(null);
+      }
     }
-    applyLearningState(response);
-  }, [enabled, status, username]);
+  }, [syncNow, refreshReport, reportOwner]);
 
   useEffect(() => {
     const refresh = () => {
       if (document.visibilityState === "visible") void refreshLearning().catch(() => {});
     };
     document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
     window.addEventListener("online", refresh);
     return () => {
       document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
       window.removeEventListener("online", refresh);
     };
   }, [refreshLearning]);
 
   const patchStep = useCallback(<T extends object,>(step: number, patch: Partial<T>) => {
-    if (!enabled || status !== "ready") return;
+    if (!enabled || status !== "ready" || operating.current) return;
     // A grading callback survives step navigation. Compare against the live bank here,
     // not the old QuizPanel's frozen props, before it can replace a newer saved answer.
     if ("quiz" in patch && currentQuizzes.current
@@ -444,6 +539,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
 
   return {
     status, session, report, updatedAt, completion, reportCurrent, reportGate, materialGate, restoredEdits, ...quizState, refreshLearning,
+    reportOperation, runReport, refreshReport,
     syncing: saveState.phase === "saving", unsynced: saveState.phase !== "saved" && status === "ready",
     syncError: saveState.error ?? (storageFailed ? "本标签页草稿备份失败，刷新前请等待服务器保存成功。" : null),
     localViewWarning: viewStorageFailed ? "本地浏览设置未能备份，刷新后可能需要重新选择；不影响作业保存。" : null,
@@ -460,16 +556,5 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     },
     patchStep, syncNow, keepUnsavedEdits, resolveSyncConflict,
     retryLoad: useCallback(() => setLoadAttempt((n) => n + 1), []), loadAttempts: loadAttempt,
-    applyReportMutation: useCallback((response: ReportMutationResponse) => {
-      reportMutation.current++;
-      setReport(response.report);
-      // A report may finish after leaving its step and saving newer work. Keep
-      // the report, but do not let its older snapshot revive completion or export.
-      if ((response.updated_at ?? null) !== queue.current?.getBaseUpdatedAt()) {
-        applyQuizState(response);
-        return;
-      }
-      applyLearningState(response);
-    }, []),
   };
 }

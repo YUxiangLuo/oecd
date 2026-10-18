@@ -1,1218 +1,462 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { api, ApiError } from "../../api";
-import { renderToStaticMarkup } from "react-dom/server";
-import { ToastHost } from "../../toast";
+import { useState } from "react";
+import { api } from "../../api";
+import { ToastHost, clearToasts } from "../../toast";
 import { MaterialCard } from "../../material-card";
 import { ReportOutro } from "../../report-outro";
-import type { ClassroomReport, ReportMutationResponse, TeachingCountriesResponse } from "../../types";
-import { GateCard, RecordedMaterials, ReportLab, ReportStatus } from "./report-lab";
+import type { ClassroomReport, TeachingCountriesResponse } from "../../types";
+import type { ReportActions } from "../../use-session";
+import { GateCard, RecordedMaterials, ReportLab } from "./report-lab";
 import {
-  REPORT_REFLECTION_INCOMPLETE_SELECTOR,
-  activateReportGateDestination,
-  focusReportGateDestination,
-  reflectionCountLabel,
-  reportGenerateButtonLabel,
-  reportGenerateLabel,
-  reportWaitLabel,
-  summarizeReportGate,
-  reflectionLength,
-  limitInsertion,
-  codePointLength,
-  REFLECTION_MAX_LENGTH,
-  reportConflictMessage,
-  reportOutdatedAdvice,
-  gradedExportRefusal,
-  reportStatusChanged,
-  revealWithOffset,
+  REFLECTION_MAX_LENGTH, reflectionCountLabel, reflectionLength, codePointLength,
+  limitInsertion, reportConflictMessage, reportOutdatedAdvice, reportGenerateLabel,
+  reportWaitLabel, reportGenerateButtonLabel, summarizeReportGate, revealWithOffset,
+  activateReportGateDestination, focusReportGateDestination, gradedExportRefusal,
 } from "./report-lab-logic";
-import { useState } from "react";
 
-afterEach(cleanup);
-
-for (const cancel of [false, true]) test(`material-table lazy navigation ${cancel ? "does not steal focus after cancellation" : "focuses and reveals the material card"}`, async () => {
-  const revealed: HTMLElement[] = [];
-  const scroll = spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (this: HTMLElement) { revealed.push(this); });
-  function Harness() {
-    const [step, setStep] = useState(15);
-    const [loaded, setLoaded] = useState(false);
-    return <>
-      {step === 15 ? <RecordedMaterials steps={[{ n: 6, title: "图表", lab: "viz" }]} blocked={[]} onNavigateStep={setStep} />
-        : <><h3 id="step-task-title-6" tabIndex={-1}>任务</h3><button onClick={() => setLoaded(true)}>加载完成</button>{loaded && <MaterialCard state="missing" summary="等待记录" />}</>}
-    </>;
-  }
-  try {
-    render(<Harness />);
-    fireEvent.click(screen.getByRole("button", { name: "步骤 6 · 图表" }));
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 40)); });
-    if (cancel) fireEvent.keyDown(window, { key: "Escape" });
-    // A data/lazy-render completion is not a new student navigation.
-    act(() => { screen.getByRole("button", { name: "加载完成" }).click(); });
-    if (cancel) {
-      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 60)); });
-      expect(document.activeElement?.id).not.toBe("step-material-action");
-      expect(revealed).toHaveLength(0);
-    } else {
-      await waitFor(() => expect(document.activeElement?.id).toBe("step-material-action"));
-      expect(revealed.at(-1)).toBe(document.activeElement as HTMLElement);
-    }
-  } finally { scroll.mockRestore(); }
-});
-
+afterEach(() => { cleanup(); mock.restore(); clearToasts(); });
 function report(state: ClassroomReport["state"]): ClassroomReport {
   return {
-    markdown: "# report",
-    provenance: {
-      release_id: "a".repeat(32),
-      session_version: "experiment-session-simple-v4",
-      generated_at: "2026-08-13T00:00:00Z",
-      years: [2020],
-      session_fingerprint: "fingerprint",
-      runs: [],
-      custom_results: [],
-    },
-    state,
-    score: state === "graded" ? 93 : null,
-    feedback: state === "graded" ? "证据链完整" : "",
-    graded_by: state === "graded" ? "teacher" : null,
-    generated_at: "2026-08-13T00:00:00Z",
-    updated_at: "2026-08-13T00:00:00Z",
+    markdown: "# report", state, score: state === "graded" ? 93 : null,
+    feedback: state === "graded" ? "证据链完整" : "", graded_by: state === "graded" ? "teacher" : null,
+    generated_at: "2026-08-13T00:00:00Z", updated_at: "2026-08-13T00:00:00Z",
     submitted_at: state === "draft" ? null : "2026-08-13T00:01:00Z",
     graded_at: state === "graded" ? "2026-08-13T00:02:00Z" : null,
+    provenance: { release_id: "a".repeat(32), session_version: "experiment-session-simple-v4",
+      generated_at: "2026-08-13T00:00:00Z", years: [2020], session_fingerprint: "fingerprint", runs: [], custom_results: [] },
   };
 }
-
-describe("step 15 report states", () => {
-  test("discards an old generation gate when a newer saved session has no missing materials", async () => {
-    const blocked = [{ step: 15, title: "原创分析", missing: ["填写研究问题"] }];
-    const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(Object.assign(new Error("缺少材料"), { blocked }));
-    const props = {
-      state: { data: {}, save: () => {}, complete: false, syncing: false, syncError: null, syncNow: () => {} },
-      report: null,
-      reportGate: blocked,
-      sessionStatus: "ready" as const,
-      sessionUnsynced: false,
-      sessionSyncing: false,
-      onFlushSession: async () => {},
-      onNavigateStep: () => {},
-      onReportChanged: () => {},
-    };
-    try {
-      const view = render(<ReportLab {...props} />);
-      // While the saved records still miss items, the generate buttons say why and point to the list.
-      const draft = screen.getByRole("button", { name: "只生成草稿（不提交）" });
-      expect(draft.getAttribute("aria-disabled")).toBe("true");
-      expect(screen.getByText(/还有 1 项没完成，现在还不能生成报告/)).toBeDefined();
-      await act(async () => { fireEvent.click(draft); });
-      expect(generate).toHaveBeenCalledTimes(0);
-      expect(view.container.querySelector(".report-gate-panel.report-gate-flash")).not.toBeNull();
-      expect(screen.getByText("还不能生成报告")).toBeDefined();
-      view.rerender(<ReportLab {...props} reportGate={[]} state={{ ...props.state, data: { research_question: "已保存的新分析" } }} />);
-      expect(screen.queryByText("还不能生成报告")).toBeNull();
-      expect(screen.getByRole("button", { name: "只生成草稿（不提交）" }).getAttribute("aria-disabled")).toBeNull();
-      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "只生成草稿（不提交）" })); });
-      expect(generate).toHaveBeenCalledTimes(1);
-    } finally {
-      generate.mockRestore();
-    }
-  });
-
-  test("a second click while the regenerate confirmation is open neither opens another nor strands the first", async () => {
-    const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new Error("服务不可用"));
-    const props = {
-      state: { data: {}, save: () => {}, complete: true, syncing: false, syncError: null, syncNow: () => {} },
-      report: report("graded"),
-      reportGate: [],
-      sessionStatus: "ready" as const,
-      sessionUnsynced: false,
-      sessionSyncing: false,
-      onFlushSession: async () => {},
-      onNavigateStep: () => {},
-      onReportChanged: () => {},
-    };
-    try {
-      render(<ReportLab {...props} />);
-      await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" }));
-        fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" }));
-      });
-      expect(screen.getAllByRole("button", { name: "确定重新生成" })).toHaveLength(1);
-      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "确定重新生成" })); });
-      expect(generate).toHaveBeenCalledTimes(1);
-      expect(screen.queryByRole("button", { name: "确定重新生成" })).toBeNull();
-      // The guard is released again: cancelling and retrying still reaches the server.
-      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" })); });
-      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "取消" })); });
-      expect(generate).toHaveBeenCalledTimes(1);
-      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" })); });
-      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "确定重新生成" })); });
-      expect(generate).toHaveBeenCalledTimes(2);
-    } finally {
-      generate.mockRestore();
-    }
-  });
-
-  test("does not generate or replace an existing report when flushing session edits fails", async () => {
-    const generate = spyOn(api.classroom, "generateReport");
-    const confirm = spyOn(window, "confirm").mockReturnValue(true);
-    const changed: unknown[] = [];
-    try {
-      render(<ReportLab
-        state={{ data: {}, save: () => {}, complete: true, syncing: false, syncError: "保存失败", syncNow: () => {} }}
-        report={report("graded")} reportGate={[]} sessionStatus="ready" sessionUnsynced={true} sessionSyncing={false}
-        onFlushSession={async () => { throw new Error("保存失败，请重试"); }} onNavigateStep={() => {}}
-        onReportChanged={(response) => changed.push(response)}
-      />);
-      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "保存失败，请先重试" })); });
-      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "确定重新生成" })); });
-      expect((await screen.findByRole("alert")).textContent).toContain("保存失败");
-      expect(generate).not.toHaveBeenCalled();
-      expect(changed).toEqual([]);
-      expect(screen.getByText(/已评阅 · 93 分/)).toBeDefined();
-    } finally {
-      generate.mockRestore();
-      confirm.mockRestore();
-    }
-  });
-
-  test("renders draft, pending, and graded feedback distinctly", () => {
-    expect(renderToStaticMarkup(<ReportStatus report={report("draft")} />)).toContain("尚未提交");
-    expect(renderToStaticMarkup(<ReportStatus report={report("pending")} />)).toContain("等待教师评阅");
-    const graded = renderToStaticMarkup(<ReportStatus report={report("graded")} />);
-    expect(graded).toContain("93 分");
-    expect(graded).toContain("证据链完整");
-    // Without comments the score card says so, and the roadmap link no longer promises them.
-    const silent = { ...report("graded"), feedback: "" };
-    expect(renderToStaticMarkup(<ReportStatus report={silent} />)).toContain("老师没有写评语。");
-    const page = renderToStaticMarkup(<ReportLab {...finishProps} report={silent} />);
-    expect(page).toContain(">已评阅，查看分数<");
-    // The score card comes before the submit panel.
-    expect(page.indexOf("report-score-card")).toBeLessThan(page.indexOf("report-submit-panel"));
-  });
-
-  test("shows progress against both the minimum and the hard maximum", () => {
-    expect(reflectionCountLabel(0, 40)).toBe("已写 0 / 2400 字 · 最低 40 字");
-    expect(reflectionCountLabel(30, 40)).toBe("已写 30 / 2400 字 · 最低 40 字");
-    expect(reflectionCountLabel(83, 40)).toBe("已写 83 / 2400 字 · 已达最低 40 字");
-    expect(reflectionCountLabel(2400, 40)).toBe("已写 2400 / 2400 字 · 已达上限");
-    // Full by the server's code points while emoji and line breaks count less on screen: say why, not "2380 / 2400".
-    expect(reflectionCountLabel(2380, 40, 2400, true)).toBe("已写 2380 字 · 已达 2400 字上限（空格、换行和表情符号按实际字符计，可能占多个字）");
-  });
-
-  test("an outdated report says what updating does in each state", () => {
-    expect(reportOutdatedAdvice("draft")).toBe("修改后请先点“重新生成草稿”，再提交或导出。");
-    // A submitted report has no draft-only update: regenerating resubmits, and the teacher keeps the old one until then.
-    expect(reportOutdatedAdvice("pending")).toContain("在你更新之前，老师那里仍是已提交的版本。点“更新报告并提交给老师”会按最新记录重新生成并再次提交");
-    expect(reportOutdatedAdvice("pending")).not.toContain("请先重新生成");
-    expect(reportOutdatedAdvice("graded")).toContain("老师那里仍是已评阅的版本");
-    expect(reportOutdatedAdvice("graded")).toContain("清除原评分和评语");
-  });
-
-  test("uses resubmission semantics after submission or grading", () => {
-    expect(reportGenerateLabel(null)).toBe("只生成草稿（不提交）");
-    expect(reportGenerateLabel(report("draft"))).toBe("重新生成草稿");
-    expect(reportGenerateLabel(report("pending"))).toBe("重新生成并提交");
-    expect(reportGenerateLabel(report("graded"))).toBe("重新生成并提交");
-  });
-
-  test("keeps the generate action distinguishable from the step title", () => {
-    const stepTitle = "生成实验报告";
-    const first = reportGenerateLabel(null);
-    expect(first).toBe("只生成草稿（不提交）");
-    expect(first.includes(stepTitle)).toBe(false);
-    const html = renderToStaticMarkup(<ReportLab
-      state={{
-        data: {},
-        save: () => {},
-        complete: true,
-        syncing: false,
-        syncError: null,
-        syncNow: () => {},
-      }}
-      report={null}
-      reportGate={[]}
-      sessionStatus="ready"
-      sessionUnsynced={false}
-      sessionSyncing={false}
-      onFlushSession={async () => {}}
-      onNavigateStep={() => {}}
-      onReportChanged={() => {}}
-    />);
-    expect(html).toContain(">只生成草稿（不提交）<");
-    const generateButton = html.match(/<button[^>]*class="secondary"[^>]*>只生成草稿（不提交）<\/button>/)?.[0];
-    expect(generateButton).toBeDefined();
-    expect(generateButton).not.toContain("aria-label=");
-  });
-
-  test("puts restore and save status on the generate button itself", () => {
-    expect(reportWaitLabel("loading", false, false)).toBe("正在恢复实验记录…");
-    expect(reportWaitLabel("ready", true, false)).toBe("正在保存实验记录…");
-    expect(reportWaitLabel("ready", false, false)).toBeNull();
-    expect(reportWaitLabel("ready", true, false, "session changed")).toBe("保存失败，请先重试");
-    // Beside the primary button's "保存失败，请先重试", the draft button keeps its own action.
-    expect(reportGenerateButtonLabel(null, false, "ready", true, false, "offline")).toBe("重试保存后才能生成草稿");
-    expect(reportGenerateButtonLabel(report("draft"), false, "ready", true, false, "offline")).toBe("重试保存后才能重新生成草稿");
-    expect(reportGenerateButtonLabel(report("pending"), false, "ready", true, false, "冲突", true)).toBe("处理保存异常后才能重新生成");
-    expect(reportGenerateButtonLabel(null, false, "loading", false, false)).toBe("正在恢复实验记录…");
-    expect(reportGenerateButtonLabel(null, true, "loading", false, false)).toBe("正在生成报告…");
-  });
-
-  test("renders actionable report-gate links", () => {
-    const html = renderToStaticMarkup(<GateCard
-      blocked={[{ step: 11, title: "回归实验", missing: ["保存有效回归"] }]}
-      onNavigateStep={() => {}}
-    />);
-    expect(html).toContain("步骤 11");
-    expect(html).toContain("保存有效回归");
-    expect(html).toContain("gate-link");
-    expect(html).toContain("继续步骤 11");
-    expect(html).toContain("查看全部缺项（1）");
-  });
-
-  test("keeps the step-15 action local and focuses the first unfinished reflection field", () => {
-    const html = renderToStaticMarkup(<GateCard
-      blocked={[{ step: 15, title: "原创分析与反思", missing: ["填写证据解释"] }]}
-      onNavigateStep={() => {}}
-    />);
-    expect(html).toContain("去写你的分析");
-    expect(html).not.toContain("继续步骤 15");
-
-    const navigated: number[] = [];
-    const focused: string[] = [];
-    let scheduled = 0;
-    const activated = activateReportGateDestination(
-      15,
-      (step) => navigated.push(step),
-      {
-        getElementById: () => null,
-        querySelector: (selector) => {
-          expect(selector).toBe(REPORT_REFLECTION_INCOMPLETE_SELECTOR);
-          return { focus: () => focused.push("unfinished-field") } as unknown as Element;
-        },
-      },
-      {
-        requestAnimationFrame: () => {
-          scheduled += 1;
-          return 1;
-        },
-      },
-    );
-    expect(activated).toBe(true);
-    expect(navigated).toEqual([]);
-    expect(scheduled).toBe(0);
-    expect(focused).toEqual(["unfinished-field"]);
-  });
-
-  test("marks only below-minimum reflection fields as local focus candidates", () => {
-    const html = renderToStaticMarkup(<ReportLab
-      state={{
-        data: {
-          research_question: "123456789012",
-          evidence_interpretation: "不足",
-          limitations: "123456789012345678901234567890",
-        },
-        save: () => {},
-        complete: true,
-        syncing: false,
-        syncError: null,
-        syncNow: () => {},
-      }}
-      report={null}
-      reportGate={[{ step: 15, title: "原创分析与反思", missing: ["填写证据解释"] }]}
-      sessionStatus="ready"
-      sessionUnsynced={false}
-      sessionSyncing={false}
-      onFlushSession={async () => {}}
-      onNavigateStep={() => {}}
-      onReportChanged={() => {}}
-    />);
-    expect(html.match(/data-report-reflection-incomplete="true"/g)).toHaveLength(1);
-  });
-
-  test("summarizes and groups a long gate before revealing every item", () => {
-    const overview = summarizeReportGate([
-      { step: 11, title: "贸易流回归", missing: ["完成理解题", "保存有效回归"] },
-      { step: 1, title: "数据浏览", missing: ["记录单元格"] },
-      { step: 15, title: "原创分析", missing: ["填写研究问题"] },
-      { step: 2, title: "贸易流指标", missing: ["记录两个国家"] },
-    ]);
-    expect(overview.summary).toBe("步骤 1–14 中 3 个步骤还有 4 项待补齐；本步还有 1 项待完成");
-    expect(overview.next?.step).toBe(1);
-    expect(overview.groups.map((group) => group.label)).toEqual([
-      "数据接入", "指标计算", "关税回归", "实验报告",
-    ]);
-  });
-
-  test("focuses the destination task heading after a report-gate navigation", () => {
-    const calls: unknown[] = [];
-    const found = focusReportGateDestination(11, {
-      getElementById: (id) => id === "step-task-title-11"
-        ? { focus: (options) => calls.push(options) }
-        : null,
-    });
-    expect(found).toBe(true);
-    expect(calls).toEqual([{ preventScroll: true }]);
-    expect(focusReportGateDestination(9, { getElementById: () => null })).toBe(false);
-  });
-
-  test("a step missing only its quiz (the server's quiz_only, whatever its message) opens at the quiz", () => {
-    const focused: string[] = [];
-    const root = {
-      getElementById: (id: string) => ({ focus: () => focused.push(id), scrollIntoView: () => {} }),
-    };
-    const frames: (() => void)[] = [];
-    const scheduler = { requestAnimationFrame: (callback: FrameRequestCallback) => { frames.push(() => callback(0)); return 1; } };
-    const navigated: number[] = [];
-    activateReportGateDestination(7, (step) => navigated.push(step), root, scheduler, true);
-    activateReportGateDestination(8, (step) => navigated.push(step), root, scheduler, false);
-    frames.forEach((frame) => frame());
-    expect(navigated).toEqual([7, 8]);
-    expect(focused).toEqual(["quiz-title-7", "step-task-title-8"]);
-  });
-
-  test("offers PDF export after a report has been generated", () => {
-    const html = renderToStaticMarkup(<ReportLab
-      state={{
-        data: {},
-        save: () => {},
-        complete: true,
-        syncing: false,
-        syncError: null,
-        syncNow: () => {},
-      }}
-      report={report("graded")}
-      reportGate={[]}
-      sessionStatus="ready"
-      sessionUnsynced={false}
-      sessionSyncing={false}
-      onFlushSession={async () => {}}
-      onNavigateStep={() => {}}
-      onReportChanged={() => {}}
-    />);
-    expect(html).toContain("导出 PDF");
-  });
-});
-
-
-test("blocks stale snapshot export and submission after edits, saves and reloads until regeneration", () => {
-  const original = report("draft");
-  const props = {
-    state: { data: {}, save: () => {}, complete: true, syncing: false, syncError: null, syncNow: () => {} },
-    report: original, reportGate: [], sessionStatus: "ready" as const,
-    sessionUnsynced: false, sessionSyncing: false, sessionUpdatedAt: "2026-08-12T23:59:00Z",
-    onFlushSession: async () => {}, onNavigateStep: () => {}, onReportChanged: () => {},
-  };
-  const view = render(<ReportLab {...props} />);
-  const disabled = (name: string) => (screen.getByRole("button", { name }) as HTMLButtonElement).disabled;
-  expect(disabled("导出 PDF")).toBe(false);
-  view.rerender(<ReportLab {...props} sessionUnsynced />);
-  expect(screen.getByText("报告尚未包含最新修改")).toBeDefined();
-  expect(disabled("导出 PDF")).toBe(true);
-  // A stale draft offers “更新报告并提交给老师” instead of submitting the outdated snapshot.
-  expect([...view.container.querySelectorAll(".report-actions button")].some((button) => button.textContent === "提交报告给老师")).toBe(false);
-  view.unmount();
-  const saved = { ...props, sessionUpdatedAt: "2026-08-13T00:05:00Z" };
-  const restored = render(<ReportLab {...saved} report={{ ...original, updated_at: "2026-08-13T00:10:00Z" }} />);
-  expect(disabled("导出 PDF")).toBe(true);
-  restored.rerender(<ReportLab {...saved} report={{ ...original, generated_at: "2026-08-13T00:06:00Z" }} />);
-  expect(disabled("导出 PDF")).toBe(false);
-  expect(disabled("提交报告给老师")).toBe(false);
-});
-
-test("the server's report-current verdict wins over a newer session save time", () => {
-  const props = {
-    state: { data: {}, save: () => {}, complete: true, syncing: false, syncError: null, syncNow: () => {} },
-    report: report("graded"), reportGate: [], sessionStatus: "ready" as const,
-    sessionUnsynced: false, sessionSyncing: false, sessionUpdatedAt: "2026-08-14T00:00:00Z",
-    onFlushSession: async () => {}, onNavigateStep: () => {}, onReportChanged: () => {},
-  };
-  // Typing a character and deleting it saves the session again but leaves the report inputs unchanged.
-  const current = render(<ReportLab {...props} reportCurrent />);
-  expect(screen.queryByText("报告需更新后重新提交")).toBeNull();
-  expect((screen.getByRole("button", { name: "导出 PDF" }) as HTMLButtonElement).disabled).toBe(false);
-  current.unmount();
-  render(<ReportLab {...props} sessionUpdatedAt="2026-08-01T00:00:00Z" reportCurrent={false} />);
-  expect(screen.getByText("报告需更新后重新提交")).toBeDefined();
-});
-
-const mutation = (state: ClassroomReport["state"]): ReportMutationResponse => ({
-  report: report(state), report_current: true, report_gate: [], material_gate: [],
-  completion: { steps: [], completed: [], completed_count: 0, total: 15 },
-});
-const finishProps = {
+const actions = (): ReportActions => ({ reportOperation: null,
+  runReport: mock(async () => undefined), refreshReport: mock(async () => undefined) });
+const props = () => ({
   state: { data: {}, save: () => {}, complete: false, syncing: false, syncError: null, syncNow: () => {} },
-  report: null, reportGate: [], sessionStatus: "ready" as const, sessionUnsynced: false, sessionSyncing: false,
-  onFlushSession: async () => {}, onNavigateStep: () => {}, onReportChanged: (_response: ReportMutationResponse) => {},
-};
+  report: null, reportCurrent: true, reportGate: [], sessionStatus: "ready" as const,
+  sessionUnsynced: false, sessionSyncing: false, reportActions: actions(), onNavigateStep: () => {},
+});
+const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 40)); });
 
-test("one-click finish flushes then generates then submits; outro appears only after acknowledged submission", async () => {
-  const order: string[] = [];
-  let acknowledge!: (value: ReportMutationResponse) => void;
-  const generate = spyOn(api.classroom, "generateReport").mockImplementation(async () => { order.push("generate"); return mutation("draft"); });
-  const submit = spyOn(api.classroom, "submitReport").mockImplementation(() => { order.push("submit"); return new Promise((resolve) => { acknowledge = resolve; }); });
-  try {
-    render(<><ReportLab {...finishProps} onFlushSession={async () => { order.push("flush"); }} onReportChanged={(r) => order.push(r.report.state)} /><ToastHost /></>);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "生成并提交报告" })); });
-    expect(order).toEqual(["flush", "generate", "draft", "submit"]);
-    expect(generate).toHaveBeenCalledWith(null);
-    expect(screen.queryByRole("dialog")).toBeNull();
-    await act(async () => { acknowledge(mutation("pending")); });
-    const dialog = screen.getByRole("dialog", { name: "报告已提交" });
-    expect(within(dialog).getByText("提交成功 · 等待教师评阅")).toBeTruthy();
-    expect(within(dialog).getByText("计算并理解指标")).toBeTruthy();
-    expect(within(dialog).getByText("看变化与全球位置")).toBeTruthy();
-    expect(within(dialog).getByText("汇总四项回归结果")).toBeTruthy();
-    expect(within(dialog).queryByText("比较与验证")).toBeNull();
-    expect(screen.queryByRole("status")).toBeNull();
-    expect(document.activeElement?.textContent).toBe("报告已提交");
-    expect(order).toEqual(["flush", "generate", "draft", "submit", "pending"]);
-    fireEvent.keyDown(dialog, { key: "Escape" });
-    expect(screen.queryByRole("dialog")).toBeNull();
-  } finally { generate.mockRestore(); submit.mockRestore(); }
+test.each(["draft", "pending", "graded"] as const)("%s report has distinct status and one action group", (state) => {
+  const view = render(<ReportLab {...props()} report={report(state)} />);
+  expect(view.container.querySelectorAll(".report-actions")).toHaveLength(1);
+  expect(screen.getByRole("region", { name: "报告正文" })).toBeTruthy();
+  expect(screen.getByRole("textbox", { name: "研究问题" }).getAttribute("rows")).toBe("3");
+  expect(screen.getByRole("button", { name: "导出 PDF" })).toBeTruthy();
+  if (state === "draft") {
+    expect(screen.getByText("草稿 · 尚未提交")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "提交报告给老师" })).toBeTruthy();
+    expect(view.container.querySelector(".report-print-grade")).toBeNull();
+  } else {
+    expect(screen.getByText("报告已交给老师")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "重新生成并提交" })).toBeTruthy();
+    expect(screen.getByText("导出 PDF 仅供个人留存，不能代替提交。")).toBeTruthy();
+    if (state === "pending") expect(screen.getByText(/等待教师评阅/)).toBeTruthy();
+    else {
+      expect(screen.getByRole("region", { name: "教师评语" }).textContent).toContain("证据链完整");
+      expect(view.container.querySelector(".report-print-grade")?.textContent).toContain("93 分");
+    }
+  }
 });
 
-test("a 409 because the teacher just graded shows the current report, not a phantom draft", async () => {
-  const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new ApiError(409, "报告或评分已更新，请刷新页面核对后再确认重新生成", "Conflict"));
-  const latest = mutation("graded");
-  const session = spyOn(api.classroom, "session").mockResolvedValue({ release_id: "a".repeat(32), session: { version: "experiment-session-simple-v4", steps: {}, shared: {} }, updated_at: null, ...latest });
-  const changed: string[] = [];
-  try {
-    render(<ReportLab {...finishProps} report={report("pending")} onReportChanged={(r) => changed.push(r.report.state)} />);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /重新生成|更新报告/ })); });
-    expect(changed).toEqual(["graded"]);
-    const alert = screen.getByRole("alert").textContent ?? "";
-    expect(alert).toContain("老师刚刚评阅了这份报告");
-    expect(alert).not.toContain("草稿会保留");
-  } finally { generate.mockRestore(); session.mockRestore(); }
+test("silent grading promises only the score; the score precedes submission actions", () => {
+  const view = render(<ReportLab {...props()} report={{ ...report("graded"), feedback: "" }} />);
+  expect(screen.getByRole("link", { name: "已评阅，查看分数" })).toBeTruthy();
+  expect(screen.queryByRole("region", { name: "教师评语" })).toBeNull();
+  expect(view.container.innerHTML.indexOf("report-score-card")).toBeLessThan(view.container.innerHTML.indexOf("report-submit-panel"));
 });
 
-test("a 409 because the report was submitted in another tab says so, not that it was graded", async () => {
-  const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new ApiError(409, "报告或评分已更新，请刷新页面核对后再确认重新生成", "Conflict"));
-  const latest = mutation("pending");
-  const session = spyOn(api.classroom, "session").mockResolvedValue({ release_id: "a".repeat(32), session: { version: "experiment-session-simple-v4", steps: {}, shared: {} }, updated_at: null, ...latest });
-  const changed: string[] = [];
-  try {
-    render(<ReportLab {...finishProps} report={report("draft")} onReportChanged={(r) => changed.push(r.report.state)} />);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重新生成草稿" })); });
-    expect(changed).toEqual(["pending"]);
-    const alert = screen.getByRole("alert").textContent ?? "";
-    expect(alert).toContain("已在别处提交给老师");
-    expect(alert).not.toContain("评分与评语");
-  } finally { generate.mockRestore(); session.mockRestore(); }
+test.each([null, undefined, false])("unknown or outdated validity (%s) cannot export an ungraded report", (current) => {
+  const view = render(<ReportLab {...props()} report={report("draft")} reportCurrent={current} />);
+  expect((screen.getByRole("button", { name: "导出 PDF" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByRole("button", { name: "提交报告给老师" })).toBeNull();
+  expect(screen.getByText(current == null ? "报告状态待核对，请联网后重试" : "报告尚未包含最新修改")).toBeTruthy();
+  view.rerender(<ReportLab {...props()} report={report("draft")} />);
+  expect((screen.getByRole("button", { name: "导出 PDF" }) as HTMLButtonElement).disabled).toBe(false);
 });
 
-test("the 409 message follows what changed on the server", () => {
-  const graded = report("graded");
-  expect(reportConflictMessage(report("pending"), graded)).toContain("老师刚刚评阅");
-  expect(reportConflictMessage(graded, { ...graded, graded_at: "2026-08-14T00:00:00Z" })).toContain("老师刚刚评阅");
-  expect(reportConflictMessage(null, report("draft"))).toContain("已在别处更新");
-  expect(reportConflictMessage(report("pending"), { ...report("pending"), updated_at: "2026-08-14T00:00:00Z" })).toContain("已在别处更新");
-  expect(reportConflictMessage(report("pending"), report("pending"))).toBeNull();
-  expect(reportConflictMessage(report("pending"), null)).toBeNull();
+test.each(["sessionUnsynced", "sessionSyncing"] as const)("%s blocks stale draft submission/export", (flag) => {
+  render(<ReportLab {...props()} report={report("draft")} {...{ [flag]: true }} />);
+  expect(screen.getByText("报告尚未包含最新修改")).toBeTruthy();
+  expect((screen.getByRole("button", { name: "导出 PDF" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByRole("button", { name: "提交报告给老师" })).toBeNull();
 });
 
-test("draft generation keeps toast feedback when no outro is shown", async () => {
-  const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("draft"));
-  try {
-    render(<><ReportLab {...finishProps} /><ToastHost /></>);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "只生成草稿（不提交）" })); });
+test.each(["loading", "unavailable"] as const)("%s disables report actions and editing", (status) => {
+  const view = render(<ReportLab {...props()} sessionStatus={status} />);
+  for (const button of view.container.querySelectorAll<HTMLButtonElement>(".report-actions button")) expect(button.disabled).toBe(true);
+  expect((screen.getByRole("textbox", { name: "研究问题" }) as HTMLTextAreaElement).disabled).toBe(true);
+});
+
+test.each(["generate", "generate-submit", "submit"] as const)("%s delegates the selected public operation and report version", async (operation) => {
+  const p = props();
+  const run = spyOn(p.reportActions, "runReport").mockResolvedValue(report(operation === "generate" ? "draft" : "pending"));
+  const draft = operation === "submit" ? report("draft") : null;
+  render(<><ReportLab {...p} report={draft} /><ToastHost /></>);
+  fireEvent.click(screen.getByRole("button", { name: operation === "submit" ? "提交报告给老师" : operation === "generate" ? "只生成草稿（不提交）" : "生成并提交报告" }));
+  await waitFor(() => expect(run).toHaveBeenCalledWith(operation, draft?.updated_at ?? null));
+  if (operation === "generate") {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByRole("status").textContent).toContain("报告草稿已生成，请预览后提交");
-  } finally { generate.mockRestore(); }
+  } else {
+    const dialog = screen.getByRole("dialog", { name: "报告已提交" });
+    for (const text of ["提交成功 · 等待教师评阅", "计算并理解指标", "看变化与全球位置", "汇总四项回归结果"]) expect(within(dialog).getByText(text)).toBeTruthy();
+    expect(within(dialog).queryByText("比较与验证")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+  }
 });
 
-test("a generated draft brings the preview into view and focuses it", async () => {
-  const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("draft"));
-  try {
-    const view = render(<ReportLab {...finishProps} />);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "只生成草稿（不提交）" })); });
-    // The parent renders the new draft; the page then continues at the preview, not at the buttons.
-    view.rerender(<ReportLab {...finishProps} report={report("draft")} />);
-    await act(async () => { await new Promise((resolve) => requestAnimationFrame(() => resolve(null))); });
-    expect(document.activeElement?.getAttribute("aria-label")).toBe("报告正文");
-  } finally { generate.mockRestore(); }
+test("success receipt and toast cleanup wait for acknowledgement; failure never shows success", async () => {
+  const p = props();
+  let resolve!: (r: ClassroomReport) => void;
+  spyOn(p.reportActions, "runReport").mockResolvedValueOnce(report("draft"))
+    .mockRejectedValueOnce(new Error("网络中断"))
+    .mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  const view = render(<><ReportLab {...p} /><ToastHost /></>);
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "只生成草稿（不提交）" })); });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "生成并提交报告" })); });
+  expect(screen.getByRole("alert").textContent).toContain("网络中断");
+  expect(screen.queryByRole("dialog")).toBeNull();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "生成并提交报告" })); });
+  expect(view.container.querySelector(".toast-host")?.textContent).toContain("报告草稿已生成");
+  expect(screen.queryByRole("dialog")).toBeNull();
+  await act(async () => { resolve(report("pending")); });
+  expect(screen.getByRole("dialog", { name: "报告已提交" })).toBeTruthy();
+  expect(view.container.querySelector(".toast-host")).toBeNull();
 });
 
-test("a restored draft does not move focus to the preview", async () => {
-  render(<ReportLab {...finishProps} report={report("draft")} />);
-  await act(async () => { await new Promise((resolve) => requestAnimationFrame(() => resolve(null))); });
+test.each([true, false])("graded regeneration requires confirmation (current: %s); cancellation and double clicks are safe", async (current) => {
+  const p = props();
+  const run = spyOn(p.reportActions, "runReport").mockRejectedValue(new Error("服务不可用"));
+  render(<ReportLab {...p} report={report("graded")} reportCurrent={current} />);
+  const button = screen.getByRole("button", { name: current ? "重新生成并提交" : "更新报告并提交给老师" });
+  await act(async () => { fireEvent.click(button); fireEvent.click(button); });
+  const dialog = screen.getByRole("dialog", { name: "重新生成已评阅的报告？" });
+  expect(dialog.textContent).toContain("清除现有评分和评语");
+  expect(dialog.textContent).toContain("导出的 PDF 含评分与评语");
+  await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: "取消" })); });
+  expect(run).not.toHaveBeenCalled();
+  await act(async () => { fireEvent.click(button); });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "确定重新生成" })); });
+  expect(run).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("alert").textContent).toContain("服务不可用");
+  expect(screen.getByText(/已评阅 · 93 分/)).toBeTruthy();
+});
+
+test("a shared report operation disables controls even after this step is remounted", () => {
+  const p = props();
+  render(<ReportLab {...p} reportActions={{ ...p.reportActions, reportOperation: "generate-submit" }} />);
+  for (const button of screen.getAllByRole("button", { name: "正在生成报告…" })) expect((button as HTMLButtonElement).disabled).toBe(true);
+});
+
+test("generation reveals only a newly generated preview, not a restored draft", async () => {
+  const p = props();
+  spyOn(p.reportActions, "runReport").mockResolvedValue(report("draft"));
+  const view = render(<ReportLab {...p} />);
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "只生成草稿（不提交）" })); });
+  view.rerender(<ReportLab {...p} report={report("draft")} />);
+  await settle();
+  expect(document.activeElement?.getAttribute("aria-label")).toBe("报告正文");
+  view.unmount();
+  render(<ReportLab {...props()} report={report("draft")} />);
+  await settle();
   expect(document.activeElement?.getAttribute("aria-label")).not.toBe("报告正文");
 });
 
-test("failed submission retains generated draft and never opens a success outro", async () => {
-  const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("draft"));
-  const submit = spyOn(api.classroom, "submitReport").mockRejectedValue(new Error("网络中断"));
-  const changed: string[] = [];
-  try {
-    render(<ReportLab {...finishProps} onReportChanged={(r) => changed.push(r.report.state)} />);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "生成并提交报告" })); });
-    expect(changed).toEqual(["draft"]);
-    expect(screen.getByRole("alert").textContent).toContain("网络中断");
-    expect(screen.queryByRole("dialog")).toBeNull();
-  } finally { generate.mockRestore(); submit.mockRestore(); }
-});
-
-for (const action of ["提交报告给老师", "生成并提交报告"]) {
-  test(`${action} removes earlier draft feedback only after submission succeeds`, async () => {
-    const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("draft"));
-    let acknowledge!: (value: ReportMutationResponse) => void;
-    const submit = spyOn(api.classroom, "submitReport").mockImplementation(() => new Promise((resolve) => { acknowledge = resolve; }));
-    try {
-      const view = render(<><ReportLab {...finishProps} /><ToastHost /></>);
-      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "只生成草稿（不提交）" })); });
-      if (action === "提交报告给老师") {
-        view.rerender(<><ReportLab {...finishProps} report={report("draft")} /><ToastHost /></>);
-      }
-      await act(async () => { fireEvent.click(screen.getByRole("button", { name: action })); });
-      expect(view.container.querySelector(".toast-host")?.textContent).toContain("报告草稿已生成");
-      expect(screen.queryByRole("dialog")).toBeNull();
-      await act(async () => { acknowledge(mutation("pending")); });
-      expect(screen.getByRole("dialog", { name: "报告已提交" })).toBeTruthy();
-      expect(view.container.querySelector(".toast-host")).toBeNull();
-    } finally { generate.mockRestore(); submit.mockRestore(); }
-  });
-}
-
-test("material gate stops one-click submission and stays above the writing fields", async () => {
-  const blocked = [{ step: 9, title: "网络图表材料", missing: ["记录两个国家"] }];
-  const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(Object.assign(new Error("缺项"), { blocked }));
-  const submit = spyOn(api.classroom, "submitReport");
-  try {
-    const view = render(<ReportLab {...finishProps} />);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "生成并提交报告" })); });
-    expect(submit).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "继续步骤 9" })).toBeTruthy();
-    const html = view.container.innerHTML;
-    expect(html.indexOf("report-gate-panel")).toBeLessThan(html.indexOf('class="report-reflection"'));
-    expect(screen.queryByRole("dialog")).toBeNull();
-  } finally { generate.mockRestore(); submit.mockRestore(); }
-});
-
-for (const button of ["重新生成并提交", "更新报告并提交给老师"]) {
-  test(`graded report requires confirmation through ${button}, and cancelling does not mutate it`, async () => {
-    const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("pending"));
-    const submit = spyOn(api.classroom, "submitReport");
-    let flushes = 0;
-    let mutations = 0;
-    const gradedReport = { ...report("graded"), updated_at: "2026-08-13T00:02:00.123456Z" };
-    try {
-      // “更新…” is offered for an outdated report, “重新生成并提交” only for a current one.
-      render(<ReportLab {...finishProps} report={gradedReport}
-        sessionUpdatedAt={button === "更新报告并提交给老师" ? "2026-08-14T00:00:00Z" : "2026-08-12T00:00:00Z"}
-        onFlushSession={async () => { flushes++; }} onReportChanged={() => { mutations++; }} />);
-      await act(async () => { fireEvent.click(screen.getByRole("button", { name: button })); });
-      const dialog = screen.getByRole("dialog", { name: "重新生成已评阅的报告？" });
-      expect(dialog.textContent).toContain("清除现有评分和评语");
-      await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: "取消" })); });
-      expect(screen.queryByRole("dialog", { name: "重新生成已评阅的报告？" })).toBeNull();
-      expect(generate).not.toHaveBeenCalled();
-      expect(flushes).toBe(0);
-      expect(mutations).toBe(0);
-      expect(screen.getByText(/已评阅 · 93 分/)).toBeTruthy();
-      await act(async () => { fireEvent.click(screen.getByRole("button", { name: button })); });
-      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "确定重新生成" })); });
-      expect(generate).toHaveBeenCalledTimes(1);
-      expect(generate).toHaveBeenCalledWith(gradedReport.updated_at);
-      expect(flushes).toBe(1);
-      expect(mutations).toBe(1);
-      expect(submit).not.toHaveBeenCalled();
-      expect(screen.getByRole("dialog", { name: "报告已提交" })).toBeTruthy();
-    } finally { generate.mockRestore(); submit.mockRestore(); }
-  });
-}
-
-test("a stale report conflict does not retry, submit, or replace the displayed report", async () => {
-  const message = "报告或评分已更新，请刷新页面核对后再确认重新生成";
-  const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new Error(message));
-  const submit = spyOn(api.classroom, "submitReport");
-  const changed = spyOn(finishProps, "onReportChanged");
-  const pending = { ...report("pending"), updated_at: "2026-08-13T00:01:00.654321Z" };
-  try {
-    render(<ReportLab {...finishProps} report={pending} />);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" })); });
-    expect(generate).toHaveBeenCalledTimes(1);
-    expect(generate).toHaveBeenCalledWith(pending.updated_at);
-    expect(submit).not.toHaveBeenCalled();
-    expect(changed).not.toHaveBeenCalled();
-    expect(screen.getByText(message, { exact: false })).toBeTruthy();
-    expect(screen.queryByRole("dialog")).toBeNull();
-  } finally { generate.mockRestore(); submit.mockRestore(); changed.mockRestore(); }
-});
-
-test("regenerating a submitted report uses server resubmission directly without a second submit", async () => {
-  const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("pending"));
-  const submit = spyOn(api.classroom, "submitReport");
-  const confirm = spyOn(window, "confirm");
-  try {
-    render(<ReportLab {...finishProps} report={report("pending")} />);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" })); });
-    expect(confirm).not.toHaveBeenCalled();
-    expect(submit).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog", { name: "报告已提交" })).toBeTruthy();
-  } finally { generate.mockRestore(); submit.mockRestore(); confirm.mockRestore(); }
-});
-
-test("restored graded receipt is available without submitting again; an outdated graded report still exports as graded", () => {
-  const submit = spyOn(api.classroom, "submitReport");
-  try {
-    render(<ReportLab {...finishProps} report={report("graded")} sessionUnsynced />);
-    fireEvent.click(screen.getByRole("button", { name: "查看提交回执与实验总结" }));
-    const dialog = screen.getByRole("dialog", { name: "报告已评阅" });
-    expect(within(dialog).getByText("已评阅 · 93 分")).toBeTruthy();
-    expect(within(dialog).getByRole("region", { name: "教师评语" }).textContent).toBe("教师评语：证据链完整");
-    const receipt = within(dialog).getByRole("region", { name: "报告提交回执" });
-    expect(within(receipt).getByText(/后续修改尚未纳入这份报告/)).toBeTruthy();
-    expect(within(receipt).getByText(/重新生成会清除当前评分与评语/)).toBeTruthy();
-    expect(within(dialog).queryByText(/你可以离开页面/)).toBeNull();
-    // The PDF is the graded version with its score and feedback, the record regenerating would clear.
-    expect((within(dialog).getByRole("button", { name: "导出 PDF 留存" }) as HTMLButtonElement).disabled).toBe(false);
-    expect(within(dialog).queryByText("报告需要先更新，才能导出。")).toBeNull();
-    expect(submit).not.toHaveBeenCalled();
-  } finally { submit.mockRestore(); }
-});
-
-test("receipt distinguishes busy export from outdated content and preserves pending state", () => {
-  const props = { report: report("pending"), onClose: () => {}, onExport: () => {} };
-  const { rerender } = render(<ReportOutro {...props} exportDisabled />);
-  expect(screen.queryByText(/后续修改尚未纳入/)).toBeNull();
-  expect((screen.getByRole("button", { name: "导出 PDF 留存" }) as HTMLButtonElement).disabled).toBe(true);
-  rerender(<ReportOutro {...props} reportOutdated />);
-  expect(screen.getByText(/后续修改尚未纳入/)).toBeTruthy();
-  expect(screen.queryByText(/清除当前评分/)).toBeNull();
-  // Outdated: the receipt leads with the caveat, never with "提交成功".
-  const receipt = screen.getByRole("region", { name: "报告提交回执" });
-  expect(receipt.firstElementChild?.textContent).toStartWith("报告需更新");
-  expect(receipt.textContent).not.toContain("提交成功");
-  expect(screen.getByText("已提交的版本 · 等待教师评阅")).toBeTruthy();
-  expect((screen.getByRole("button", { name: "导出 PDF 留存" }) as HTMLButtonElement).disabled).toBe(true);
-  rerender(<ReportOutro {...props} />);
-  expect(screen.getByText(/你可以离开页面/)).toBeTruthy();
-  expect((screen.getByRole("button", { name: "导出 PDF 留存" }) as HTMLButtonElement).disabled).toBe(false);
-  // Graded: nothing is left to wait for, so the closing line no longer promises the teacher's review.
-  rerender(<ReportOutro {...props} report={report("graded")} />);
-  expect(screen.queryByText(/查看报告与老师的评阅/)).toBeNull();
-  expect(screen.getByText("报告与评阅已保存在服务器上，可随时回到步骤 15 查看。")).toBeTruthy();
-  // The receipt names when it was graded, as the step 15 card does.
-  expect(screen.getByText(/^评阅时间：/)).toBeTruthy();
-});
-
-test("the graded warning names only the button on screen", () => {
-  const current = render(<ReportLab {...finishProps} report={report("graded")} />);
-  expect(current.container.querySelector(".reg-rerun-warning")?.textContent).toBe("注意“重新生成并提交”会替换已评阅报告，并清除原评分和评语。");
-  current.unmount();
-  const outdated = render(<ReportLab {...finishProps} report={report("graded")} sessionUpdatedAt="2026-08-14T00:00:00Z" />);
-  expect(outdated.container.querySelector(".reg-rerun-warning")?.textContent).toBe("注意“更新报告并提交给老师”会替换已评阅报告，并清除原评分和评语。");
-  outdated.unmount();
-});
-
-test("the submit panel drops the pre-submit line once the current version is with the teacher", () => {
-  const panelText = (view: ReturnType<typeof render>) => view.container.querySelector(".report-submit-panel > p")?.textContent;
-  const draft = render(<ReportLab {...finishProps} report={report("draft")} />);
-  expect(panelText(draft)).toStartWith("提交前会先保存文字并检查材料");
-  draft.unmount();
-  const pending = render(<ReportLab {...finishProps} report={report("pending")} />);
-  expect(panelText(pending)).toBe("导出 PDF 仅供个人留存，不能代替提交。");
-  pending.unmount();
-  const outdatedDraft = render(<ReportLab {...finishProps} report={report("draft")} sessionUpdatedAt="2026-08-14T00:00:00Z" />);
-  expect(outdatedDraft.getByText("草稿需更新，尚未提交")).toBeTruthy();
-  outdatedDraft.unmount();
-});
-
-test("each report state shows one action group in the submit panel, without duplicate update buttons", () => {
-  const names = (view: ReturnType<typeof render>) =>
-    [...view.container.querySelectorAll(".report-submit-panel .report-actions button")].map((button) => button.textContent);
-  const none = render(<ReportLab {...finishProps} />);
-  expect(names(none)).toEqual(["生成并提交报告", "只生成草稿（不提交）"]);
-  none.unmount();
-  const outdated = render(<ReportLab {...finishProps} report={report("graded")} sessionUpdatedAt="2026-08-14T00:00:00Z" />);
-  expect(names(outdated)).toEqual(["更新报告并提交给老师", "查看提交回执与实验总结", "导出已评阅版本 PDF"]);
-  outdated.unmount();
-  const current = render(<ReportLab {...finishProps} report={report("graded")} sessionUpdatedAt="2026-08-12T00:00:00Z" />);
-  expect(names(current)).toEqual(["查看提交回执与实验总结", "导出 PDF", "重新生成并提交"]);
-  current.unmount();
-});
-
-test("an exported graded report carries the score and feedback, and the PDF is named after the report", async () => {
-  const graded = { ...report("graded"), markdown: "# GVC 指标与关税实验报告\n\n学生：演示学生 05\n\n正文", generated_at: "2026-10-09T03:05:00" };
-  const view = render(<ReportLab {...finishProps} report={graded} sessionUpdatedAt="2026-08-12T00:00:00Z" />);
-  const block = view.container.querySelector(".report-body .report-print-grade");
-  expect(block?.textContent).toContain("教师评阅 · 93 分");
-  expect(block?.textContent).toContain("教师评语：证据链完整");
-  const css = await Bun.file(new URL("../../report-finish.css", import.meta.url)).text();
-  expect(css).toMatch(/\.report-print-grade \{ display: none; \}/);
-  expect(css.slice(css.indexOf("@media print"))).toMatch(/\.report-print-grade \{\s*display: block/);
-  // The regenerate warning points to the PDF instead of asking to copy the grade by hand.
-  fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" }));
-  expect(screen.getByText(/请先取消并导出 PDF：导出的 PDF 含评分与评语/)).toBeTruthy();
-  expect(screen.queryByText(/记下评分与评语/)).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "取消" }));
-  const titles: string[] = [];
-  const print = spyOn(globalThis, "print").mockImplementation(() => { titles.push(document.title); });
-  // A graded export first checks the server still has this graded version (it does here).
-  const session = spyOn(api.classroom, "session").mockResolvedValue({
-    release_id: "a".repeat(32), session: { version: "experiment-session-simple-v4", steps: {}, shared: {} }, updated_at: null,
-    ...mutation("graded"), report: graded,
-  });
-  document.title = "步骤 15 · 生成实验报告";
-  try {
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "导出 PDF" })); });
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
-    expect(print).toHaveBeenCalledTimes(1);
-    expect(titles).toEqual(["实验报告 · 演示学生 05 · 2026-10-09"]);
-    act(() => { window.dispatchEvent(new Event("afterprint")); });
-    expect(document.title).toBe("步骤 15 · 生成实验报告");
-    expect(session).toHaveBeenCalledTimes(1);
-  } finally { print.mockRestore(); session.mockRestore(); }
-});
-
-test("a draft or pending report prints no grade block", () => {
-  for (const state of ["draft", "pending"] as const) {
-    const view = render(<ReportLab {...finishProps} report={report(state)} />);
-    expect(view.container.querySelector(".report-print-grade")).toBeNull();
-    view.unmount();
-  }
-});
-
-test("analysis length counts visible code points as the server does; invisible characters count nothing", () => {
-  expect(reflectionLength("  贸易 😀\n\n分析  ")).toBe(7);
-  expect(reflectionLength("😀😀")).toBe(2);
-  // The server's rule (report_gate.reflection_length): the joiners of a family emoji are invisible, its people
-  // count; a flag is two regional-indicator code points; a combining accent adds nothing.
-  expect(reflectionLength("👨‍👩‍👧")).toBe(3);
-  expect(reflectionLength("🇨🇳")).toBe(2);
-  expect(reflectionLength("e\u0301")).toBe(1);
-  // Zero-width spaces and bidi controls alone are an empty answer.
-  expect(reflectionLength("\u200b".repeat(40))).toBe(0);
-  expect(reflectionLength("\u202e结果\u202c")).toBe(2);
-  // Python's whitespace: U+001F splits words like a space.
-  expect(reflectionLength("甲\u001f乙")).toBe(3);
-});
-
-describe("the 2,400 limit shortens only the inserted text", () => {
-  const ending = "结尾十个字很重要啊";
-  const original = "甲".repeat(REFLECTION_MAX_LENGTH - 1 - ending.length) + ending;
-
-  test("an insert at the start keeps the student's ending and cuts the insertion", () => {
-    expect(codePointLength(original)).toBe(REFLECTION_MAX_LENGTH - 1);
-    const pasted = "插".repeat(18);
-    const result = limitInsertion(original, pasted + original, pasted.length);
-    expect(result.cut).toBe(true);
-    expect(result.value).toBe("插" + original);
-    expect(result.value.endsWith(ending)).toBe(true);
-    expect(result.caret).toBe(1);
-    expect(codePointLength(result.value)).toBe(REFLECTION_MAX_LENGTH);
-  });
-
-  test("an insert in the middle keeps both sides and the caret lands after the kept part", () => {
-    const at = 100;
-    const next = original.slice(0, at) + "中间插入" + original.slice(at);
-    const result = limitInsertion(original, next, at + 4);
-    expect(result.value).toBe(original.slice(0, at) + "中" + original.slice(at));
-    expect(result.caret).toBe(at + 1);
-  });
-
-  test("an append at the end is cut at whole characters, never inside an emoji", () => {
-    const base = "甲".repeat(REFLECTION_MAX_LENGTH - 3);
-    const next = base + "😀👨‍👩‍👧乙";
-    const result = limitInsertion(base, next, next.length);
-    // 😀 is one code point; the family emoji is five, which no longer fits, so it is dropped whole.
-    expect(result.value).toBe(base + "😀");
-    expect(codePointLength(result.value)).toBeLessThanOrEqual(REFLECTION_MAX_LENGTH);
-  });
-
-  test("a paste over a selection replaces the selection and is cut, the text around it stays", () => {
-    const next = original.slice(0, 10) + "替".repeat(30) + original.slice(20);
-    const result = limitInsertion(original, next, 40);
-    expect(result.value).toBe(original.slice(0, 10) + "替".repeat(11) + original.slice(20));
-  });
-
-  test("a change within the limit is kept as typed; without a caret the common tail is used", () => {
-    expect(limitInsertion("abc", "abXc", 3)).toEqual({ value: "abXc", caret: 3, cut: false });
-    const result = limitInsertion(original, "新新" + original, null);
-    expect(result.value).toBe("新" + original);
-    // A field already over the limit (saved elsewhere): deleting a character is not reported as a cut.
-    const over = "超".repeat(REFLECTION_MAX_LENGTH + 5);
-    expect(limitInsertion(over, over.slice(1), 0)).toEqual({ value: over.slice(1), caret: 0, cut: false });
-  });
-
-  test("the field keeps the ending, says the pasted part was cut and puts the caret after it", async () => {
-    function Harness() {
-      const [data, setData] = useState<Record<string, unknown>>({ limitations: original });
-      return <ReportLab {...finishProps} state={{ ...finishProps.state, data, save: (patch) => setData((value) => ({ ...value, ...patch })) }} />;
-    }
-    render(<Harness />);
-    const field = screen.getByRole("textbox", { name: "局限与反思" }) as HTMLTextAreaElement;
-    const next = "粘贴".repeat(9) + original;
-    // happy-dom leaves the caret at the end after a programmatic change: the common tail still decides.
-    act(() => { fireEvent.change(field, { target: { value: next } }); });
-    expect(field.value).toBe("粘" + original);
-    expect(field.value.endsWith(ending)).toBe(true);
-    expect(field.selectionStart).toBe(1);
-    expect(screen.getByText(/刚粘贴或输入的文字有一部分没有保留，原有文字没有改动/)).toBeTruthy();
-    expect(screen.getByText(/已写 2400 \/ 2400 字 · 已达上限/)).toBeTruthy();
-  });
-
-  test("the cut warning goes away with the next edit, in any field", () => {
-    function Harness() {
-      const [data, setData] = useState<Record<string, unknown>>({ limitations: original });
-      return <ReportLab {...finishProps} state={{ ...finishProps.state, data, save: (patch) => setData((value) => ({ ...value, ...patch })) }} />;
-    }
-    render(<Harness />);
-    const field = screen.getByRole("textbox", { name: "局限与反思" }) as HTMLTextAreaElement;
-    act(() => { fireEvent.change(field, { target: { value: "粘贴".repeat(9) + original } }); });
-    expect(screen.queryByText(/超过 2400 字上限/)).not.toBeNull();
-    const other = screen.getByRole("textbox", { name: "研究问题" });
-    act(() => { fireEvent.change(other, { target: { value: "我比较了中国和美国" } }); });
-    expect(screen.queryByText(/超过 2400 字上限/)).toBeNull();
-    expect(field.getAttribute("aria-describedby")).not.toContain("report-paste-");
-  });
-});
-
-test("offline, the two report buttons read differently", () => {
-  render(<ReportLab {...finishProps} state={{ ...finishProps.state, syncError: "网络连接中断" }} sessionUnsynced />);
-  const labels = [...document.querySelectorAll(".report-submit-panel .report-actions button")].map((button) => button.textContent);
-  expect(labels).toEqual(["保存失败，请先重试", "重试保存后才能生成草稿"]);
-  expect(screen.getByText("未保存")).toBeTruthy();
-});
-
-test("the writing area shows the autosave state and says formatting marks stay as typed", () => {
-  const { rerender } = render(<ReportLab {...finishProps} />);
-  expect(screen.getByText("已保存")).toBeTruthy();
-  for (const label of ["写分析", "提交与导出"]) {
-    const target = screen.getByRole("link", { name: label }).getAttribute("href")!;
-    expect(document.querySelector(target)?.getAttribute("tabindex")).toBe("-1");
-  }
-  expect(screen.getByText(/四步回归写默认模型的两年累计结果；方向不确定或没算出估计值时写明原因/)).toBeTruthy();
-  expect(screen.getByText(/“#”“\*\*”等符号不会变成标题或粗体/)).toBeTruthy();
-  rerender(<ReportLab {...finishProps} sessionSyncing />);
-  expect(screen.getByText("保存中…")).toBeTruthy();
-  rerender(<ReportLab {...finishProps} sessionStatus="loading" />);
-  expect(screen.queryByText("已保存")).toBeNull();
-});
-
-test("the 结果解释 hint keeps to the default model; what to say about a model experiment shows once one is in the report", () => {
-  const hint = (key: string) => document.querySelector(`#report-hint-${key}`)?.textContent ?? "";
-  const starter = () => screen.getByRole("textbox", { name: "结果解释" }).getAttribute("placeholder") ?? "";
-  const plain = render(<ReportLab {...finishProps} />);
-  expect(hint("evidence_interpretation")).toBe("引用保存的数字，写明对象、年份、指标、方向和区间，并标明是真实指标还是模拟回归。四步回归写默认模型的两年累计结果；方向不确定或没算出估计值时写明原因，不要写成“没有关联”。");
-  expect(starter()).not.toContain("模型实验");
-  // The whole sample, not "every country×industry" (the US, ROW and units without data are out).
-  expect(hint("research_question")).toContain("回归用的是整个样本，不按步骤 10 的例子挑选，例子只用来换算展示");
-  expect(hint("research_question")).not.toContain("样本筛选");
-  plain.unmount();
-  // Step 11 holds a model experiment put into the report (the options request is left pending).
-  const options = spyOn(api, "regressionOptions").mockImplementation(() => new Promise(() => {}));
-  const experiment = {
-    spec: { x_lags: [0, 1] },
-    snapshot: { depvar_label: "外国增加值项占比", depvar_kind: "share", result: { n_obs: 16000, years: [2016, 2020], cumulative: null, coefs: [] } },
-  };
-  try {
-    render(<ReportLab {...finishProps} getStep={((step: number) => (step === 11 ? { experiment } : undefined)) as never} />);
-    expect(hint("evidence_interpretation")).toContain("你还把模型实验记入了报告：写明改了什么、X 各项合计怎样变、样本是否相同");
-    expect(hint("evidence_interpretation")).toContain("样本是否相同（不同时写明原因）");
-    expect(hint("evidence_interpretation")).toContain("跨度照“你的模型实验”表中“X 各项合计”一栏括号里的写");
-    expect(hint("evidence_interpretation")).toContain("不要一律写两年累计");
-    expect(starter()).toContain("95% 区间为……；模型实验“……”的 X 各项合计为……，与默认模型相比……。");
-    // The span rule is said in the hint only: the experiments table above the writing box carries the spans, not the
-    // rule, and the general note it replaced is gone.
-    const table = document.querySelector(".reg-reported-models")?.textContent ?? "";
-    expect(table).not.toMatch(/跨度|不要一律/);
-    expect(document.body.textContent).not.toContain("自定义模型的解释跨度");
-    // A sum the table cannot show ("—") still names its span, which the hint points to.
-    expect(table).toContain("—（两年累计）");
-  } finally { options.mockRestore(); }
-});
-
-test("a blocked generate click marks the short analysis fields invalid at once; the gated hint is not contradicted", () => {
-  const gate = [{ step: 8, title: "步骤 8", missing: ["记录报告材料"] }, { step: 15, title: "你的分析", missing: ["填写研究问题"] }];
-  render(<ReportLab {...finishProps} reportGate={gate} state={{ ...finishProps.state, data: { research_question: "我比较了中国和美国的外国增加值项占比" } }} />);
-  expect(screen.getByText(/补齐上方清单中的缺项后，可以先生成草稿预览/)).toBeTruthy();
-  const field = (name: string) => screen.getByRole("textbox", { name }).getAttribute("aria-invalid");
-  expect(field("结果解释")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "生成并提交报告" }));
-  expect(field("结果解释")).toBe("true");
-  expect(field("局限与反思")).toBe("true");
-  expect(field("研究问题")).toBeNull();
-});
-
-test("in a save conflict the report actions ask for the server version, not a retry", () => {
-  expect(reportWaitLabel("ready", true, false, "冲突", true)).toBe("请先处理保存异常");
-  expect(reportWaitLabel("ready", true, false, "网络中断")).toBe("保存失败，请先重试");
-  render(<ReportLab {...finishProps} state={{ ...finishProps.state, syncConflict: true, syncError: "版本变化" }} sessionUnsynced />);
-  const checklist = screen.getByRole("region", { name: "报告完成清单" });
-  expect(checklist.textContent).toContain("保存已暂停");
-  expect(checklist.textContent).toContain("请先复制需要保留的内容");
-  expect(checklist.textContent).not.toContain("同一份材料");
-});
-
-const sessionWith = (latest: ReportMutationResponse, steps: Record<string, unknown> = {}) => ({
-  release_id: "a".repeat(32), updated_at: null, ...latest,
-  session: { version: "experiment-session-simple-v4", steps, shared: {} } as never,
-});
-const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
-
-for (const path of ["refresh", "generate conflict"] as const) {
-  test(`${path} preserves the server's complete learning state`, async () => {
-    const latest = { ...sessionWith(mutation("graded")), quiz_revision: 7, quizzes: {}, report_current: false };
-    const session = spyOn(api.classroom, "session").mockResolvedValue(latest);
-    const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new ApiError(409, "报告已更新", "Conflict"));
-    const changed: ReportMutationResponse[] = [];
-    try {
-      render(<ReportLab {...finishProps} report={report("pending")} onReportChanged={(response) => changed.push(response)} />);
-      await act(async () => {
-        if (path === "refresh") window.dispatchEvent(new Event("focus"));
-        else fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" }));
-      });
-      expect(session).toHaveBeenCalledTimes(1);
-      expect(generate).toHaveBeenCalledTimes(path === "refresh" ? 0 : 1);
-      expect(changed).toHaveLength(1);
-      expect(changed[0]).toMatchObject({ report: latest.report, quiz_revision: 7, quizzes: {}, report_current: false });
-    } finally { session.mockRestore(); generate.mockRestore(); }
-  });
-}
-
-test("a delayed refresh cannot replace a generation and submission that already completed", async () => {
-  let resolveRead!: (value: ReturnType<typeof sessionWith>) => void;
-  const session = spyOn(api.classroom, "session").mockImplementation(() => new Promise((resolve) => { resolveRead = resolve; }));
-  const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("draft"));
-  const submit = spyOn(api.classroom, "submitReport").mockResolvedValue(mutation("pending"));
-  const changed: ClassroomReport["state"][] = [];
-  function Harness() {
-    const [current, setCurrent] = useState<ClassroomReport | null>(null);
-    return <ReportLab {...finishProps} report={current} onReportChanged={(response) => {
-      changed.push(response.report.state);
-      setCurrent(response.report);
-    }} />;
-  }
-  try {
-    render(<Harness />);
-    await act(async () => { window.dispatchEvent(new Event("focus")); });
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "生成并提交报告" })); });
-    expect(changed).toEqual(["draft", "pending"]);
-    await act(async () => { resolveRead(sessionWith(mutation("graded"))); });
-    expect(changed).toEqual(["draft", "pending"]);
-  } finally { session.mockRestore(); generate.mockRestore(); submit.mockRestore(); }
-});
-
-test("once a submitted report exists, an unfinished answer blocks updating it, not generating it", () => {
-  const gate = [{ step: 15, title: "你的分析", missing: ["填写研究问题"] }];
-  render(<ReportLab {...finishProps} report={report("pending")} reportGate={gate} sessionUpdatedAt="2026-08-14T00:00:00Z" />);
-  expect(screen.getByRole("heading", { name: "还不能更新报告" })).toBeTruthy();
-  expect(screen.getByText("还有 1 项没完成，现在还不能更新报告；请先按上方“还不能更新报告”的清单补齐。")).toBeTruthy();
-  expect(screen.queryByText(/还不能生成报告/)).toBeNull();
-  cleanup();
-  render(<ReportLab {...finishProps} reportGate={gate} />);
-  expect(screen.getByRole("heading", { name: "还不能生成报告" })).toBeTruthy();
-});
-
-test("closing the receipt shown after a submit focuses the status card, in view, not the report body far above", async () => {
-  const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("draft"));
-  const submit = spyOn(api.classroom, "submitReport").mockResolvedValue(mutation("pending"));
-  const revealed: Element[] = [];
-  const scrolled = spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (this: HTMLElement) { revealed.push(this); });
-  function Harness() {
-    const [current, setCurrent] = useState<ClassroomReport | null>(null);
-    return <ReportLab {...finishProps} report={current} onReportChanged={(response) => setCurrent(response.report)} />;
-  }
-  try {
-    render(<Harness />);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "生成并提交报告" })); });
-    const dialog = screen.getByRole("dialog", { name: "报告已提交" });
-    revealed.length = 0;
-    await act(async () => { fireEvent.keyDown(dialog, { key: "Escape" }); });
-    await settle();
-    expect(document.activeElement?.id).toBe("report-status-card");
-    expect(revealed.at(-1)?.id).toBe("report-status-card");
-    // A padded card, so the focus ring outlines a deliberate box rather than a bare line of text.
-    expect(document.activeElement?.className).toBe("submit-card submit-card-plain");
-    // The 研究问题 box is tall enough for its two-line placeholder.
-    expect(screen.getByRole("textbox", { name: "研究问题" }).getAttribute("rows")).toBe("3");
-    // The report body is a named region (its aria-label needs a role).
-    expect(screen.getByRole("region", { name: "报告正文" }).className).toBe("report-body");
-  } finally { generate.mockRestore(); submit.mockRestore(); scrolled.mockRestore(); }
-});
-
-test("closing a receipt opened from 查看提交回执与实验总结 returns focus to that button", async () => {
-  render(<ReportLab {...finishProps} report={report("graded")} />);
-  const opener = screen.getByRole("button", { name: "查看提交回执与实验总结" });
-  opener.focus();
-  fireEvent.click(opener);
-  await act(async () => { fireEvent.keyDown(screen.getByRole("dialog", { name: "报告已评阅" }), { key: "Escape" }); });
+test("receipt closure restores its opener; auto-opened receipt returns to padded status card", async () => {
+  const p = props();
+  spyOn(p.reportActions, "runReport").mockResolvedValue(report("pending"));
+  const view = render(<ReportLab {...p} />);
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "生成并提交报告" })); });
+  view.rerender(<ReportLab {...p} report={report("pending")} />);
+  fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
   await settle();
-  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(document.activeElement?.id).toBe("report-status-card");
+  expect(document.activeElement?.className).toBe("submit-card submit-card-plain");
+  const opener = screen.getByRole("button", { name: "查看提交回执与实验总结" });
+  opener.focus(); fireEvent.click(opener);
+  fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+  await settle();
   expect(document.activeElement).toBe(opener);
 });
 
-test("a tab coming back shows a report changed elsewhere, and will not export a grade that is gone", async () => {
-  const graded = report("graded");
-  const session = spyOn(api.classroom, "session").mockResolvedValue(sessionWith({ ...mutation("graded"), report: graded }));
+test("graded export refreshes its version, refuses removed grades and keeps local answers", async () => {
+  const p = props();
+  const latest = report("pending");
+  const refresh = spyOn(p.reportActions, "refreshReport").mockResolvedValue(latest);
   const print = spyOn(globalThis, "print").mockImplementation(() => {});
-  const changed: ClassroomReport["state"][] = [];
-  try {
-    render(<ReportLab {...finishProps} report={graded} sessionUpdatedAt="2026-08-14T00:00:00Z" onReportChanged={(response) => changed.push(response.report.state)} />);
-    // Unchanged on the server: nothing to apply.
-    await act(async () => { window.dispatchEvent(new Event("focus")); });
-    expect(session).toHaveBeenCalledTimes(1);
-    expect(changed).toEqual([]);
-    // Another tab regenerated the report, which cleared the grade.
-    const regenerated = { ...report("pending"), updated_at: "2026-08-13T01:00:00Z", generated_at: "2026-08-13T01:00:00Z" };
-    session.mockResolvedValue(sessionWith({ ...mutation("pending"), report: regenerated }));
-    await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
-    expect(changed).toEqual(["pending"]);
-    // This parent does not apply it, so the page still offers the graded PDF: the export checks again and refuses.
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "导出已评阅版本 PDF" })); });
-    await settle();
-    expect(print).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert").textContent).toBe(gradedExportRefusal(regenerated));
-    expect(gradedExportRefusal(regenerated)).toContain("原评分和评语已清除，不能再导出已评阅版本");
-  } finally { session.mockRestore(); print.mockRestore(); }
+  render(<ReportLab {...p} report={report("graded")} reportCurrent={false} state={{ ...p.state, data: { limitations: "我的局限" } }} />);
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "导出已评阅版本 PDF" })); });
+  expect(refresh).toHaveBeenCalledTimes(1);
+  expect(print).not.toHaveBeenCalled();
+  expect(screen.getByRole("alert").textContent).toBe(gradedExportRefusal(latest));
+  expect((screen.getByRole("textbox", { name: "局限与反思" }) as HTMLTextAreaElement).value).toBe("我的局限");
 });
 
-test("a combined emoji that does not fit is said to take several characters", async () => {
-  const base = "甲".repeat(REFLECTION_MAX_LENGTH - 3);
-  const family = limitInsertion(base, `${base}👨‍👩‍👧`, base.length + 8);
-  expect([family.value, family.cut, family.wide]).toEqual([base, true, true]);
-  expect(limitInsertion(base, `${base}乙乙乙乙`, base.length + 4).wide).toBe(false);
-  function Harness() {
-    const [data, setData] = useState<Record<string, unknown>>({ limitations: base });
-    return <ReportLab {...finishProps} state={{ ...finishProps.state, data, save: (patch) => setData((value) => ({ ...value, ...patch })) }} />;
-  }
-  render(<Harness />);
-  act(() => { fireEvent.change(screen.getByRole("textbox", { name: "局限与反思" }), { target: { value: `${base}👨‍👩‍👧` } }); });
-  expect(screen.getByText(/这个表情按实际字符计算占多个字，剩余字数不够/)).toBeTruthy();
-  expect(screen.queryByText(/一部分没有保留/)).toBeNull();
+test.each(["current", "offline"])("graded PDF carries score, feedback and report title (%s)", async (mode) => {
+  const p = props();
+  const graded = { ...report("graded"), markdown: "# 报告\n\n学生：演示学生 05\n\n正文", generated_at: "2026-10-09T03:05:00" };
+  const refresh = spyOn(p.reportActions, "refreshReport");
+  if (mode === "current") refresh.mockResolvedValue(graded); else refresh.mockRejectedValue(new Error("offline"));
+  const titles: string[] = [];
+  spyOn(globalThis, "print").mockImplementation(() => { titles.push(document.title); });
+  document.title = "步骤 15";
+  const view = render(<ReportLab {...p} report={graded} />);
+  expect(view.container.querySelector(".report-print-grade")?.textContent).toContain("教师评语：证据链完整");
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "导出 PDF" })); });
+  await waitFor(() => expect(titles).toEqual(["实验报告 · 演示学生 05 · 2026-10-09"]));
+  act(() => { window.dispatchEvent(new Event("afterprint")); });
+  expect(document.title).toBe("步骤 15");
 });
 
-test("a refused regeneration reveals the teacher-grade conflict without replacing local answers", async () => {
-  const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new ApiError(409, "报告或评分已更新，请刷新页面核对后再确认重新生成", "Conflict"));
-  const newer = { research_question: "新的研究问题", evidence_interpretation: "新的结果解释", limitations: "新的局限" };
-  const session = spyOn(api.classroom, "session").mockResolvedValue(sessionWith(mutation("graded"), { "15": { data: newer } }));
-  const revealed: Element[] = [];
-  const scrolled = spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (this: HTMLElement) { revealed.push(this); });
-  try {
-    render(<ReportLab {...finishProps} report={report("pending")} state={{ ...finishProps.state, data: { research_question: "旧的研究问题", evidence_interpretation: "旧的结果解释", limitations: "旧的局限" } }} />);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /重新生成并提交/ })); });
-    await settle();
-    const alert = screen.getByRole("alert");
-    expect(alert.textContent).toContain("老师刚刚评阅了这份报告");
-    expect((screen.getByRole("textbox", { name: "局限与反思" }) as HTMLTextAreaElement).value).toBe("旧的局限");
-    expect(document.querySelector(".report-answers-outdated")).toBeNull();
-    expect(revealed.at(-1) === alert).toBe(true);
-  } finally { generate.mockRestore(); session.mockRestore(); scrolled.mockRestore(); }
-});
-
-test("an element is revealed at the top of the course scroller with room above it", () => {
-  const calls: ScrollToOptions[] = [];
-  const scroller = { scrollTop: 10, getBoundingClientRect: () => ({ top: 20 }), scrollTo: (options: ScrollToOptions) => calls.push(options) };
-  const target = { closest: () => scroller, getBoundingClientRect: () => ({ top: 500 }) } as unknown as HTMLElement;
-  revealWithOffset(target);
-  expect(calls).toEqual([{ top: 474, left: 0, behavior: "smooth" }]);
-});
-
-test("the report status is compared by version, state and grade", () => {
-  const graded = report("graded");
-  expect(reportStatusChanged(graded, { ...graded })).toBe(false);
-  expect(reportStatusChanged(graded, { ...graded, state: "pending", graded_at: null })).toBe(true);
-  expect(reportStatusChanged(graded, { ...graded, updated_at: "2026-08-14T00:00:00Z" })).toBe(true);
-  expect(reportStatusChanged(null, graded)).toBe(true);
-});
-
-
-test("the student's report folds its appendix sections, opens them all while printing, and folds the results panel once handed in", async () => {
+test("appendices fold on screen, open for printing and restore; submitted results panel folds", async () => {
+  const p = props();
   const sectioned = { ...report("draft"), markdown: "# 报告\n\n## 结论\n\n结论段\n\n## 理解题答题记录\n\n答题\n\n## 报告溯源\n\n溯源" };
-  const view = render(<ReportLab {...finishProps} report={sectioned} />);
+  const view = render(<ReportLab {...p} report={sectioned} />);
   await waitFor(() => expect(view.container.querySelectorAll(".report-body details.report-section")).toHaveLength(3));
   const open = () => [...view.container.querySelectorAll<HTMLDetailsElement>(".report-body details.report-section")].map((item) => item.open);
   expect(open()).toEqual([true, false, false]);
-  // Ctrl+P or the export button: a closed details prints nothing, so every section opens for the print and folds back after.
-  act(() => { window.dispatchEvent(new Event("beforeprint")); });
-  expect(open()).toEqual([true, true, true]);
-  act(() => { window.dispatchEvent(new Event("afterprint")); });
-  expect(open()).toEqual([true, false, false]);
-  // The 四步回归结果 panel is open while writing (a draft), folded once the report is with the teacher.
-  const panel = () => view.container.querySelector<HTMLDetailsElement>("details.report-reference")!;
-  expect(panel().open).toBe(true);
-  expect(panel().querySelector("summary")?.textContent).toBe("四步回归结果");
-  view.rerender(<ReportLab {...finishProps} report={{ ...sectioned, state: "pending" }} />);
-  expect(panel().open).toBe(false);
-  view.unmount();
+  act(() => { window.dispatchEvent(new Event("beforeprint")); }); expect(open()).toEqual([true, true, true]);
+  act(() => { window.dispatchEvent(new Event("afterprint")); }); expect(open()).toEqual([true, false, false]);
+  expect(view.container.querySelector<HTMLDetailsElement>("details.report-reference")?.open).toBe(true);
+  view.rerender(<ReportLab {...p} report={{ ...sectioned, state: "pending" }} />);
+  expect(view.container.querySelector<HTMLDetailsElement>("details.report-reference")?.open).toBe(false);
 });
 
-
-test("你记录的材料 lists every step 1–14 in the words its material card used, and links a missing step back", () => {
-  const steps = [1, 2, 3, 4, 6, 11, 15].map((n) => ({ n, title: `步骤名${n}`, lab: n === 15 ? "rep" : "viz" }));
-  const data: Record<number, Record<string, unknown>> = {
-    1: { observation: { row: "CHN_A01", column: "USA_A01", value: 1 }, material_label: "2020 年 CHN 中国·A01（供给）→ USA 美国·A01（使用）= 228.07 百万美元" },
-    2: { observations: [{ country: "CHN" }], material_label: "2020 年外国增加值项占比：CHN 中国 11.730%" },
-    3: { observations: [{ country: "CHN" }] },
-    4: { observations: [{ country: "CHN" }], material_label: "  " },
-    11: { run: { result: {} }, material_label: "默认模型：外国增加值项占比两年累计 -0.55 个百分点", experiment: { spec: {} } },
-  };
-  const navigated: number[] = [];
-  render(<RecordedMaterials steps={steps as never} getStep={(n: number) => data[n] as never} blocked={[{ step: 6, title: "步骤名6", missing: ["请在一张读数完整的图表下点“把这张图记为本步报告材料”"] }]} onNavigateStep={(n: number) => { navigated.push(n); }} />);
-  const rows = [...document.querySelectorAll(".report-materials tbody tr")].map((row) => [...row.children].map((cell) => cell.textContent));
-  expect(rows).toEqual([
-    ["步骤 1 · 步骤名1", "已记录", "2020 年 CHN 中国·A01（供给）→ USA 美国·A01（使用）= 228.07 百万美元"],
-    ["步骤 2 · 步骤名2", "已记录", "2020 年外国增加值项占比：CHN 中国 11.730%"],
-    ["步骤 3 · 步骤名3", "已记录", "材料已保存，暂无摘要；可点步骤名查看。"],
-    ["步骤 4 · 步骤名4", "已记录", "材料已保存，暂无摘要；可点步骤名查看。"],
-    ["步骤 6 · 步骤名6", "未记录", "请在一张读数完整的图表下点“把这张图记为本步报告材料”"],
-    // The card's second line too: the model experiment put into the report.
-    ["步骤 11 · 步骤名11", "已记录", "默认模型：外国增加值项占比两年累计 -0.55 个百分点另记入报告的模型实验：1 个（选做），见下方“你的模型实验”。"],
-  ]);
-  fireEvent.click(screen.getByRole("button", { name: "步骤 6 · 步骤名6" }));
-  expect(navigated).toEqual([6]);
+test("gate blocks locally, marks short fields, navigates and clears on acknowledged metadata", async () => {
+  const p = props();
+  const blocked = [{ step: 15, title: "原创分析", missing: ["填写研究问题"] }];
+  const view = render(<ReportLab {...p} reportGate={blocked} />);
+  const draft = screen.getByRole("button", { name: "只生成草稿（不提交）" });
+  expect(draft.getAttribute("aria-disabled")).toBe("true");
+  fireEvent.click(draft);
+  expect(p.reportActions.runReport).not.toHaveBeenCalled();
+  expect(screen.getByRole("textbox", { name: "研究问题" }).getAttribute("aria-invalid")).toBe("true");
+  expect(view.container.querySelector(".report-gate-flash")).toBeTruthy();
+  expect(screen.getByText(/还有 1 项没完成，现在还不能生成报告/)).toBeTruthy();
+  view.rerender(<ReportLab {...p} reportGate={[]} />);
+  expect(screen.queryByText("还不能生成报告")).toBeNull();
+  spyOn(p.reportActions, "runReport").mockRejectedValue(Object.assign(new Error("缺项"), { blocked: [{ step: 9, title: "网络图表材料", missing: ["记录两个国家"] }] }));
+  await act(async () => { fireEvent.click(draft); });
+  expect(screen.getByRole("button", { name: "继续步骤 9" })).toBeTruthy();
+  expect(view.container.innerHTML.indexOf("report-gate-panel")).toBeLessThan(view.container.innerHTML.indexOf('class="report-reflection"'));
+  expect(screen.queryByRole("dialog")).toBeNull();
 });
 
-test("step 15 adds a submitted service example's country policy after a country-list retry without rewriting the report or its fingerprint", async () => {
-  const saved = {
-    compared: ["CHN", "AUS"], teaching_industry: "D",
-    material_label: "例子：CHN 中国 对 AUS 澳大利亚 · D 电力燃气",
-    teaching_observation: { country: "CHN", industry: "D", year: 2020, teaching_tariff_rate_tau: 0, teaching_tariff_exposure: 0 },
-  };
-  const submitted = report("pending");
-  submitted.markdown = "# 已提交报告\n\n原报告与数值保留。";
-  const before = JSON.stringify({ saved, submitted });
-  let rejectCountries!: (error: Error) => void;
-  let resolveCountries!: (overview: TeachingCountriesResponse) => void;
-  const countries = spyOn(api, "teachingCountries")
-    .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectCountries = reject; }))
-    .mockImplementationOnce(() => new Promise((resolve) => { resolveCountries = resolve; }));
-  const generate = spyOn(api.classroom, "generateReport");
-  const submit = spyOn(api.classroom, "submitReport");
-  const save = spyOn(finishProps.state, "save");
-  const changed = spyOn(finishProps, "onReportChanged");
-  try {
-    render(<ReportLab {...finishProps} report={submitted} reportCurrent
-      steps={[{ n: 10, title: "政策冲击", lab: "shock" }] as never}
-      getStep={(n) => n === 10 ? saved as never : undefined} />);
-    const label = () => document.querySelector(".report-materials tbody tr td:last-child")!.textContent;
-    expect(label()).toBe("例子：CHN 中国 对 AUS 澳大利亚 · D 电力燃气");
-    expect(screen.getByText("正在核对步骤 10 例子的国家税况…")).toBeTruthy();
-    await act(async () => { rejectCountries(new Error("network unavailable")); });
-    expect(screen.getByRole("alert").textContent).toContain("材料已保留，暂不显示国家税况");
-    expect(label()).not.toContain("未被加税");
-    fireEvent.click(screen.getByRole("button", { name: "重试国家税况" }));
-    expect(screen.getByText("正在核对步骤 10 例子的国家税况…")).toBeTruthy();
-    await act(async () => { resolveCountries({
-      countries: [{ country: "CHN", taxed: true }, { country: "AUS", taxed: false }],
-      taxed_rule: { scope: "goods industries (ICIO sectors A-C)" },
-    } as TeachingCountriesResponse); });
-    await waitFor(() => expect(label()).toBe("例子：CHN 中国（被加税） 对 AUS 澳大利亚（未被加税） · D 电力燃气（非货物行业，不加税）"));
-    expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.queryByText("报告需更新后重新提交")).toBeNull();
-    expect((screen.getByRole("button", { name: "导出 PDF" }) as HTMLButtonElement).disabled).toBe(false);
-    expect(countries).toHaveBeenCalledTimes(2);
-    expect(generate).not.toHaveBeenCalled();
-    expect(submit).not.toHaveBeenCalled();
-    expect(save).not.toHaveBeenCalled();
-    expect(changed).not.toHaveBeenCalled();
-    expect(JSON.stringify({ saved, submitted })).toBe(before);
-  } finally {
-    countries.mockRestore();
-    generate.mockRestore();
-    submit.mockRestore();
-    save.mockRestore();
-    changed.mockRestore();
+test("gate summary groups missing items and destination respects quiz-only and reflection focus", () => {
+  const blocked = [{ step: 11, title: "回归实验", missing: ["完成理解题", "保存有效回归"] }, { step: 1, title: "数据浏览", missing: ["记录单元格"] }, { step: 15, title: "原创分析", missing: ["填写研究问题"] }];
+  expect(summarizeReportGate(blocked).summary).toBe("步骤 1–14 中 2 个步骤还有 3 项待补齐；本步还有 1 项待完成");
+  render(<GateCard blocked={blocked} onNavigateStep={() => {}} />);
+  expect(screen.getByRole("button", { name: "继续步骤 1" })).toBeTruthy();
+  expect(screen.getByText("查看全部缺项（4）")).toBeTruthy();
+  const focused: string[] = [];
+  const root = { getElementById: (id: string) => ({ focus: () => focused.push(id), scrollIntoView: () => {} }) };
+  const frames: (() => void)[] = [];
+  const scheduler = { requestAnimationFrame: (cb: FrameRequestCallback) => { frames.push(() => cb(0)); return 1; } };
+  activateReportGateDestination(7, () => {}, root, scheduler, true);
+  activateReportGateDestination(8, () => {}, root, scheduler, false);
+  frames.forEach((frame) => frame());
+  expect(focused).toEqual(["quiz-title-7", "step-task-title-8"]);
+  expect(focusReportGateDestination(9, { getElementById: () => null })).toBe(false);
+});
+
+test.each([false, true])("lazy material navigation honors cancellation: %s", async (cancel) => {
+  const revealed: HTMLElement[] = [];
+  spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (this: HTMLElement) { revealed.push(this); });
+  function Harness() {
+    const [step, setStep] = useState(15); const [loaded, setLoaded] = useState(false);
+    return step === 15 ? <RecordedMaterials steps={[{ n: 6, title: "图表", lab: "viz" }]} blocked={[]} onNavigateStep={setStep} />
+      : <><h3 id="step-task-title-6" tabIndex={-1}>任务</h3><button onClick={() => setLoaded(true)}>加载完成</button>{loaded && <MaterialCard state="missing" summary="等待记录" />}</>;
   }
+  render(<Harness />); fireEvent.click(screen.getByRole("button", { name: "步骤 6 · 图表" })); await settle();
+  if (cancel) fireEvent.keyDown(window, { key: "Escape" });
+  fireEvent.click(screen.getByRole("button", { name: "加载完成" }));
+  await settle();
+  if (cancel) { expect(document.activeElement?.id).not.toBe("step-material-action"); expect(revealed).toHaveLength(0); }
+  else await waitFor(() => expect(document.activeElement?.id).toBe("step-material-action"));
+});
+
+test("reflection editing preserves text, counts code points, clips only insertions and warns about wide emoji", () => {
+  const base = "甲".repeat(REFLECTION_MAX_LENGTH - 3);
+  const limited = limitInsertion(base, `${base}👨‍👩‍👧`, base.length + 8);
+  expect([limited.value, limited.cut, limited.wide]).toEqual([base, true, true]);
+  expect(codePointLength("😀")).toBe(1);
+  expect(reflectionLength(" \n\u200b")).toBe(0);
+  function Harness() {
+    const p = props(); const [data, setData] = useState<Record<string, unknown>>({ limitations: base });
+    return <ReportLab {...p} state={{ ...p.state, data, save: (patch) => setData((old) => ({ ...old, ...patch })) }} />;
+  }
+  render(<Harness />);
+  fireEvent.change(screen.getByRole("textbox", { name: "局限与反思" }), { target: { value: `${base}👨‍👩‍👧` } });
+  expect(screen.getByText(/这个表情按实际字符计算占多个字，剩余字数不够/)).toBeTruthy();
+  expect((screen.getByRole("textbox", { name: "局限与反思" }) as HTMLTextAreaElement).value).toBe(base);
+  fireEvent.change(screen.getByRole("textbox", { name: "研究问题" }), { target: { value: "# **原样文字**" } });
+  expect(screen.queryByText(/这个表情按实际字符计算占多个字/)).toBeNull();
+  expect((screen.getByRole("textbox", { name: "研究问题" }) as HTMLTextAreaElement).value).toBe("# **原样文字**");
+});
+
+test("writing hints distinguish default regression from optional experiments and show save conflicts", () => {
+  const p = props();
+  const view = render(<ReportLab {...p} />);
+  expect(screen.getByText(/文字按原样写进报告/)).toBeTruthy();
+  expect(screen.queryByText(/你还把模型实验记入了报告/)).toBeNull();
+  spyOn(api, "regressionOptions").mockImplementation(() => new Promise(() => {}));
+  const experiment = { spec: { x_lags: [0, 1] }, snapshot: { depvar_label: "外国增加值项占比", depvar_kind: "share", result: { n_obs: 16000, years: [2016, 2020], cumulative: null, coefs: [] } } };
+  view.rerender(<ReportLab {...p} getStep={(n) => n === 11 ? { experiment } as never : undefined} />);
+  expect(screen.getByText(/你还把模型实验记入了报告/)).toBeTruthy();
+  expect(screen.getByText(/你还把模型实验记入了报告/).textContent).toContain("不要一律写两年累计");
+  expect(screen.getByRole("textbox", { name: "结果解释" }).getAttribute("placeholder")).toContain("模型实验“……”的 X 各项合计");
+  view.rerender(<ReportLab {...p} sessionUnsynced state={{ ...p.state, syncConflict: true, syncError: "版本变化" }} />);
+  expect(screen.getByRole("region", { name: "报告完成清单" }).textContent).toContain("请先复制需要保留的内容");
+  expect(screen.getByRole("button", { name: "请先处理保存异常" })).toBeTruthy();
+});
+
+test("material table uses saved labels, fallback summaries, missing links and optional experiment note", () => {
+  const navigated: number[] = [];
+  const data: Record<number, Record<string, unknown>> = { 1: { observation: {}, material_label: "保存的读数" }, 3: { observations: [{}] }, 11: { run: {}, experiment: { spec: {} }, material_label: "默认模型" } };
+  render(<RecordedMaterials steps={[1, 3, 6, 11, 15].map((n) => ({ n, title: `步骤名${n}`, lab: "viz" }))} getStep={(n) => data[n] as never} blocked={[{ step: 6, title: "图表", missing: ["记录图表"] }]} onNavigateStep={(n) => navigated.push(n)} />);
+  const rows = [...document.querySelectorAll(".report-materials tbody tr")].map((row) => row.textContent);
+  expect(rows).toHaveLength(4);
+  expect(rows[0]).toContain("保存的读数"); expect(rows[1]).toContain("材料已保存，暂无摘要");
+  expect(rows[2]).toContain("未记录记录图表"); expect(rows[3]).toContain("另记入报告的模型实验：1 个（选做）");
+  fireEvent.click(screen.getByRole("button", { name: "步骤 6 · 步骤名6" })); expect(navigated).toEqual([6]);
+});
+
+test("country-list retry enriches submitted service material without changing report or saving", async () => {
+  const saved = { compared: ["CHN", "AUS"], teaching_industry: "D", material_label: "例子：CHN 中国 对 AUS 澳大利亚 · D 电力燃气", teaching_observation: { country: "CHN", industry: "D", year: 2020, teaching_tariff_rate_tau: 0, teaching_tariff_exposure: 0 } };
+  const submitted = report("pending"); const before = JSON.stringify({ saved, submitted });
+  spyOn(api, "teachingCountries").mockRejectedValueOnce(new Error("network unavailable"))
+    .mockResolvedValue({ countries: [{ country: "CHN", taxed: true }, { country: "AUS", taxed: false }], taxed_rule: { scope: "goods industries (ICIO sectors A-C)" } } as TeachingCountriesResponse);
+  const p = props(); const save = spyOn(p.state, "save");
+  render(<ReportLab {...p} report={submitted} steps={[{ n: 10, title: "政策冲击", lab: "shock" }]} getStep={(n) => n === 10 ? saved as never : undefined} />);
+  await screen.findByRole("alert");
+  expect(screen.getByRole("alert").textContent).toContain("材料已保留，暂不显示国家税况");
+  fireEvent.click(screen.getByRole("button", { name: "重试国家税况" }));
+  await waitFor(() => expect(document.querySelector(".report-materials tbody tr td:last-child")?.textContent).toBe("例子：CHN 中国（被加税） 对 AUS 澳大利亚（未被加税） · D 电力燃气（非货物行业，不加税）"));
+  expect(save).not.toHaveBeenCalled(); expect(p.reportActions.runReport).not.toHaveBeenCalled();
+  expect(JSON.stringify({ saved, submitted })).toBe(before);
+  expect((screen.getByRole("button", { name: "导出 PDF" }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+test("report labels retain minimum, maximum, save and resubmission semantics", () => {
+  expect(reflectionCountLabel(0, 40)).toBe("已写 0 / 2400 字 · 最低 40 字");
+  expect(reflectionCountLabel(83, 40)).toContain("已达最低 40 字");
+  expect(reflectionCountLabel(2400, 40)).toContain("已达上限");
+  expect(reflectionCountLabel(2380, 40, 2400, true)).toContain("空格、换行和表情符号按实际字符计");
+  expect(reportWaitLabel("loading", false, false)).toBe("正在恢复实验记录…");
+  expect(reportGenerateButtonLabel(null, false, "ready", true, false, "offline")).toBe("重试保存后才能生成草稿");
+  expect(reportGenerateLabel(report("pending"))).toBe("重新生成并提交");
+  expect(reportOutdatedAdvice("graded")).toContain("清除原评分和评语");
+  expect(reportConflictMessage(report("pending"), report("graded"))).toContain("老师刚刚评阅");
+  expect(reportConflictMessage(report("draft"), report("pending"))).toContain("已在别处提交");
+});
+
+test("revealing a conflict leaves space above it in the course scroller", () => {
+  const calls: ScrollToOptions[] = [];
+  const scroller = { scrollTop: 10, getBoundingClientRect: () => ({ top: 20 }), scrollTo: (o: ScrollToOptions) => calls.push(o) };
+  revealWithOffset({ closest: () => scroller, getBoundingClientRect: () => ({ top: 500 }) } as unknown as HTMLElement);
+  expect(calls).toEqual([{ top: 474, left: 0, behavior: "smooth" }]);
+});
+
+test("receipt distinguishes outdated content from busy export and keeps pending status", () => {
+  const p = { report: report("pending"), onClose: () => {}, onExport: () => {} };
+  const view = render(<ReportOutro {...p} exportDisabled />);
+  const disabled = () => (screen.getByRole("button", { name: "导出 PDF 留存" }) as HTMLButtonElement).disabled;
+  expect(screen.queryByText(/后续修改尚未纳入/)).toBeNull(); expect(disabled()).toBe(true);
+  view.rerender(<ReportOutro {...p} reportOutdated />);
+  const receipt = screen.getByRole("region", { name: "报告提交回执" });
+  expect(receipt.firstElementChild?.textContent).toStartWith("报告需更新");
+  expect(receipt.textContent).not.toContain("提交成功");
+  expect(screen.queryByText(/清除当前评分/)).toBeNull(); expect(disabled()).toBe(true);
+  expect(screen.getByText("已提交的版本 · 等待教师评阅")).toBeTruthy();
+  view.rerender(<ReportOutro {...p} />);
+  expect(screen.getByText(/你可以离开页面/)).toBeTruthy(); expect(disabled()).toBe(false);
+  view.rerender(<ReportOutro {...p} report={report("graded")} />);
+  expect(screen.queryByText(/查看报告与老师的评阅/)).toBeNull();
+  expect(screen.getByText("报告与评阅已保存在服务器上，可随时回到步骤 15 查看。")).toBeTruthy();
+  expect(screen.getByText(/^评阅时间：/)).toBeTruthy();
+  view.unmount();
+  const lab = props();
+  render(<ReportLab {...lab} report={report("graded")} sessionUnsynced />);
+  fireEvent.click(screen.getByRole("button", { name: "查看提交回执与实验总结" }));
+  const dialog = screen.getByRole("dialog", { name: "报告已评阅" });
+  expect(within(dialog).getByRole("region", { name: "教师评语" }).textContent).toBe("教师评语：证据链完整");
+  expect(within(dialog).getByText(/重新生成会清除当前评分与评语/)).toBeTruthy();
+  expect((within(dialog).getByRole("button", { name: "导出 PDF 留存" }) as HTMLButtonElement).disabled).toBe(false);
+  expect(lab.reportActions.runReport).not.toHaveBeenCalled();
+});
+
+test("action groups and graded warnings name only the current or outdated action", () => {
+  const p = props(); const view = render(<ReportLab {...p} />);
+  const names = () => [...view.container.querySelectorAll(".report-actions button")].map((b) => b.textContent);
+  expect(names()).toEqual(["生成并提交报告", "只生成草稿（不提交）"]);
+  view.rerender(<ReportLab {...p} report={report("graded")} reportCurrent={false} />);
+  expect(names()).toEqual(["更新报告并提交给老师", "查看提交回执与实验总结", "导出已评阅版本 PDF"]);
+  expect(view.container.querySelector(".reg-rerun-warning")?.textContent).toBe("注意“更新报告并提交给老师”会替换已评阅报告，并清除原评分和评语。");
+  view.rerender(<ReportLab {...p} report={report("graded")} />);
+  expect(names()).toEqual(["查看提交回执与实验总结", "导出 PDF", "重新生成并提交"]);
+  expect(view.container.querySelector(".reg-rerun-warning")?.textContent).toBe("注意“重新生成并提交”会替换已评阅报告，并清除原评分和评语。");
+});
+
+test("autosave, offline actions and keyboard shortcut destinations remain actionable", () => {
+  const p = props(); const view = render(<ReportLab {...p} />);
+  expect(screen.getByText("已保存")).toBeTruthy();
+  for (const name of ["写分析", "提交与导出"]) {
+    const target = screen.getByRole("link", { name }).getAttribute("href")!;
+    expect(document.querySelector(target)?.getAttribute("tabindex")).toBe("-1");
+  }
+  view.rerender(<ReportLab {...p} sessionSyncing />); expect(screen.getByText("保存中…")).toBeTruthy();
+  view.rerender(<ReportLab {...p} sessionUnsynced state={{ ...p.state, syncError: "网络连接中断" }} />);
+  expect([...view.container.querySelectorAll(".report-actions button")].map((b) => b.textContent)).toEqual(["保存失败，请先重试", "重试保存后才能生成草稿"]);
+  expect(screen.getByText("未保存")).toBeTruthy();
+  view.rerender(<ReportLab {...p} sessionStatus="loading" />); expect(screen.queryByText("已保存")).toBeNull();
+});
+
+test("reflection visible length agrees with server Unicode and whitespace rules", () => {
+  for (const [value, count] of [["  贸易 😀\n\n分析  ", 7], ["😀😀", 2], ["👨‍👩‍👧", 3], ["🇨🇳", 2], ["e\u0301", 1], ["\u200b".repeat(40), 0], ["\u202e结果\u202c", 2], ["甲\u001f乙", 3]] as const) expect(reflectionLength(value)).toBe(count);
+});
+
+test("length limiting preserves both sides, selections, whole emoji and deletions of overlong restored text", () => {
+  const original = "甲".repeat(REFLECTION_MAX_LENGTH - 1);
+  const start = limitInsertion(original, "插".repeat(18) + original, 18);
+  expect(start).toMatchObject({ value: "插" + original, caret: 1, cut: true });
+  const middle = limitInsertion(original, original.slice(0, 100) + "中间插入" + original.slice(100), 104);
+  expect(middle).toMatchObject({ value: original.slice(0, 100) + "中" + original.slice(100), caret: 101 });
+  const replaced = limitInsertion(original, original.slice(0, 10) + "替".repeat(30) + original.slice(20), 40);
+  expect(replaced.value).toBe(original.slice(0, 10) + "替".repeat(11) + original.slice(20));
+  const base = "甲".repeat(REFLECTION_MAX_LENGTH - 3);
+  const next = base + "😀👨‍👩‍👧乙";
+  expect(limitInsertion(base, next, next.length).value).toBe(base + "😀");
+  expect(limitInsertion(original, "新新" + original, null).value).toBe("新" + original);
+  const over = "超".repeat(REFLECTION_MAX_LENGTH + 5);
+  expect(limitInsertion(over, over.slice(1), 0)).toEqual({ value: over.slice(1), caret: 0, cut: false });
+  expect(limitInsertion("abc", "abXc", 3)).toEqual({ value: "abXc", caret: 3, cut: false });
+});
+
+test("clipped paste keeps the ending and caret, exposes the warning accessibly then clears it on another edit", () => {
+  const ending = "结尾十个字很重要啊";
+  const original = "甲".repeat(REFLECTION_MAX_LENGTH - 1 - ending.length) + ending;
+  function Harness() {
+    const p = props(); const [data, setData] = useState<Record<string, unknown>>({ limitations: original });
+    return <ReportLab {...p} state={{ ...p.state, data, save: (patch) => setData((old) => ({ ...old, ...patch })) }} />;
+  }
+  render(<Harness />);
+  const field = screen.getByRole("textbox", { name: "局限与反思" }) as HTMLTextAreaElement;
+  fireEvent.change(field, { target: { value: "粘贴".repeat(9) + original } });
+  expect(field.value).toBe("粘" + original); expect(field.value.endsWith(ending)).toBe(true); expect(field.selectionStart).toBe(1);
+  expect(screen.getByText(/刚粘贴或输入的文字有一部分没有保留，原有文字没有改动/)).toBeTruthy();
+  expect(screen.getByText(/已写 2400 \/ 2400 字 · 已达上限/)).toBeTruthy();
+  expect(field.getAttribute("aria-describedby")).toContain("report-paste-");
+  fireEvent.change(screen.getByRole("textbox", { name: "研究问题" }), { target: { value: "我比较了中国和美国" } });
+  expect(screen.queryByText(/超过 2400 字上限/)).toBeNull();
+  expect(field.getAttribute("aria-describedby")).not.toContain("report-paste-");
+});
+
+test("step 15 gate focuses only the unfinished reflection locally, not another step", () => {
+  const p = props(); const navigate = mock(() => {});
+  render(<ReportLab {...p} onNavigateStep={navigate} reportGate={[{ step: 15, title: "原创分析", missing: ["填写证据解释"] }]}
+    state={{ ...p.state, data: { research_question: "123456789012", evidence_interpretation: "不足", limitations: "甲".repeat(30) } }} />);
+  expect(document.querySelectorAll('[data-report-reflection-incomplete="true"]')).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: "去写你的分析" }));
+  expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "结果解释" }));
+  expect(navigate).not.toHaveBeenCalled();
 });

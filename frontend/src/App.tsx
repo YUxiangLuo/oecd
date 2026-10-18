@@ -120,12 +120,13 @@ function AppContent() {
   }, [stepsData]);
 
   const selectStep = useCallback((next: number, historyMode: StepHistoryMode) => {
+    if (session.reportOperation) return;
     const target = resolveStep(next);
     resetStepScroller(contentRef.current);
     initialStepChosen.current = true;
     setCurrent(target);
     writeStepHistory(window.history, window.location.href, target, historyMode);
-  }, [resolveStep]);
+  }, [resolveStep, session.reportOperation]);
 
   const navigateStep = useCallback((next: number) => {
     selectStep(next, "push");
@@ -133,6 +134,10 @@ function AppContent() {
 
   useEffect(() => {
     const restoreHistoryStep = () => {
+      if (session.reportOperation) {
+        writeStepHistory(window.history, window.location.href, current, "replace");
+        return;
+      }
       const requested = stepFromSearch(window.location.search);
       const target = resolveStep(requested ?? 1);
       resetStepScroller(contentRef.current);
@@ -142,7 +147,7 @@ function AppContent() {
     };
     window.addEventListener("popstate", restoreHistoryStep);
     return () => window.removeEventListener("popstate", restoreHistoryStep);
-  }, [resolveStep]);
+  }, [resolveStep, current, session.reportOperation]);
 
   const reloadLoggedOut = useCallback((notice?: string, username?: string) => {
     const activeToken = getActiveAuthToken();
