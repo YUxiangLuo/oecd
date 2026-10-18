@@ -337,3 +337,36 @@ test("a delayed learning read cannot undo report submission with the same sessio
   expect(result.current.completion?.completed).toEqual([15]);
   expect(result.current.reportCurrent).toBe(true);
 });
+
+test.each([false, true])("report metadata applies only to its saved session (newer save: %s)", async (newerSave) => {
+  const initial = response();
+  spyOn(api.classroom, "session").mockResolvedValue(initial);
+  const saved = {
+    ...response(undefined, NEWER),
+    completion: { completed: [1], completed_count: 1, total: 15, steps: [] },
+    report_gate: [{ step: 15, title: "你的分析", missing: ["填写研究问题"] }],
+  };
+  spyOn(api.classroom, "saveSession").mockResolvedValue(saved);
+  const { result } = renderHook(() => useSession(true, "student"));
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  // A report step can unmount while its request retains this callback.
+  const changed = result.current.applyReportMutation;
+  const report: ClassroomReport = {
+    state: "draft", markdown: "generated from the earlier record", score: null, feedback: "", graded_by: null,
+    generated_at: NEWER, updated_at: NEWER, submitted_at: null, graded_at: null,
+    provenance: { session_version: "test", generated_at: NEWER, years: [2020], session_fingerprint: "test", runs: [], custom_results: [] },
+  };
+  const generated = { ...initial, report, report_current: true };
+  if (newerSave) {
+    await act(async () => {
+      result.current.patchStep(15, { research_question: "new edit" });
+      await result.current.syncNow();
+    });
+  }
+  act(() => changed(generated));
+  expect(result.current.report).toEqual(report);
+  expect(result.current.reportCurrent).toBe(!newerSave);
+  expect(result.current.completion).toEqual(newerSave ? saved.completion : generated.completion);
+  expect(result.current.reportGate).toEqual(newerSave ? saved.report_gate : generated.report_gate);
+  if (newerSave) expect(result.current.getStep<{ research_question: string }>(15)).toEqual({ research_question: "new edit" });
+});

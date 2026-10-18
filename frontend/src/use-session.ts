@@ -463,6 +463,12 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     applyReportMutation: useCallback((response: ReportMutationResponse) => {
       reportMutation.current++;
       setReport(response.report);
+      // A report may finish after leaving its step and saving newer work. Keep
+      // the report, but do not let its older snapshot revive completion or export.
+      if ((response.updated_at ?? null) !== queue.current?.getBaseUpdatedAt()) {
+        applyQuizState(response);
+        return;
+      }
       applyLearningState(response);
     }, []),
   };

@@ -320,7 +320,7 @@ async def _generate_report(user: dict, expected_report_updated_at: datetime | No
             raise HTTPException(status_code=404, detail="学生账号不存在")
         saved["suggested_filename"] = generated.suggested_filename
         learning_state = await concurrency.run_sync(lambda: _learning_state(session, report=saved))
-        response = {"report": saved, **learning_state}
+        response = {"report": saved, "updated_at": version, **learning_state}
         success = True  # Saved successfully and response bookkeeping completed.
         return response
     except quiz_config.QuizChanged as error:
@@ -366,9 +366,10 @@ def submit_report(user: dict = Depends(require_student)):
         ) from error
     if report is None:
         raise HTTPException(status_code=409, detail="请先点“生成并提交报告”。")
-    session, _existing, _row = _workspace(user["sub"])
+    session, _existing, row = _workspace(user["sub"])
     return {
         "report": report,
+        "updated_at": row["updated_at"] if row else None,
         **_learning_state(session, report=report),
     }
 

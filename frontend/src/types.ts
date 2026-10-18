@@ -662,6 +662,8 @@ export interface SessionSaveResponse extends QuizLearningState {
 }
 
 export interface ReportMutationResponse extends QuizLearningState {
+  /** Saved session revision used for the learning state, not the report's revision. */
+  updated_at?: string | null;
   report: ClassroomReport;
   completion: CompletionSummary;
   /** Whether the latest report was generated from this record. */

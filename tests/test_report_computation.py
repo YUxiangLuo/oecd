@@ -207,6 +207,7 @@ def test_report_http_charges_only_after_database_success(computation, monkeypatc
         }
         assert response.status_code == expected[failure]
         if failure is None:
+            assert datetime.fromisoformat(response.json()["updated_at"]) == version
             with pytest.raises(RateLimitExceeded):
                 limiter.check(7)
         else:
