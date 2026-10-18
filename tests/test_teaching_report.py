@@ -1,3 +1,4 @@
+from gvcsim.regression import service as regression_service
 import copy
 import json
 import re
@@ -561,11 +562,11 @@ def _sign_run(run: dict) -> dict:
     """
     from scipy import stats
     from gvcsim.regression.design import RegressionDesign
-    from gvcsim.regression_routes import _design_info
+    from gvcsim.regression.service import design_info
 
     outcome = run["design"]["outcome"]
     baseline = run["design"].get("baseline")
-    run["design"] = _design_info(RegressionDesign(outcome, teaching=True, baseline=baseline))
+    run["design"] = design_info(RegressionDesign(outcome, teaching=True, baseline=baseline))
     run["model_snapshot"] = model_snapshot(outcome, baseline)
     run["variable_catalog"] = variable_catalog(outcome, baseline)
     coefs = run.get("result", {}).get("coefs")
@@ -2367,7 +2368,7 @@ def test_view_only_keys_never_change_the_experiment_sections():
 
 
 def _course_overview(*_args, **coefs: float) -> dict:
-    """A stand-in for the course estimate of every Y (``_estimate_overview``): the fixture panel is too small to fit."""
+    """A stand-in for the course estimate of every Y (``estimate_overview``): the fixture panel is too small to fit."""
     defaults = {"share": -0.3, "length": -1.5, "position": -0.08, "network": -2000.0}
     stds = {"share": 0.05, "length": 0.58, "position": 0.17, "network": 500.0}
     return {
@@ -2954,7 +2955,6 @@ def _experiment(spec, snapshot=None) -> dict:
 def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report(tmp_path, monkeypatch):
     """模型实验: each step with an experiment gets a table with the default model first; the numbers come from the
     saved model, so a tampered snapshot changes nothing, and a step without one (or with it removed) is left out."""
-    from gvcsim import regression_routes
     from gvcsim.regression.design import RegressionDesign
     from gvcsim.regression.spec import DEFAULT_SPEC, EXCHANGE_RATE_COLUMN, GDP_COLUMN, OPENNESS_COLUMN, ModelSpec
 
@@ -2962,7 +2962,7 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
 
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
-    regression_routes.clear_result_cache()
+    regression_service.clear_result_cache()
     plain = build(_complete(), "同学")
     assert "附录：模型实验" not in plain.markdown and "按你保存的设定" not in plain.markdown
     assert plain.provenance["custom_results"] == []
@@ -2976,8 +2976,10 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     )
     # The rest of this test reads a teaching-shaped panel with two tariff waves.
     panel = _panel()
-    monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: (artifacts.release_identity(tmp_path), panel))
-    regression_routes.clear_result_cache()
+    monkeypatch.setattr(
+        regression_service, "read_teaching_panel", lambda: (artifacts.release_identity(tmp_path), panel)
+    )
+    regression_service.clear_result_cache()
 
     no_rate = ModelSpec((0, 1), ((GDP_COLUMN, 0), (OPENNESS_COLUMN, 0)), ("country_industry", "year"))
     country_year = ModelSpec((0, 1), ((EXCHANGE_RATE_COLUMN, 0),), ("country_industry", "country_year"))
@@ -3009,7 +3011,7 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     step11 = appendix.split("### 步骤 13", 1)[0]
     # The recomputed numbers, not the snapshot's 99.
     for spec in (DEFAULT_SPEC, country_year):
-        run = regression_routes.cached_run(panel, RegressionDesign("trade", teaching=True, spec=spec))
+        run = regression_service.cached_run(panel, RegressionDesign("trade", teaching=True, spec=spec))
         x = next(item for item in run["result"]["coefs"] if item["name"] == X_COLUMN)
         assert _fixed4(x["coef"]) in step11
     assert "99.0000" not in appendix
@@ -3031,7 +3033,7 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     assert step11.index("| X 各项合计 |") < step11.index(per_point)
     cells = per_point.strip(" |").split(" | ")[1:]
     assert len(cells) == 2 and all(cell.endswith(" 个百分点（两年累计）") for cell in cells)
-    default_run = regression_routes.cached_run(panel, RegressionDesign("trade", teaching=True, spec=DEFAULT_SPEC))
+    default_run = regression_service.cached_run(panel, RegressionDesign("trade", teaching=True, spec=DEFAULT_SPEC))
     # The first column's decimals, one more when the two sums would read alike (the page's sharedPerPointDigits).
     total = default_run["result"]["cumulative"]["coef"]
     assert cells[0] in {f"{total:+.2f} 个百分点（两年累计）", f"{total:+.3f} 个百分点（两年累计）"}
@@ -3039,7 +3041,7 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     (chart,) = [json.loads(block) for block in re.findall(r"```gvcsim-chart\n(.*?)\n```", step11, re.S)]
     assert [item["label"] for item in chart["items"]] == ["默认模型", custom_name]
     for bar, spec in zip(chart["items"], (DEFAULT_SPEC, country_year), strict=True):
-        recomputed = regression_routes.cached_run(panel, RegressionDesign("trade", teaching=True, spec=spec))
+        recomputed = regression_service.cached_run(panel, RegressionDesign("trade", teaching=True, spec=spec))
         for key, source in (("value", "coef"), ("ci_low", "ci_low"), ("ci_high", "ci_high")):
             assert bar[key] == recomputed["result"]["cumulative"][source]
     # Step 13 could not be recomputed on this fixture: said per column, no chart.
@@ -3063,7 +3065,7 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     tampered["steps"]["11"]["data"]["experiment"]["snapshot"] = {"result": {"coefs": [{"coef": -1e9}]}}
     tampered_appendix = build(tampered, "同学").markdown.split("## 附录：模型实验", 1)[1].split("\n## ", 1)[0]
     assert tampered_appendix == appendix
-    regression_routes.clear_result_cache()
+    regression_service.clear_result_cache()
 
 
 def test_report_appendix_reads_each_x_sum_per_percentage_point():

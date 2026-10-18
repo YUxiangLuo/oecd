@@ -196,7 +196,7 @@ def _saved_runs(session: dict[str, Any]) -> list[dict[str, Any]]:
 
 def server_runs(session: dict[str, Any], panel: Any, release: str) -> list[dict[str, Any]]:
     """Saved runs select completed steps/Ys, never the report's numeric values."""
-    from gvcsim.regression_routes import cached_run
+    from gvcsim.regression.service import cached_run
 
     runs = []
     seen = set()

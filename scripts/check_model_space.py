@@ -136,7 +136,7 @@ def _variant(args: argparse.Namespace) -> teaching_variants.Variant | None:
 def _load_panel(args: argparse.Namespace) -> tuple[str, Any]:
     variant = _variant(args)
     if variant is None:
-        from gvcsim.regression_routes import read_teaching_panel
+        from gvcsim.regression.service import read_teaching_panel
 
         return read_teaching_panel()
     return f"variant:{variant.key}", teaching_variants.build_panel(variant)

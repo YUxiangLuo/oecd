@@ -1,7 +1,8 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { useState } from "react";
+import { lazy, useState, type ReactNode } from "react";
 import { api } from "../../api";
+import { LazyView } from "../../lazy-view";
 import { ToastHost, clearToasts } from "../../toast";
 import { MaterialCard } from "../../material-card";
 import { ReportOutro } from "../../report-outro";
@@ -251,12 +252,70 @@ test("gate summary groups missing items and destination respects quiz-only and r
   const focused: string[] = [];
   const root = { getElementById: (id: string) => ({ focus: () => focused.push(id), scrollIntoView: () => {} }) };
   const frames: (() => void)[] = [];
-  const scheduler = { requestAnimationFrame: (cb: FrameRequestCallback) => { frames.push(() => cb(0)); return 1; } };
+  const scheduler = {
+    requestAnimationFrame: (cb: FrameRequestCallback) => { frames.push(() => cb(0)); return 1; },
+    cancelAnimationFrame: () => {},
+    setTimeout: window.setTimeout.bind(window), clearTimeout: window.clearTimeout.bind(window),
+    addEventListener: window.addEventListener.bind(window), removeEventListener: window.removeEventListener.bind(window),
+  };
   activateReportGateDestination(7, () => {}, root, scheduler, true);
   activateReportGateDestination(8, () => {}, root, scheduler, false);
   frames.forEach((frame) => frame());
   expect(focused).toEqual(["quiz-title-7", "step-task-title-8"]);
   expect(focusReportGateDestination(9, { getElementById: () => null })).toBe(false);
+});
+
+test.each([11, 12, 13, 14])("quiz-only navigation waits for the cold step %s module", async (step) => {
+  let loaded!: () => void;
+  const Quiz = lazy(() => new Promise<{ default: () => ReactNode }>((resolve) => {
+    loaded = () => resolve({ default: () => <h3 id={`quiz-title-${step}`} tabIndex={-1}>理解题</h3> });
+  }));
+  const revealed: HTMLElement[] = [];
+  spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (this: HTMLElement) { revealed.push(this); });
+  function Harness() {
+    const [current, setCurrent] = useState(15);
+    return current === 15
+      ? <GateCard blocked={[{ step, title: "回归", missing: ["完成理解题"], quiz_only: true }]} onNavigateStep={setCurrent} />
+      : <><h3 id={`step-task-title-${step}`} tabIndex={-1}>任务</h3><LazyView><Quiz /></LazyView></>;
+  }
+  render(<Harness />);
+  fireEvent.click(screen.getByRole("button", { name: `继续步骤 ${step}` }));
+  await settle();
+  expect(document.getElementById(`quiz-title-${step}`)).toBeNull();
+  await act(async () => { loaded(); });
+  await waitFor(() => expect(document.activeElement?.id).toBe(`quiz-title-${step}`));
+  expect(revealed).toContain(document.getElementById(`quiz-title-${step}`)!);
+});
+
+test.each(["input", "navigation"])("pending quiz navigation yields to subsequent %s", async (reason) => {
+  let loaded!: () => void;
+  const Quiz = lazy(() => new Promise<{ default: () => ReactNode }>((resolve) => {
+    loaded = () => resolve({ default: () => <h3 id="quiz-title-11" tabIndex={-1}>理解题</h3> });
+  }));
+  function Harness() {
+    const [step, setStep] = useState(15);
+    return <>
+      <button onClick={() => setStep(step === 12 ? 11 : 12)}>其他导航</button>
+      {step === 15 ? <GateCard blocked={[{ step: 11, title: "回归", missing: ["完成理解题"], quiz_only: true }]} onNavigateStep={setStep} />
+        : <><h3 id={`step-task-title-${step}`} tabIndex={-1}>任务</h3>{step === 11 && <LazyView><Quiz /></LazyView>}</>}
+    </>;
+  }
+  render(<Harness />);
+  fireEvent.click(screen.getByRole("button", { name: "继续步骤 11" }));
+  await settle();
+  const other = screen.getByRole("button", { name: "其他导航" });
+  if (reason === "input") fireEvent.keyDown(window, { key: "Tab" });
+  else {
+    // Programmatic navigation also cancels, without relying on a pointer/key event.
+    fireEvent.click(other);
+    await settle();
+    fireEvent.click(other);
+  }
+  other.focus();
+  await act(async () => { loaded(); });
+  await screen.findByRole("heading", { name: "理解题" });
+  await settle();
+  expect(document.activeElement).toBe(other);
 });
 
 test.each([false, true])("lazy material navigation honors cancellation: %s", async (cancel) => {

@@ -10,9 +10,8 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        // React is shared by the main course UI and the lazy report renderer.
-        // Keep it in a stable vendor chunk so the application entry stays below
-        // Vite's large-chunk warning threshold and can be cached independently.
+        // React is shared by the shell, lazy teacher workspace, labs and report renderer.
+        // Keep this stable runtime independently cacheable.
         manualChunks(id) {
           const normalized = id.replaceAll("\\", "/");
           if (/\/node_modules\/(react|react-dom|scheduler)\//.test(normalized)) {

@@ -323,7 +323,8 @@ def test_run_builds_sentinel_switches_pointer_and_never_touches_database(tmp_pat
     assert current.is_symlink()
     assert not __import__("os").path.isabs(__import__("os").readlink(current))
     releases = {path.resolve() for path in publication.release_store(current).iterdir()}
-    assert releases == {current.resolve(), _old_release.resolve()}
+    assert releases == {current.resolve()}
+    assert not _old_release.exists()
     metadata = json.loads((current / "dataset.json").read_text())
     assert metadata["years"] == [2020]
     assert metadata["course_release"] == config.COURSE_RELEASE

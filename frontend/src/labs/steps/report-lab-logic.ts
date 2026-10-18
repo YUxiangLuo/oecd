@@ -44,36 +44,53 @@ type ReportGateFocusRoot = {
   querySelector?(selectors: string): Element | null;
 };
 
-type AnimationFrameScheduler = Pick<Window, "requestAnimationFrame">;
+type AnimationFrameScheduler = Pick<Window,
+  "requestAnimationFrame" | "cancelAnimationFrame" | "setTimeout" | "clearTimeout" | "addEventListener" | "removeEventListener"
+>;
 
 /** A bounded hand-off across lazy step/data rendering. User navigation always wins. */
-export function activateReportMaterialDestination(step: number, onNavigateStep: (step: number) => void) {
+function activateLazyStepDestination(
+  step: number,
+  onNavigateStep: (step: number) => void,
+  targetId: string,
+  root: ReportGateFocusRoot,
+  scheduler: AnimationFrameScheduler,
+  timeoutMs: number,
+) {
   const inputs = ["pointerdown", "keydown", "wheel", "touchstart", "popstate"] as const;
   let frame = 0;
   let arrived = false;
+  let stopped = false;
   const stop = () => {
-    window.cancelAnimationFrame(frame);
-    window.clearTimeout(timer);
-    for (const type of inputs) window.removeEventListener(type, stop, true);
+    stopped = true;
+    scheduler.cancelAnimationFrame(frame);
+    scheduler.clearTimeout(timer);
+    for (const type of inputs) scheduler.removeEventListener(type, stop, true);
   };
-  const timer = window.setTimeout(stop, 4000);
-  for (const type of inputs) window.addEventListener(type, stop, { capture: true, passive: true });
+  const timer = scheduler.setTimeout(stop, timeoutMs);
+  for (const type of inputs) scheduler.addEventListener(type, stop, { capture: true, passive: true });
   onNavigateStep(step);
   const seek = () => {
-    const task = document.getElementById(stepTaskTitleId(step));
-    const otherTask = document.querySelector(`[id^="step-task-title-"]:not([id="${stepTaskTitleId(step)}"]):not([id="${stepTaskTitleId(15)}"])`);
+    if (stopped) return;
+    const task = root.getElementById(stepTaskTitleId(step));
+    const otherTask = root.querySelector?.(`[id^="step-task-title-"]:not([id="${stepTaskTitleId(step)}"]):not([id="${stepTaskTitleId(15)}"])`);
     if (otherTask || (arrived && !task)) { stop(); return; }
     arrived ||= Boolean(task);
-    const card = task ? document.getElementById(STEP_MATERIAL_ACTION_ID) : null;
-    if (card) {
+    const target = task ? root.getElementById(targetId) : null;
+    if (target) {
       stop();
-      card.focus({ preventScroll: true });
-      revealFocusedWhileSettling(card);
+      target.focus({ preventScroll: true });
+      if (target instanceof HTMLElement) revealFocusedWhileSettling(target);
+      else target.scrollIntoView?.({ block: "start" });
       return;
     }
-    frame = window.requestAnimationFrame(seek);
+    frame = scheduler.requestAnimationFrame(seek);
   };
-  frame = window.requestAnimationFrame(seek);
+  frame = scheduler.requestAnimationFrame(seek);
+}
+
+export function activateReportMaterialDestination(step: number, onNavigateStep: (step: number) => void) {
+  activateLazyStepDestination(step, onNavigateStep, STEP_MATERIAL_ACTION_ID, document, window, 4000);
 }
 
 /** Restore a useful keyboard position after the gate link itself unmounts. */
@@ -84,8 +101,9 @@ export function focusReportGateDestination(
 ): boolean {
   // Only the quiz is missing: go to the quiz, not the top of the step. The step's data loads after this frame and
   // grows the page above the quiz, so the quiz is kept in view until the page settles (or the student moves on).
-  const quiz = quizOnly ? root.getElementById(`quiz-title-${step}`) : null;
-  if (quiz) {
+  if (quizOnly) {
+    const quiz = root.getElementById(`quiz-title-${step}`);
+    if (!quiz) return false;
     quiz.focus({ preventScroll: true });
     if (quiz instanceof HTMLElement) revealFocusedWhileSettling(quiz);
     else quiz.scrollIntoView?.({ block: "start" });
@@ -115,6 +133,12 @@ export function activateReportGateDestination(
 ): boolean {
   if (step <= 0) return false;
   if (step === 15) return focusReportReflection(root);
+  if (quizOnly) {
+    // A cold regression module suspends with the quiz inside it. Keep the
+    // destination pending until it mounts, unless the student moves on.
+    activateLazyStepDestination(step, onNavigateStep, `quiz-title-${step}`, root, scheduler, 30000);
+    return true;
+  }
   onNavigateStep(step);
   scheduler.requestAnimationFrame(() => { focusReportGateDestination(step, root, quizOnly); });
   return true;

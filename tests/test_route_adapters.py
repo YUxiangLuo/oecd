@@ -1,3 +1,4 @@
+from gvcsim.regression import service as regression_service
 import asyncio
 import json
 import time
@@ -21,9 +22,9 @@ from gvcsim.regression.spec import DEFAULT_SPEC
 
 @pytest.fixture(autouse=True)
 def _clear_regression_result_cache():
-    regression_routes.clear_result_cache()
+    regression_service.clear_result_cache()
     yield
-    regression_routes.clear_result_cache()
+    regression_service.clear_result_cache()
 
 
 def _qc_checks(scope: str) -> list[dict]:
@@ -952,13 +953,13 @@ def test_regression_route_coalesces_identical_inflight_work(monkeypatch):
             return {"status": "ok", "support": {}}
 
     monkeypatch.setattr(
-        regression_routes, "read_teaching_panel", lambda: (release_id, read_panel("panel_teaching.csv"))
+        regression_service, "read_teaching_panel", lambda: (release_id, read_panel("panel_teaching.csv"))
     )
-    monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: release_id)
+    monkeypatch.setattr(regression_service.artifacts, "release_identity", lambda: release_id)
     monkeypatch.setattr(
-        regression_routes,
+        regression_service,
         "_RUN_LIMITER",
-        regression_routes.SlidingWindowRateLimiter(2),
+        regression_service.SlidingWindowRateLimiter(2),
     )
 
     async def scenario():
@@ -968,13 +969,13 @@ def test_regression_route_coalesces_identical_inflight_work(monkeypatch):
 
         async def fake_cpu(func, *_args, **_kwargs):
             nonlocal computations
-            assert func is regression_routes.run_design_with_benchmark
+            assert func is regression_service.run_design_with_benchmark
             computations += 1
             started.set()
             await release.wait()
             return Result(), {"method": "benchmark"}
 
-        monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", fake_cpu)
+        monkeypatch.setattr(regression_service.concurrency, "run_cpu_bound", fake_cpu)
         request = SimpleNamespace(state=SimpleNamespace(user={"role": "student", "sub": "student", "aid": 2}))
         req = RegressionRequest(outcome="network")
         waiters = [asyncio.create_task(regression_routes.regression_run(req, request)) for _ in range(8)]
@@ -1001,7 +1002,7 @@ def test_regression_route_coalesces_identical_inflight_work(monkeypatch):
 def test_regression_run_discloses_teaching_simulation_and_rejects_retired_contracts(teaching_db, monkeypatch):
     client = _authenticated_client(teaching_db)
     panel = pd.DataFrame({"country": ["AAA"], "entity_id": ["AAA-s1"]})
-    monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: ("a" * 32, panel))
+    monkeypatch.setattr(regression_service, "read_teaching_panel", lambda: ("a" * 32, panel))
 
     class Result:
         def to_dict(self):
@@ -1016,11 +1017,11 @@ def test_regression_run_discloses_teaching_simulation_and_rejects_retired_contra
             }
 
     async def fake_cpu(func, *args, **kwargs):
-        if func is regression_routes.run_design_with_benchmark:
+        if func is regression_service.run_design_with_benchmark:
             return Result(), {"method": "benchmark"}
         return {"draws": kwargs["n_draws"], "seed": kwargs["seed"]}
 
-    monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", fake_cpu)
+    monkeypatch.setattr(regression_service.concurrency, "run_cpu_bound", fake_cpu)
     run = client.post("/api/regression/run", json={"outcome": "network"})
     assert run.status_code == 200
     codes = {check["code"] for check in run.json()["preflight"]["checks"]}
@@ -1080,12 +1081,12 @@ def test_regression_runtime_boundary_maps_to_controlled_route_400(teaching_db, m
             for year in range(5)
         ]
     )
-    monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: ("a" * 32, mutation(panel.copy())))
+    monkeypatch.setattr(regression_service, "read_teaching_panel", lambda: ("a" * 32, mutation(panel.copy())))
 
     async def direct_cpu(func, *args, **kwargs):
         return func(*args, **kwargs)
 
-    monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", direct_cpu)
+    monkeypatch.setattr(regression_service.concurrency, "run_cpu_bound", direct_cpu)
     response = client.post(
         "/api/regression/run",
         json={"outcome": "trade", **({"spec": spec} if spec else {})},
@@ -1098,13 +1099,13 @@ def test_regression_runtime_boundary_maps_to_controlled_route_400(teaching_db, m
 def test_regression_route_maps_numerical_failure_to_chinese_400(teaching_db, monkeypatch):
     client = _authenticated_client(teaching_db)
     monkeypatch.setattr(
-        regression_routes, "read_teaching_panel", lambda: ("a" * 32, pd.DataFrame({"country": ["AAA"]}))
+        regression_service, "read_teaching_panel", lambda: ("a" * 32, pd.DataFrame({"country": ["AAA"]}))
     )
 
     async def fail_numerically(*_args, **_kwargs):
         raise np.linalg.LinAlgError("singular")
 
-    monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", fail_numerically)
+    monkeypatch.setattr(regression_service.concurrency, "run_cpu_bound", fail_numerically)
     response = client.post(
         "/api/regression/run",
         json={"outcome": "trade"},
@@ -1132,7 +1133,7 @@ def test_regression_design_and_run_accept_only_a_same_family_baseline(teaching_d
 
     # A release whose teaching panel lacks the chosen baseline's Y says so instead of estimating.
     panel = pd.DataFrame({"country": ["AAA"], "entity_id": ["AAA-s1"], "teaching_y_trade": [0.2]})
-    monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: ("a" * 32, panel))
+    monkeypatch.setattr(regression_service, "read_teaching_panel", lambda: ("a" * 32, panel))
     missing = client.post("/api/regression/run", json={"outcome": "trade", "baseline": "DVAex_share"})
     assert missing.status_code == 409
     assert "没有这个指标对应的 Y" in missing.json()["detail"]
@@ -1151,7 +1152,7 @@ def test_regression_design_and_run_accept_only_a_same_family_baseline(teaching_d
         assert args[1].baseline == "DVAex_share"
         return Result(), {"method": "benchmark"}
 
-    monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", fake_cpu)
+    monkeypatch.setattr(regression_service.concurrency, "run_cpu_bound", fake_cpu)
     run = client.post("/api/regression/run", json={"outcome": "trade", "baseline": "DVAex_share"})
     assert run.status_code == 200
     body = run.json()

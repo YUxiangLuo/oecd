@@ -1,7 +1,12 @@
-import { DbLab, IndicatorLab, ReportLab, ShockLab, VizLab } from "./labs";
-import {
-  RegressionRunLab,
-} from "./regression";
+import { lazy } from "react";
+import { LazyView } from "./lazy-view";
+
+const DbLab = lazy(() => import("./labs/steps/db-lab").then((m) => ({ default: m.DbLab })));
+const IndicatorLab = lazy(() => import("./labs/steps/indicator-lab").then((m) => ({ default: m.IndicatorLab })));
+const ReportLab = lazy(() => import("./labs/steps/report-lab").then((m) => ({ default: m.ReportLab })));
+const ShockLab = lazy(() => import("./labs/steps/shock-lab").then((m) => ({ default: m.ShockLab })));
+const VizLab = lazy(() => import("./labs/steps/viz-lab").then((m) => ({ default: m.VizLab })));
+const RegressionRunLab = lazy(() => import("./regression").then((m) => ({ default: m.RegressionRunLab })));
 import type { SiblingStepData } from "./regression-teach-logic";
 import type { ClassroomReport, Meta, ReportGateItem, Step, StepStateApi } from "./types";
 import type { ReportActions, SessionStatus } from "./use-session";
@@ -28,7 +33,11 @@ interface LabRouterProps {
 }
 
 /** Map the course contract's lab key to one isolated interactive workbench. */
-export function LabRouter({
+export function LabRouter(props: LabRouterProps) {
+  return <LazyView key={props.step.n}><LabContent {...props} /></LazyView>;
+}
+
+function LabContent({
   step,
   meta,
   state,

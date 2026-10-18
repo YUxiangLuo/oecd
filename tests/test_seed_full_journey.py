@@ -7,7 +7,7 @@ from scipy import stats
 
 from scripts import seed_full_journey as journey
 from gvcsim.regression.design import RegressionDesign
-from gvcsim.regression_routes import _design_info
+from gvcsim.regression.service import design_info
 from gvcsim.report_gate import _table_comparison_complete, check_material_gate
 from gvcsim.regression.teaching import EXCHANGE_RATE_COLUMN, X_COLUMN, X_LAG_COLUMNS, model_snapshot, variable_catalog
 
@@ -106,7 +106,7 @@ def api(monkeypatch):
             outcome = kwargs["payload"]["outcome"]
             return {
                 # The design exactly as the run endpoint describes the course default model.
-                "design": _design_info(RegressionDesign(outcome, teaching=True)),
+                "design": design_info(RegressionDesign(outcome, teaching=True)),
                 "result": deepcopy(state["results"].get(outcome, _result("ok"))),
                 "model_snapshot": model_snapshot(outcome),
                 "variable_catalog": variable_catalog(outcome),

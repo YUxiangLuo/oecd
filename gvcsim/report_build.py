@@ -53,12 +53,12 @@ def _regression_overview(panel: Any = None, release: str | None = None) -> dict[
     """The course's estimate of every Y (the step 11–14 bars), from the release's teaching panel and computed once
     per release: the same cached panel and result the teaching-overview endpoint serves. A failure leaves each
     chart with the saved Y alone instead of blocking the report."""
-    from gvcsim.regression_routes import _estimate_overview, read_teaching_panel
+    from gvcsim.regression.service import estimate_overview, read_teaching_panel
 
     try:
         if panel is None:
             release, panel = read_teaching_panel()
-        return _estimate_overview(panel, release)
+        return estimate_overview(panel, release)
     except (
         ArtifactContractError,
         OSError,
@@ -204,7 +204,7 @@ def build(session: dict[str, Any], student: str, *, quiz_bank: dict[str, Any] | 
     years = processed_years()
     if not years:
         raise ReportGateError([{"step": 0, "title": "数据不可用", "missing": ["课程数据暂时不可用，请联系老师。"]}])
-    from gvcsim.regression_routes import read_teaching_panel
+    from gvcsim.regression.service import read_teaching_panel
 
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     # The pages show server-local wall-clock time (PostgreSQL now()) as "YYYY-MM-DD HH:MM"; the report says the same,

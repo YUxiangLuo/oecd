@@ -1,5 +1,6 @@
 """Cancellation at ordinary-I/O boundaries must not abandon physical threads."""
 
+from gvcsim.regression import service as regression_service
 import asyncio
 import gc
 import threading
@@ -41,8 +42,8 @@ def test_regression_disconnect_during_panel_read_keeps_thread_and_cancels_queued
         limiter = anyio.to_thread.current_default_thread_limiter()
         limiter.total_tokens = 1
         cache = AsyncSingleFlightCache(max_inflight=1)
-        monkeypatch.setattr(regression_routes, "_RESULT_CACHE", cache)
-        monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda _root=None: "a" * 32)
+        monkeypatch.setattr(regression_service, "_RESULT_CACHE", cache)
+        monkeypatch.setattr(regression_service.artifacts, "release_identity", lambda _root=None: "a" * 32)
         started, release, finished = threading.Event(), threading.Event(), threading.Event()
         reads, computations = [], []
 
@@ -61,8 +62,8 @@ def test_regression_disconnect_during_panel_read_keeps_thread_and_cancels_queued
                 return SimpleNamespace(to_dict=lambda: {"status": "ok", "support": {}}), {}
             return {"draws": []}
 
-        monkeypatch.setattr(regression_routes.artifacts, "read_csv_artifact", read)
-        monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", compute)
+        monkeypatch.setattr(regression_service.artifacts, "read_csv_artifact", read)
+        monkeypatch.setattr(regression_service.concurrency, "run_cpu_bound", compute)
         route = regression_routes.regression_run_http
         payload = RegressionRequest(outcome="trade")
         disconnected, retry_disconnected = asyncio.Event(), asyncio.Event()

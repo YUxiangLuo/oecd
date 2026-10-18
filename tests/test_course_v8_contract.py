@@ -7,7 +7,7 @@ from scipy import stats
 from gvcsim import quizzes, teaching_report
 from gvcsim.classroom import routes as classroom_routes
 from gvcsim.regression.design import RegressionDesign
-from gvcsim.regression_routes import _design_info
+from gvcsim.regression.service import design_info
 from gvcsim.report_saved_run import _parse_saved_run
 from gvcsim.regression.teaching import VERSION, X_COLUMN, Y_COLUMNS, model_snapshot, variable_catalog
 from gvcsim.session import empty_session, make_record
@@ -33,7 +33,7 @@ def _run(outcome: str, *, version: str = VERSION, coefficient: str = X_COLUMN) -
 
     names = [coefficient, *design.regressors[1:], *design.controls]
     return {
-        "design": _design_info(design),
+        "design": design_info(design),
         "result": {
             "status": "ok",
             "n_obs": 20,

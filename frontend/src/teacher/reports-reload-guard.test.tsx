@@ -1,3 +1,4 @@
+import { mockReports } from "./report-api-fixture";
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api, ApiError } from "../api";
@@ -45,7 +46,7 @@ function setup() {
   const grade = spyOn(api.classroom, "grade").mockRejectedValueOnce(new ApiError(409, "学生重新提交报告", ""));
   const confirm = spyOn(window, "confirm").mockReturnValue(false);
   const spies = [detail, grade, confirm,
-    spyOn(api.classroom, "reports").mockResolvedValue({ reports: [report, nextReport] }),
+    mockReports([report, nextReport]),
     spyOn(api.classroom, "students").mockResolvedValue({ students: [] }),
     spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] }),
   ];
@@ -59,7 +60,7 @@ function setup() {
 }
 
 async function openDraftAndReload() {
-  fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /报告评阅 评阅与打分/ }));
   fireEvent.click(await screen.findByRole("button", { name: "评阅报告：第一位学生" }));
   fireEvent.change(await screen.findByRole("spinbutton"), { target: { value: draft.score } });
   fireEvent.change(screen.getByRole("textbox", { name: "评语（选填）" }), { target: { value: draft.feedback } });
@@ -114,7 +115,7 @@ describe("report draft protection throughout conflict reloads", () => {
       expect(confirm).toHaveBeenCalledTimes(1);
       expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("学生与进度");
       expect(protectedOnUnload()).toBe(false);
-      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /报告评阅 评阅与打分/ }));
       fireEvent.click(await screen.findByRole("button", { name: "评阅报告：第二位学生" }));
       await screen.findByRole("spinbutton");
       if (mode === "pending") await act(async () => reload.resolve(latest));
@@ -195,7 +196,7 @@ describe("report draft protection throughout conflict reloads", () => {
   test("an initial report load failure has no unsaved draft and can return without prompting", async () => {
     const { detail, confirm } = setup();
     detail.mockReset().mockRejectedValue(new Error("第一次加载失败"));
-    fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /报告评阅 评阅与打分/ }));
     fireEvent.click(await screen.findByRole("button", { name: "评阅报告：第一位学生" }));
     await screen.findByRole("alert");
     expect(protectedOnUnload()).toBe(false);

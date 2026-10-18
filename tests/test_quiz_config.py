@@ -119,8 +119,9 @@ def test_bank_edit_blocks_draft_but_preserves_submitted_report_and_grade(teachin
     else:
         assert db.submit_report("student") == report
         assert db.submit_report("student") == report
-        teacher_reports = db.list_reports("teacher")
-        assert teacher_reports[0]["markdown"] == "immutable content"
+        teacher_reports = db.list_reports("teacher")["reports"]
+        assert "markdown" not in teacher_reports[0]
+        assert db.get_report(teacher_reports[0]["account_id"], "teacher")["markdown"] == "immutable content"
         assert teacher_reports[0]["report_outdated"] is False
     assert db.latest_report("student") == report
 

@@ -41,8 +41,6 @@ def test_environment_has_bounded_request_rates_without_removed_evidence_or_pool_
     assert "GVCSIM_LOGIN_ATTEMPTS_PER_MINUTE=10" in environment
     assert "GVCSIM_LOGIN_SOURCE_ATTEMPTS_PER_MINUTE=120" in environment
     assert "GVCSIM_REGRESSION_RUNS_PER_MINUTE=20" in environment
-    assert "GVCSIM_BACKUP_KEEP=90" in environment
-    assert "1..10000" in environment
     assert "GVCSIM_DATA_DIR=/opt/gvcsim/shared/data" in environment
     assert "GVCSIM_RAW_DATA_DIR=/opt/gvcsim/shared/OECD_ICIO" in environment
     assert "GVCSIM_PUBLICATION_LOCK_DIR" not in environment
@@ -115,21 +113,6 @@ def test_capacity_configuration_rejects_nonpositive_request_limits(monkeypatch, 
     monkeypatch.setattr(config, attribute, 0)
     with pytest.raises(config.ConfigurationError, match=setting):
         config.validate_capacity_config()
-
-
-def test_backup_units_and_script_keep_their_safety_invariants():
-    timer = (ROOT / "deploy" / "gvcsim-backup.timer").read_text()
-    service = (ROOT / "deploy" / "gvcsim-backup.service").read_text()
-    assert "Persistent=true" in timer
-    assert "backup_classroom.sh" in service
-    assert "EnvironmentFile=/etc/gvcsim.env" in service
-    assert "Environment=GVCSIM_BACKUP_KEEP" not in service
-    backup_script = (ROOT / "scripts" / "backup_classroom.sh").read_text()
-    assert "checksum_candidates" in backup_script
-    assert "completed_checksums" in backup_script
-    assert "retention_removed" in backup_script
-    assert '"$backup_dir" != /* || "$backup_dir" == / || -L "$backup_dir"' in backup_script
-    assert '! -L "$old_checksum"' in backup_script and '! -L "$old_dump"' in backup_script
 
 
 def test_nginx_lets_course_readings_embed_and_revalidates_index():

@@ -479,12 +479,9 @@ def run(years: list[int] | None = None) -> None:
         except BaseException:
             shutil.rmtree(staging, ignore_errors=True)
             raise
-        previous = publication.publish_release(current, final)
-        retained = [final]
-        if previous is not None:
-            retained.append(previous)
-        for warning in publication.cleanup_old_releases(current, retained):
+        publication.publish_release(current, final)
+        for warning in publication.cleanup_old_releases(current):
             print(f"警告:{warning}")
     print(f"面板构建完成:{current / 'panel_industry.csv'}(行业级,回归默认)")
     print(f"            {current / 'panel_country.csv'}(国家级)")
-    print("已耐久、原子切换固定产物并保留上一发布；教学记录按新 release 自动隔离")
+    print("已耐久、原子发布当前产物并清理旧发布；部署时请重建教学库")

@@ -1,3 +1,4 @@
+import { mockReports } from "./report-api-fixture";
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api } from "../api";
@@ -17,7 +18,7 @@ const row: StudentRow = {
 
 test("each teacher tab titles the window, and the students table explains 最近操作", async () => {
   const spies = [
-    spyOn(api.classroom, "reports").mockResolvedValue({ reports: [] }),
+    mockReports([]),
     spyOn(api.classroom, "students").mockResolvedValue({ students: [row] }),
     spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] }),
   ];
@@ -43,7 +44,7 @@ const teacher = { username: "teacher", name: "老师", role: "teacher" } as cons
 
 test("with no semester yet, 学生与进度 says to start in 学期与班级 and links there", async () => {
   const spies = [
-    spyOn(api.classroom, "reports").mockResolvedValue({ reports: [] }),
+    mockReports([]),
     spyOn(api.classroom, "students").mockResolvedValue({ students: [row] }),
     spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] }),
   ];
@@ -68,7 +69,7 @@ test("调整班级 confirms the move in a toast; the first-step hint is gone onc
   };
   const student = { ...row, display_name: "张三", last_login_at: "2026-10-08T15:55:00+09:00" };
   const spies = [
-    spyOn(api.classroom, "reports").mockResolvedValue({ reports: [] }),
+    mockReports([]),
     spyOn(api.classroom, "students").mockResolvedValue({ students: [student] }),
     spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [semester] }),
     spyOn(api.classroom, "setEnrollment").mockResolvedValue(undefined as never),
@@ -100,7 +101,7 @@ test("调整班级 confirms the move in a toast; the first-step hint is gone onc
 
 test("a teacher still on the deployment's initial password is asked to change it, on every tab", async () => {
   const spies = [
-    spyOn(api.classroom, "reports").mockResolvedValue({ reports: [] }),
+    mockReports([]),
     spyOn(api.classroom, "students").mockResolvedValue({ students: [row] }),
     spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] }),
   ];

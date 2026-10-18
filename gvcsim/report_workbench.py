@@ -112,7 +112,7 @@ def run_designs(models: list[dict[str, Any]]) -> list[RegressionDesign]:
 
 def _run(panel: Any, release: str | None, outcome: str, baseline: str, spec: ModelSpec) -> dict[str, Any] | str:
     """The run's response from the shared run cache (the same numbers the page showed), or why it failed."""
-    from gvcsim.regression_routes import cached_run
+    from gvcsim.regression.service import cached_run
 
     try:
         return cached_run(panel, RegressionDesign(outcome, teaching=True, baseline=baseline, spec=spec), release)
@@ -124,7 +124,7 @@ def recompute(models: list[dict[str, Any]], panel: Any = None, release: str | No
     """One table per (step, Y): the default model's run, then each reported model's run (or its failure)."""
     if not models:
         return []
-    from gvcsim.regression_routes import read_teaching_panel
+    from gvcsim.regression.service import read_teaching_panel
 
     if panel is None:
         release, panel = read_teaching_panel()

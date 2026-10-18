@@ -1,9 +1,9 @@
-import { useLayoutEffect, useRef, type RefObject } from "react";
+import { lazy, useLayoutEffect, useRef, type RefObject } from "react";
 import { AccountPasswordModal } from "./account-password";
 import { LogoMark } from "./brand";
 import { oecdIcioDatasetLabel } from "./dataset-label";
 import { isDemoStudentUsername } from "./login";
-import { TeacherDashboard } from "./teacher";
+import { LazyView } from "./lazy-view";
 import { TeacherReviewGuardProvider, useTeacherReviewGuard } from "./teacher/review-guard";
 import { showToast, ToastHost } from "./toast";
 import { materialStatusForStep, reportStatusLabel, stepMaterialStatusText } from "./step-task-card";
@@ -16,6 +16,8 @@ import type {
   Step,
   StepsResponse,
 } from "./types";
+
+const TeacherDashboard = lazy(() => import("./teacher").then((m) => ({ default: m.TeacherDashboard })));
 
 const ROMAN = ["", "一", "二", "三", "四", "五"];
 // Vite includes the canonical PDF as a versioned asset in both production and demo builds.
@@ -145,8 +147,8 @@ function TeacherWorkspaceContent({
           <button onClick={() => reviewGuard.attempt(() => { reviewGuard.clear(); onLogout(); })}>退出登录</button>
         </div>
       </header>
-      <TeacherDashboard user={user}
-        onChangePassword={fixedDemoPassword ? undefined : () => reviewGuard.attempt(onRequestPasswordChange)} />
+      <LazyView><TeacherDashboard user={user}
+        onChangePassword={fixedDemoPassword ? undefined : () => reviewGuard.attempt(onRequestPasswordChange)} /></LazyView>
       {/* 教师和学生分支互斥，因此任一时刻只挂载一个 ToastHost。 */}
       <ToastHost />
       {showPasswordChange && (

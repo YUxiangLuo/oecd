@@ -950,6 +950,28 @@ export interface TeacherReport extends ClassroomReport {
   enrollments: ClassEnrollment[];
 }
 
+export type TeacherReportSummary = Pick<TeacherReport,
+  "account_id" | "username" | "display_name" | "student_no" | "enrollments" |
+  "state" | "score" | "submitted_at" | "updated_at" | "report_outdated">;
+
+export interface ReportCounts { pending: number; graded: number }
+export interface TeacherReportQuery {
+  state?: "pending" | "graded" | "all";
+  term_id?: number | null;
+  class_id?: number | null;
+  q?: string;
+  page?: number;
+  page_size?: number;
+}
+export interface TeacherReportPage {
+  reports: TeacherReportSummary[];
+  total: number;
+  page: number;
+  page_size: number;
+  counts: ReportCounts;
+  overall: ReportCounts;
+}
+
 /** A regression model: which X terms (lags of X), which controls at which lag, which fixed effects. */
 export interface ModelSpec {
   x_lags: number[];

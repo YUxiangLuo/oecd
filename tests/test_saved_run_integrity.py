@@ -8,7 +8,7 @@ import pytest
 
 from gvcsim.regression.design import RegressionDesign
 from gvcsim.regression.teaching import EXCHANGE_RATE_COLUMN, X_COLUMN, X_LAG_COLUMNS, model_snapshot, variable_catalog
-from gvcsim.regression_routes import _design_info
+from gvcsim.regression.service import design_info
 from gvcsim.report_saved_run import _parse_saved_run
 
 
@@ -30,7 +30,7 @@ def saved_run(outcome="trade"):
         }
 
     return {
-        "design": _design_info(RegressionDesign(outcome, teaching=True)),
+        "design": design_info(RegressionDesign(outcome, teaching=True)),
         "model_snapshot": model_snapshot(outcome),
         "variable_catalog": variable_catalog(outcome),
         "result": {

@@ -1,7 +1,7 @@
 """The report's regression bar charts, mirroring the step 11–15 pages number for number.
 
 Per step (frontend ``familyBarRows``): one bar per Y of the step's family, in the course overview's order (the
-default first), from the course's fixed estimates of every Y (``_estimate_overview``); the saved Y's bar is taken
+default first), from the course's fixed estimates of every Y (``estimate_overview``); the saved Y's bar is taken
 from the saved run itself and marked 已保存, so the chart, the page and the step's table print the same numbers.
 Summary (frontend ``regressionSummaryRows``): one bar per step's saved run, all in standard deviations.
 Numbers and labels follow frontend ``barFigures``: shares in 个百分点 when every Y of the family is a share,

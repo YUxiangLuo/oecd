@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
-import type { AuthUser, TeacherReport } from "../types";
+import type { AuthUser } from "../types";
 import { ReportsTab } from "./reports";
 import { QuizzesTab } from "./quizzes";
 import { SemestersTab } from "./semesters";
@@ -40,8 +40,8 @@ export function TeacherDashboard({ user, onChangePassword }: { user: AuthUser; o
   const [reviewBump, setReviewBump] = useState(0);
   // A report opened from the student table: 报告评阅 starts on it, with the table's order for 上一份/下一份.
   const [reportRequest, setReportRequest] = useState<{ accountId: number; queue: number[] } | null>(null);
-  const { data } = useAsync<{ reports: TeacherReport[] }>(() => api.classroom.reports(), [tab, reviewBump], { keepPreviousData: true });
-  const pending = (data?.reports ?? []).filter((report) => report.state === "pending").length;
+  const { data } = useAsync(() => api.classroom.reportSummary(), [tab, reviewBump], { keepPreviousData: true });
+  const pending = data?.pending ?? 0;
   const reviewGuard = useTeacherReviewGuard();
   // New submissions arrive while the teacher is elsewhere: recount the badge when they come back to this tab.
   useRefetchOnVisible(() => setReviewBump((value) => value + 1));

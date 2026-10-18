@@ -1,5 +1,6 @@
 """Public report/run outcomes: shared computation, immutable releases and successful billing."""
 
+from gvcsim.regression import service as regression_service
 import asyncio
 import copy
 import time
@@ -34,13 +35,13 @@ def request(account=7):
 @pytest.fixture
 def computation(monkeypatch):
     panel = _panel(countries=12)
-    monkeypatch.setattr(runs, "read_teaching_panel", lambda: (RELEASE, panel))
-    monkeypatch.setattr(runs, "current_release", lambda: RELEASE)
+    monkeypatch.setattr(regression_service, "read_teaching_panel", lambda: (RELEASE, panel))
+    monkeypatch.setattr(regression_service, "current_release", lambda: RELEASE)
     return panel
 
 
 def test_queue_failure_returns_run_budget_before_retry(computation, monkeypatch):
-    monkeypatch.setattr(runs, "_RUN_LIMITER", SlidingWindowRateLimiter(1))
+    monkeypatch.setattr(regression_service, "_RUN_LIMITER", SlidingWindowRateLimiter(1))
     original = concurrency.run_cpu_bound
 
     async def scenario():
@@ -64,20 +65,22 @@ def test_queue_failure_returns_run_budget_before_retry(computation, monkeypatch)
 
 def test_twenty_report_builders_share_page_computation_without_cpu_deadlock(computation, monkeypatch):
     calls = []
-    real = runs.run_design_with_benchmark
+    real = regression_service.run_design_with_benchmark
 
     def calculate(panel, design):
         calls.append(design)
         time.sleep(0.03)
         return real(panel, design)
 
-    monkeypatch.setattr(runs, "run_design_with_benchmark", calculate)
+    monkeypatch.setattr(regression_service, "run_design_with_benchmark", calculate)
 
     async def scenario():
         # Even a single CPU slot must work: renderers never borrow it.
         monkeypatch.setattr(concurrency, "_CPU_LIMITER", anyio.CapacityLimiter(1))
         design = RegressionDesign("trade", teaching=True, spec=SPEC)
-        reports = [concurrency.run_report_build(runs.cached_run, computation, design, RELEASE) for _ in range(20)]
+        reports = [
+            concurrency.run_report_build(regression_service.cached_run, computation, design, RELEASE) for _ in range(20)
+        ]
         page = runs.regression_run(RegressionRequest(outcome="trade", spec=SPEC.to_dict()), request())
         results = await asyncio.wait_for(asyncio.gather(*reports, page), 10)
         assert all(result is results[0] for result in results)
@@ -101,12 +104,12 @@ def test_report_stops_when_server_cannot_estimate_instead_of_printing_browser_va
 
 def test_default_model_survives_4096_other_models(computation):
     design = RegressionDesign("trade", teaching=True)
-    first = runs.cached_run(computation, design, RELEASE)
+    first = regression_service.cached_run(computation, design, RELEASE)
     for index in range(4097):
-        runs._store_payload(f"custom-{index}", {"index": index}, RELEASE)
-    assert runs.cached_run(computation.copy(), design, RELEASE) is first
-    assert runs._cached_payload("custom-0", RELEASE) is None
-    assert runs._cached_payload("custom-1", RELEASE) is not None
+        regression_service._store_payload(f"custom-{index}", {"index": index}, RELEASE)
+    assert regression_service.cached_run(computation.copy(), design, RELEASE) is first
+    assert regression_service._cached_payload("custom-0", RELEASE) is None
+    assert regression_service._cached_payload("custom-1", RELEASE) is not None
 
 
 def test_panel_read_pins_symlink_target_when_release_switches(tmp_path, monkeypatch):
@@ -115,7 +118,7 @@ def test_panel_read_pins_symlink_target_when_release_switches(tmp_path, monkeypa
     new.mkdir()
     link = tmp_path / "processed"
     link.symlink_to(old, target_is_directory=True)
-    monkeypatch.setattr(runs.app_config, "PROCESSED_DIR", link)
+    monkeypatch.setattr(regression_service.app_config, "PROCESSED_DIR", link)
     roots = []
 
     def identity(root):
@@ -125,9 +128,9 @@ def test_panel_read_pins_symlink_target_when_release_switches(tmp_path, monkeypa
             link.symlink_to(new, target_is_directory=True)
         return RELEASE if root == old else "b" * 32
 
-    monkeypatch.setattr(runs.artifacts, "release_identity", identity)
-    monkeypatch.setattr(runs.artifacts, "read_csv_artifact", lambda path: path.parent.name)
-    assert runs.read_teaching_panel() == (RELEASE, "old")
+    monkeypatch.setattr(regression_service.artifacts, "release_identity", identity)
+    monkeypatch.setattr(regression_service.artifacts, "read_csv_artifact", lambda path: path.parent.name)
+    assert regression_service.read_teaching_panel() == (RELEASE, "old")
     assert roots == [old, old]
 
 
@@ -151,14 +154,14 @@ def test_report_http_charges_only_after_database_success(computation, monkeypatc
     design = RegressionDesign("trade", teaching=True, spec=SPEC)
     monkeypatch.setattr(routes.report_workbench, "run_designs", lambda _: [design])
     limiter = SlidingWindowRateLimiter(1)
-    monkeypatch.setattr(runs, "_RUN_LIMITER", limiter)
+    monkeypatch.setattr(regression_service, "_RUN_LIMITER", limiter)
 
     def build(*_args, quiz_bank):
         if failure == "render":
             raise teaching_report.ReportGateError([{"step": 11, "missing": ["测试"]}])
         if failure == "queue":
             raise concurrency.WorkUnavailable("work_queue_timeout")
-        runs.cached_run(computation, design, RELEASE)
+        regression_service.cached_run(computation, design, RELEASE)
         return TeachingReport("# server report", {}, "report.md")
 
     monkeypatch.setattr(teaching_report, "build", build)
@@ -227,8 +230,12 @@ def test_report_body_ignores_self_consistent_browser_numbers(tmp_path, monkeypat
     panel = _panel(countries=12)
     for outcome in ("production", "length", "network"):
         panel[f"teaching_y_{outcome}"] = panel.teaching_y_trade
-    monkeypatch.setattr(runs, "read_teaching_panel", lambda: (runs.artifacts.release_identity(tmp_path), panel))
-    monkeypatch.setattr(runs, "_estimate_overview", lambda *_args: None)
+    monkeypatch.setattr(
+        regression_service,
+        "read_teaching_panel",
+        lambda: (regression_service.artifacts.release_identity(tmp_path), panel),
+    )
+    monkeypatch.setattr(regression_service, "estimate_overview", lambda *_args: None)
     session = _complete()
     browser = session["steps"]["11"]["data"]["run"]
     for coef in browser["result"]["coefs"]:
@@ -236,7 +243,9 @@ def test_report_body_ignores_self_consistent_browser_numbers(tmp_path, monkeypat
     _sign_run(browser)
     saved_result = copy.deepcopy(browser["result"])
     report = build(session, "student")
-    server = runs.cached_run(panel, RegressionDesign("trade", teaching=True), runs.artifacts.release_identity(tmp_path))
+    server = regression_service.cached_run(
+        panel, RegressionDesign("trade", teaching=True), regression_service.artifacts.release_identity(tmp_path)
+    )
     result = next(item["result"] for item in report.provenance["runs"] if item["step"] == 11)
     assert result == server["result"] and result != saved_result
     assert session["steps"]["11"]["data"]["run"]["result"] == saved_result
@@ -260,7 +269,7 @@ def test_report_reserves_before_work_caps_charge_and_shared_retry_is_free(comput
     monkeypatch.setattr(routes.report_workbench, "run_designs", lambda _: designs)
     monkeypatch.setattr(routes, "_learning_state", lambda *_args, **_kwargs: {})
     limiter = SlidingWindowRateLimiter(20)
-    monkeypatch.setattr(runs, "_RUN_LIMITER", limiter)
+    monkeypatch.setattr(regression_service, "_RUN_LIMITER", limiter)
     builds, saves = [], []
 
     def build(*_args, quiz_bank):
@@ -269,7 +278,7 @@ def test_report_reserves_before_work_caps_charge_and_shared_retry_is_free(comput
         with pytest.raises(RateLimitExceeded):
             limiter.check(7)
         for design in designs:
-            runs.cached_run(computation, design, RELEASE)
+            regression_service.cached_run(computation, design, RELEASE)
         return TeachingReport("# complete", {}, "report.md")
 
     monkeypatch.setattr(teaching_report, "build", build)
@@ -300,17 +309,17 @@ def test_database_conflict_does_not_bill_rendered_report(teaching_db, computatio
     monkeypatch.setattr(routes.report_workbench, "run_designs", lambda _: [design])
     monkeypatch.setattr(routes, "_learning_state", lambda *_args, **_kwargs: {})
     limiter = SlidingWindowRateLimiter(20)
-    monkeypatch.setattr(runs, "_RUN_LIMITER", limiter)
+    monkeypatch.setattr(regression_service, "_RUN_LIMITER", limiter)
 
     def build(*_args, quiz_bank):
-        runs.cached_run(computation, design, RELEASE)
+        regression_service.cached_run(computation, design, RELEASE)
         return TeachingReport("# stored", {}, "report.md")
 
     monkeypatch.setattr(teaching_report, "build", build)
     client = _authenticated_client(teaching_db, "student")
     assert client.post("/api/classroom/report/generate", json={}).status_code == 200
     events = sum(map(len, limiter._events.values()))
-    runs.clear_result_cache()  # Force recalculation before a real stale-report 409.
+    regression_service.clear_result_cache()  # Force recalculation before a real stale-report 409.
     response = client.post("/api/classroom/report/generate", json={})
     assert response.status_code == 409 and response.json()["detail"]["code"] == "report_changed"
     assert sum(map(len, limiter._events.values())) == events == 1
@@ -319,7 +328,7 @@ def test_database_conflict_does_not_bill_rendered_report(teaching_db, computatio
 
 def test_cancelled_page_retry_rejoins_work_and_charges_once(computation, monkeypatch):
     limiter = SlidingWindowRateLimiter(1)
-    monkeypatch.setattr(runs, "_RUN_LIMITER", limiter)
+    monkeypatch.setattr(regression_service, "_RUN_LIMITER", limiter)
     calls = []
 
     async def scenario():
@@ -353,7 +362,7 @@ def test_cold_overview_waiters_never_borrow_model_cpu_slots(computation, monkeyp
 
     started, release = threading.Event(), threading.Event()
     calls = []
-    real = runs.run_design_with_benchmark
+    real = regression_service.run_design_with_benchmark
 
     def calculate(panel, design):
         calls.append(design)
@@ -361,11 +370,13 @@ def test_cold_overview_waiters_never_borrow_model_cpu_slots(computation, monkeyp
         assert release.wait(5)
         return real(panel, design)
 
-    monkeypatch.setattr(runs, "run_design_with_benchmark", calculate)
+    monkeypatch.setattr(regression_service, "run_design_with_benchmark", calculate)
     monkeypatch.setattr(
-        runs,
-        "_estimate_overview",
-        lambda panel, identity: runs.cached_run(panel, RegressionDesign("trade", teaching=True), identity),
+        regression_service,
+        "estimate_overview",
+        lambda panel, identity: regression_service.cached_run(
+            panel, RegressionDesign("trade", teaching=True), identity
+        ),
     )
 
     async def scenario():

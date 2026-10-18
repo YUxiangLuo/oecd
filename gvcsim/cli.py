@@ -53,7 +53,12 @@ def main() -> None:
 
     sub.add_parser("preflight", help="启动前验证 ASGI 应用、产物、容量目录和教学数据库")
 
-    p = sub.add_parser("classroom-init", help="显式初始化或迁移教学数据库（serve/preflight 不会修改 schema）")
+    p = sub.add_parser("verify-release", help="复算当前发布的 QC 和 136 个课堂模型，并绑定代码与数据指纹")
+    verification = p.add_mutually_exclusive_group(required=True)
+    verification.add_argument("--out", help="写入本次验证 JSON（不修改数据或数据库）")
+    verification.add_argument("--check", help="核对已有验证记录是否仍对应当前代码、数据和依赖")
+
+    p = sub.add_parser("classroom-init", help="显式初始化教学数据库；部署可用 --reset 重建，不提供历史迁移")
     p.add_argument("--reset", action="store_true", help="删除并重建全部教学表（会清空账号、会话和报告）")
     p.add_argument("--teacher-username", help="显式创建首位教师（口令从 GVCSIM_INITIAL_TEACHER_PASSWORD 读取）")
     p.add_argument("--teacher-name", default="课程管理员", help="首位教师显示名")
@@ -136,6 +141,26 @@ def main() -> None:
         )
         for warning in preflight_report.get("warnings", []):
             print(f"⚠ {warning}")
+
+    elif args.command == "verify-release":
+        import json
+        from pathlib import Path
+
+        from gvcsim import release_verification
+
+        if args.check:
+            summary = release_verification.check_evidence(Path(args.check))
+            print("验证记录与当前发布匹配：" + json.dumps(summary, ensure_ascii=False))
+        else:
+            report = release_verification.verify()
+            destination = Path(args.out)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(
+                json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8"
+            )
+            print("发布验证：" + json.dumps(report["summary"], ensure_ascii=False))
+            if not report["passed"]:
+                raise SystemExit("发布验证失败，详见 " + str(destination))
 
     elif args.command == "classroom-init":
         import psycopg

@@ -11,15 +11,22 @@ PR59 审查修复的实现与验证边界见 [审查记录](docs/review-pr59-202
 | 文档 | 内容 |
 | --- | --- |
 | [技术手册](技术手册.md) | 架构、计算方法、数据契约、接口、数据库、运行保护、测试与运维 |
-| [DEPLOY.md](DEPLOY.md) | 生产主机上的部署、数据发布、回滚、新学期重置与备份恢复命令 |
+| [DEPLOY.md](DEPLOY.md) | 当前版本部署、数据验证、全新教学库初始化与故障处理 |
 | [实验手册 PDF](实验手册.pdf) | 学生操作指南；正文与重新生成方法见 [docs/student-manual](docs/student-manual/README.md) |
 | [docs/indicator-readings](docs/indicator-readings/README.md) | 步骤 2–5 指标说明 PDF 的源文件与构建方法 |
 
-当前 v13 的本地 release 为 `88063fb4cbf24ce2b4657d6f3c679a66`（2016–2020；2026-10-16 为修正汇率变动单位说明重建）。2026-10-17 核对：发布完整性、原始输入绑定、教学参数快照及 QC 重算均通过；与上一 release `8565f226719d4179967f6372dbc7c49e` 的面板差异仅为介数浮点末位，最大绝对差约 1.1e-11，数值在相对／绝对容差 1e-12 下相符。这不是整个计算管线的位级复现。
+当前部署的数据身份以 `data/processed/dataset.json` 为准，不在文档中固化“当前 release”。本次复核证据见 [2026-10-18 发布验证](benchmarks/release_verification_20261018.json)：绑定实际 release、原始输入、文件 SHA-256、代码及依赖，覆盖逐年输出 QC、回归输入 QC 和 17 个 Y ×（默认 + 7 预设）共 136 次库对照。验证命令如下；`--check` 会拒绝数据、代码或依赖已经变化的旧证据。
+
+```bash
+uv run gvcsim verify-release --out dogfood-output/release-verification.json
+uv run gvcsim verify-release --check dogfood-output/release-verification.json
+```
+
+这项验证不包含完整 20,111 次模型网格、200 种子覆盖率、原始 ICIO 全量重算或生产容量。
 
 **历史验证的适用范围：**`benchmarks/model_space_v13.json` 的 20,111 次估计属于旧 release `8565f226…`：7 种 X 组合 × 13 种固定效应组合 × 13 组代表性控制配置 × 17 个 Y，全部通过标准库对照。它不穷举工作台任意控制变量及滞后组合。`benchmarks/teaching_design_v13.json` 的 200 种子基准也绑定旧源面板。这些文件不能认证当前代码／release 已完整重跑；结论见 [历史模型空间核查](docs/regression-model-space-check-2026-10-14.md)。`shock_panel_v16.json` 同样保留为旧 release 的性能记录。
 
-**2026-10-17 当前版本补验：**[200 种子 × 17 个 Y](benchmarks/teaching_design_v13_20261017.json) 已完整重跑，逐种子估计、标准误和判定与历史记录完全一致；有预设 β 的累计区间覆盖率为 91.5%–95.5%，不是 95% 的保证。[36 种代表性设定 × 17 个 Y](benchmarks/model_space_v13_sample_20261017.json) 的 612 次估计全部通过库对照，未重跑完整 20,111 次网格；单次样本的设定值恢复仍有 9/165 项未通过原检查规则，明细保留，不能称为所有教学预期均通过。[contract 17 冲击面板性能](benchmarks/shock_panel_v17.json) 的单次冷请求约 340 ms、顺序热请求 p95 约 37 ms、8 并发热请求 p95 约 362 ms，均在脚本预算内；这是本机 TestClient 结果，不是生产容量或网络时延验收。旧 benchmark 未覆盖，release 未重建。
+**2026-10-17 历史补验（release `88063fb4…`）：**[200 种子 × 17 个 Y](benchmarks/teaching_design_v13_20261017.json) 已完整重跑，逐种子估计、标准误和判定与历史记录完全一致；有预设 β 的累计区间覆盖率为 91.5%–95.5%，不是 95% 的保证。[36 种代表性设定 × 17 个 Y](benchmarks/model_space_v13_sample_20261017.json) 的 612 次估计全部通过库对照，未重跑完整 20,111 次网格；单次样本的设定值恢复仍有 9/165 项未通过原检查规则，明细保留，不能称为所有教学预期均通过。[contract 17 冲击面板性能](benchmarks/shock_panel_v17.json) 的单次冷请求约 340 ms、顺序热请求 p95 约 37 ms、8 并发热请求 p95 约 362 ms，均在脚本预算内；这是本机 TestClient 结果，不是生产容量或网络时延验收。这些记录仅适用于文件所绑定的数据与代码；后续发布必须重新验证。
 
 此前 v12 的本地验收 release 为 `be37a7cfe40444f09749a77a276f45a3`：4,743 个分层选择的模型通过标准库对照；独立复算 364 个案例中 352 个成功估计、12 个一致拒绝，无超容差差异；四类报告案例完成生成、提交与重新读取检查。详见 [v12 历史规格与验证边界](docs/regression-refactor-20261010.md)。历史 review 和评估只适用于其注明的基线，不是生产容量验收。
 
@@ -44,23 +51,17 @@ GVCSIM_FILE_CACHE_MODE=notify uv run gvcsim serve --port 8000   # 多人使用�
 ```
 
 - 原始表放在 `OECD_ICIO/`，产物入口为 `data/processed`；生产环境用 `GVCSIM_RAW_DATA_DIR`、`GVCSIM_DATA_DIR` 指向代码目录外的持久目录。
-- 当前开发教学库 schema 为 `gvcsim-teaching-db-v15`（会话契约 `experiment-session-simple-v4`：步骤 11–14 只保存 `run` 和一个 `experiment`），新增独立于数据 release 的系统统一题库快照，没有历史版本迁移；使用新建空开发库，版本不匹配应停止，不以普通代码部署为理由清空已有库。保存接口预算为规范化 UTF-8 JSON 300000 字节，PUT/PATCH 应答只含 `updated_at` 与学习状态，不回传 `session`（见技术手册）。
+- 当前开发教学库 schema 为 `gvcsim-teaching-db-v15`（会话契约 `experiment-session-simple-v4`：步骤 11–14 只保存 `run` 和一个 `experiment`），新增独立于数据 release 的系统统一题库快照，不考虑历史数据库或系统兼容；每次部署使用全新教学库，空库初始化或显式 `classroom-init --reset` 重建。保存接口预算为规范化 UTF-8 JSON 300000 字节，PUT/PATCH 应答只含 `updated_at` 与学习状态，不回传 `session`（见技术手册）。
 - 教师可在“理解题”配置步骤 1–14：每步 1–3 道判断／单选题，单选 2–4 个选项，默认共 24 题。保存仅变更本步版本，无实质变化不变版；“恢复默认”把当前默认题目填进编辑区，点“保存并生效”后才生效。改题不删除实验材料或已提交报告，未提交报告需重新生成。`scripts/seed_full_journey.py` 仅支持服务器当前默认版本与公开题目，使用学生 workspace 核对，不需要教师口令或读取私有答案。
 - `serve` 默认只监听本机回环地址；课堂局域网访问用 `--host 0.0.0.0` 或设置 `GVCSIM_BIND_HOST`。
 - 前端开发：`cd frontend && bun run dev`。Vite 把 `/api` 代理到本机 8000 端口，其他位置用 `GVCSIM_API_PROXY=http://<api主机>:<端口>`。
 - 演示构建 `bun run build:demo` 内置 50 组学生快捷登录（`student`，`student02`–`student50` 的口令为基础口令加 `-02`–`-50`）和教师 `teacher`。基础口令默认 `gvclab2026`，可用 `VITE_DEMO_PASSWORD` 覆盖，须与服务端 `GVCSIM_BOOTSTRAP_PASSWORD` 一致；服务端运行一次 `classroom-init` 即可幂等补齐这些账号。普通构建不含这些凭证。
 
-## 三个独立生命周期
+## 部署约定
 
-| 操作 | 命令 | 教学库 |
-| --- | --- | --- |
-| 代码部署 | 更新代码、重建前端、重启 API | 保留 |
-| 数据发布 | 维护窗口内运行 `compute`，原子切换 release | 保留；会话和报告按 `(账号, release_id)` 自动隔离，旧令牌失效 |
-| 新学期清场 | 备份后 `classroom-init --reset` | **清空**全部账号、会话、报告和评分 |
+只支持当前版本，每次部署采用“停止 API → 更新代码和认证密钥 → 重建数据 release 并验证 → `classroom-init --reset` 创建全新教学库 → 预检启动”。账号、题库修改、会话、报告及评分均清空，首位教师与学生账号重新建立。普通服务重启不会清库。具体命令见 [DEPLOY.md](DEPLOY.md)。
 
-普通代码部署和数据换版绝不执行 `--reset`。`compute` 只处理数据，不连接教学库。
-
-v12 升级到 v13（以及之前的 v11 → v12）必须重建 release，不能只更新代码或修改数据版本标签；旧契约会被启动校验拒绝。切换后重新登录，新 release 的会话和报告从空记录开始，旧记录仍在旧 release 下。
+数据在暂存目录完成完整性检查后原子发布，成功后仅保留当前 release；不提供历史迁移、自动备份、恢复或版本回滚。`compute` 本身不访问数据库。重建 release 与轮换认证密钥可防止上一部署的令牌和浏览器暂存材料套用到新库。
 
 学生端只支持一个用户在一个标签页编辑，不提供多窗口／多设备协作或自动合并。浏览选择和未记入报告的模型表单仅在本标签页 `sessionStorage` 中按账号＋release 恢复；正式材料、理解题结果和分析文字自动保存到服务器。旧记录中的浏览设置首次读取时转为本地设置，后续作业请求不再携带它们。`sessionStorage` 另存最新待保存作业及未确认请求，用于刷新和断网恢复，不是永久备份。保存队列先确认未完成请求再发送新内容；服务端仍保留版本检查与重复请求确认，防止刷新前的旧请求覆盖新作业。报告生成、提交和教师评分保护保持独立。
 

@@ -682,7 +682,7 @@ def _evidence_summary(
     overview: dict[str, Any] | None = None,
     custom_models: list[dict[str, Any]] | None = None,
 ) -> list[str]:
-    """``overview`` is the course's estimate of every Y (``_estimate_overview``) for the per-step bar charts;
+    """``overview`` is the course's estimate of every Y (``estimate_overview``) for the per-step bar charts;
     without it each chart shows the saved Y alone. ``custom_models`` are the workbench models marked 放入报告
     (``report_workbench.reported_models``): each step names how many the appendix compares."""
     from gvcsim.regression.spec import ModelSpec

@@ -1,5 +1,6 @@
 """The workbench of steps 11–14 (自己设计模型): options, spec runs over HTTP, saved models and their validation."""
 
+from gvcsim.regression import service as regression_service
 import copy
 import json
 import re
@@ -21,7 +22,7 @@ from gvcsim.regression.model import CoefStat, PreparedModel, RegressionResult
 from gvcsim.regression.panel import run_design_with_benchmark
 from gvcsim.regression.spec import DEFAULT_SPEC, EXCHANGE_RATE_COLUMN, ModelSpec
 from gvcsim.report_saved_run import _fixed_design_matches
-from gvcsim.regression_routes import _design_info
+from gvcsim.regression.service import design_info
 from gvcsim.session import empty_session, make_record
 
 PANEL = _panel()
@@ -110,15 +111,15 @@ def test_options_list_every_choice_in_page_order_with_the_default_and_the_limits
 def student_client(teaching_db, monkeypatch):
     from test_route_adapters import _authenticated_client
 
-    monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: ("a" * 32, PANEL))
+    monkeypatch.setattr(regression_service, "read_teaching_panel", lambda: ("a" * 32, PANEL))
 
     async def direct_cpu(func, *args, **kwargs):
         return func(*args, **kwargs)
 
-    monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", direct_cpu)
-    regression_routes.clear_result_cache()
+    monkeypatch.setattr(regression_service.concurrency, "run_cpu_bound", direct_cpu)
+    regression_service.clear_result_cache()
     yield _authenticated_client(teaching_db)
-    regression_routes.clear_result_cache()
+    regression_service.clear_result_cache()
 
 
 def test_run_takes_a_spec_and_an_omitted_spec_is_the_default_model(student_client):
@@ -228,27 +229,27 @@ def test_a_teacher_cannot_run_a_spec(teaching_db):
 
 def test_the_report_and_the_page_share_one_computed_run(monkeypatch):
     """The report's synchronous recalculation and the endpoint read and fill the same cache."""
-    regression_routes.clear_result_cache()
+    regression_service.clear_result_cache()
     calls = []
-    real = regression_routes.run_design_with_benchmark
+    real = regression_service.run_design_with_benchmark
     monkeypatch.setattr(
-        regression_routes,
+        regression_service,
         "run_design_with_benchmark",
         lambda panel, design: calls.append(design) or real(panel, design),
     )
     release = ["a" * 32]
-    monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: release[0])
+    monkeypatch.setattr(regression_service.artifacts, "release_identity", lambda: release[0])
     spec = ModelSpec((0, 1), (), ("country_year", "industry"))
     design = RegressionDesign("trade", teaching=True, spec=spec)
-    first = regression_routes.cached_run(PANEL, design)
-    assert regression_routes.cached_run(PANEL, RegressionDesign("trade", teaching=True, spec=spec)) is first
+    first = regression_service.cached_run(PANEL, design)
+    assert regression_service.cached_run(PANEL, RegressionDesign("trade", teaching=True, spec=spec)) is first
     assert len(calls) == 1
 
     async def direct_cpu(func, *args, **kwargs):
         return func(*args, **kwargs)
 
-    monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: (release[0], PANEL))
-    monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", direct_cpu)
+    monkeypatch.setattr(regression_service, "read_teaching_panel", lambda: (release[0], PANEL))
+    monkeypatch.setattr(regression_service.concurrency, "run_cpu_bound", direct_cpu)
     import asyncio
 
     request = SimpleNamespace(state=SimpleNamespace(user={"role": "student", "sub": "student", "aid": 9}))
@@ -256,28 +257,28 @@ def test_the_report_and_the_page_share_one_computed_run(monkeypatch):
     assert asyncio.run(regression_routes.regression_run(payload, request)) is first
     assert len(calls) == 1
     # A new DataFrame of the same release (the CSV cache read it again) still reads the cached run.
-    assert regression_routes.cached_run(PANEL.copy(), design) is first
+    assert regression_service.cached_run(PANEL.copy(), design) is first
     assert len(calls) == 1
     # A new release starts empty.
     release[0] = "b" * 32
-    assert regression_routes.cached_run(PANEL, design) is not first
+    assert regression_service.cached_run(PANEL, design) is not first
     assert len(calls) == 2
-    regression_routes.clear_result_cache()
+    regression_service.clear_result_cache()
 
 
 def test_the_overview_fills_the_run_cache_so_a_default_run_is_neither_computed_nor_charged(monkeypatch):
     release = "a" * 32
-    monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: release)
-    monkeypatch.setattr(regression_routes, "OUTCOMES", ("trade",))
-    overview = regression_routes._estimate_overview(PANEL)
+    monkeypatch.setattr(regression_service.artifacts, "release_identity", lambda: release)
+    monkeypatch.setattr(regression_service, "OUTCOMES", ("trade",))
+    overview = regression_service.estimate_overview(PANEL)
     calls = []
-    monkeypatch.setattr(regression_routes, "run_design_with_benchmark", lambda *args: calls.append(args))
+    monkeypatch.setattr(regression_service, "run_design_with_benchmark", lambda *args: calls.append(args))
     for design in (
         RegressionDesign("trade", teaching=True),
         RegressionDesign("trade", teaching=True, spec=DEFAULT_SPEC),
     ):
-        assert regression_routes._run_cached(regression_routes._run_key(design), release)  # admit() charges nothing
-        run = regression_routes.cached_run(PANEL, design, release)
+        assert regression_service._run_cached(regression_service._run_key(design), release)  # admit() charges nothing
+        run = regression_service.cached_run(PANEL, design, release)
         assert run["result"]["cumulative"]["coef"] == overview["outcomes"]["trade"][0]["coef"]
     assert calls == []
 
@@ -455,7 +456,7 @@ def test_report_fingerprint_counts_only_what_the_report_prints_of_the_experiment
 
 
 def test_a_saved_default_run_must_record_its_model():
-    design = _design_info(RegressionDesign("trade", teaching=True))
+    design = design_info(RegressionDesign("trade", teaching=True))
     assert _fixed_design_matches(design)
     assert not _fixed_design_matches({**design, "spec": None})
     assert not _fixed_design_matches({k: v for k, v in design.items() if k != "spec"})

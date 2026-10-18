@@ -172,7 +172,8 @@ test("a step's button and its heading line agree on how its questions stand; no 
   stored.steps[1].updated_by = "teacher";
   const load = spyOn(api.classroom, "quizBank").mockResolvedValue(stored);
   try {
-    render(<TeacherReviewGuardProvider><QuizzesTab /></TeacherReviewGuardProvider>);
+    // Flush the initial asynchronous load and its navigation guard before clicking.
+    await act(async () => { render(<TeacherReviewGuardProvider><QuizzesTab /></TeacherReviewGuardProvider>); });
     await screen.findByLabelText("题干（最多 500 字）");
     expect(screen.getByRole("button", { name: /^1\./ }).textContent).toBe("1. 步骤1 · 1 题 · 与默认不同");
     expect(screen.getByText("与当前默认题目不同，可点“恢复默认”更新")).toBeTruthy();

@@ -1,12 +1,8 @@
-# 远程部署
+# 部署
 
-示例代码目录为 `/opt/gvcsim/current`，共享状态根目录为 `/opt/gvcsim/shared`，环境配置为 `/etc/gvcsim.env`。正式账号只能通过 HTTPS 登录。`<课程域名>`、`<数据库主机>` 等占位符按实际环境替换，实际值只写入 `/etc/gvcsim.env` 或当次环境变量；健康检查统一用 `GVCSIM_BASE_URL` 指定站点地址。
+部署只支持当前代码、当前数据契约和全新教学库，不提供历史迁移、备份恢复或版本回滚。每次部署都在停止 API 后重建数据 release 和数据库；全部账号、题库修改、会话、报告及评分会清空，随后重新创建首位教师和学生账号。数据发布保留完整的暂存、校验和原子切换，成功后仅保留当前 release。
 
-部署分为三个互不绑定的生命周期：
-
-1. **代码部署**：更新 Python/前端代码，不计算数据、不清空教学库。
-2. **数据发布**：执行 `compute` 并原子切换 release，不清空教学库；会话和报告按 `release_id` 自动隔离。
-3. **新学期重置**：仅在明确清场时执行 `classroom-init --reset`，会删除全部账号、会话、报告和评分。
+示例代码目录为 `/opt/gvcsim/current`，共享数据根目录为 `/opt/gvcsim/shared`，环境配置为 `/etc/gvcsim.env`。正式账号通过 HTTPS 登录。域名、证书、数据库地址和口令按实际环境填写，不提交仓库。
 
 ## 一次性主机 bootstrap
 
@@ -28,9 +24,9 @@ useradd --system --home-dir /opt/gvcsim --create-home --shell /usr/sbin/nologin 
 # Ubuntu 21.04+ 的 useradd 把家目录建成 0750；Nginx 的 www-data 必须能穿过它读取
 # /opt/gvcsim/current/frontend/dist，否则首页返回 500（stat() Permission denied）。
 chmod 0751 /opt/gvcsim
+install -d -o gvcsim -g gvcsim -m 0750 /opt/gvcsim/shared
 install -d -o gvcsim -g gvcsim -m 0750 /opt/gvcsim/shared/data
 install -d -o gvcsim -g gvcsim -m 0750 /opt/gvcsim/shared/OECD_ICIO
-install -d -o gvcsim -g gvcsim -m 0700 /opt/gvcsim/shared/backups
 ```
 
 创建独立 PostgreSQL 角色与数据库；按提示生成并妥善保存数据库口令。PostgreSQL 与 API 可以不同机，但以下本地 socket 命令必须登录到**实际数据库主机**执行，不能在另一台 API 主机上照抄；若由远程管理终端建库，应显式指定数据库主机并使用对应的管理员认证。应用最终只通过环境文件中的连接串定位数据库：
@@ -71,22 +67,33 @@ nginx -t
 systemctl enable --now nginx
 ```
 
-安装 systemd 服务与每日备份定时器：
+安装 systemd 服务：
 
 ```bash
 install -m 0644 deploy/gvcsim-api.service /etc/systemd/system/
-install -m 0644 deploy/gvcsim-backup.service deploy/gvcsim-backup.timer /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable gvcsim-api
-systemctl enable --now gvcsim-backup.timer
 ```
 
-首次建库必须显式初始化教师。初始口令只通过当前进程传入，不写环境文件：
+## 首次及后续部署
+
+先在开发环境运行 `bash scripts/local_ci.sh`。它使用独立数据库与合成数据验证，不操作课堂数据库。正式部署按以下顺序执行：
+
+1. 停止 API，更新 `/opt/gvcsim/current` 中的代码及依赖。
+2. 每次部署重新生成 `/etc/gvcsim.env` 的 `GVCSIM_AUTH_SECRET`（`openssl rand -hex 32`），使上一部署的令牌失效。其余配置保持实际环境值。
+3. 重新构建前端和数据，运行发布验证。新的 release ID 同时隔离浏览器中上一部署的暂存内容。
+4. 显式重建教学库，创建首位教师，预检通过后启动。
 
 ```bash
+set -euo pipefail
+systemctl stop gvcsim-api
+cd /opt/gvcsim/current
+uv sync --locked
+cd frontend && bun install --frozen-lockfile && bun run build && cd ..
+# 用新生成的随机值替换 GVCSIM_AUTH_SECRET，文件保持 root:gvcsim 0640。
+editor /etc/gvcsim.env
 read -rsp '首位教师初始口令（至少 12 位）: ' GVCSIM_INITIAL_TEACHER_PASSWORD
 echo
-test "${#GVCSIM_INITIAL_TEACHER_PASSWORD}" -ge 12
 export GVCSIM_INITIAL_TEACHER_PASSWORD
 trap 'unset GVCSIM_INITIAL_TEACHER_PASSWORD' EXIT
 runuser -u gvcsim --preserve-environment -- /bin/sh -c '
@@ -94,83 +101,36 @@ runuser -u gvcsim --preserve-environment -- /bin/sh -c '
   set -a; . /etc/gvcsim.env; set +a
   cd /opt/gvcsim/current
   .venv/bin/gvcsim compute
-  .venv/bin/gvcsim classroom-init --teacher-username teacher --teacher-name 老师
+  .venv/bin/gvcsim verify-release --out /opt/gvcsim/shared/release-verification.json
+  .venv/bin/gvcsim verify-release --check /opt/gvcsim/shared/release-verification.json
+  .venv/bin/gvcsim classroom-init --reset --teacher-username teacher --teacher-name 老师
   .venv/bin/gvcsim preflight
 '
 unset GVCSIM_INITIAL_TEACHER_PASSWORD
 trap - EXIT
 systemctl start gvcsim-api
-GVCSIM_BASE_URL='https://<课程域名>'   # 替换为站点实际对外地址
+GVCSIM_BASE_URL='https://<课程域名>'
+curl -fsS "$GVCSIM_BASE_URL/health/live"
 curl -fsS "$GVCSIM_BASE_URL/health"
 ```
 
-空库初始化不需要 `--reset`。首次登录后立即轮换教师口令：教师端顶部会提示仍在使用初始口令，点提示里的“立即修改密码”即可，改完后提示消失。
+`classroom-init --reset` 删除指定数据库的整个 `public` schema 后按当前版本创建。仅停止后的部署流程执行它；`serve`、`preflight` 和普通重启不会自动清库或迁移。首次使用空库也可以省略 `--reset`。教师首次登录后修改初始密码，再创建学生账号与班级。
 
-## 普通代码部署
+`compute` 不连接数据库。在暂存目录中完成计算、QC、manifest 和来源绑定，通过后才原子切换入口；构建失败时入口仍指向原产物，服务保持停止，修复问题后重新部署。成功后清理旧 release，不提供恢复旧版本的流程。清理失败会打印警告，应检查目录权限和空间。
 
-普通代码部署不运行 `compute`，更不能运行 `classroom-init --reset`。新代码若要求更高的 artifact contract，应改走下一节的数据发布流程。
+`verify-release` 将实际 release ID、dataset/panel 文件 SHA-256、运行时代码、构建入口与配置、锁文件、随站发布的静态资源及实验手册 PDF 指纹，以及安装的数值依赖版本写入验证记录，并复算各年份输出 QC、回归输入 QC 和 17 个 Y ×（默认模型 + 7 个预设）共 136 次标准库对照。`--check` 拒绝与上述输入不匹配的记录。它不代表完整模型网格、200 种子覆盖率、原始 IO 全量重算或生产容量验收；历史 benchmark 不能替代当次证据。
 
-`deploy/` 下的 systemd 或 Nginx 模板有变化时，只更新代码不会改变已安装的旧模板：保留实际域名、证书和 upstream 地址重新安装，执行 `nginx -t`、`systemctl daemon-reload` 并重载 Nginx。容量参数（单 API worker、16 个普通线程、4 个计算名额、512 个连接）须配套使用，见[运行容量](技术手册.md#112-运行容量)。
+部署模板发生变化时，保留实际域名、证书、upstream 和服务用户配置重新安装，再执行 `nginx -t` 与 `systemctl daemon-reload`。`shared` 根目录必须允许服务账号写入验证记录，可执行 `install -d -o gvcsim -g gvcsim -m 0750 /opt/gvcsim/shared`。
 
-服务模板设置 `GVCSIM_FILE_CACHE_MODE=notify`，前提是 API 运行期间 active release 和原始输入不被改写（inotify 不覆盖 mmap／原始块设备写入；不支持的文件系统自动回退哈希）。不满足该前提时在 `/etc/gvcsim.env` 设为 `hash` 并重启。注意性能差异：`hash` 模式每次原始切片请求都重算原始 CSV 的 SHA-256，实测单次约 420 ms，50 名学生同时打开步骤 1 时排队超过 10 s；`notify` 模式单次约 13 ms。因此 `GVCSIM_DATA_DIR` 与 `GVCSIM_RAW_DATA_DIR` 必须放在本地 ext4／XFS／Btrfs 文件系统上，NFS、SMB、9p 等网络或虚拟文件系统会静默回退到 `hash`。部署后可用 `journalctl -u gvcsim-api` 与一次切片请求的耗时确认。
+服务模板采用单 API worker、16 个普通线程、4 个计算名额、512 个连接；容量边界见[技术手册](技术手册.md#112-运行容量)。`notify` 文件缓存要求 API 运行期间不改写数据，并使用支持 inotify 的本地文件系统；不满足时用 `hash`，延迟须重新实测。Nginx 与 API 分机时须同时调整受信代理和来源登录限流，避免全班被计为单个来源。
 
-Nginx 与 API 分机部署时还要注意：API 只信任来自 `127.0.0.1` 的 `X-Forwarded-For`（uvicorn `forwarded_allow_ips`），分机时所有学生的来源 IP 都会被记成 Nginx 的地址，登录来源限流（默认每分钟 120 次）会把全班当作一个来源。同机部署无此问题；分机部署需相应调高 `GVCSIM_LOGIN_SOURCE_ATTEMPTS_PER_MINUTE`，或在 API 侧另行信任该代理地址。
+## 验收与故障处理
 
-```bash
-set -euo pipefail
-GVCSIM_BASE_URL='https://<课程域名>'   # 替换为站点实际对外地址
-systemctl stop gvcsim-api
-systemctl start gvcsim-backup.service
-cd /opt/gvcsim/current
-uv sync --frozen
-cd frontend && bun install --frozen-lockfile && bun run build && cd ..
-runuser -u gvcsim -- /bin/sh -c '
-  set -eu; set -a; . /etc/gvcsim.env; set +a
-  cd /opt/gvcsim/current
-  .venv/bin/gvcsim preflight
-'
-systemctl start gvcsim-api
-curl -fsS "$GVCSIM_BASE_URL/health"
-```
+每次部署记录前端构建模式、验证 JSON、健康检查及实际浏览器验收。使用独立验收账号检查登录、保存、刷新恢复、报告生成/提交和教师评分；报告列表需验证分页及按需读取详情。
 
-## 数据发布或 artifact contract 升级
+容量要求由目标机器单独验收。可先在相同配置的隔离环境设置 `GVCSIM_BENCHMARK_USERNAME`、`GVCSIM_BENCHMARK_PASSWORD`，运行 `uv run python scripts/benchmark_shock_panel_v9.py`；其 TestClient 结果仅表示进程内预算，不代表端到端网络时延。
 
-当前教学生成契约是 `step10-tariff-teaching-v13`。从 v12 或更早升级需要按本节重建完整 release，并重新构建前端；只更新代码、单个 CSV 或版本标签均不够。v13 改了课程生成变量的混杂强度与方向（GDP、开放度）、共同年份变化和七个 Y 的校准下限（见 `docs/regression-steps-11-14-optimization-final-2026-10-14.md`），发布质检仍逐行检查定义域与恒等式。API 启动拒绝旧教学契约，故应在维护窗口内协调代码与数据切换，不要将版本不匹配误诊为数据库故障。
-
-切换使旧令牌失效，学生需要重新登录。会话、报告和评分按账号＋release 隔离：新 release 无历史记录时显示空记录，旧记录未删除；本标签页的旧 release 草稿不会套用到新 release。无需 `classroom-init --reset`，回滚需同时选择兼容的代码和数据。新手册 PDF 已更新，前端重建后才会包含新的带指纹资源。
-
-进入停机维护窗口并先备份数据库。`compute` 以 `gvcsim` 账号在暂存 release 中完成计算、诊断、manifest 和原始输入内容绑定，通过后才原子切换。完整性、来源绑定与数学有效性检查失败均阻断发布，包括源账户误差超出容差、逆矩阵稳定性、计算恒等式或聚合一致性失败；容差内舍入、经济范围与研究设计诊断持续披露。数据库不会被重置。
-
-准备一个可登录的普通学生账号供性能验收，并通过安全交互方式设置 benchmark 口令：
-
-```bash
-set -euo pipefail
-GVCSIM_BASE_URL='https://<课程域名>'   # 替换为站点实际对外地址
-systemctl stop gvcsim-api
-systemctl start gvcsim-backup.service
-cd /opt/gvcsim/current
-uv sync --frozen
-cd frontend && bun install --frozen-lockfile && bun run build && cd ..
-
-read -rp '性能验收学生用户名: ' GVCSIM_BENCHMARK_USERNAME
-read -rsp '性能验收学生口令: ' GVCSIM_BENCHMARK_PASSWORD
-echo
-export GVCSIM_BENCHMARK_USERNAME GVCSIM_BENCHMARK_PASSWORD
-trap 'unset GVCSIM_BENCHMARK_USERNAME GVCSIM_BENCHMARK_PASSWORD' EXIT
-runuser -u gvcsim --preserve-environment -- /bin/sh -c '
-  set -eu; set -a; . /etc/gvcsim.env; set +a
-  cd /opt/gvcsim/current
-  .venv/bin/gvcsim compute
-  .venv/bin/gvcsim preflight
-  .venv/bin/python scripts/benchmark_shock_panel_v9.py
-'
-unset GVCSIM_BENCHMARK_USERNAME GVCSIM_BENCHMARK_PASSWORD
-trap - EXIT
-systemctl start gvcsim-api
-curl -fsS "$GVCSIM_BASE_URL/health"
-```
-
-性能验收在进程内经正常登录中间件完成，包含单请求冷启动、8 请求并发冷启动、warm sequential 和 8-concurrent；任一预算失败都会非零退出并阻止放行，此时 API 保持停止并按下文回滚到上一 release。
+任一门禁失败均保持 API 停止，查看日志、修复代码/数据/配置后重做部署。不将旧代码、旧数据库或旧数据作为回退目标。普通运行故障先检查 `journalctl -u gvcsim-api -n 100 --no-pager` 和 `/health`；普通重启不需要重建数据库。
 
 ### 工作台与报告 HTTP 验收（P3-19）
 
@@ -218,84 +178,3 @@ pending 回到零；503/排队、渲染、数据库失败及退款由聚焦自�
 已有 ASGI 20 人 × 12 合法附录模型冷/暖验证不等于真实 DB、代理与小主机容量验收。
 生产课堂人数、混合工作台/自动保存/登录高峰、长期 RSS、多 worker、hash 模式与切换 release 的负载
 仍需在对应部署上实测，不能沿用旧 R5 的每秒 5 次或约 40 人作为修复后的生产上限。
-
-## 明确的新学期重置
-
-这是独立且破坏性的操作，不得放入普通部署脚本：
-
-```bash
-set -euo pipefail
-systemctl stop gvcsim-api
-systemctl start gvcsim-backup.service
-read -rsp '新学期首位教师口令（至少 12 位）: ' GVCSIM_INITIAL_TEACHER_PASSWORD
-echo
-test "${#GVCSIM_INITIAL_TEACHER_PASSWORD}" -ge 12
-export GVCSIM_INITIAL_TEACHER_PASSWORD
-trap 'unset GVCSIM_INITIAL_TEACHER_PASSWORD' EXIT
-runuser -u gvcsim --preserve-environment -- /bin/sh -c '
-  set -eu; set -a; . /etc/gvcsim.env; set +a
-  cd /opt/gvcsim/current
-  .venv/bin/gvcsim classroom-init --reset --teacher-username teacher --teacher-name 老师
-  .venv/bin/gvcsim preflight
-'
-unset GVCSIM_INITIAL_TEACHER_PASSWORD
-trap - EXIT
-systemctl start gvcsim-api
-```
-
-## 教学数据库 schema 演进门槛
-
-当前初始化版本为 `gvcsim-teaching-db-v15`（表结构同 v14；会话契约升为 `experiment-session-simple-v4`，步骤 11–14 只保存 `run` 和一个 `experiment`，旧记录在保存时被拒绝，因此要新建空库），保留学期/班级名称比较键及账号大小写一致的唯一约束，新增独立于 release 的系统统一 `quiz_config` 默认题库快照。
-本轮按要求仅提供新库初始化，没有要求或实现历史兼容迁移；不要把不带 `--reset` 的
-`classroom-init` 当作旧库升级器。既有数据库必须保留，schema 不匹配应预检失败，停止放行；
-若要部署到旧库，需另行批准保留记录的迁移方案，不能用重置代替。隔离验收使用新建空库初始化 v15。教师改题无需重新发布数据；仅变更本步答案版本，不删除材料或已提交报告，未提交草稿需重新生成。
-
-## 数据 release 回滚
-
-发布前记录 `readlink /opt/gvcsim/shared/data/processed`。回滚时必须同时使用兼容该 artifact contract 的代码版本，并先验证目标 release；不要删除故障 release：
-
-```bash
-set -euo pipefail
-GVCSIM_BASE_URL='https://<课程域名>'   # 替换为站点实际对外地址
-systemctl stop gvcsim-api
-set -a; . /etc/gvcsim.env; set +a
-OLD_RELEASE_ID='<32位 release id>'
-runuser -u gvcsim -- /opt/gvcsim/current/.venv/bin/python -c \
-  "from pathlib import Path; from gvcsim.artifacts import validate_release; print(validate_release(Path('$GVCSIM_DATA_DIR/.processed-releases/$OLD_RELEASE_ID')))"
-runuser -u gvcsim -- rm -f "$GVCSIM_DATA_DIR/processed.rollback"
-runuser -u gvcsim -- ln -s ".processed-releases/$OLD_RELEASE_ID" "$GVCSIM_DATA_DIR/processed.rollback"
-runuser -u gvcsim -- mv -Tf "$GVCSIM_DATA_DIR/processed.rollback" "$GVCSIM_DATA_DIR/processed"
-runuser -u gvcsim -- /bin/sh -c '
-  set -eu; set -a; . /etc/gvcsim.env; set +a
-  cd /opt/gvcsim/current
-  .venv/bin/gvcsim preflight
-'
-systemctl start gvcsim-api
-curl -fsS "$GVCSIM_BASE_URL/health"
-```
-
-## 备份与恢复演练
-
-备份脚本使用 `pg_dump --format=custom`，每日服务默认保留最新 90 组已完成的 dump + SHA-256 文件（可用 `GVCSIM_BACKUP_KEEP` 在 `1..10000` 内调整）。轮换先排除缺少 dump 或 checksum 的不完整归档，它们不占用保留名额；恢复演练不会覆盖已有归档。备份脚本从 `GVCSIM_PG_DSN` 读取数据库位置，文档与脚本均不预设数据库主机：
-
-```bash
-set -a; . /etc/gvcsim.env; set +a
-GVCSIM_BACKUP_DIR=/opt/gvcsim/shared/backups scripts/backup_classroom.sh
-cd /opt/gvcsim/shared/backups
-sha256sum -c classroom-YYYYmmddTHHMMSSZ.dump.sha256
-pg_restore --list classroom-YYYYmmddTHHMMSSZ.dump >/dev/null
-# 演练库所在主机按实际环境填写（可与生产库同机，也可以是隔离主机）。
-# 应用角色 gvcsim 没有 CREATEDB 权限，演练库须由数据库管理员在数据库主机上创建并指定属主：
-sudo -u postgres createdb --owner=gvcsim gvcsim_restore_drill
-export PGHOST=<数据库主机> PGPORT=5432 PGUSER=gvcsim
-read -rsp 'PostgreSQL 口令: ' PGPASSWORD
-echo
-export PGPASSWORD
-pg_restore --single-transaction --no-owner --no-acl --dbname=gvcsim_restore_drill classroom-YYYYmmddTHHMMSSZ.dump
-psql --dbname=gvcsim_restore_drill -Atc "select version from schema_meta where singleton"
-unset PGPASSWORD
-```
-
-当前版本的恢复结果必须为 `gvcsim-teaching-db-v15`（历史备份须配套历史代码验证，不会自动迁移）。恢复生产库前应停止 API、保留故障库，并先在隔离空库完成摘要、目录和 schema 验证。
-
-本机保留不等于灾难备份。应只同步已同时存在 `.dump` 与 `.dump.sha256` 的完成文件对到异机或对象存储，并对异机副本定期执行同样的摘要与隔离恢复演练。

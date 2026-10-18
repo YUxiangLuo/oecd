@@ -83,7 +83,7 @@ def test_v14_schema_contains_release_auth_class_and_quiz_contracts(teaching_db):
     assert "release_id" in session_columns
 
 
-def test_schema_mismatch_requires_migration_without_recommending_reset_as_upgrade(teaching_db):
+def test_schema_mismatch_requires_fresh_initialization(teaching_db):
     with db.conn() as connection:
         connection.execute("UPDATE schema_meta SET version='gvcsim-teaching-db-v9' WHERE singleton")
 
@@ -92,8 +92,9 @@ def test_schema_mismatch_requires_migration_without_recommending_reset_as_upgrad
         db.initialize_schema()
 
     message = str(exc_info.value)
-    assert "兼容迁移" in message
-    assert "不能用 `uv run gvcsim classroom-init --reset` 代替普通升级" in message
+    assert "不支持历史数据库迁移" in message
+    assert "uv run gvcsim classroom-init --reset" in message
+    assert "删除全部教学数据" in message
 
 
 def test_old_schema_is_not_silently_migrated(teaching_db):
@@ -314,12 +315,13 @@ def test_teacher_reports_follow_current_record_without_blocking_grades(teaching_
     account_id = db.find_account("student")["id"]
 
     def check(outdated):
-        listed = db.list_reports("teacher")[0]
+        listed = db.list_reports("teacher")["reports"][0]
         detail = db.get_report(account_id, "teacher")
         for row in (listed, detail):
             assert row["report_outdated"] is outdated
             assert "source_session" not in row
-        assert listed == detail
+        assert listed == {key: detail[key] for key in listed}
+        assert not {"markdown", "provenance", "feedback", "source_session"} & listed.keys()
         return detail
 
     check(False)
@@ -338,6 +340,52 @@ def test_teacher_reports_follow_current_record_without_blocking_grades(teaching_
     assert regenerated["state"] == "pending" and regenerated["score"] is None
     db.submit_report("student")
     assert check(False)["markdown"] == "regenerated version"
+
+
+def test_report_pages_bound_payload_and_session_work_and_preserve_filters(teaching_db, monkeypatch):
+    import json
+
+    term = db.create_term("2026 秋", "teacher")
+    group = db.create_class_group(term["id"], "一班", "teacher")
+    for i in range(28):
+        username = f"paged{i:02}"
+        account = db.create_student(username, f"张 三（{i}）", "test-password-123", f"N{i:02}", "teacher")
+        if i < 10:
+            db.set_student_enrollment(account["id"], term["id"], group["id"], "teacher")
+        _save_report("large body " * 10000, {"extra": "large provenance " * 1000}, username)
+        report = db.submit_report(username)
+        if i >= 20:
+            db.grade_report(account["id"], 90, "private feedback", "teacher", report["updated_at"])
+    calls = []
+    original = records.report_fingerprint
+
+    def fingerprint(session):
+        calls.append(session)
+        return original(session)
+
+    monkeypatch.setattr(records, "report_fingerprint", fingerprint)
+    assert db.report_summary("teacher") == {"pending": 20, "graded": 8}
+    assert calls == []
+    first = db.list_reports("teacher", state="all", page_size=10)
+    assert first["total"] == 28 and len(first["reports"]) == 10
+    assert len(calls) == 10
+    assert len(json.dumps(first, default=str)) < 7000
+    for row in first["reports"]:
+        assert not {"markdown", "provenance", "feedback", "source_session", "session"} & row.keys()
+        assert row["report_outdated"] is False
+    second = db.list_reports("teacher", state="all", page_size=10, page=2)
+    assert not {r["account_id"] for r in first["reports"]} & {r["account_id"] for r in second["reports"]}
+    last = db.list_reports("teacher", state="all", page_size=10, page=99)
+    assert last["page"] == 3 and len(last["reports"]) == 8
+    filtered = db.list_reports("teacher", term_id=term["id"], class_id=group["id"])
+    assert filtered["total"] == 10 and filtered["counts"] == {"pending": 10, "graded": 0}
+    assert filtered["overall"] == {"pending": 20, "graded": 8}
+    assert db.list_reports("teacher", term_id=term["id"], class_id=-1)["total"] == 18
+    assert db.list_reports("teacher", q="张三(２７)")["reports"][0]["username"] == "paged27"
+    assert db.list_reports("teacher", q="Ｎ ０１")["reports"][0]["username"] == "paged01"
+    assert db.list_reports("teacher", q="%_")["total"] == 0
+    assert db.list_reports("teacher", q="absent", state="pending")["counts"] == {"pending": 0, "graded": 0}
+    assert db.list_reports("student")["reports"] == []
 
 
 def test_grading_does_not_count_as_student_activity(teaching_db):

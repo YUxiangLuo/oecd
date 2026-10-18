@@ -281,7 +281,7 @@ def test_observed_panel_designs_cannot_take_a_spec():
 def test_a_failed_library_check_hides_every_inferential_number(monkeypatch):
     from gvcsim.regression import panel as panel_module
     from gvcsim.report_saved_run import _result_is_reportable
-    from gvcsim.regression_routes import _design_info
+    from gvcsim.regression.service import design_info
 
     original = panel_module._summarize_benchmark
     monkeypatch.setattr(
@@ -297,7 +297,7 @@ def test_a_failed_library_check_hides_every_inferential_number(monkeypatch):
     assert result.support["suppress_inference"] is True
     assert any("标准库实现对照" in reason for reason in result.support["reasons"])
     # The step's saved run is then printed as "计算设定有问题", not refused as unreportable.
-    assert _result_is_reportable(result.to_dict(), _design_info(design))
+    assert _result_is_reportable(result.to_dict(), design_info(design))
 
     no_effects = RegressionDesign("trade", teaching=True, spec=ModelSpec((0, 1), (), ()))
     result, _ = run_design_with_benchmark(_panel(), no_effects)

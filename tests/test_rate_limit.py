@@ -1,3 +1,4 @@
+from gvcsim.regression import service as regression_service
 import asyncio
 from types import SimpleNamespace
 
@@ -89,17 +90,17 @@ def test_expensive_regression_routes_limit_each_account_before_repeating_work(
             return {"status": "ok", "support": {}}
 
     async def fake_cpu(function, *_args, **_kwargs):
-        if function is regression_routes.run_design_with_benchmark:
+        if function is regression_service.run_design_with_benchmark:
             return Result(), {"benchmark_passed": True}
         return {"draws": []}
 
-    monkeypatch.setattr(regression_routes, limiter_name, SlidingWindowRateLimiter(1))
-    monkeypatch.setattr(regression_routes, "_RESULT_CACHE", Uncached())
+    monkeypatch.setattr(regression_service, limiter_name, SlidingWindowRateLimiter(1))
+    monkeypatch.setattr(regression_service, "_RESULT_CACHE", Uncached())
     # Neither cache keeps the result, so the second request repeats the work.
-    monkeypatch.setattr(regression_routes, "_store_payload", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: "a" * 32)
-    monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: ("a" * 32, object()))
-    monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", fake_cpu)
+    monkeypatch.setattr(regression_service, "_store_payload", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(regression_service.artifacts, "release_identity", lambda: "a" * 32)
+    monkeypatch.setattr(regression_service, "read_teaching_panel", lambda: ("a" * 32, object()))
+    monkeypatch.setattr(regression_service.concurrency, "run_cpu_bound", fake_cpu)
     request = SimpleNamespace(state=SimpleNamespace(user={"role": "student", "sub": "student", "aid": 2}))
 
     assert isinstance(asyncio.run(route(request_payload, request)), dict)
@@ -128,12 +129,12 @@ def test_a_run_already_computed_does_not_count_against_the_limit(monkeypatch):
         return SimpleNamespace(to_dict=lambda: {"status": "ok", "support": {}}), {"benchmark_passed": True}
 
     panel = object()
-    monkeypatch.setattr(regression_routes, "_RUN_LIMITER", SlidingWindowRateLimiter(1))
-    monkeypatch.setattr(regression_routes, "_RESULT_CACHE", Uncached())
-    monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: "a" * 32)
-    monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: ("a" * 32, panel))
-    monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", fake_cpu)
-    regression_routes.clear_result_cache()
+    monkeypatch.setattr(regression_service, "_RUN_LIMITER", SlidingWindowRateLimiter(1))
+    monkeypatch.setattr(regression_service, "_RESULT_CACHE", Uncached())
+    monkeypatch.setattr(regression_service.artifacts, "release_identity", lambda: "a" * 32)
+    monkeypatch.setattr(regression_service, "read_teaching_panel", lambda: ("a" * 32, panel))
+    monkeypatch.setattr(regression_service.concurrency, "run_cpu_bound", fake_cpu)
+    regression_service.clear_result_cache()
     request = SimpleNamespace(state=SimpleNamespace(user={"role": "student", "sub": "student", "aid": 2}))
     payload = RegressionRequest(outcome="trade")
 
@@ -146,7 +147,7 @@ def test_a_run_already_computed_does_not_count_against_the_limit(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(regression_routes.regression_run(other, request))
     assert exc_info.value.status_code == 429
-    regression_routes.clear_result_cache()
+    regression_service.clear_result_cache()
 
 
 def test_regression_limit_requires_stable_account_identity():
@@ -163,10 +164,10 @@ def test_exhausted_initiator_does_not_publish_429_to_49_other_students(monkeypat
         limiter = SlidingWindowRateLimiter(limit)
         for _ in range(limit):
             limiter.check(1)
-        monkeypatch.setattr(regression_routes, "_RUN_LIMITER", limiter)
-        monkeypatch.setattr(regression_routes, "_RESULT_CACHE", AsyncSingleFlightCache())
-        monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: "a" * 32)
-        monkeypatch.setattr(regression_routes, "read_teaching_panel", lambda: ("a" * 32, object()))
+        monkeypatch.setattr(regression_service, "_RUN_LIMITER", limiter)
+        monkeypatch.setattr(regression_service, "_RESULT_CACHE", AsyncSingleFlightCache())
+        monkeypatch.setattr(regression_service.artifacts, "release_identity", lambda: "a" * 32)
+        monkeypatch.setattr(regression_service, "read_teaching_panel", lambda: ("a" * 32, object()))
         computations = []
 
         async def compute(function, *_args, **_kwargs):
@@ -176,7 +177,7 @@ def test_exhausted_initiator_does_not_publish_429_to_49_other_students(monkeypat
                 return SimpleNamespace(to_dict=lambda: {"status": "ok", "support": {}}), {}
             return {"draws": []}
 
-        monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", compute)
+        monkeypatch.setattr(regression_service.concurrency, "run_cpu_bound", compute)
         route = regression_routes.regression_run
         payload = RegressionRequest(outcome="trade")
 
@@ -216,9 +217,9 @@ def test_report_generation_charges_the_runs_it_has_to_compute(monkeypatch):
     from gvcsim.regression.spec import ModelSpec
 
     release = ["a" * 32]
-    monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: release[0])
-    monkeypatch.setattr(regression_routes, "_RUN_LIMITER", SlidingWindowRateLimiter(3))
-    regression_routes.clear_result_cache()
+    monkeypatch.setattr(regression_service.artifacts, "release_identity", lambda: release[0])
+    monkeypatch.setattr(regression_service, "_RUN_LIMITER", SlidingWindowRateLimiter(3))
+    regression_service.clear_result_cache()
     own = ModelSpec((0,), (), ("country_industry", "year"))
     other = ModelSpec((0, 2), (), ("country_industry", "year"))
     designs = [
@@ -226,22 +227,21 @@ def test_report_generation_charges_the_runs_it_has_to_compute(monkeypatch):
         RegressionDesign("trade", teaching=True, baseline="FVA_share", spec=own),
     ]
     # The default model was computed on the page: only the student's own model is a new calculation.
-    regression_routes._store_payload(regression_routes._run_key(designs[0]), {"cached": True})
-    regression_routes.charge_report_runs(7, designs + designs)
-    regression_routes.charge_report_runs(7, designs[:1])  # all cached: free
-    regression_routes.charge_report_runs(7, [RegressionDesign("trade", teaching=True, spec=other), designs[1]])
-    with pytest.raises(HTTPException) as exc_info:
-        regression_routes.charge_report_runs(7, designs)
-    assert exc_info.value.status_code == 429
-    assert "生成报告要重新计算" in exc_info.value.detail and exc_info.value.headers["Retry-After"]
+    regression_service._store_payload(regression_service._run_key(designs[0]), {"cached": True})
+    regression_service.charge_report_runs(7, designs + designs)
+    regression_service.charge_report_runs(7, designs[:1])  # all cached: free
+    regression_service.charge_report_runs(7, [RegressionDesign("trade", teaching=True, spec=other), designs[1]])
+    with pytest.raises(regression_service.RegressionRateLimited) as exc_info:
+        regression_service.charge_report_runs(7, designs)
+    assert "生成报告要重新计算" in str(exc_info.value) and exc_info.value.retry_after
     # A run cached before the release changed is computed again, so it counts again.
     release[0] = "b" * 32
-    assert not regression_routes._run_cached(regression_routes._run_key(designs[0]))
+    assert not regression_service._run_cached(regression_service._run_key(designs[0]))
     # A run on the older panel that ends after the swap keeps the release its panel was read under: it never makes
     # the new release's run look computed (and free).
-    regression_routes._store_payload(regression_routes._run_key(designs[0]), {"late": True}, "a" * 32)
-    assert not regression_routes._run_cached(regression_routes._run_key(designs[0]))
-    regression_routes.clear_result_cache()
+    regression_service._store_payload(regression_service._run_key(designs[0]), {"late": True}, "a" * 32)
+    assert not regression_service._run_cached(regression_service._run_key(designs[0]))
+    regression_service.clear_result_cache()
 
 
 def test_a_new_dataframe_for_the_same_release_reads_the_cached_runs(monkeypatch):
@@ -255,22 +255,22 @@ def test_a_new_dataframe_for_the_same_release_reads_the_cached_runs(monkeypatch)
         computed.append(design.outcome)
         return "result", {"benchmark_passed": True}
 
-    monkeypatch.setattr(regression_routes, "run_design_with_benchmark", compute)
+    monkeypatch.setattr(regression_service, "run_design_with_benchmark", compute)
     monkeypatch.setattr(
-        regression_routes, "_run_payload", lambda design, result, benchmark: {"outcome": design.outcome}
+        regression_service, "_run_payload", lambda design, result, benchmark: {"outcome": design.outcome}
     )
-    monkeypatch.setattr(regression_routes, "_require_y", lambda *_args: None)
-    regression_routes.clear_result_cache()
+    monkeypatch.setattr(regression_service, "_require_y", lambda *_args: None)
+    regression_service.clear_result_cache()
     trade, production = (RegressionDesign(outcome, teaching=True) for outcome in ("trade", "production"))
     release = "a" * 32
-    regression_routes.cached_run(object(), trade, release)
-    regression_routes.cached_run(object(), production, release)
-    assert regression_routes._run_cached(regression_routes._run_key(trade), release)
-    assert regression_routes.cached_run(object(), trade, release) == {"outcome": "trade"}
+    regression_service.cached_run(object(), trade, release)
+    regression_service.cached_run(object(), production, release)
+    assert regression_service._run_cached(regression_service._run_key(trade), release)
+    assert regression_service.cached_run(object(), trade, release) == {"outcome": "trade"}
     assert computed == ["trade", "production"]
-    assert regression_routes._run_cached(regression_routes._run_key(production), release)
+    assert regression_service._run_cached(regression_service._run_key(production), release)
     # Another release starts over.
-    regression_routes.cached_run(object(), trade, "b" * 32)
+    regression_service.cached_run(object(), trade, "b" * 32)
     assert computed == ["trade", "production", "trade"]
-    assert not regression_routes._run_cached(regression_routes._run_key(production), "b" * 32)
-    regression_routes.clear_result_cache()
+    assert not regression_service._run_cached(regression_service._run_key(production), "b" * 32)
+    regression_service.clear_result_cache()

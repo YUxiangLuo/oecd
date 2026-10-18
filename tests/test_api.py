@@ -21,6 +21,18 @@ def test_api_requires_bearer(teaching_db):
     assert TestClient(app).get("/api/steps").status_code == 401
 
 
+def test_report_summary_and_pagination_require_teacher_and_validate_bounds(teaching_db):
+    teacher = _client(teaching_db, "teacher")
+    student = _client(teaching_db)
+    assert teacher.get("/api/classroom/reports/summary").json() == {"pending": 0, "graded": 0}
+    assert student.get("/api/classroom/reports/summary").status_code == 403
+    assert student.get("/api/classroom/reports").status_code == 403
+    for query in ("page=0", "page_size=101", "state=draft", "term_id=0", "class_id=1", "class_id=0&term_id=1"):
+        assert teacher.get(f"/api/classroom/reports?{query}").status_code == 422
+    body = teacher.get("/api/classroom/reports?page=99").json()
+    assert body["page"] == 1 and body["total"] == 0 and body["reports"] == []
+
+
 def test_health_checks_raw_years_before_database(monkeypatch):
     calls = []
     monkeypatch.setattr(api_module, "validate_release_cached", lambda *_args: None)

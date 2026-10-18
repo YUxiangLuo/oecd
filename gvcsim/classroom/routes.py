@@ -5,10 +5,10 @@ from __future__ import annotations
 import re
 import unicodedata
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 import psycopg
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from gvcsim import concurrency, demo_accounts, evidence, quizzes
@@ -18,7 +18,7 @@ from gvcsim.classroom import db, management, quiz_config, records
 from gvcsim.name_keys import normalize_academic_name, required_name_key
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 from gvcsim.regression.workbench import experiment_problem
-from gvcsim.regression_routes import REPORT_BILLING, ReportBilling, charge_report_runs, finish_report_runs
+from gvcsim.regression.service import REPORT_BILLING, ReportBilling, charge_report_runs, finish_report_runs
 from gvcsim.report_gate import check_gate
 from gvcsim.report_saved_run import _STEP_OUTCOMES, _parse_saved_run
 from gvcsim.request_validation import TextRequest
@@ -639,8 +639,26 @@ def update_student_enrollment(account_id: int, req: EnrollmentRequest, user: dic
 
 
 @router.get("/reports")
-def reports(user: dict = Depends(require_teacher)):
-    return {"reports": db.list_reports(user["sub"])}
+def reports(
+    state: Literal["all", "pending", "graded"] = "all",
+    term_id: int | None = Query(None, gt=0),
+    class_id: int | None = Query(None, ge=-1),
+    q: str = Query("", max_length=200),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    user: dict = Depends(require_teacher),
+):
+    try:
+        return db.list_reports(
+            user["sub"], state=state, term_id=term_id, class_id=class_id, q=q, page=page, page_size=page_size
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.get("/reports/summary")
+def reports_summary(user: dict = Depends(require_teacher)):
+    return db.report_summary(user["sub"])
 
 
 @router.get("/reports/{account_id}")

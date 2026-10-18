@@ -26,6 +26,7 @@ from gvcsim.classroom import routes as classroom_routes
 from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, processed_years
 from gvcsim.data import icio_browser
 from gvcsim.data.raw_icio import validate_raw_source_bindings
+from gvcsim.regression import service as regression_service
 
 _LOG = logging.getLogger(__name__)
 
@@ -66,15 +67,19 @@ async def lifespan(_app: FastAPI):
         await anyio.to_thread.run_sync(validate_startup_data)
         yield
     finally:
-        await regression_routes._RESULT_CACHE.aclose()
+        await regression_service.shutdown()
         await classroom_routes._REPORT_FLIGHTS.aclose()
         await concurrency.shutdown()
         auth_routes.clear_rate_limits()
-        regression_routes.clear_rate_limits()
         await anyio.to_thread.run_sync(classroom_db.shutdown)
 
 
 app = FastAPI(title="供应链仿真系统 API", version="0.2.0", lifespan=lifespan)
+
+
+@app.exception_handler(regression_service.RegressionRateLimited)
+async def regression_rate_limited(_request: Request, error: regression_service.RegressionRateLimited):
+    return JSONResponse(status_code=429, content={"detail": str(error)}, headers={"Retry-After": error.retry_after})
 
 
 @app.exception_handler(concurrency.WorkUnavailable)
@@ -221,5 +226,5 @@ async def classroom_db_operation_failed(request: Request, exc: classroom_db.Oper
 
 @app.exception_handler(classroom_db.SchemaVersionMismatch)
 async def classroom_schema_unavailable(request: Request, exc: classroom_db.SchemaVersionMismatch):
-    _LOG.error("教学数据库 schema 未就绪；请先完成兼容迁移（%s）", exc)
+    _LOG.error("教学数据库 schema 未就绪；请停止服务并按当前版本重建教学库（%s）", exc)
     return JSONResponse(status_code=503, content={"detail": SERVICE_UNAVAILABLE_MESSAGE})

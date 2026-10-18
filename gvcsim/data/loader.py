@@ -1,7 +1,9 @@
 """步骤1:OECD ICIO 数据下载与加载(基于 pymrio)。"""
 
 import csv
+import os
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pandas as pd
 import pymrio
@@ -11,9 +13,45 @@ from gvcsim.data.raw_icio import dimension_contract_for, resolve_year_source, va
 
 
 def download(years: list[int]) -> None:
-    """下载指定年份的 OECD ICIO 数据到 RAW_DATA_DIR。"""
+    """按 ICIO2023 年份包下载；只安装经过验证的指定年份，已有数据不改名、不覆盖。"""
+    requested = sorted(set(years))
+    if any(type(year) is not int or not 1995 <= year <= 2020 for year in requested):
+        raise ValueError("ICIO2023 支持 1995–2020 年")
+    if not requested:
+        return
     RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    pymrio.download_oecd(storage_folder=RAW_DATA_DIR, years=years)
+    contract = dimension_contract_for(RAW_DATA_DIR)
+    missing = []
+    for year in requested:
+        if list(RAW_DATA_DIR.glob(f"ICIO*_{year}.csv")):
+            validate_raw_file(resolve_year_source(year, RAW_DATA_DIR), contract)
+        else:
+            missing.append(year)
+    if not missing:
+        return
+    bundles = [(1995, 2000), (2001, 2005), (2006, 2010), (2011, 2015), (2016, 2020)]
+    # pymrio v2023 renames every file in storage_folder after each bundle.
+    # An empty, separate directory per bundle also prevents repeated prefixes.
+    with TemporaryDirectory(prefix=".icio-download-", dir=RAW_DATA_DIR) as staging:
+        sources = []
+        for start, end in bundles:
+            targets = [year for year in missing if start <= year <= end]
+            if not targets:
+                continue
+            directory = Path(staging) / f"{start}-{end}"
+            pymrio.download_oecd(storage_folder=directory, version="v2023", years=[f"{start}-{end}"])
+            for year in targets:
+                source = resolve_year_source(year, directory)
+                validate_raw_file(source, contract)
+                sources.append((year, source))
+        # Validate all requested files before installing any. Hard links publish
+        # complete files atomically on the same filesystem without overwriting.
+        for year, source in sources:
+            destination = RAW_DATA_DIR / f"ICIO2023_{year}.csv"
+            try:
+                os.link(source, destination)
+            except FileExistsError:
+                validate_raw_file(resolve_year_source(year, RAW_DATA_DIR), contract)
 
 
 def _read_reported_output(path: Path, index: pd.MultiIndex) -> pd.Series:

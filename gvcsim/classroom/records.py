@@ -11,6 +11,7 @@ from typing import Any
 import psycopg
 
 from gvcsim.classroom import quiz_config
+from gvcsim.name_keys import name_key
 from gvcsim.steps import STEPS
 
 
@@ -364,21 +365,116 @@ def _teacher_report(row: dict[str, Any]) -> dict[str, Any]:
     return row
 
 
-def list_reports(teacher_username: str) -> list[dict[str, Any]]:
+def _report_counts(c: psycopg.Connection[dict[str, Any]], where: str, params: list[Any]) -> dict[str, int]:
+    row = c.execute(
+        "SELECT count(*) FILTER (WHERE r.state='pending') AS pending,"
+        " count(*) FILTER (WHERE r.state='graded') AS graded"
+        " FROM reports r JOIN accounts a ON a.id=r.account_id WHERE " + where,
+        params,
+    ).fetchone()
+    assert row is not None
+    return {"pending": row["pending"], "graded": row["graded"]}
+
+
+def report_summary(teacher_username: str) -> dict[str, int]:
+    """Sidebar counts without reading report bodies, provenance or sessions."""
     release_id = database.current_release_id()
     with database.conn() as c:
         if not _teacher_exists(c, teacher_username):
-            return []
+            return {"pending": 0, "graded": 0}
+        return _report_counts(c, "r.release_id=%s AND r.state IN ('pending','graded')", [release_id])
+
+
+def list_reports(
+    teacher_username: str,
+    *,
+    state: str = "all",
+    term_id: int | None = None,
+    class_id: int | None = None,
+    q: str = "",
+    page: int = 1,
+    page_size: int = 25,
+) -> dict[str, Any]:
+    """Page summaries; full markdown/provenance/feedback are detail-only.
+
+    Search normalizes account labels with the same Unicode rules as the UI.
+    Only an explicit search scans the small account directory; session data is
+    read for at most one page, never for all submitted reports.
+    """
+    if state not in {"all", "pending", "graded"} or page < 1 or not 1 <= page_size <= 100:
+        raise ValueError("报告分页参数无效")
+    if class_id is not None and (term_id is None or class_id == 0 or class_id < -1):
+        raise ValueError("班级筛选必须指定学期，班级须为正整数或 -1（未分班）")
+    release_id = database.current_release_id()
+    with database.conn() as c:
+        # Counts and rows describe the same snapshot even when another teacher grades.
+        c.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        overall = {"pending": 0, "graded": 0}
+        empty = {"reports": [], "total": 0, "page": 1, "page_size": page_size, "counts": overall, "overall": overall}
+        if not _teacher_exists(c, teacher_username):
+            return empty
+        where = "r.release_id=%s AND r.state IN ('pending','graded')"
+        params: list[Any] = [release_id]
+        overall = _report_counts(c, where, params)
+        if term_id is not None:
+            enrollment = "SELECT 1 FROM class_enrollments ce WHERE ce.account_id=a.id AND ce.term_id=%s"
+            params.append(term_id)
+            if class_id is not None and class_id != -1:
+                enrollment += " AND ce.class_id=%s"
+                params.append(class_id)
+            where += (" AND NOT EXISTS (" if class_id == -1 else " AND EXISTS (") + enrollment + ")"
+        needle = name_key(q).replace(" ", "")
+        if needle:
+            accounts = c.execute(
+                "SELECT id,username,display_name,student_no FROM accounts WHERE role='student'"
+            ).fetchall()
+            matching = [
+                row["id"]
+                for row in accounts
+                if any(
+                    needle in name_key(row[key]).replace(" ", "") for key in ("username", "display_name", "student_no")
+                )
+            ]
+            where += " AND a.id=ANY(%s)"
+            params.append(matching)
+        counts = _report_counts(c, where, params) if term_id is not None or needle else overall
+        total = sum(counts.values()) if state == "all" else counts[state]
+        page = min(page, max(1, (total + page_size - 1) // page_size))
+        if state != "all":
+            where += " AND r.state=%s"
+            params.append(state)
         rows = c.execute(
-            f"SELECT a.id AS account_id,a.username,a.display_name,a.student_no,{_REPORT_COLUMNS},"
-            f"{_REPORT_ENROLLMENTS},s.session AS source_session"
-            " FROM reports r JOIN accounts a ON a.id=r.account_id"
-            " LEFT JOIN experiment_sessions s ON s.account_id=r.account_id AND s.release_id=r.release_id"
-            " WHERE r.release_id=%s AND r.state IN ('pending','graded')"
-            " ORDER BY CASE r.state WHEN 'pending' THEN 0 ELSE 1 END,r.submitted_at DESC,a.username",
-            (release_id,),
+            "SELECT a.id AS account_id,a.username,a.display_name,a.student_no,"
+            "r.state,r.score,r.submitted_at,r.updated_at,"
+            + _REPORT_ENROLLMENTS
+            + " FROM reports r JOIN accounts a ON a.id=r.account_id WHERE "
+            + where
+            + " ORDER BY CASE r.state WHEN 'pending' THEN 0 ELSE 1 END,r.submitted_at DESC,a.username,a.id"
+            " LIMIT %s OFFSET %s",
+            [*params, page_size, (page - 1) * page_size],
         ).fetchall()
-        return [_teacher_report(row) for row in rows]
+        if rows:
+            sources = c.execute(
+                "SELECT r.account_id,r.provenance->>'report_inputs_fingerprint' AS fingerprint,s.session"
+                " FROM reports r LEFT JOIN experiment_sessions s"
+                " ON s.account_id=r.account_id AND s.release_id=r.release_id"
+                " WHERE r.release_id=%s AND r.account_id=ANY(%s)",
+                (release_id, [row["account_id"] for row in rows]),
+            ).fetchall()
+            outdated = {
+                row["account_id"]: row["fingerprint"] != report_fingerprint(row["session"] or {"steps": {}})
+                for row in sources
+            }
+            for row in rows:
+                row["report_outdated"] = outdated[row["account_id"]]
+        return {
+            "reports": rows,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "counts": counts,
+            "overall": overall,
+        }
 
 
 def get_report(account_id: int, teacher_username: str) -> dict[str, Any] | None:

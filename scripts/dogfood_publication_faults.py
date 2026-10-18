@@ -89,14 +89,14 @@ def child(phase, marker):
     elif phase in {"cleanup", "cleanup_denied"}:
         cleanup = publication.cleanup_old_releases
 
-        def cleanup_phase(current, keep):
+        def cleanup_phase(current):
             if phase == "cleanup":
                 checkpoint()
-                return cleanup(current, keep)
+                return cleanup(current)
             store = publication.release_store(current)
             store.chmod(0o300)
             try:
-                return cleanup(current, keep)
+                return cleanup(current)
             finally:
                 store.chmod(0o700)
 
@@ -255,7 +255,8 @@ def main():
                         )
                         assert recovered.returncode == 0, recovered.stderr
                         assert artifacts.validate_release(active)["release_id"] != old_id
-                        assert len(list(store.iterdir())) == 2
+                        assert list(store.iterdir()) == [active.resolve()]
+                        assert not previous.exists()
                     results.append(
                         {
                             "case": phase,

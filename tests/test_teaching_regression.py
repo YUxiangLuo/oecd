@@ -647,15 +647,15 @@ def test_country_exposure_overview_lists_every_sample_country_taxed_or_not():
     assert overview["policy_year"] == min(panel.loc[panel.teaching_tariff_rate_tau.gt(0), "year"])
 
 
-def test_estimate_overview_matches_a_single_run_for_every_baseline():
+def testestimate_overview_matches_a_single_run_for_every_baseline():
     from gvcsim.regression.design import RegressionDesign
     from gvcsim.regression.panel import run_design_with_benchmark
     from gvcsim.regression.teaching import BASELINES, available_baselines
-    from gvcsim.regression_routes import _estimate_overview
+    from gvcsim.regression.service import estimate_overview
 
     source = _full_source(tuple(f"C{i:02}" for i in range(30)))
     panel = build_teaching_panel(source, _exposure(source))
-    overview = _estimate_overview(panel)
+    overview = estimate_overview(panel)
     for outcome, items in overview["outcomes"].items():
         assert [item["key"] for item in items] == [b.key for b in available_baselines(outcome, panel.columns)]
         assert [item["default"] for item in items].count(True) == 1

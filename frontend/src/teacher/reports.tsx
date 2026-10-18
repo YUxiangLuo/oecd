@@ -7,7 +7,7 @@ import { ReportMarkdown } from "../report-renderer-lazy";
 import { showToast } from "../toast";
 import type { AcademicSemester, AuthUser, TeacherReport } from "../types";
 import { userFacingRequestError } from "../user-facing-error";
-import { AcademicFilters, matchesAcademicFilter, enrollmentLabel } from "./academic-filter";
+import { AcademicFilters, enrollmentLabel } from "./academic-filter";
 import { EmptyState, LoadFailure, SearchInput, StatusPill, Toolbar, useModalErrorFocus, useRefetchOnVisible } from "./ui";
 import { LEAVE_MESSAGE, useTeacherReviewGuard } from "./review-guard";
 
@@ -126,15 +126,17 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh, onReturn 
   const [query, setQuery] = useState("");
   const [semesterId, setSemesterId] = useState<number | null>(null);
   const [classId, setClassId] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
+  const request = { state: filter, term_id: semesterId, class_id: classId, q: query, page, page_size: 25 };
   // Counts completed list loads, so focus can wait for the list refreshed after a review.
   const [loads, setLoads] = useState(0);
-  const { data, error, status, retry } = useAsync<{ reports: TeacherReport[] }>(
-    () => api.classroom.reports().then((result) => {
-      setLoads((value) => value + 1);
+  const { data, error, status, retry } = useAsync(
+    (signal) => api.classroom.reports(request, signal).then((result) => {
+      if (!signal.aborted) setLoads((value) => value + 1);
       return result;
     }),
-    [refresh],
-    { keepPreviousData: true },
+    [refresh, filter, semesterId, classId, query, page],
+    { requestKey: JSON.stringify(request), enabled: openAccountId == null },
   );
   const { data: academic, error: academicError, retry: retryAcademic } = useAsync(() => api.classroom.semesters(), [refresh], { keepPreviousData: true });
   const rootRef = useRef<HTMLDivElement>(null);
@@ -143,7 +145,7 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh, onReturn 
   // After a review closes, focus returns to that student's row once the refreshed list has arrived (the row
   // may have left the 待评阅 filter, in which case the list itself gets focus). The pane stays at the top,
   // with the toolbar in view.
-  const returnFocus = useRef<{ accountId: number; afterLoad: number } | null>(null);
+  const returnFocus = useRef<{ accountId: number | null; afterLoad: number } | null>(null);
   useEffect(() => {
     const target = returnFocus.current;
     if (!target || openAccountId != null) return;
@@ -151,7 +153,7 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh, onReturn 
     if (loads <= target.afterLoad) return;
     returnFocus.current = null;
     const list = rootRef.current;
-    const row = list?.querySelector<HTMLElement>(`tr[data-account-id="${target.accountId}"] button`);
+    const row = target.accountId == null ? null : list?.querySelector<HTMLElement>(`tr[data-account-id="${target.accountId}"] button`);
     (row ?? list?.querySelector<HTMLElement>(".table-wrap"))?.focus({ preventScroll: true });
   }, [loads, status, openAccountId]);
   const reload = () => {
@@ -166,14 +168,10 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh, onReturn 
   useRefetchOnVisible(() => setRefresh((value) => value + 1), openAccountId == null);
   const reports = data?.reports ?? [];
   const semesters = academic?.semesters ?? [];
-  // Compared with full-width punctuation folded too (names stored before it was kept as typed have ASCII).
   const needle = searchKey(query);
-  // The term/class filter and the search narrow every tab alike, so the 待评阅 count is taken after them
-  // (as 学生与进度 counts its summary over the rows its filters leave); only the sidebar badge counts them all.
-  const narrowed = reports
-    .filter((report) => matchesAcademicFilter(report.enrollments, semesterId, classId))
-    .filter((report) => !needle || [report.display_name, report.username, report.student_no].some((value) => searchKey(value ?? "").includes(needle)));
-  const shown = narrowed.filter((report) => filter === "all" || report.state === filter);
+  const shown = reports;
+  const currentPage = data?.page ?? page;
+  const pages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.page_size ?? 25)));
   // The open review comes first: a list refresh failing in the background must not unmount an unsaved review.
   if (openAccountId != null) {
     return <div ref={rootRef}><ReportView key={openAccountId} accountId={openAccountId} queue={queue}
@@ -201,11 +199,17 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh, onReturn 
       if (academicError) retryAcademic();
     }} />;
   }
-  const pending = narrowed.filter((report) => report.state === "pending").length;
-  const pendingElsewhere = reports.filter((report) => report.state === "pending").length - pending;
+  const pending = data?.counts.pending ?? 0;
+  const pendingElsewhere = (data?.overall.pending ?? 0) - pending;
   const open = (accountId: number) => {
     setQueue(shown.map((report) => report.account_id));
     setOpenAccountId(accountId);
+  };
+  const changePage = (next: number) => {
+    // The loading state replaces the pager. Restore keyboard focus to the new
+    // table after it arrives so Enter on 下一页 does not leave focus on <body>.
+    returnFocus.current = { accountId: null, afterLoad: loads };
+    setPage(next);
   };
   return (
     <div ref={rootRef}>
@@ -216,7 +220,7 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh, onReturn 
               key={value}
               className={filter === value ? "active" : undefined}
               aria-pressed={filter === value}
-              onClick={() => setFilter(value)}
+              onClick={() => { setFilter(value); setPage(1); }}
             >
               {REPORT_FILTER_LABELS[value]}
               {value === "pending" && pending > 0 && <span className="seg-badge">{pending}</span>}
@@ -227,15 +231,15 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh, onReturn 
           semesters={semesters}
           semesterId={semesterId}
           classId={classId}
-          onSemesterChange={setSemesterId}
-          onClassChange={setClassId}
+          onSemesterChange={(value) => { setSemesterId(value); setPage(1); }}
+          onClassChange={(value) => { setClassId(value); setPage(1); }}
         />
-        <SearchInput value={query} onChange={setQuery} placeholder="搜索姓名、用户名或学号" />
+        <SearchInput value={query} onChange={(value) => { setQuery(value.slice(0, 200)); setPage(1); }} placeholder="搜索姓名、用户名或学号" />
         <div className="toolbar-actions">
           <button type="button" onClick={reload}>刷新列表</button>
         </div>
       </Toolbar>
-      <p className="muted list-refreshing" role="status">{data && status === "loading" ? "正在刷新列表…" : ""}</p>
+      <p className="muted list-refreshing" role="status">{status === "loading" ? "正在载入报告列表…" : ""}</p>
       <ScrollableRegion className="table-wrap" label="报告提交列表，可横向滚动">
         <table className="data-table"><thead><tr><th>姓名</th><th>用户名</th><th>学号</th><th>班级</th><th>提交时间</th><th>状态</th><th>分数</th><th><span className="sr-only">操作</span></th></tr></thead><tbody>
           {shown.map((report) => <tr key={report.account_id} data-account-id={report.account_id}>
@@ -248,8 +252,15 @@ export function ReportsTab({ user, initialReview, onGraded, onRefresh, onReturn 
             <td><ReportRowAction report={report} onOpen={() => open(report.account_id)} /></td>
           </tr>)}
         </tbody></table>
-        {data && shown.length === 0 && <EmptyState icon="📝" {...reportsEmptyState(reports.length, filter, Boolean(needle) || semesterId != null, pendingElsewhere)} />}
+        {data && shown.length === 0 && <EmptyState icon="📝" {...reportsEmptyState((data.overall.pending + data.overall.graded), filter, Boolean(needle) || semesterId != null, pendingElsewhere)} />}
       </ScrollableRegion>
+      {data && <nav className="toolbar report-pagination" aria-label="报告分页">
+        <span className="muted">共 {data.total} 份 · 第 {currentPage} / {pages} 页，每页 {data.page_size} 份</span>
+        <div className="toolbar-actions">
+          <button type="button" disabled={currentPage <= 1 || status === "loading"} onClick={() => changePage(currentPage - 1)}>上一页</button>
+          <button type="button" disabled={currentPage >= pages || status === "loading"} onClick={() => changePage(currentPage + 1)}>下一页</button>
+        </div>
+      </nav>}
     </div>
   );
 }

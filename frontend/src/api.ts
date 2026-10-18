@@ -410,7 +410,9 @@ export const api = {
         `/api/classroom/students/${id}/enrollment`,
         { term_id: termId, class_id: classId },
       ),
-    reports: () => get<{ reports: import("./types").TeacherReport[] }>("/api/classroom/reports"),
+    reportSummary: () => get<import("./types").ReportCounts>("/api/classroom/reports/summary"),
+    reports: (params: import("./types").TeacherReportQuery = {}, signal?: AbortSignal) =>
+      get<import("./types").TeacherReportPage>(withQuery("/api/classroom/reports", { ...params }), signal),
     reportDetail: (accountId: number) =>
       get<import("./types").TeacherReport>(`/api/classroom/reports/${accountId}`),
     grade: (accountId: number, score: number, feedback: string, expectedUpdatedAt: string) =>

@@ -52,6 +52,8 @@
 
 ## 6. 备份、恢复与回滚
 
+本节仅记录 v1.0.0 的历史演练。2026-10-18 已移除备份服务和回滚演练脚本；当前部署重建教学库，只保留当前 release，按 [DEPLOY.md](../DEPLOY.md) 执行。
+
 - 每日备份由 `gvcsim-backup.timer` 执行，产物为 `pg_dump` 自定义格式 + SHA-256；本周在干净主机上验证了备份、校验、目录读取和隔离库恢复（schema `gvcsim-teaching-db-v12`）。交付包 `evidence/rehearsal/` 含校验文件与演练日志，不含转储本身。
 - release 回滚按 DEPLOY.md"数据 release 回滚"执行，本周已演练；上一兼容版本即 `v1.0.0` 之前的最近提交，回滚代码时须同时使用兼容该 artifact contract（v15）的 release。
 

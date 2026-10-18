@@ -7,7 +7,7 @@ import os
 import shutil
 import stat
 import uuid
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -126,9 +126,9 @@ def _current_target(current: Path) -> Path | None:
         raise PublicationError(f"固定产物入口指向无效发布:{current}") from error
 
 
-def publish_release(current: Path, final: Path) -> Path | None:
-    """Atomically switch the pointer and return the previously active release."""
-    old_release = _current_target(current)
+def publish_release(current: Path, final: Path) -> None:
+    """Atomically expose a completed release. Call only while the API is stopped."""
+    _current_target(current)
     _validated_release(current, final)
     relative = os.path.relpath(final, current.parent)
     temporary = current.with_name(f".{current.name}.{uuid.uuid4().hex}.link")
@@ -138,14 +138,13 @@ def publish_release(current: Path, final: Path) -> Path | None:
         _fsync_directory(current.parent)
     finally:
         temporary.unlink(missing_ok=True)
-    return old_release
 
 
-def cleanup_old_releases(current: Path, keep: Iterable[Path]) -> list[str]:
-    """Retain the active and immediately previous releases; remove anything older."""
+def cleanup_old_releases(current: Path) -> list[str]:
+    """Keep only the active release; no historical release or rollback retention."""
     warnings: list[str] = []
     store = release_store(current)
-    retained = {path.resolve() for path in keep}
+    retained = {_current_target(current)}
     changed = False
     try:
         candidates = list(store.iterdir())

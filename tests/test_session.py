@@ -7,7 +7,7 @@ from scipy import stats
 from gvcsim.classroom import routes as classroom_routes
 from gvcsim.config import ROOT
 from gvcsim.regression.design import RegressionDesign
-from gvcsim.regression_routes import _design_info
+from gvcsim.regression.service import design_info
 from gvcsim.regression.teaching import model_snapshot, variable_catalog
 from gvcsim.session import SESSION_VERSION, SessionError, empty_session, make_record, validate_session
 
@@ -60,7 +60,7 @@ def _estimate(name: str, coef: float, se: float = 0.1) -> dict:
 def test_put_session_acknowledges_without_echoing_the_saved_snapshot(monkeypatch):
     outcome = "production"
     run = {
-        "design": _design_info(RegressionDesign(outcome, teaching=True)),
+        "design": design_info(RegressionDesign(outcome, teaching=True)),
         "result": {
             "status": "ok",
             "n_obs": 20,

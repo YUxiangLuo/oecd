@@ -132,9 +132,8 @@ def initialize_schema() -> list[str]:
             if version not in {None, TEACHING_DB_VERSION}:
                 raise SchemaVersionMismatch(
                     f"教学库 schema 版本为 {version}，当前代码需要 {TEACHING_DB_VERSION}；"
-                    "请停止服务并执行经过测试的兼容迁移；"
-                    "不能用 `uv run gvcsim classroom-init --reset` 代替普通升级，"
-                    "只有完成备份后的新学期清场才允许 reset"
+                    "不支持历史数据库迁移；请停止服务，使用空库或执行 "
+                    "`uv run gvcsim classroom-init --reset` 重建教学库（删除全部教学数据）"
                 )
             if version is None:
                 c.execute(schema.SCHEMA_SQL)
@@ -408,6 +407,7 @@ from gvcsim.classroom.records import (  # noqa: E402
     grade_report as grade_report,
     latest_report as latest_report,
     list_reports as list_reports,
+    report_summary as report_summary,
     save_generated_report as save_generated_report,
     save_session as save_session,
     submit_report as submit_report,

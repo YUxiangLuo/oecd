@@ -35,6 +35,7 @@ if (
     os.environ.setdefault("GVCSIM_CI_SYNTHETIC", "1")
 
 from gvcsim.config import RAW_DATA_DIR
+from gvcsim.regression import service as regression_service
 
 REGIONS = ["AAA", "BBB"]
 SECTORS = ["s1", "s2"]
@@ -43,23 +44,22 @@ SECTORS = ["s1", "s2"]
 @pytest.fixture(autouse=True)
 def clear_process_request_limits():
     """Keep process-local production limiters isolated between unit tests."""
-    from gvcsim import auth_routes, regression_routes
+    from gvcsim import auth_routes
 
     auth_routes.clear_rate_limits()
-    regression_routes.clear_rate_limits()
+    regression_service.clear_rate_limits()
     yield
     auth_routes.clear_rate_limits()
-    regression_routes.clear_rate_limits()
+    regression_service.clear_rate_limits()
 
 
 @pytest.fixture(autouse=True)
 def clear_regression_results():
     """Completed runs are cached per release, and tests feed their own panels under one release: start each empty."""
-    from gvcsim import regression_routes
 
-    regression_routes.clear_result_cache()
+    regression_service.clear_result_cache()
     yield
-    regression_routes.clear_result_cache()
+    regression_service.clear_result_cache()
 
 
 @pytest.fixture(params=["hash", "notify"])

@@ -1,3 +1,4 @@
+import { mockReports } from "./report-api-fixture";
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api, ApiError } from "../api";
@@ -67,7 +68,7 @@ describe("stale teacher report recovery", () => {
   test("guards workspace navigation, password changes, logout and unload without losing a cancelled draft", async () => {
     const pendingReport = { ...report, state: "pending" as const };
     const spies = [
-      spyOn(api.classroom, "reports").mockResolvedValue({ reports: [pendingReport] }),
+      mockReports([pendingReport]),
       spyOn(api.classroom, "reportDetail").mockResolvedValue(pendingReport),
       spyOn(api.classroom, "students").mockResolvedValue({ students: [] }),
       spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] }),
@@ -81,7 +82,7 @@ describe("stale teacher report recovery", () => {
       render(<TeacherWorkspace user={{ username: "teacher", name: "老师", role: "teacher" }} meta={null}
         showPasswordChange={false} onRequestPasswordChange={password} onClosePasswordChange={() => {}}
         onPasswordChanged={() => {}} onLogout={logout} />);
-      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /报告评阅 评阅与打分/ }));
       fireEvent.click(await screen.findByRole("button", { name: "评阅报告：学生" }));
       const feedback = await screen.findByRole("textbox", { name: "评语（选填）" });
       fireEvent.change(feedback, { target: { value: "不能丢失的评语" } });
@@ -231,7 +232,7 @@ describe("teacher review flow", () => {
 
   test("outdated records are secondary context in the list and review, not a grading lock", async () => {
     const outdated = { ...pendingReport, report_outdated: true };
-    const reports = spyOn(api.classroom, "reports").mockResolvedValue({ reports: [pendingReport] });
+    const reports = mockReports([pendingReport]);
     const grade = spyOn(api.classroom, "grade").mockResolvedValue({ ...outdated, state: "graded" });
     const spies = [reports, grade,
       spyOn(api.classroom, "reportDetail").mockResolvedValue(outdated),
@@ -240,10 +241,10 @@ describe("teacher review flow", () => {
     ];
     try {
       renderReports();
-      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /报告评阅 评阅与打分/ }));
       await screen.findByRole("button", { name: "评阅报告：学生" });
       expect(screen.queryByText(OUTDATED_REPORT_LABEL)).toBeNull();
-      reports.mockResolvedValue({ reports: [outdated] });
+      reports.setRows([outdated]);
       fireEvent.click(screen.getByRole("button", { name: "刷新列表" }));
       expect((await screen.findByText(OUTDATED_REPORT_LABEL)).title).toBe(OUTDATED_REPORT_NOTE);
       fireEvent.click(screen.getByRole("button", { name: "评阅报告：学生" }));
@@ -253,7 +254,7 @@ describe("teacher review flow", () => {
       fireEvent.click(screen.getByRole("button", { name: "提交评阅" }));
       await screen.findByRole("button", { name: "评阅报告：学生" });
       expect(screen.queryByRole("spinbutton")).toBeNull();
-      reports.mockResolvedValue({ reports: [{ ...pendingReport, report_outdated: false }] });
+      reports.setRows([{ ...pendingReport, report_outdated: false }]);
       fireEvent.click(screen.getByRole("button", { name: "刷新列表" }));
       await waitFor(() => expect(screen.queryAllByText(OUTDATED_REPORT_LABEL).length).toBe(0));
     } finally {
@@ -265,7 +266,7 @@ describe("teacher review flow", () => {
     const newer = { ...pendingReport, markdown: "# newer", updated_at: "2026-08-14T00:00:00Z" };
     const detail = spyOn(api.classroom, "reportDetail").mockResolvedValueOnce(pendingReport).mockResolvedValue(newer);
     const spies = [
-      spyOn(api.classroom, "reports").mockResolvedValue({ reports: [pendingReport] }),
+      mockReports([pendingReport]),
       spyOn(api.classroom, "students").mockResolvedValue({ students: [] }),
       spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] }),
       spyOn(api.classroom, "grade").mockRejectedValue(new ApiError(409, "学生刚重新提交了报告", "409")),
@@ -274,7 +275,7 @@ describe("teacher review flow", () => {
     const confirm = spyOn(window, "confirm").mockReturnValue(false);
     try {
       renderReports();
-      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /报告评阅 评阅与打分/ }));
       fireEvent.click(await screen.findByRole("button", { name: "评阅报告：学生" }));
       fireEvent.change(await screen.findByRole("spinbutton"), { target: { value: "88" } });
       fireEvent.change(screen.getByRole("textbox", { name: "评语（选填）" }), { target: { value: "保留的评语" } });
@@ -299,7 +300,7 @@ describe("teacher review flow", () => {
     const elsewhere = { ...pendingReport, state: "graded" as const, score: 70, feedback: "另一窗口的评语\n第二行", updated_at: "2026-08-14T00:00:00Z" };
     const detail = spyOn(api.classroom, "reportDetail").mockResolvedValueOnce(pendingReport).mockResolvedValue(elsewhere);
     const spies = [
-      spyOn(api.classroom, "reports").mockResolvedValue({ reports: [pendingReport] }),
+      mockReports([pendingReport]),
       spyOn(api.classroom, "students").mockResolvedValue({ students: [] }),
       spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] }),
       spyOn(api.classroom, "grade").mockRejectedValue(new ApiError(409, "你在另一个窗口已把这份报告评为 70 分", "409")),
@@ -307,7 +308,7 @@ describe("teacher review flow", () => {
     ];
     try {
       renderReports();
-      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /报告评阅 评阅与打分/ }));
       fireEvent.click(await screen.findByRole("button", { name: "评阅报告：学生" }));
       fireEvent.change(await screen.findByRole("spinbutton"), { target: { value: "88" } });
       fireEvent.change(screen.getByRole("textbox", { name: "评语（选填）" }), { target: { value: "本页的评语" } });
@@ -331,20 +332,20 @@ describe("teacher review flow", () => {
 
   test("focus goes to the student heading on open, the form via the skip link, and back to the list after saving", async () => {
     const graded = { ...pendingReport, state: "graded" as const, score: 90 };
-    const reports = spyOn(api.classroom, "reports").mockResolvedValue({ reports: [pendingReport] });
+    const reports = mockReports([pendingReport]);
     const spies = [
       reports,
       spyOn(api.classroom, "reportDetail").mockResolvedValue(pendingReport),
       spyOn(api.classroom, "students").mockResolvedValue({ students: [] }),
       spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] }),
       spyOn(api.classroom, "grade").mockImplementation(async () => {
-        reports.mockResolvedValue({ reports: [graded] });
+        reports.setRows([graded]);
         return graded;
       }),
     ];
     try {
       renderReports();
-      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /报告评阅 评阅与打分/ }));
       fireEvent.click(await screen.findByRole("button", { name: "评阅报告：学生" }));
       const heading = await screen.findByRole("heading", { level: 3, name: "学生（student）" });
       await waitFor(() => expect(document.activeElement).toBe(heading));
@@ -370,7 +371,7 @@ describe("teacher review flow", () => {
 
       // Back to 全部: the row is there, open it and return without changes; focus lands on that row's button.
       fireEvent.click(screen.getByRole("button", { name: "全部" }));
-      fireEvent.click(screen.getByRole("button", { name: "查看或修改评分：学生" }));
+      fireEvent.click(await screen.findByRole("button", { name: "查看或修改评分：学生" }));
       fireEvent.click(await screen.findByRole("button", { name: "← 返回列表" }));
       await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
       expect(document.activeElement).toBe(screen.getByRole("button", { name: "查看或修改评分：学生" }));
@@ -380,7 +381,7 @@ describe("teacher review flow", () => {
   });
 
   test("the list refreshes on request and when the window becomes visible again", async () => {
-    const reports = spyOn(api.classroom, "reports").mockResolvedValue({ reports: [] });
+    const reports = mockReports([]);
     const spies = [
       reports,
       spyOn(api.classroom, "students").mockResolvedValue({ students: [] }),
@@ -388,15 +389,15 @@ describe("teacher review flow", () => {
     ];
     try {
       renderReports();
-      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /报告评阅 评阅与打分/ }));
       await screen.findByText("还没有学生提交报告");
-      reports.mockResolvedValue({ reports: [pendingReport] });
+      reports.setRows([pendingReport]);
       fireEvent.click(screen.getByRole("button", { name: "刷新列表" }));
       expect(await screen.findByRole("button", { name: "评阅报告：学生" })).toBeTruthy();
       // The nav badge was refreshed too.
       await waitFor(() => expect(document.querySelector(".nav-badge")?.textContent).toBe("1"));
 
-      reports.mockResolvedValue({ reports: [pendingReport, { ...pendingReport, account_id: 8, display_name: "新同学" }] });
+      reports.setRows([pendingReport, { ...pendingReport, account_id: 8, display_name: "新同学" }]);
       await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
       expect(await screen.findByRole("button", { name: "评阅报告：新同学" })).toBeTruthy();
       await waitFor(() => expect(document.querySelector(".nav-badge")?.textContent).toBe("2"));
@@ -413,22 +414,22 @@ describe("teacher review flow", () => {
     ];
     const autumn = { ...pendingReport, account_id: 8, display_name: "秋季学生", enrollments: [{ term_id: 1, term_name: "2026 秋", class_id: 11, class_name: "一班" }] };
     const spies = [
-      spyOn(api.classroom, "reports").mockResolvedValue({ reports: [pendingReport, autumn] }),
+      mockReports([pendingReport, autumn]),
       spyOn(api.classroom, "students").mockResolvedValue({ students: [] }),
       spyOn(api.classroom, "semesters").mockResolvedValue({ semesters }),
     ];
     try {
       renderReports();
-      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /报告评阅 评阅与打分/ }));
       await screen.findByRole("button", { name: "评阅报告：秋季学生" });
       const pill = () => screen.getByRole("button", { name: /^待评阅/ }).querySelector(".seg-badge")?.textContent ?? null;
       expect(pill()).toBe("2");
       await waitFor(() => expect(document.querySelector(".nav-badge")?.textContent).toBe("2"));
 
       fireEvent.change(await screen.findByLabelText("筛选学期"), { target: { value: "1" } });
-      expect(pill()).toBe("1");
+      await waitFor(() => expect(pill()).toBe("1"));
       fireEvent.change(screen.getByLabelText("筛选学期"), { target: { value: "2" } });
-      expect(pill()).toBeNull();
+      await waitFor(() => expect(pill()).toBeNull());
       expect(screen.getByText("没有匹配的报告")).toBeTruthy();
       expect(screen.getByText("筛选范围外还有 2 份待评阅报告；请调整筛选条件或关键词")).toBeTruthy();
       // The sidebar keeps counting every pending report, and its name says it is not filtered.
@@ -442,7 +443,8 @@ describe("teacher review flow", () => {
   });
 
   test("a failed list load reads as Chinese and can be retried", async () => {
-    const reports = spyOn(api.classroom, "reports").mockRejectedValue(new TypeError("Failed to fetch"));
+    const reports = mockReports();
+    reports.fail(new TypeError("Failed to fetch"));
     const spies = [
       reports,
       spyOn(api.classroom, "students").mockResolvedValue({ students: [] }),
@@ -450,11 +452,11 @@ describe("teacher review flow", () => {
     ];
     try {
       renderReports();
-      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /报告评阅 评阅与打分/ }));
       const alert = await screen.findByRole("alert");
       expect(alert.textContent).toContain("报告列表加载失败：网络连接中断");
       expect(alert.textContent).not.toContain("Failed to fetch");
-      reports.mockResolvedValue({ reports: [] });
+      reports.setRows([]);
       fireEvent.click(screen.getByRole("button", { name: "重试" }));
       expect(await screen.findByText("还没有学生提交报告")).toBeTruthy();
     } finally {
@@ -528,7 +530,7 @@ describe("moving through the list while grading", () => {
     const grade = spyOn(api.classroom, "grade").mockImplementation(async (accountId) => ({ ...queue.find((item) => item.account_id === accountId)!, state: "graded" as const }));
     const spies = [
       grade,
-      spyOn(api.classroom, "reports").mockResolvedValue({ reports: queue }),
+      mockReports(queue),
       spyOn(api.classroom, "reportDetail").mockImplementation(async (accountId) => queue.find((item) => item.account_id === accountId)!),
       spyOn(api.classroom, "students").mockResolvedValue({ students: [] }),
       spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] }),
@@ -536,7 +538,7 @@ describe("moving through the list while grading", () => {
     const confirm = spyOn(window, "confirm").mockReturnValue(false);
     try {
       renderWorkspace();
-      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /报告评阅 评阅与打分/ }));
       fireEvent.click(await screen.findByRole("button", { name: "评阅报告：学生7" }));
       await screen.findByRole("heading", { level: 3, name: "学生7（s7）" });
       expect(screen.getByText("第 1 / 3 份")).toBeTruthy();
@@ -579,7 +581,7 @@ describe("moving through the list while grading", () => {
       last_valid_activity: null, enrollments: [],
     };
     const spies = [
-      spyOn(api.classroom, "reports").mockResolvedValue({ reports: queue }),
+      mockReports(queue),
       spyOn(api.classroom, "reportDetail").mockImplementation(async (accountId) => queue.find((item) => item.account_id === accountId)!),
       spyOn(api.classroom, "students").mockResolvedValue({ students: [student, { ...student, id: 3, username: "s3", display_name: "学生3", report_state: null }] }),
       spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] }),
@@ -598,7 +600,7 @@ describe("moving through the list while grading", () => {
       expect(document.title).toContain("学生与进度");
       await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { level: 2, name: "学生与进度" })));
       // Opened from the sidebar instead, the same report returns to the list.
-      fireEvent.click(screen.getByRole("button", { name: /报告评阅 评阅与打分/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /报告评阅 评阅与打分/ }));
       fireEvent.click(await screen.findByRole("button", { name: "评阅报告：学生8" }));
       fireEvent.click(await screen.findByRole("button", { name: "← 返回列表" }));
       expect(await screen.findByRole("button", { name: "评阅报告：学生8" })).toBeTruthy();
