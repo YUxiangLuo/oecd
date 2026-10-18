@@ -445,6 +445,15 @@ _NATIVE_UNIT_NOTES = {
 }
 
 
+def _chart_model_label(value: Any) -> str:
+    """Match the workbench's chartModelLabel; the table and chart notes keep the full settings."""
+    name = " ".join(str(value).split())
+    if len(name) > 20 and name.startswith("自定义（") and name.endswith("）") and "；" in name:
+        return f"自定义（{name.count('；') + 1} 处改动）"
+    # Keep other labels within the renderer's limit without silently dropping their ending.
+    return name if len(name) <= 120 else name[:119] + "…"
+
+
 def _comparison_chart(table: dict[str, Any], label: str) -> list[str]:
     """Compare the same Y in native units; missing estimates are omitted, never zero placeholders."""
     items: list[dict[str, Any]] = []
@@ -476,7 +485,7 @@ def _comparison_chart(table: dict[str, Any], label: str) -> list[str]:
                 n_text = f"{int(n):,}" if _finite(n) else "未记录"
                 items.append(
                     {
-                        "label": " ".join(str(column["name"]).split())[:120],
+                        "label": _chart_model_label(column["name"]),
                         "sub": _x_span(spec),
                         "value": value,
                         "text": with_count_unit(_signed(value, estimate_digits(kind, value, bounds)), kind),
@@ -497,7 +506,8 @@ def _comparison_chart(table: dict[str, Any], label: str) -> list[str]:
                 "title": f"步骤 {table['step']} · 模型 X 效应及 95% 区间（Y：{label}）",
                 "x_label": f"X 每高 1 个百分点，所选 X 项效应（{UNIT_NAMES.get(kind, '原始单位')}）",
                 "note": f"同一 Y 使用原始单位（{_NATIVE_UNIT_NOTES.get(kind, '原始单位')}），不按各模型标准差归一化；"
-                "单项用该项系数，多项用累计系数；X 项范围见各条标签，样本数和年份见图下说明。不同跨度不是同一个估计量。",
+                "单项用该项系数，多项用累计系数；X 项范围见各条标签，完整模型名、样本数和年份见图下说明。"
+                "不同跨度不是同一个估计量。",
                 "items": items[start : start + 8],
             }
         )

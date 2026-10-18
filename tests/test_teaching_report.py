@@ -3290,6 +3290,44 @@ def test_report_marks_a_default_step_10_example_and_names_accounts_rows(tmp_path
     )
 
 
+def test_custom_report_chart_shortens_long_settings_without_losing_the_full_model_name():
+    from gvcsim.regression import workbench
+    from gvcsim.regression.spec import CONTROLS, DEFAULT_SPEC, ModelSpec, X_LAG_COLUMNS
+    from gvcsim.report_workbench import _comparison_chart, _name
+
+    # The browser reproduction: only L2.X, all eight controls lagged by one year, default fixed effects.
+    spec = ModelSpec((2,), tuple((key, 1) for key in CONTROLS), DEFAULT_SPEC.fixed_effects)
+    name = workbench.experiment_label(spec)
+    assert len(name) > 120 and name.endswith("贸易开放度改为 L1.贸易开放度）")
+    coefficient = {"coef": 0.003, "ci_low": -0.002, "ci_high": 0.008}
+    table = {
+        "step": 14,
+        "outcome": "network",
+        "columns": [
+            {
+                "name": name,
+                "spec": spec,
+                "run": {
+                    "design": {"outcome": "network", "depvar_kind": "network"},
+                    "result": {
+                        "coefs": [{"name": X_LAG_COLUMNS[2], **coefficient}],
+                        "n_obs": 120,
+                        "sample_flow": {"years": [2016, 2022]},
+                    },
+                },
+            }
+        ],
+    }
+    markdown = "\n".join(_comparison_chart(table, "加权度"))
+    (chart,) = [json.loads(block) for block in re.findall(r"```gvcsim-chart\n(.*?)\n```", markdown, re.S)]
+    (item,) = chart["items"]
+    assert item["label"] == "自定义（11 处改动）"
+    assert item["sub"] == "仅 L2.X"
+    assert [item[key] for key in ("value", "ci_low", "ci_high")] == pytest.approx([0.00003, -0.00002, 0.00008])
+    assert f"- {_name(name)}：仅 L2.X；N = 120；年份 2016–2022。" in markdown
+    assert "完整模型名" in chart["note"]
+
+
 @pytest.mark.parametrize("kind,scale", [("share", 1.0), ("length", 0.01), ("position", 0.01), ("network", 0.01)])
 def test_custom_report_chart_compares_native_effects_and_omits_invalid_models(kind, scale):
     from gvcsim.regression import workbench

@@ -900,6 +900,7 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
   .step-header-bar,
   .stepfooter,
   .announce-banner,
+  .student-first-step,
   .persistent-qc-warning,
   .skip-to-step-content,
   .step-task-card,

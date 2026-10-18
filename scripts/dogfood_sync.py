@@ -194,26 +194,16 @@ def main():
                 assert browser.value() == newer
                 assert database_value() == first
                 request(proxy, "POST", "/__fault/release", {})
-                if action == "drop":
-                    browser.run("wait", "--text", "重试保存")
-                    assert browser.value() == newer
-                    browser.button("重试保存")
-                    browser.run("wait", "--text", "载入服务器版本")
-                    assert browser.value() == newer and database_value() == first
-                    browser.run("screenshot", str(output / f"{action}-{attempt}-conflict.png"))
-                    browser.button("载入服务器版本")
-                    browser.run("wait", "--fn", f'document.querySelector("textarea").value === {json.dumps(first)}')
-                    # The explicit reload deliberately picks the server version; no silent overwrite.
-                    assert database_value() == first
-                else:
-                    browser.run("wait", "--fn", '!document.body.innerText.includes("正在保存")')
-                    deadline = time.monotonic() + 15
-                    while database_value() != newer and time.monotonic() < deadline:
-                        time.sleep(0.02)
-                    assert database_value() == newer and browser.value() == newer
-                    browser.run("reload")
-                    browser.run("wait", "--fn", f'document.querySelector("textarea")?.value === {json.dumps(newer)}')
-                    browser.run("screenshot", str(output / f"{action}-{attempt}-saved.png"))
+                # A lost response replays this tab's own request idempotently, then drains its newer draft.
+                # It is not an external-writer conflict and needs no manual retry or destructive reload.
+                deadline = time.monotonic() + 15
+                while database_value() != newer and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                assert database_value() == newer and browser.value() == newer
+                browser.run("wait", "--fn", '!document.body.innerText.includes("正在保存")')
+                browser.run("reload")
+                browser.run("wait", "--fn", f'document.querySelector("textarea")?.value === {json.dumps(newer)}')
+                browser.run("screenshot", str(output / f"{action}-{attempt}-saved.png"))
                 results.append(
                     {"case": "SYNC-01" if action == "drop" else "SYNC-02", "attempt": attempt, "passed": True}
                 )
