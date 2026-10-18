@@ -130,9 +130,7 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
             assert float(bar_sd) == pytest.approx(float(sd), abs=0.51 * 10 ** -len(sd.split(".")[1]))
             assert (
                 bar["sub"]
-                == {"length": "长度单位", "position": "比值，无单位", "network": "模拟分数单位"}[
-                    design["depvar_kind"]
-                ]
+                == {"length": "长度单位", "position": "比值，无单位", "network": "模拟分数单位"}[design["depvar_kind"]]
             )
             if outcome == "network":
                 # The table states the same SD size, unsigned after 幅度约 ("幅度约 0.047 个标准差").
