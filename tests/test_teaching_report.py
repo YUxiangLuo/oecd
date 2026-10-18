@@ -27,7 +27,7 @@ from gvcsim.regression import teaching
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 from gvcsim.regression.teaching import X_COLUMN, model_snapshot, variable_catalog
 from gvcsim.report_common import _number
-from gvcsim.report_render import _experiment_sections, _fixed4, _qc_release_summary
+from gvcsim.report_render import _experiment_sections, _fixed4, _lag_timing_lines, _qc_release_summary
 
 from gvcsim.session import empty_session, make_record
 from gvcsim.teaching_report import (
@@ -53,6 +53,23 @@ def rendering_server_results(monkeypatch):
     monkeypatch.setattr(
         report_build, "server_runs", lambda session, _panel, _release: report_saved_run._saved_runs(session)
     )
+
+
+def test_sustained_exposure_reading_distinguishes_terms_from_years():
+    design = {"depvar_kind": "share", "spec": {"x_lags": [0, 1]}}
+    result = {
+        "coefs": [
+            {"name": "teaching_tariff_exposure", "coef": -0.33},
+            {"name": "teaching_tariff_exposure_lag1", "coef": -0.22},
+        ],
+        "cumulative": {"coef": -0.55, "ci_low": -0.57, "ci_high": -0.53},
+    }
+    lines = _lag_timing_lines("trade", design, result)
+    assert "| 第一年 | 当期 X 项 | -0.33 个百分点 |" in lines
+    assert "| 第二年及以后 | 当期 X 项＋上一年 X 项 | -0.55 个百分点 |" in lines
+    assert "上一年 X 项（L1.X）：-0.22 个百分点" in lines[0]
+    assert _lag_timing_lines("trade", {"spec": {"x_lags": [0, 2]}}, result) == []
+    assert _lag_timing_lines("trade", design, {"coefs": result["coefs"][:1]}) == []
 
 
 @pytest.mark.parametrize(
@@ -132,7 +149,7 @@ def test_report_tiny_nonzero_numbers_and_standardized_effect_preserve_sign():
         {"name": "tariff_shock", "coef": -690.746, "ci_low": -15099, "ci_high": 13718},
     )
     # The standard-deviation size is unsigned (the leading estimate carries the sign) but never rounds to 0.
-    assert effect.startswith("-6.91 个中心性原始单位") and "幅度约 0.003 个标准差" in effect
+    assert effect.startswith("-6.91 个模拟分数单位") and "幅度约 0.003 个标准差" in effect
 
 
 def test_report_network_interval_in_standard_deviations_never_shows_equal_ends():
@@ -762,7 +779,7 @@ def test_report_statements_are_associations_with_their_number():
     assert evidence == "方向明确：X 越高，Y 越低"
     assert (
         copy
-        == "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动、GDP 对数和贸易开放度后，关税暴露 X 越高，复杂 GVC 生产份额两年累计平均越低（X 每高 1 个百分点，两年累计约低 0.40 个百分点）。"
+        == "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动、GDP 对数和贸易开放度后，若关税暴露 X 持续高 1 个百分点，从第二年起，复杂 GVC 生产份额平均低 0.40 个百分点（当期＋滞后合计的条件关联）。"
     )
     assert "模拟" not in copy and "真实" not in copy and "下降" not in copy
     assert re.search(r"与.*(?:扩张|收缩)一致", copy) is None
@@ -772,12 +789,12 @@ def test_report_statements_are_associations_with_their_number():
     )
     assert (
         length
-        == "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动、GDP 对数和贸易开放度后，关税暴露 X 越高，前向 GVC 段长度两年累计平均越短（X 每高 1 个百分点，两年累计约短 0.0182 个长度单位）。"
+        == "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动、GDP 对数和贸易开放度后，若关税暴露 X 持续高 1 个百分点，从第二年起，前向 GVC 段长度平均短 0.0182 个长度单位（当期＋滞后合计的条件关联）。"
     )
     _evidence, network = teaching_report._evidence_reading(
         "network", {"coef": 3969.9979, "ci_low": 3000.0, "ci_high": 4900.0}, False, {}
     )
-    assert network.endswith("加权总度两年累计平均越高（X 每高 1 个百分点，两年累计约高 39.70 个中心性原始单位）。")
+    assert network.endswith("加权总度平均高 39.70 个模拟分数单位（当期＋滞后合计的条件关联）。")
     assert teaching_report._evidence_reading("trade", {"coef": -0.1, "ci_low": -0.3, "ci_high": 0.1}, False, {})[0] == (
         "方向不确定"
     )
@@ -1531,11 +1548,11 @@ def test_report_prints_automatically_saved_teaching_row(tmp_path, monkeypatch):
         "步骤 14 · 网络",
     ]
     for step, chart in zip(range(11, 15), regression[1:]):
-        assert chart["title"] == f"步骤 {step} · 你保存的 Y：X 每高 1 个百分点，Y 两年累计平均相差多少"
+        assert chart["title"] == f"步骤 {step} · 你保存的 Y：当期＋滞后合计（X 每高 1 个百分点）"
         (item,) = chart["items"]
         assert item["saved"] is True
         assert item["ci_low"] <= item["value"] <= item["ci_high"]
-        assert chart["x_label"].endswith("（个百分点）" if step < 13 else "（个标准差）")
+        assert chart["x_label"].endswith("Y 单位：个百分点）" if step < 13 else "Y 单位：个标准差）")
 
 
 def test_report_renders_authoritative_result_fixture_without_calling_estimator(tmp_path, monkeypatch):
@@ -1576,7 +1593,7 @@ def test_report_renders_authoritative_result_fixture_without_calling_estimator(t
     assert "## 技术附录：保存的回归结果" in report.markdown
     # The raw coefficient states its scale, next to the per-percentage-point reading used in the body.
     assert (
-        "| 变量 | X 每高 1 个百分点，Y 两年累计平均相差 | 系数（X 按份额计） | 95% 区间（按系数计） | 标准误（按国家聚类） | t 值 | p 值 |"
+        "| 变量 | X 每高 1 个百分点的关联（该行项／合计） | 系数（X 按份额计） | 95% 区间（按系数计） | 标准误（按国家聚类） | t 值 | p 值 |"
         in report.markdown
     )
     # Four decimals for every number but p, as the page's 详细数字 table prints them.
@@ -1603,11 +1620,11 @@ def test_report_renders_authoritative_result_fixture_without_calling_estimator(t
     assert f"剩下 {disclosure['published_entities']} 个用于四项回归" in report.markdown
     assert "预设" not in report.markdown
     assert (
-        "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动、GDP 对数和贸易开放度后，关税暴露 X 越高，外国增加值项占比两年累计平均越高（X 每高 1 个百分点，两年累计约高 1.20 个百分点）。"
+        "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动、GDP 对数和贸易开放度后，若关税暴露 X 持续高 1 个百分点，从第二年起，外国增加值项占比平均高 1.20 个百分点（当期＋滞后合计的条件关联）。"
         in report.markdown
     )
     assert (
-        "- **可以支持的表述**：扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动、GDP 对数和贸易开放度后，关税暴露 X 越高"
+        "- **可以支持的表述**：扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动、GDP 对数和贸易开放度后，若关税暴露 X 持续高 1 个百分点，从第二年起"
         in report.markdown
     )
     # The method notes state the tariff's scope, the parallel-trends premise and the SD basis.
@@ -1618,7 +1635,7 @@ def test_report_renders_authoritative_result_fixture_without_calling_estimator(t
     assert "前提是没有关税时两组的 Y 会平行变化" in report.markdown
     assert "扣掉各国家×行业平均水平和每年共同变化后 Y 的标准差" in report.markdown
     assert (
-        "- **按步骤 10 的例子换算**：CHN 中国 · s1 的 X 为 2.00 个百分点，按估计两年累计与 X 相关的差异约为 +2.40 个百分点（Y 偏高）。"
+        "- **按步骤 10 的例子换算**：CHN 中国 · s1 的 X 为 2.00 个百分点，若 X 持续保持该数值，第二年起与 X 相关的差异约为 +2.40 个百分点（Y 偏高）。"
         in report.markdown
     )
     assert "本实验没有生成冲击后的投入产出表或网络" not in report.markdown
@@ -1636,7 +1653,7 @@ def test_report_renders_authoritative_result_fixture_without_calling_estimator(t
     # Step 14's unit is explained next to its number, not only in the appendix.
     body = report.markdown.split("## 关键证据摘要", 1)[1].split("## 技术附录", 1)[0]
     step_14 = body.split("### 步骤 14", 1)[1]
-    assert "- **单位**：中心性原始单位。这一步的 Y 是课程生成的分数（高低顺序参照真实网络指标）" in step_14
+    assert "- **单位**：模拟分数单位。这一步的 Y 是课程生成的分数（高低顺序参照真实网络指标）" in step_14
     assert "不是步骤 5、9 里以百万美元计的加权总度" in step_14
     # The appendix note on coefficient units, in plain steps.
     assert "两次换算抵消" not in report.markdown
@@ -2075,8 +2092,8 @@ def test_report_translates_settings_controls_and_rounds_display_values(tmp_path,
     assert "关税暴露 X" in markdown
     assert "总增加值规模(log, ICIO GVA proxy)" not in markdown
     assert "0.0013729825631389496" not in markdown
-    assert "并控制同期的汇率变动、GDP 对数和贸易开放度后" in markdown
-    assert "Y 当年与次年合计平均相差多少（双向固定效应，TWFE）" in markdown
+    assert "并控制同期的汇率变动、GDP 对数和贸易开放度（双向固定效应，TWFE）" in markdown
+    assert "若 X 持续高 1 个百分点，第一年只计当期项，第二年起计当期＋滞后合计" in markdown
     assert "twfe_intensity ×" not in markdown
     assert "icio_derived" not in markdown
 
@@ -2420,7 +2437,7 @@ def test_report_draws_every_y_of_each_family_with_the_saved_one_marked(tmp_path,
     ]
     assert not {"binscatter", "coefficient"} & {chart["type"] for chart in charts}
     trade = next(chart for chart in charts if chart["title"].startswith("步骤 11"))
-    assert trade["title"] == "步骤 11 · 贸易流的 2 个 Y：X 每高 1 个百分点，Y 两年累计平均相差多少"
+    assert trade["title"] == "步骤 11 · 贸易流的 2 个 Y：当期＋滞后合计（X 每高 1 个百分点）"
     assert trade["items"] == [
         {
             "label": "外国增加值项占比",
@@ -2433,12 +2450,12 @@ def test_report_draws_every_y_of_each_family_with_the_saved_one_marked(tmp_path,
         {"label": "国内增加值出口占比", "value": 0.55, "text": "+0.55", "ci_low": 0.495, "ci_high": 0.605},
     ]
     step_11 = markdown.split("### 步骤 11 · 贸易流回归", 1)[1].split("### ", 1)[0]
-    assert "| 关税暴露 X 每高 1 个百分点，Y 两年累计平均相差 | **-0.55 个百分点** |" in step_11
+    assert "| 关税暴露 当期＋滞后合计（X 每高 1 个百分点） | **-0.55 个百分点** |" in step_11
     assert "- 图中标“已保存”的是你保存的 Y，下表是它的详细数字" in step_11
     # Steps 13 and 14 mix units, so their bars are in standard deviations with the native value first.
     network = next(chart for chart in charts if chart["title"].startswith("步骤 14"))
     assert len(network["items"]) == len(teaching.BASELINES["network"])
-    assert network["x_label"] == "X 每高 1 个百分点，Y 两年累计平均相差（个标准差）"
+    assert network["x_label"] == "当期＋滞后合计（X 每高 1 个百分点；Y 单位：个标准差）"
     assert network["items"][1]["text"] == "-20.00（-0.040 个标准差）"
     assert "介数" in [item["label"] for item in network["items"]]
     assert "未缓存的重新计算，不采用浏览器保存的数字" in markdown
@@ -2570,7 +2587,7 @@ def test_report_example_conversion_reads_like_the_page():
     coefficient = {"coef": -0.55}
     line = _example_conversion("trade", {}, coefficient, True, example)
     assert line is not None and line.endswith(
-        "的 X 为 23.25 个百分点，按估计两年累计与 X 相关的差异约为 -12.79 个百分点（Y 偏低）。"
+        "的 X 为 23.25 个百分点，若 X 持续保持该数值，第二年起与 X 相关的差异约为 -12.79 个百分点（Y 偏低）。"
     )
     length = _example_conversion("length", {"depvar_kind": "length"}, {"coef": -1.8}, True, example)
     assert length is not None and length.endswith("约为 -0.419 个长度单位（Y 偏短）。")
@@ -2596,7 +2613,7 @@ def test_report_example_conversion_multiplies_the_printed_numbers():
     coefficient = {"coef": -0.5517, "ci_low": -0.61, "ci_high": -0.49}
     line = _example_conversion("trade", {}, coefficient, True, example)
     assert line is not None and line.endswith(
-        "的 X 为 20.44 个百分点，按估计两年累计与 X 相关的差异约为 -11.24 个百分点（Y 偏低）。"
+        "的 X 为 20.44 个百分点，若 X 持续保持该数值，第二年起与 X 相关的差异约为 -11.24 个百分点（Y 偏低）。"
     )
 
 
@@ -2620,7 +2637,8 @@ def test_report_example_x_uses_step_ten_digits():
     }
     line = _example_conversion("network", {"depvar_kind": "network"}, {"coef": 4080}, True, example)
     assert (
-        line is not None and "的 X 为 0.22 个百分点，按估计两年累计与 X 相关的差异约为 +8.98 个中心性原始单位" in line
+        line is not None
+        and "的 X 为 0.22 个百分点，若 X 持续保持该数值，第二年起与 X 相关的差异约为 +8.98 个模拟分数单位" in line
     )
     # Without w (an older record), two decimals as before.
     del example["teaching_export_share_w"]
@@ -2650,8 +2668,8 @@ def test_report_network_standardized_size_uses_three_decimals_below_point_one():
 def test_report_example_conversion_below_network_precision_says_so():
     from gvcsim.report_render import _example_size
 
-    assert _example_size("network", -0.49 * 0.0000039) == "不到 0.00001 个中心性原始单位"
-    assert _example_size("network", -4000 * 0.0932) == "373 个中心性原始单位"
+    assert _example_size("network", -0.49 * 0.0000039) == "不到 0.00001 个模拟分数单位"
+    assert _example_size("network", -4000 * 0.0932) == "373 个模拟分数单位"
 
 
 def _network_reading(coef: float, low: float, high: float, std: float) -> tuple[str, str]:
@@ -2669,13 +2687,13 @@ def test_report_network_interval_ends_share_the_estimate_digits():
     from gvcsim.report_common import network_interval_digits
 
     effect, interval = _network_reading(-0.4884, -0.5045, -0.4722, 0.11)
-    assert effect.startswith("-0.0049 个中心性原始单位（幅度约 ")
-    assert interval.startswith("[-0.0050, -0.0047] 个中心性原始单位（约 [")
+    assert effect.startswith("-0.0049 个模拟分数单位（幅度约 ")
+    assert interval.startswith("[-0.0050, -0.0047] 个模拟分数单位（约 [")
     # The other network Ys keep their two decimals.
     effect, interval = _network_reading(-4080, -4180, -3980, 850)
-    assert effect.startswith("-40.80 个中心性原始单位") and interval.startswith("[-41.80, -39.80] 个中心性原始单位")
+    assert effect.startswith("-40.80 个模拟分数单位") and interval.startswith("[-41.80, -39.80] 个模拟分数单位")
     effect, interval = _network_reading(-5933, -6400, -5466, 1300)
-    assert effect.startswith("-59.33 个中心性原始单位") and interval.startswith("[-64.00, -54.66] 个中心性原始单位")
+    assert effect.startswith("-59.33 个模拟分数单位") and interval.startswith("[-64.00, -54.66] 个模拟分数单位")
     # Same rule as the page's networkIntervalDigits.
     assert network_interval_digits(-0.004884, (-0.005045, -0.004722)) == 4
     assert network_interval_digits(-0.004884, (-0.004891, -0.004877)) == 5
@@ -2686,7 +2704,7 @@ def test_report_network_interval_ends_share_the_estimate_digits():
     reading = _effect_size(
         "network", {"depvar_kind": "network"}, {"coef": -0.4884, "ci_low": -0.5045, "ci_high": -0.4722}
     )
-    assert reading == "0.0049 个中心性原始单位"
+    assert reading == "0.0049 个模拟分数单位"
 
 
 def test_report_generation_time_is_written_like_the_page(tmp_path, monkeypatch):
@@ -2824,7 +2842,7 @@ def test_report_scenario_line_and_two_example_conversion_read_like_step_ten():
     untaxed = {"country": "CRI", "industry": "C29", X_COLUMN: 0.0, "teaching_tariff_rate_tau": 0.0}
     line = _example_conversion("trade", {}, {"coef": -0.55}, True, [taxed, untaxed])
     assert line == (
-        f"- **按步骤 10 的例子换算**：{country_label('CAN')} · {_sector('C29')} 的 X 为 23.25 个百分点，按估计两年累计与 X 相关的"
+        f"- **按步骤 10 的例子换算**：{country_label('CAN')} · {_sector('C29')} 的 X 为 23.25 个百分点，若 X 持续保持该数值，第二年起与 X 相关的"
         f"差异约为 -12.79 个百分点（Y 偏低）；{country_label('CRI')} · {_sector('C29')} 未被加税，X = 0，按估计没有与 X 相关的差异。"
     )
     # An open direction is said once, after the converted example, not after the untaxed one.
@@ -2886,7 +2904,7 @@ def test_report_appendix_groups_thousands_like_the_page_detail_table():
     lines = _technical_estimate_tables({"depvar_kind": "network"}, result, suppressed=False, outcome="network")
     row = next(line for line in lines if line.startswith("| 关税暴露 X |"))
     assert row == (
-        "| 关税暴露 X | -40.80 个中心性原始单位 | -4,080.3723 | [-4,158.5420, -4,002.2026] | 39.8800 | -102.32 | <0.0001 |"
+        "| 关税暴露 X | -40.80 个模拟分数单位 | -4,080.3723 | [-4,158.5420, -4,002.2026] | 39.8800 | -102.32 | <0.0001 |"
     )
 
 
@@ -2940,8 +2958,8 @@ def test_summary_table_gives_a_share_its_size_in_standard_deviations(monkeypatch
 def test_report_example_conversion_groups_thousands_like_the_page():
     from gvcsim.report_render import _example_size
 
-    assert _example_size("network", -1382.4) == "1,382 个中心性原始单位"
-    assert _example_size("network", 12.345) == "12.3 个中心性原始单位"
+    assert _example_size("network", -1382.4) == "1,382 个模拟分数单位"
+    assert _example_size("network", 12.345) == "12.3 个模拟分数单位"
 
 
 def _experiment(spec, snapshot=None) -> dict:
@@ -3032,11 +3050,11 @@ def test_report_appendix_recomputes_the_experiment_each_step_put_into_the_report
     per_point = next(line for line in step11.splitlines() if line.startswith("| 合计：X 每高 1 个百分点 |"))
     assert step11.index("| X 各项合计 |") < step11.index(per_point)
     cells = per_point.strip(" |").split(" | ")[1:]
-    assert len(cells) == 2 and all(cell.endswith(" 个百分点（两年累计）") for cell in cells)
+    assert len(cells) == 2 and all(cell.endswith(" 个百分点（当期＋滞后合计）") for cell in cells)
     default_run = regression_service.cached_run(panel, RegressionDesign("trade", teaching=True, spec=DEFAULT_SPEC))
     # The first column's decimals, one more when the two sums would read alike (the page's sharedPerPointDigits).
     total = default_run["result"]["cumulative"]["coef"]
-    assert cells[0] in {f"{total:+.2f} 个百分点（两年累计）", f"{total:+.3f} 个百分点（两年累计）"}
+    assert cells[0] in {f"{total:+.2f} 个百分点（当期＋滞后合计）", f"{total:+.3f} 个百分点（当期＋滞后合计）"}
     assert cells[0] != cells[1]
     (chart,) = [json.loads(block) for block in re.findall(r"```gvcsim-chart\n(.*?)\n```", step11, re.S)]
     assert [item["label"] for item in chart["items"]] == ["默认模型", custom_name]
@@ -3092,7 +3110,7 @@ def test_report_appendix_reads_each_x_sum_per_percentage_point():
         {"name": "算不出", "spec": ModelSpec((0, 1), (), ()), "run": "关税暴露 X 在这个设定下无法估计"},
     ]
     assert _per_point_rows(columns) == [
-        "| 合计：X 每高 1 个百分点 | -0.0182 个长度单位（两年累计） | -0.0120 个长度单位（仅当期 X） |  |"
+        "| 合计：X 每高 1 个百分点 | -0.0182 个长度单位（当期＋滞后合计） | -0.0120 个长度单位（仅当期 X） |  |"
     ]
     assert _per_point_rows([columns[2]]) == []
     # The X-terms sum row: the one-term model shows its term, as the page does, not an empty cell.
@@ -3107,7 +3125,7 @@ def test_report_appendix_reads_each_x_sum_per_percentage_point():
 
 def test_report_appendix_never_calls_one_coefficient_a_sum():
     """L1.X dropped from a two-term model: the estimate has no sum, so the cell stays empty rather than printing the
-    remaining X term as 两年累计."""
+    remaining X term as 当期＋滞后合计."""
     from gvcsim.regression.spec import DEFAULT_SPEC, X_LAG_COLUMNS
     from gvcsim.report_workbench import _per_point_rows
 
@@ -3127,7 +3145,7 @@ def test_report_appendix_never_calls_one_coefficient_a_sum():
             "run": {"design": design, "result": {"coefs": [x], "cumulative": None}},
         },
     ]
-    assert _per_point_rows(columns) == ["| 合计：X 每高 1 个百分点 | -0.0182 个长度单位（两年累计） |  |"]
+    assert _per_point_rows(columns) == ["| 合计：X 每高 1 个百分点 | -0.0182 个长度单位（当期＋滞后合计） |  |"]
 
 
 def test_gate_marks_the_steps_where_only_the_quiz_is_missing(monkeypatch):
@@ -3179,8 +3197,8 @@ def test_x_sum_labels_name_their_terms_when_not_a_run_of_years():
         _x_span(ModelSpec(lags, (), effects)) for lags in ((0,), (0, 1), (0, 1, 2), (1,), (2,), (0, 2), (1, 2))
     ] == [
         "仅当期 X",
-        "两年累计",
-        "三年累计",
+        "当期＋滞后合计",
+        "当期至滞后二期合计",
         "仅 L1.X",
         "仅 L2.X",
         "X + L2.X 之和",
@@ -3320,16 +3338,16 @@ def test_custom_report_chart_compares_native_effects_and_omits_invalid_models(ki
     first, single, noncontiguous = chart["items"]
     assert [first[key] for key in ("value", "ci_low", "ci_high")] == pytest.approx([-2 * scale, -3 * scale, -scale])
     assert single["value"] == 0 and single["ci_low"] == -scale and single["ci_high"] == scale
-    assert first["sub"] == "两年累计"
+    assert first["sub"] == "当期＋滞后合计"
     assert single["sub"] == "仅 L1.X"
     assert noncontiguous["sub"] == "X + L2.X 之和"
-    assert "两年累计；N = 120；年份 2016–2022" in markdown
+    assert "当期＋滞后合计；N = 120；年份 2016–2022" in markdown
     assert "仅 L1.X；N = 100" in markdown
     assert "标准差" not in chart["x_label"]
     assert "百分点" in chart["x_label"] if kind == "share" else "原始单位" in chart["note"]
     # The note names the Y's own unit: only a share is converted to points (step 13's index is a bare ratio).
     native = {"share": "份额转换为百分点", "length": "长度单位", "position": "位置指数是比值，无单位"}
-    assert chart["note"].startswith(f"同一 Y 使用原始单位（{native.get(kind, '中心性原始单位')}），")
+    assert chart["note"].startswith(f"同一 Y 使用原始单位（{native.get(kind, '模拟分数单位')}），")
     if kind == "position":
         assert chart["x_label"].endswith("（比值，无单位）")
     assert markdown.count("不绘制对应模型") == 5

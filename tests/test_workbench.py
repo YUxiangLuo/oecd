@@ -555,7 +555,7 @@ def test_report_design_value_row_compares_only_models_covering_the_two_year_tota
     assert re.fullmatch(
         r"-0\.55 个百分点；(幅度比设定值[大小] \d+%|与设定值几乎相同|方向与设定值相反)", cells[0].strip(" |")
     )
-    assert cells[1] == "-0.55 个百分点（两年累计）；本列跨度不同，不计偏差"
+    assert cells[1] == "-0.55 个百分点（当期＋滞后合计）；本列跨度不同，不计偏差"
     assert re.fullmatch(
         r"-0\.55 个百分点；(幅度比设定值[大小] \d+%|与设定值几乎相同|方向与设定值相反)", cells[2].strip(" |")
     )

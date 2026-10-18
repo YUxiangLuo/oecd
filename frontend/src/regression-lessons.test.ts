@@ -36,7 +36,7 @@ describe("regression lessons", () => {
 
   test("research question stays on the fixed teaching X", () => {
     const network = lessonQuestion("network");
-    expect(network).toContain("关税暴露（X）每高 1 个百分点");
+    expect(network).toContain("关税暴露（X）持续高 1 个百分点时，从第二年起");
     expect(network).not.toContain("模拟");
     expect(lessonQuestion("trade")).not.toMatch(/cohort|处理组|对照组/);
   });

@@ -331,7 +331,7 @@ export function wrapLabel(text: string, size: number, max: number): string[] {
 const isUncertain = (item: CoefficientItem) => item.ci_low == null || item.ci_high == null || (item.ci_low <= 0 && item.ci_high >= 0);
 const divergingFill = (item: CoefficientItem) => (isUncertain(item) ? UNCERTAIN : item.value >= 0 ? POSITIVE : NEGATIVE);
 const endLabel = (item: DivergingItem) => (isUncertain(item) ? `${item.text} · 方向不确定` : item.text);
-/** A bar's end label on one, two or three lines (layout 0–2): "-40.11 个中心性原始单位" / "（-0.047 个标准差）" /
+/** A bar's end label on one, two or three lines (layout 0–2): "-40.11 个模拟分数单位" / "（-0.047 个标准差）" /
  *  "方向不确定". Long labels on both sides of the zero line are stacked so the bars keep a readable length. */
 function endLabelLines(item: DivergingItem, layout: number): string[] {
   if (layout === 0) return [endLabel(item)];

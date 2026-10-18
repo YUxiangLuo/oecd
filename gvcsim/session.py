@@ -9,7 +9,10 @@ from typing import Any
 from gvcsim.numeric import finite_number
 
 SESSION_VERSION = "experiment-session-simple-v4"
-MAX_SESSION_BYTES = 300_000
+# Four five-country/all-industry charts already exceed 300 KB with regressions.
+# Leave room for all steps, four optional models and full-length analysis text,
+# while staying below the reverse proxy's 2 MiB request-body limit.
+MAX_SESSION_BYTES = 1_000_000
 MAX_STEPS = 15
 SHARED_KEYS = {"regression_settings"}
 

@@ -28,8 +28,8 @@ test("step 9 records the main comparison only when asked; the exploration views 
   ] };
   const save = mock((_patch: Partial<VizStepState>) => {});
   render(<NetworkVizStep meta={meta} step={step} state={{ data, save, syncing: false, syncError: null, syncNow: () => {}, complete: false }} />);
-  await screen.findByText("贸易网络当前没有可显示的数据。");
-  expect(screen.getByRole("button", { name: "全球贸易网络图" }).getAttribute("aria-pressed")).toBe("true");
+  await screen.findByRole("img");
+  expect(screen.getByRole("button", { name: "历年变化" }).getAttribute("aria-pressed")).toBe("true");
   expect(recordedPatches(save)).toHaveLength(0);
   fireEvent.click(screen.getByRole("button", { name: "历年变化" }));
   await screen.findByRole("img");
@@ -99,7 +99,7 @@ test("browsing across all six views of step 9 records nothing: material is made 
   const save = mock((_patch: Partial<VizStepState>) => {});
   const saveView = mock((_patch: Partial<VizStepState>) => {});
   render(<NetworkVizStep meta={meta} step={step} state={{ data, save, saveView, syncing: false, syncError: null, syncNow: () => {}, complete: false }} />);
-  await screen.findByText("贸易网络当前没有可显示的数据。");
+  await screen.findByRole("img");
   const bar = screen.getByRole("group", { name: "图表视角" });
   for (const name of ["历年变化", "行业排名", "流量与路径", "买入与卖出", "贸易伙伴", "全球贸易网络图"]) {
     fireEvent.click(within(bar).getByRole("button", { name }));

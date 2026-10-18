@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../../api";
 import { sameJsonValue } from "../../../session-store";
 import { MATERIAL_LOCKED_ACTION } from "../../../step-task-card";
-import { AUTO_RECORD_HOW, MaterialCard } from "../../../material-card";
+import { MaterialCard } from "../../../material-card";
 import type { IndicatorSchema, Meta, StepStateApi } from "../../../types";
 import { cjkSpace, formatMetric } from "../../../format";
 import { countryLabel } from "../../../viz";
@@ -98,10 +98,14 @@ export function countryScope(label: string): string {
   return label.endsWith("）") ? `${label.slice(0, -1)}，国家整体）` : `${label}（国家整体）`;
 }
 
-/** The sentence a reading is recorded as: "2020 年 外国增加值项占比：CHN 中国 11.730%". */
+function countryMetricLabel(metric: string, schema: IndicatorSchema | null | undefined): string {
+  return metric === "weighted degree" ? "加权总度（国家整体，出口＋进口）" : countryScope(fieldLabel(metric, schema));
+}
+
+/** The recorded country's reading, explicitly distinguished from the industry browsing view. */
 export function indicatorMaterialLabel(observations: readonly IndicatorObservation[], schema: IndicatorSchema | null | undefined): string {
   if (!observations.length) return "";
-  return `${cjkSpace(`${observations[0].year} 年`, fieldLabel(observations[0].metric, schema))}：${observations.map((item) => {
+  return `${cjkSpace(`${observations[0].year} 年`, countryMetricLabel(observations[0].metric, schema))}：${observations.map((item) => {
     // Saved readings remain interpretable when indicator metadata is temporarily unavailable.
     const format = schema?.fields[item.metric]?.format ?? (item.unit === "%" ? "pct" : item.unit === "百万美元" ? "amount" : undefined);
     return `${countryLabel(item.country)} ${formatMetric(item.value, format)}${item.unit === "百万美元" ? " 百万美元" : ""}`;
@@ -133,7 +137,7 @@ export function AutoMaterialStatus({ state, schema, metric, current, record: _re
   // mistaken for the new selection, and a submitted report must not be rewritten by recovery.
   const recorded = current || state.materialLocked || loadFailed || loadPending ? state.data?.observations ?? [] : [];
   const [rechosen, setRechosen] = useState(false);
-  const scope = cjkSpace(lead ? "记录的是同一年的" : "同一年的", countryScope(metric ? fieldLabel(metric, schema) : "本步指标"));
+  const scope = cjkSpace(lead ? "记录的是同一年的" : "同一年的", metric ? countryMetricLabel(metric, schema) : countryScope("本步指标"));
   const savedLabel = typeof state.data?.material_label === "string" ? state.data.material_label : null;
   return <>
     {loadFailed && <AsyncStateMessage status="error"
@@ -149,7 +153,7 @@ export function AutoMaterialStatus({ state, schema, metric, current, record: _re
       extra={recorded.length && (loadFailed || loadPending)
         ? `${loadFailed ? "当前选择的数据加载失败" : "正在加载当前选择的数据"}；此处保留已记录材料。${state.materialLocked ? "" : "加载恢复后将自动更新为当前选择。"}`
         : undefined}
-      how={`${lead ?? `记录${where}`}${scope}，${AUTO_RECORD_HOW}${note ? ` ${note}` : ""}`}
+      how={`${lead ?? `记录${where}`}${scope}，随国家或年份的选择自动记录，无需另外保存。${note ? ` ${note}` : ""}`}
       locked={state.materialLocked}
       rechosen={rechosen && current}
       action={state.materialLocked && _record ? { label: MATERIAL_LOCKED_ACTION.replace("当前图表", "当前选择"), onClick: () => { setRechosen(true); _record(); } } : null}

@@ -73,7 +73,7 @@ describe("student-first regression reading", () => {
     expect(html).toContain("-0.020 个百分点");
     expect(html).not.toContain("</b><span>百分点</span>");
     // The column names the association, as the step pages do.
-    expect(html).toContain('<th scope="col">X 每高 1 个百分点，Y 两年累计平均相差</th><th scope="col">其中当年 / 次年</th>');
+    expect(html).toContain('<th scope="col">当期＋滞后合计（X 每高 1 个百分点）</th><th scope="col">当期 X 项 / 上一年 X 项</th>');
   });
 
   test("a saved run of the course model shows its cumulative relation and its split over the two years", () => {
@@ -134,7 +134,7 @@ describe("student-first regression reading", () => {
     expect(effect("13")).toBe("-0.0184 个长度单位（幅度约 0.032 个标准差）");
     expect([...dom.querySelectorAll("tbody tr")].find((item) => item.querySelector("th")?.textContent === "13")!
       .querySelectorAll("td")[4].textContent).toMatch(/^\[-0\.0192, -0\.0176\] 个长度单位/);
-    expect(effect("14")).toBe("-40.11 个中心性原始单位（幅度约 0.047 个标准差）");
+    expect(effect("14")).toBe("-40.11 个模拟分数单位（幅度约 0.047 个标准差）");
     expect(html).not.toContain("样本均值");
     expect(html.match(/1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化/g)).toHaveLength(1);
   });
@@ -166,7 +166,7 @@ describe("RegressionSummaryBars", () => {
     const dom = new DOMParser().parseFromString(html, "text/html");
     expect(dom.querySelectorAll("[data-bar]")).toHaveLength(2);
     expect(dom.querySelector("svg")?.getAttribute("role")).toBe("img");
-    expect(html).toContain("X 每高 1 个百分点，Y 两年累计平均相差（个标准差）");
+    expect(html).toContain("当期＋滞后合计（X 每高 1 个百分点；Y 单位：个标准差）");
     expect(dom.querySelector(".reg-family-missing")?.textContent).toBe("步骤 12 · 生产、步骤 14 · 网络：还没计算");
   });
 
@@ -219,7 +219,7 @@ describe("ReportedExperiments", () => {
         ], production: [], length: [], network: [] } });
         await waitFor(() => expect(defaultCell()).toContain(fails ? "—95% 区间：—" : "+2.37 个百分点95% 区间：[+2.10, +2.60] 个百分点；方向明确：X 越高，Y 越高"));
         // The total, then its sample on the next line.
-        expect(view.container.querySelectorAll("tbody tr td")[2]?.textContent).toBe("+1.73 个百分点（两年累计）95% 区间：[+1.60, +1.90] 个百分点；方向明确：X 越高，Y 越高样本 N = 10");
+        expect(view.container.querySelectorAll("tbody tr td")[2]?.textContent).toBe("+1.73 个百分点（当期＋滞后合计）95% 区间：[+1.60, +1.90] 个百分点；方向明确：X 越高，Y 越高样本 N = 10");
         expect(view.container.textContent).toContain("同一 Y 的默认模型");
       } finally { cleanup(); options.mockRestore(); overview.mockRestore(); }
     });
@@ -243,7 +243,7 @@ describe("ReportedExperiments", () => {
       expect(rows[0][0]).toBe("步骤 11 · 贸易流");
       expect(rows[0][2]).toContain("X + L1.X；GDP 对数、贸易开放度；国家×行业 + 年份 FE");
       // The model's sum says which years it covers; both read at the default's decimals.
-      expect(rows[0][3]).toBe("-0.70 个百分点（两年累计）95% 区间：[-0.75, -0.65] 个百分点；方向明确：X 越高，Y 越低样本 N = 10");
+      expect(rows[0][3]).toBe("-0.70 个百分点（当期＋滞后合计）95% 区间：[-0.75, -0.65] 个百分点；方向明确：X 越高，Y 越低样本 N = 10");
       expect(rows[0][4]).toBe("-0.55 个百分点95% 区间：[-0.57, -0.53] 个百分点；方向明确：X 越高，Y 越低样本 N = 10");
       expect(overview).not.toHaveBeenCalled();
     } finally { cleanup(); options.mockRestore(); overview.mockRestore(); }
@@ -259,7 +259,7 @@ describe("ReportedExperiments", () => {
       } } : undefined,
     }));
     const cells = html.match(/<td>([^]*?)<\/td>/g)!;
-    expect(cells[2]).toContain("-0.5546 个百分点（两年累计）");
+    expect(cells[2]).toContain("-0.5546 个百分点（当期＋滞后合计）");
     expect(cells[2]).toContain("95% 区间：[-0.5547, -0.5545] 个百分点");
     expect(cells[3]).toContain("-0.55 个百分点");
     expect(cells[3]).toContain("95% 区间：[-0.57, -0.53] 个百分点");
@@ -278,7 +278,7 @@ describe("ReportedExperiments", () => {
         getStep: (step: number) => step === 11 ? { run, experiment: { spec, snapshot, saved_at: "test" } } : undefined,
       }));
       const cell = html.match(/<td>([^]*?)<\/td>/g)![2];
-      expect(cell).toContain(mode === "single-lag" ? "仅当期 X" : mode === "three-years" ? "三年累计" : "两年累计");
+      expect(cell).toContain(mode === "single-lag" ? "仅当期 X" : mode === "three-years" ? "当期至滞后二期合计" : "当期＋滞后合计");
       expect(cell).toContain("方向不确定");
       expect(cell).toContain(["missing-ci", "suppressed", "missing-sum"].includes(mode) ? "95% 区间：—" : "95% 区间：[-0.20, +0.40]");
       expect(cell).not.toContain("-0.57");
@@ -371,7 +371,7 @@ describe("the sentence under the three-group chart (v13)", () => {
     expect(ratio).not.toContain("无量纲");
     // What the regression's result is of the split; no causal story for the second wave.
     // The mean X it multiplies is given, so the part can be checked by hand (-0.55 × 2.9 ≈ -1.6).
-    expect(text).toContain("回归结论只对应第一项：它约等于两年累计的系数 × 第一批国家 2020 年的平均 X（2.9 个百分点，按全部行业平均，非货物行业的 X 为 0，所以比步骤 10 的货物行业平均小）。");
+    expect(text).toContain("回归结论只对应第一项：它约等于当期＋滞后合计的系数 × 第一批国家 2020 年的平均 X（2.9 个百分点，按全部行业平均，非货物行业的 X 为 0，所以比步骤 10 的货物行业平均小）。");
     expect(text).not.toContain("第二批");
   });
 });

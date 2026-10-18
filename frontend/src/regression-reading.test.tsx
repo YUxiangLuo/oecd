@@ -50,7 +50,8 @@ describe("fixed teaching regression reading", () => {
     Object.assign(network.result.coefs[0], { coef: -4080, ci_low: -4180, ci_high: -3980 });
     network.result.depvar_within_std = 850;
     const dom = new DOMParser().parseFromString(renderToStaticMarkup(<RegressionResultCard outcome="network" response={network} />), "text/html");
-    expect(dom.querySelector(".reg-unit-note")?.textContent).toBe("中心性原始单位：本步的 Y 是课程生成的分数（高低顺序参照真实网络指标），不是步骤 5、9 的百万美元，不能和那两步的数值直接比较。");
+    expect(dom.querySelector(".reg-plain-verdict")?.textContent).toContain("加权总度（教学模拟分数）");
+    expect(dom.querySelector(".reg-unit-note")?.textContent).toBe("模拟分数单位：本步的 Y 是课程生成的分数（高低顺序参照真实网络指标），不是步骤 5、9 的百万美元，不能和那两步的数值直接比较。");
     expect(renderToStaticMarkup(<RegressionResultCard outcome="trade" response={response()} />)).not.toContain("reg-unit-note");
   });
 
@@ -122,7 +123,7 @@ describe("fixed teaching regression reading", () => {
       { label: "SVK 斯洛伐克·C26", x: 0.00224440, w: 0.0089776, tau: 0.25 },
     ]} />);
     expect(checked.container.querySelector(".reg-example-effect")!.textContent)
-      .toContain("SVK 斯洛伐克·C26：X = 0.22 个百分点 → 与 X 相关的差异约 +8.98 个中心性原始单位");
+      .toContain("SVK 斯洛伐克·C26：X = 0.22 个百分点 → 与 X 相关的差异约 +8.98 个模拟分数单位");
     expect(exampleXText({ x: 0.0932 })).toBe("9.32");
     cleanup();
     // Goods only (v8): a service industry's X is 0 in every country, and the line says why and what to pick instead.
@@ -257,7 +258,7 @@ describe("the course's design value on the result card (v13)", () => {
   test("a recovered design value reads as covered with its deviation; the zero-effect Y and the ratio say so", () => {
     const run = response();
     const html = renderToStaticMarkup(<RegressionResultCard outcome="trade" response={run} />);
-    expect(html).toContain("课程数据设定的两年累计为");
+    expect(html).toContain("课程数据设定的当期＋滞后合计为");
     expect(html).toContain("区间包含设定值（与设定值几乎相同）");
     const zero = response();
     zero.model_snapshot!.beta = 0;

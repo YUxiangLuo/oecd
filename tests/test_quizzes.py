@@ -74,7 +74,7 @@ def test_step_11_checks_percentage_points_with_a_simple_independent_example(answ
 def test_regression_defaults_cover_basic_concepts_without_optional_model_experiments():
     """Students can answer from the default lesson without choosing a model or a particular result."""
     prompts = " ".join(question["prompt"] for step in range(10, 15) for question in quizzes.STEP_QUIZZES[step])
-    for concept in ("L1.X", "汇率变动", "两年累计", "国家×行业", "控制变量", "生产份额", "模拟回归"):
+    for concept in ("L1.X", "汇率变动", "当期＋滞后合计", "国家×行业", "控制变量", "生产份额", "模拟回归"):
         assert concept in prompts, concept
     for number in ("−0.55", "-0.55", "0.0182", "40.4"):
         assert number not in prompts
@@ -183,8 +183,8 @@ def test_quizzes_read_x_as_exposure_an_association_and_step_14_y_as_no_amount_ro
     every = " ".join(_quiz_text(question) for question in QUIZ_BY_ID.values())
     assert "受新关税影响" not in every
     assert "没有影响" not in every and "没有关联" in QUIZ_BY_ID["s12-compare"]["explanation"]
-    # Step 14's Y is generated on the real 加权总度 ranking, in 中心性原始单位: not an amount.
-    assert "中心性原始单位" in QUIZ_BY_ID["s14-metric-v9"]["explanation"]
+    # Step 14's Y is generated on the real 加权总度 ranking, in 模拟分数单位: not an amount.
+    assert "模拟分数单位" in QUIZ_BY_ID["s14-metric-v9"]["explanation"]
     assert "不是金额" in QUIZ_BY_ID["s14-metric-v9"]["explanation"]
     assert "金额" not in quizzes.HINTS["s14-metric-v9"]
     # The options and correct answers stay as the owner kept them.

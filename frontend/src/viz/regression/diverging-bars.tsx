@@ -48,7 +48,7 @@ export function endLabel(row: Pick<DivergingBarRow, "valueLabel" | "uncertain">)
 }
 
 /**
- * The end label on one, two or three lines (layout 0–2), as the report draws it: "-40.11 个中心性原始单位" /
+ * The end label on one, two or three lines (layout 0–2), as the report draws it: "-40.11 个模拟分数单位" /
  * "（-0.047 个标准差）" / "方向不确定". Where one line leaves the bars too short (long labels on both sides of the
  * zero line in a narrow window), the labels are stacked instead.
  */

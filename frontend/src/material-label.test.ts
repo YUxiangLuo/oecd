@@ -14,7 +14,7 @@ test("every step's material reads as one sentence of the same shape", () => {
   expect(networkMaterialLabel({ view: "trend", metric: "加权总度", countries: ["CHN"], industry: "C26", years: [2016, 2020], readings: 5 })).toBe("历年变化 · 加权总度 · C26 计算机电子光学 · CHN 中国 · 2016–2020（5 条读数）");
   expect(shockMaterialLabel({ first: "CAN", second: "AUS", industry: "C29", firstTaxed: true, secondTaxed: false })).toBe("例子：CAN 加拿大（被加税） 对 AUS 澳大利亚（未被加税） · C29 汽车及零部件");
   expect(shockMaterialLabel({ first: "CAN", industry: "C29", firstTaxed: true })).toBe("例子：CAN 加拿大（被加税） · C29 汽车及零部件");
-  expect(regressionMaterialLabel({ depvar: "外国增加值项占比", reading: "-0.55 个百分点", interval: "-0.57 个百分点 至 -0.54 个百分点" })).toBe("默认模型：外国增加值项占比两年累计 -0.55 个百分点（95% 区间 -0.57 个百分点 至 -0.54 个百分点）");
+  expect(regressionMaterialLabel({ depvar: "外国增加值项占比", reading: "-0.55 个百分点", interval: "-0.57 个百分点 至 -0.54 个百分点" })).toBe("默认模型：外国增加值项占比当期＋滞后合计 -0.55 个百分点（95% 区间 -0.57 个百分点 至 -0.54 个百分点）");
   expect(regressionMaterialLabel({ depvar: "加权总度", reading: null })).toBe("默认模型：加权总度（已计算，无法可靠推断）");
 });
 

@@ -362,7 +362,7 @@ test("writing hints distinguish default regression from optional experiments and
   const experiment = { spec: { x_lags: [0, 1] }, snapshot: { depvar_label: "外国增加值项占比", depvar_kind: "share", result: { n_obs: 16000, years: [2016, 2020], cumulative: null, coefs: [] } } };
   view.rerender(<ReportLab {...p} getStep={(n) => n === 11 ? { experiment } as never : undefined} />);
   expect(screen.getByText(/你还把模型实验记入了报告/)).toBeTruthy();
-  expect(screen.getByText(/你还把模型实验记入了报告/).textContent).toContain("不要一律写两年累计");
+  expect(screen.getByText(/你还把模型实验记入了报告/).textContent).toContain("不要一律写当期＋滞后合计");
   expect(screen.getByRole("textbox", { name: "结果解释" }).getAttribute("placeholder")).toContain("模型实验“……”的 X 各项合计");
   view.rerender(<ReportLab {...p} sessionUnsynced state={{ ...p.state, syncConflict: true, syncError: "版本变化" }} />);
   expect(screen.getByRole("region", { name: "报告完成清单" }).textContent).toContain("请先复制需要保留的内容");

@@ -968,6 +968,7 @@ export function DecompositionDemo({
           )}
         </LabeledControl>
       </div>
+      <p className="muted" role="note">单个行业仅供查看；本步报告材料记录所选国家同一年的国家整体指标。</p>
       <div className="decomp-formula">
         <span className="df-total">{cfg.totalLabel}</span><span className="df-eq">=</span>
         {cfg.parts.map((part, index) => (

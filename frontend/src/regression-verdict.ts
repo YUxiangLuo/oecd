@@ -72,7 +72,7 @@ export const signed = (value: number, digits = 3) => {
 const DEFAULT_KINDS: Record<RegressionOutcome, DepvarKind> = { trade: "share", production: "share", length: "length", network: "network" };
 /** The unit as named beside a chart, a column or a bar ("长度单位"); the position index is a ratio: "无量纲" in the data
  *  (step 8), shown as {@link POSITION_UNIT_WORDS}. */
-const KIND_UNITS: Record<DepvarKind, string> = { share: "个百分点", length: "长度单位", position: "无量纲", network: "中心性原始单位" };
+const KIND_UNITS: Record<DepvarKind, string> = { share: "个百分点", length: "长度单位", position: "无量纲", network: "模拟分数单位" };
 
 /** The unit name under a bar's Y in 个标准差 charts ("长度单位"); the position index, a ratio, in plain words
  *  ("比值，无单位": "无量纲" is not a word step 13's students know). */
@@ -238,8 +238,8 @@ export interface BarFigures {
 export type BarUnit = "points" | "sd";
 
 export const BAR_UNIT_TITLES: Record<BarUnit, string> = {
-  points: "X 每高 1 个百分点，Y 两年累计平均相差（个百分点）",
-  sd: "X 每高 1 个百分点，Y 两年累计平均相差（个标准差）",
+  points: "当期＋滞后合计（X 每高 1 个百分点；Y 单位：个百分点）",
+  sd: "当期＋滞后合计（X 每高 1 个百分点；Y 单位：个标准差）",
 };
 
 export function barUnitFor(kinds: readonly string[]): BarUnit {

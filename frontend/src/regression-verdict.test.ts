@@ -80,7 +80,7 @@ describe("fixed TWFE verdict", () => {
       .toBe("+0.40 个百分点");
     expect(buildRegressionVerdict("length", response("length", coefficient(2, 1, 3))).effect)
       .toContain("+0.0200 个长度单位");
-    expect(chartDisplayScale("network")).toEqual({ scale: 0.01, unit: "中心性原始单位" });
+    expect(chartDisplayScale("network")).toEqual({ scale: 0.01, unit: "模拟分数单位" });
   });
 
   test("never turns suppressed inference into a zero-crossing claim", () => {
@@ -123,15 +123,15 @@ describe("network size in standard deviations (same digits as the report)", () =
   test("both ends of a network interval use the estimate's digits: closeness is not [-0.01, -0.0047]", () => {
     // Closeness: β = -0.4884, [-0.5045, -0.4722]; per 1 percentage point (× 0.01) all three are below 0.01.
     const closeness = network(-0.4884, -0.5045, -0.4722, 0.11);
-    expect(closeness.intervalShort).toBe("[-0.0050, -0.0047] 个中心性原始单位");
-    expect(closeness.effect).toMatch(/^-0\.0049 个中心性原始单位/);
-    expect(closeness.interval.startsWith("[-0.0050, -0.0047] 个中心性原始单位；约 [")).toBe(true);
-    expect(closeness.evidence).toContain("[-0.0050, -0.0047] 个中心性原始单位");
+    expect(closeness.intervalShort).toBe("[-0.0050, -0.0047] 个模拟分数单位");
+    expect(closeness.effect).toMatch(/^-0\.0049 个模拟分数单位/);
+    expect(closeness.interval.startsWith("[-0.0050, -0.0047] 个模拟分数单位；约 [")).toBe(true);
+    expect(closeness.evidence).toContain("[-0.0050, -0.0047] 个模拟分数单位");
     // The other network Ys keep their two decimals.
-    expect(network(-4080, -4180, -3980, 850).intervalShort).toBe("[-41.80, -39.80] 个中心性原始单位");
-    expect(network(-4080, -4180, -3980, 850).effect).toMatch(/^-40\.80 个中心性原始单位/);
-    expect(network(-5933, -6400, -5466, 1300).intervalShort).toBe("[-64.00, -54.66] 个中心性原始单位");
-    expect(network(-5933, -6400, -5466, 1300).effect).toMatch(/^-59\.33 个中心性原始单位/);
+    expect(network(-4080, -4180, -3980, 850).intervalShort).toBe("[-41.80, -39.80] 个模拟分数单位");
+    expect(network(-4080, -4180, -3980, 850).effect).toMatch(/^-40\.80 个模拟分数单位/);
+    expect(network(-5933, -6400, -5466, 1300).intervalShort).toBe("[-64.00, -54.66] 个模拟分数单位");
+    expect(network(-5933, -6400, -5466, 1300).effect).toMatch(/^-59\.33 个模拟分数单位/);
   });
 
   test("signed numbers group thousands, as the report's _signed does", () => {
@@ -205,7 +205,7 @@ describe("bars repeat the headline's numbers", () => {
     expect(bar.value).toBeCloseTo(-0.04685, 5);
     const data = response("network", coefficient(-4010.70, -4109.84, -3911.56));
     data.result.depvar_within_std = 856;
-    expect(buildRegressionVerdict("network", data).effect).toMatch(/^-40\.11 个中心性原始单位（幅度约 0\.047 个标准差/);
+    expect(buildRegressionVerdict("network", data).effect).toMatch(/^-40\.11 个模拟分数单位（幅度约 0\.047 个标准差/);
     // Step 15 mixes units, so the native value names its unit.
     expect(barFigures(estimate(-0.5493, -0.5711, -0.5274, 0.05), "share", "sd", true).valueLabel).toBe("-0.55 个百分点（-0.110 个标准差）");
     expect(barFigures(estimate(-1.8143, -1.9, -1.7, 0.4), "length", "sd", true).valueLabel).toBe("-0.0181 个长度单位（-0.045 个标准差）");

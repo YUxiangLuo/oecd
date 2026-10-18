@@ -3,15 +3,15 @@
   "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
   "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
   "simulation_contract": "step10-tariff-teaching-v13",
-  "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
+  "code_state": "Mixed capture batches: top-level baseline/release/source hash identify the retained 2026-10-17 batch; each of the five refreshed entries records its 2026-10-18 code state and release.",
   "viewport": {
     "width": 1280,
     "height": 960
   },
   "code_sources_hash_rule": "SHA-256 of sorted sha256sum output for frontend/src and gvcsim .ts/.tsx/.css/.py files (Linux checkout).",
   "code_sources_sha256": "a2bc41dfcbe7f22e0ac864d0302d893bc0d20a94f5c41d1953838eb9b7dc0aa2",
-  "source": "Manual 2.31: all 20 figures captured using agent-browser attached to headless Chrome in an independent non-demo local classroom (database gvcsim_manual_refresh_20261017; API :8044, Vite :5244). Public APIs seeded manual-student-v231 through scripts/seed_full_journey.py. The browser capture script recorded a 去掉汇率变动 experiment, generated and submitted a report, and the teacher API graded it 90 (flow example only). manual-gate has no course records. Initial passwords were changed through public APIs. No real student accounts or production classroom data were modified.",
-  "provenance_scope": "All 20 images captured on 2026-10-17; figures 06–09 recaptured in the same classroom to improve framing. Unchanged login-page pixels are still from this new capture. Status images are cropped, not retouched.",
+  "source": "Manual 2.32: five figures (14–18) refreshed with agent-browser in independent local classroom oecd_student_deep_20261018t070619z_test, API :8000 and Vite :5173. Test accounts completed browser actions and regenerated the report. The remaining 15 figures retain the 2.31 capture described by their per-image entries. No production classroom data or real student accounts were modified.",
+  "provenance_scope": "Manual 2.32: five figures (14–18) refreshed on 2026-10-18 in an independent local test classroom; the other 15 figures retain their 2026-10-17 provenance. See each screenshot entry for release, code state and hash.",
   "capture_script_sha256": "bc5b6bed00e24a22e4abc56778b33251531e534d8909c520e679476e317bc008",
   "screenshots": [
     {
@@ -70,28 +70,27 @@
       ]
     },
     {
-      "captured_on": "2026-10-17",
-      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
-      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "captured_on": "2026-10-18",
+      "baseline_commit": "b0b55fd9adeee3eeab5b094ad21bb597138e2b01",
+      "data_release": "4421c9966d4d45a98a7a941b63587f08",
       "simulation_contract": "step10-tariff-teaching-v13",
-      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
+      "code_state": "Working tree based on b0b55fd9adeee3eeab5b094ad21bb597138e2b01; novice-review fixes applied, before commit.",
       "file": "screenshots/11-regression-setup.png",
       "width": 1280,
       "height": 960,
-      "sha256": "1a0b3eefb50be5c950026b7163dd37bd2b154f2b0508e570148deaf85d83f59a",
-      "capture_url": "http://127.0.0.1:5244",
-      "capture_tool": "agent-browser-over-cdp",
-      "journey": "blank-account-browser",
-      "account": "manual-gate",
-      "capture_note": "Step 12 before running: taxed vs untaxed group chart and run button.",
+      "sha256": "4073e3424a6410e2e7a394f36a9af1388c0e9187861a3ddee6f0dbe087d194d4",
+      "capture_url": "http://127.0.0.1:5173",
+      "capture_tool": "agent-browser",
+      "journey": "browser-test-classroom",
+      "account": "fix-entry-20261018-0847",
+      "capture_note": "Step 12 before running, with the sustained-X question and default model.",
       "data_sources": [
         {
-          "name": "Course-generated tariff and regression teaching data, not observed policy effects",
-          "production_data": false,
-          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66",
-          "version": "step10-tariff-teaching-v13"
+          "name": "Independent local test classroom; OECD ICIO indicators and course-generated tariff/regression data.",
+          "production_data": false
         }
-      ]
+      ],
+      "code_sources_sha256": "2775f8c77ed6b8a3efcfbc9b1e647fa59e28da978be90b9fcf28413106ac2829"
     },
     {
       "captured_on": "2026-10-17",
@@ -348,118 +347,96 @@
       ]
     },
     {
-      "captured_on": "2026-10-17",
-      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
-      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "captured_on": "2026-10-18",
+      "baseline_commit": "b0b55fd9adeee3eeab5b094ad21bb597138e2b01",
+      "data_release": "4421c9966d4d45a98a7a941b63587f08",
       "simulation_contract": "step10-tariff-teaching-v13",
-      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
+      "code_state": "Working tree based on b0b55fd9adeee3eeab5b094ad21bb597138e2b01; novice-review fixes applied, before commit.",
       "file": "screenshots/11-regression-result.png",
       "width": 1280,
       "height": 960,
-      "sha256": "4e7f6a14d8428272ed183aa614edd8c8d7f1de2fbd42618e7285609a2755093e",
-      "capture_url": "http://127.0.0.1:5244",
-      "capture_tool": "agent-browser-over-cdp",
-      "journey": "api-seeded-then-browser",
-      "account": "manual-student-v231",
-      "capture_note": "Step 11 after the run: one bar per Y and the two-year headline with its current-year and next-year parts.",
+      "sha256": "11a61d8c9675c1a7a5a5997119b0225949c3131dfd549bbecd90332233744670",
+      "capture_url": "http://127.0.0.1:5173",
+      "capture_tool": "agent-browser",
+      "journey": "browser-test-classroom",
+      "account": "novice-20261018-0801",
+      "capture_note": "Step 11 result: current and lagged X terms, with first-year and second-year-onward readings.",
       "data_sources": [
         {
-          "name": "Course-generated tariff and regression teaching data, not observed policy effects",
-          "production_data": false,
-          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66",
-          "version": "step10-tariff-teaching-v13"
+          "name": "Independent local test classroom; OECD ICIO indicators and course-generated tariff/regression data.",
+          "production_data": false
         }
-      ]
+      ],
+      "code_sources_sha256": "2775f8c77ed6b8a3efcfbc9b1e647fa59e28da978be90b9fcf28413106ac2829"
     },
     {
-      "captured_on": "2026-10-17",
-      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
-      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "captured_on": "2026-10-18",
+      "baseline_commit": "b0b55fd9adeee3eeab5b094ad21bb597138e2b01",
+      "data_release": "4421c9966d4d45a98a7a941b63587f08",
       "simulation_contract": "step10-tariff-teaching-v13",
-      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
+      "code_state": "Working tree based on b0b55fd9adeee3eeab5b094ad21bb597138e2b01; novice-review fixes applied, before commit.",
       "file": "screenshots/11-regression-workbench.png",
       "width": 1280,
       "height": 960,
-      "sha256": "8a0dfc3374e3f4d93a6c0f96b8cd03747ab1ff2abbdfd8bf28aa1fa0b8d25fec",
-      "capture_url": "http://127.0.0.1:5244",
-      "capture_tool": "agent-browser-over-cdp",
-      "journey": "api-seeded-then-browser",
-      "account": "manual-student-v231",
-      "capture_note": "Step 11 改模型、对比: the 去掉汇率变动 preset beside the default model, with the 课程设定值 row.",
+      "sha256": "3faaff8267f3c6bbd61ad2152860948a776cb88f56baa442df7dc5aeba8b2dee",
+      "capture_url": "http://127.0.0.1:5173",
+      "capture_tool": "agent-browser",
+      "journey": "browser-test-classroom",
+      "account": "novice-20261018-0801",
+      "capture_note": "Optional model comparison with the current-plus-lag coefficient sum.",
       "data_sources": [
         {
-          "name": "Course-generated tariff and regression teaching data, not observed policy effects",
-          "production_data": false,
-          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66",
-          "version": "step10-tariff-teaching-v13"
+          "name": "Independent local test classroom; OECD ICIO indicators and course-generated tariff/regression data.",
+          "production_data": false
         }
-      ]
+      ],
+      "code_sources_sha256": "2775f8c77ed6b8a3efcfbc9b1e647fa59e28da978be90b9fcf28413106ac2829"
     },
     {
-      "captured_on": "2026-10-17",
-      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
-      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "captured_on": "2026-10-18",
+      "baseline_commit": "b0b55fd9adeee3eeab5b094ad21bb597138e2b01",
+      "data_release": "4421c9966d4d45a98a7a941b63587f08",
       "simulation_contract": "step10-tariff-teaching-v13",
-      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
+      "code_state": "Working tree based on b0b55fd9adeee3eeab5b094ad21bb597138e2b01; novice-review fixes applied, before commit.",
       "file": "screenshots/15-writing.png",
       "width": 1280,
       "height": 960,
-      "sha256": "432664955840dea77eea4491d3ef913190fa370789e3cfe0b4471c3b363bf852",
-      "capture_url": "http://127.0.0.1:5244",
-      "capture_tool": "agent-browser-over-cdp",
-      "journey": "api-seeded-then-browser",
-      "account": "manual-student-v231",
-      "capture_note": "Step 15 writing area with sentence starters.",
+      "sha256": "dbae17eb0f30601a9309456c594dfe1beb223fbe0bc7d27e00af0de4bcbc99e0",
+      "capture_url": "http://127.0.0.1:5173",
+      "capture_tool": "agent-browser",
+      "journey": "browser-test-classroom",
+      "account": "novice-20261018-0801",
+      "capture_note": "Analysis prompts and test-student prose using current coefficient and simulated-score terminology.",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed indicators",
-          "production_data": true,
-          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66"
-        },
-        {
-          "name": "Course-generated tariff and regression teaching data, not observed policy effects",
-          "production_data": false,
-          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66",
-          "version": "step10-tariff-teaching-v13"
-        },
-        {
-          "name": "Isolated classroom test account, authored report text and example grading",
+          "name": "Independent local test classroom; OECD ICIO indicators and course-generated tariff/regression data.",
           "production_data": false
         }
-      ]
+      ],
+      "code_sources_sha256": "2775f8c77ed6b8a3efcfbc9b1e647fa59e28da978be90b9fcf28413106ac2829"
     },
     {
-      "captured_on": "2026-10-17",
-      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
-      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "captured_on": "2026-10-18",
+      "baseline_commit": "b0b55fd9adeee3eeab5b094ad21bb597138e2b01",
+      "data_release": "4421c9966d4d45a98a7a941b63587f08",
       "simulation_contract": "step10-tariff-teaching-v13",
-      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
+      "code_state": "Working tree based on b0b55fd9adeee3eeab5b094ad21bb597138e2b01; novice-review fixes applied, before commit.",
       "file": "screenshots/15-report.png",
       "width": 1280,
       "height": 960,
-      "sha256": "bd6b6ea7b701bb56458324642d9760eed65d5c82a3e6b2d79f37d152a3e16b23",
-      "capture_url": "http://127.0.0.1:5244",
-      "capture_tool": "agent-browser-over-cdp",
-      "journey": "api-seeded-then-browser",
-      "account": "manual-student-v231",
-      "capture_note": "Generated report (draft).",
+      "sha256": "b978bddc62d2b0831db44a4765395dda768c35b4f0c48a6b983fff62943c96ee",
+      "capture_url": "http://127.0.0.1:5173",
+      "capture_tool": "agent-browser",
+      "journey": "browser-test-classroom",
+      "account": "novice-20261018-0801",
+      "capture_note": "Regenerated submitted report with current/lag timing and simulated-score units.",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed indicators",
-          "production_data": true,
-          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66"
-        },
-        {
-          "name": "Course-generated tariff and regression teaching data, not observed policy effects",
-          "production_data": false,
-          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66",
-          "version": "step10-tariff-teaching-v13"
-        },
-        {
-          "name": "Isolated classroom test account, authored report text and example grading",
+          "name": "Independent local test classroom; OECD ICIO indicators and course-generated tariff/regression data.",
           "production_data": false
         }
-      ]
+      ],
+      "code_sources_sha256": "2775f8c77ed6b8a3efcfbc9b1e647fa59e28da978be90b9fcf28413106ac2829"
     },
     {
       "captured_on": "2026-10-17",
@@ -527,5 +504,6 @@
         }
       ]
     }
-  ]
+  ],
+  "last_updated_on": "2026-10-18"
 }

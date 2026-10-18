@@ -117,7 +117,7 @@ export function decompositionParts(
     lead: `第一批被加税国家 ${decomposition.year} 年的${metric}，比加税前（${decomposition.pre_years.join("、")} 年平均）${direction} ${amount(Math.abs(observed))}。按默认模型（见下方）的估计，这个总变化等于下面各项之和：`,
     parts,
     // One point a sentence: what the regression's result is of the split, and why the example's number differs.
-    tail: `回归结论只对应第一项：它约等于两年累计的系数 × 第一批国家 ${decomposition.year} 年的平均 X${decomposition.x_mean != null
+    tail: `回归结论只对应第一项：它约等于当期＋滞后合计的系数 × 第一批国家 ${decomposition.year} 年的平均 X${decomposition.x_mean != null
       ? `（${(decomposition.x_mean * 100).toFixed(1)} 个百分点，按全部行业平均，非货物行业的 X 为 0，所以比步骤 10 的货物行业平均小）`
       : ""}。结果卡里的例子换算用的是例子自己的 X，数值可能大得多。`,
   };

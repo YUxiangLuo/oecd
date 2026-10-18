@@ -526,7 +526,9 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
         "下表按四步保存的设定列出服务器计算的结果（贸易流、生产、长度、网络），各用自己的单位，表中数值不能直接比较"
         + ("；表后的图将其统一换算为标准差，以便并列比较。" if qualified else "。"),
         "",
-        "| 步骤 | 指标 | X 每高 1 个百分点，Y 两年累计平均相差 | 95% 区间 | 方向 |",
+        "当期＋滞后合计是两个 X 项的系数之和。若 X 持续高 1 个百分点，第一年只计当期项，第二年起计两项之和；不是把两年的 Y 变化相加。",
+        "",
+        "| 步骤 | 指标 | 当期＋滞后合计（X 每高 1 个百分点） | 95% 区间 | 方向 |",
         "|---|---|---|---|---|",
     ]
     designs = []
@@ -594,7 +596,7 @@ def _example_size(kind: str, change: float) -> str:
     # The position index has no unit: a bare number, as on the page.
     if 0 < size < 0.5 * 10**-digits:
         return with_count_unit(f"不到 {10**-digits:.{digits}f}", kind)
-    # Thousands separators, as the page writes them ("约为 -1,382 个中心性原始单位"). Half up on the decimal
+    # Thousands separators, as the page writes them ("约为 -1,382 个模拟分数单位"). Half up on the decimal
     # product, as by hand: 0.018 × 23.25 = 0.4185 reads 0.419 (float formatting alone gives 0.418).
     rounded = Decimal(repr(size)).quantize(Decimal(1).scaleb(-digits), rounding=ROUND_HALF_UP)
     return with_count_unit(f"{rounded:,.{digits}f}", kind)
@@ -643,9 +645,7 @@ def _example_conversion(
                 if item is converted[-1]
                 else ""
             )
-            text = (
-                f"{label} 的 X 为 {_example_x(item, x, tau)} 个百分点，按估计两年累计与 X 相关的差异{amount}{reading}"
-            )
+            text = f"{label} 的 X 为 {_example_x(item, x, tau)} 个百分点，若 X 持续保持该数值，第二年起与 X 相关的差异{amount}{reading}"
         elif tau == 0 and _is_service(item.get("industry")):
             text = f"{label} 不是货物行业，不在加税范围内（τ = 0），X = 0，按估计没有与 X 相关的差异"
         elif tau > 0:
@@ -673,6 +673,37 @@ def markdown_name(value: Any) -> str:
     from gvcsim.report_workbench import _name
 
     return _name(value)
+
+
+def _lag_timing_lines(outcome: str, design: dict[str, Any], result: dict[str, Any]) -> list[str]:
+    """Separate X terms from the years of a sustained change, as the result card does."""
+    if sorted(design.get("spec", {}).get("x_lags", [0, 1])) != [0, 1]:
+        return []
+    terms = {item.get("name"): item for item in result.get("coefs", [])}
+    current, previous = terms.get("teaching_tariff_exposure"), terms.get("teaching_tariff_exposure_lag1")
+    total = result.get("cumulative")
+    if not current or not previous or not total:
+        return []
+    kind = _depvar_kind(outcome, design)
+    scale = 1.0 if kind == "share" else 0.01
+    low, high = total.get("ci_low"), total.get("ci_high")
+    bounds = (float(low) * scale, float(high) * scale) if low is not None and high is not None else None
+    digits = estimate_digits(kind, float(total["coef"]) * scale, bounds)
+
+    def reading(term: dict[str, Any]) -> str:
+        return with_count_unit(_signed(float(term["coef"]) * scale, digits), kind)
+
+    return [
+        f"- 当期 X 项：{reading(current)}；上一年 X 项（L1.X）：{reading(previous)}。",
+        "- 假设 X 从某年起持续高 1 个百分点，其他模型项保持相同：",
+        "",
+        "| 时间 | 计入的 X 项 | Y 的条件差异 |",
+        "|---|---|---|",
+        f"| 第一年 | 当期 X 项 | {reading(current)} |",
+        f"| 第二年及以后 | 当期 X 项＋上一年 X 项 | {reading(total)} |",
+        "",
+        "- 合计的是系数，不是两个年份的 Y 变化相加，也不代表因果效应。",
+    ]
 
 
 def _evidence_summary(
@@ -755,6 +786,7 @@ def _evidence_summary(
             )
         )
         if not suppressed:
+            lines.extend(_lag_timing_lines(outcome, design, result))
             conversion = _example_conversion(outcome, design, coefficient, directional, teaching_observation)
             if conversion:
                 lines.append(conversion)
@@ -767,7 +799,7 @@ def _evidence_summary(
         if _depvar_kind(outcome, design) == "network":
             # Said here, next to the number, not only in the appendix: the unit is not step 5/9's 百万美元.
             lines.append(
-                "- **单位**：中心性原始单位。这一步的 Y 是课程生成的分数（高低顺序参照真实网络指标），"
+                "- **单位**：模拟分数单位。这一步的 Y 是课程生成的分数（高低顺序参照真实网络指标），"
                 "不是步骤 5、9 里以百万美元计的加权总度，不能和那两步的数值直接比较。"
             )
         reasons = [*_list_values(result.get("status_reasons")), *_list_values(support.get("reasons"))]
@@ -842,7 +874,7 @@ def _technical_estimate_tables(
     lines = [
         "",
         # The page's column order (详细数字), t 值 included.
-        "| 变量 | X 每高 1 个百分点，Y 两年累计平均相差 | 系数（X 按份额计） | 95% 区间（按系数计） | 标准误（按国家聚类） | t 值 | p 值 |",
+        "| 变量 | X 每高 1 个百分点的关联（该行项／合计） | 系数（X 按份额计） | 95% 区间（按系数计） | 标准误（按国家聚类） | t 值 | p 值 |",
         "|---|---:|---:|---:|---:|---:|---:|",
     ]
     cumulative = result.get("cumulative")

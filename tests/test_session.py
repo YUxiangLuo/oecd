@@ -9,7 +9,16 @@ from gvcsim.config import ROOT
 from gvcsim.regression.design import RegressionDesign
 from gvcsim.regression.service import design_info
 from gvcsim.regression.teaching import model_snapshot, variable_catalog
-from gvcsim.session import SESSION_VERSION, SessionError, empty_session, make_record, validate_session
+from gvcsim.regression.workbench import MAX_SNAPSHOT_BYTES
+from gvcsim.report_common import REFLECTION_TEXT_LIMIT
+from gvcsim.session import (
+    MAX_SESSION_BYTES,
+    SESSION_VERSION,
+    SessionError,
+    empty_session,
+    make_record,
+    validate_session,
+)
 
 
 def test_minimal_session_contract():
@@ -18,6 +27,64 @@ def test_minimal_session_contract():
     payload["steps"]["1"] = make_record({"quiz": {"answers": {"q": "a"}}})
     payload["shared"]["regression_settings"] = {"trade": {"method": "did"}}
     assert validate_session(payload) == payload
+
+
+def test_session_fits_all_four_maximum_industry_rankings_and_analysis():
+    """The five-country/all-45-industry selections that failed in browser dogfood."""
+    payload = empty_session()
+    countries = ["CHN", "USA", "DEU", "JPN", "GBR"]
+    release = "a" * 32
+    for step, metric, unit in [
+        (6, "gross_exports", "百万美元"),
+        (7, "SVA", "百万美元"),
+        (8, "PLv_GVC", "长度单位"),
+        (9, "betweenesscentrality", "未归一化介数"),
+    ]:
+        observations = []
+        for country in countries:
+            for index in range(45):
+                industry = f"C{index:02d}"
+                row = {
+                    "country": country,
+                    "industry": industry,
+                    "entity": f"{country}·{industry}",
+                    "year": 2020,
+                    "metric": metric,
+                    "unit": unit,
+                    "value": 573166.9331286182,
+                    "release": release,
+                    "scope": "country-industry",
+                    "source": "explicit-network-ranking" if step == 9 else "explicit-indicator-comparison",
+                }
+                if step == 9:
+                    row.update(
+                        generation=0,
+                        request_key=f"{release}:network-trend:{','.join(countries)}:2016,2017,2018,2019,2020",
+                    )
+                observations.append(row)
+        payload["steps"][str(step)] = make_record(
+            {"compared": countries, "observations": observations, "material_chosen": True}
+        )
+    payload["steps"]["15"] = make_record(
+        {key: "🧪" * REFLECTION_TEXT_LIMIT for key in ["research_question", "evidence_interpretation", "limitations"]}
+    )
+    size = len(json.dumps(payload, ensure_ascii=False).encode())
+    assert size > 300_000
+    assert validate_session(payload) == payload
+    # Budget for four default runs, four maximum-size optional snapshots, and the remaining steps/quizzes.
+    assert size + 4 * (12_000 + MAX_SNAPSHOT_BYTES) + 40_000 < MAX_SESSION_BYTES
+
+
+def test_session_byte_limit_counts_utf8_and_still_rejects_oversized_payloads():
+    payload = empty_session()
+    payload["steps"]["15"] = make_record({"text": ""})
+    remaining = MAX_SESSION_BYTES - len(json.dumps(payload, ensure_ascii=False).encode())
+    payload["steps"]["15"]["data"]["text"] = "🧪" * (remaining // 4) + "x" * (remaining % 4)
+    assert len(json.dumps(payload, ensure_ascii=False).encode()) == MAX_SESSION_BYTES
+    assert validate_session(payload) == payload
+    payload["steps"]["15"]["data"]["text"] += "x"
+    with pytest.raises(SessionError, match="会话过大"):
+        validate_session(payload)
 
 
 @pytest.mark.parametrize("value", [10**400, -(10**400), float("inf"), -float("inf"), float("nan")])

@@ -33,10 +33,11 @@ export function RegressionEvidenceMatrix({
         </div>
         <p>四个 Y 的单位不同，数字不能直接比较大小（括号里换算成标准差，{SD_DEFINITION}）；“—”表示该步还没有结果。四步用同一个模型，只换 Y。</p>
       </div>
+      <p>当期＋滞后合计是两个 X 项的系数之和：若 X 持续高 1 个百分点，第一年只计当期项，第二年起计两项之和；不是把两年的 Y 变化相加。</p>
       <div className="table-wrap" role="region" aria-label="四步结果汇总表，可横向滚动" tabIndex={0}>
         <table className="data-table reg-evidence-table">
           <thead>
-            <tr><th scope="col">步骤</th><th scope="col">指标类型</th><th scope="col">方向</th><th scope="col">X 每高 1 个百分点，Y 两年累计平均相差</th><th scope="col">其中当年 / 次年</th><th scope="col">95% 区间</th><th scope="col">解释限制</th></tr>
+            <tr><th scope="col">步骤</th><th scope="col">指标类型</th><th scope="col">方向</th><th scope="col">当期＋滞后合计（X 每高 1 个百分点）</th><th scope="col">当期 X 项 / 上一年 X 项</th><th scope="col">95% 区间</th><th scope="col">解释限制</th></tr>
           </thead>
           <tbody>
             {REGRESSION_FAMILIES.map((item) => {
@@ -104,7 +105,7 @@ export function ReportedExperiments({ getStep, onNavigateStep }: {
         : (
           <div className="table-wrap" role="region" aria-label="记入报告的模型实验，可横向滚动" tabIndex={0}>
             <table className="data-table reg-reported-table">
-              <thead><tr><th scope="col">步骤</th><th scope="col">改动</th><th scope="col">设定</th><th scope="col">X 各项合计（X 每高 1 个百分点）</th><th scope="col">同一 Y 的默认模型（两年累计）</th></tr></thead>
+              <thead><tr><th scope="col">步骤</th><th scope="col">改动</th><th scope="col">设定</th><th scope="col">X 各项合计（X 每高 1 个百分点）</th><th scope="col">同一 Y 的默认模型（当期＋滞后合计）</th></tr></thead>
               <tbody>
                 {rows.map(({ step, family, outcome, experiment, run }) => {
                   const sum = xSum(experiment.snapshot, experiment.spec);

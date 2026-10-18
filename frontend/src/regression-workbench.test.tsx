@@ -156,7 +156,7 @@ describe("tables", () => {
       { name: "只放 L2.X", spec: { ...DEFAULT, x_lags: [2] }, snapshot: snapshotOf(DEFAULT_RUN) },
       { name: "三年", spec: { ...DEFAULT, x_lags: [0, 1, 2] }, snapshot: snapshotOf(DEFAULT_RUN) },
     ], "trade", "FVA_share", options)!;
-    expect(spans.cells[2]).toBe("-0.55 个百分点（两年累计）；本列跨度不同，不计偏差");
+    expect(spans.cells[2]).toBe("-0.55 个百分点（当期＋滞后合计）；本列跨度不同，不计偏差");
     expect(spans.cells[3]).toMatch(/^-0\.55 个百分点；(?:幅度比设定值[大小] \d+%|与设定值几乎相同|方向与设定值相反)$/);
     expect(designDeviation(-0.66, -0.55)).toBeCloseTo(0.2);
     expect(designDeviation(-0.44, -0.55)).toBeCloseTo(-0.2);
@@ -222,7 +222,7 @@ describe("tables", () => {
   test("the X terms' sum reads per percentage point at the first column's decimals (one more where two would read alike), saying which years it covers", () => {
     const row = perPointRow(columns, "trade")!;
     expect(row.label).toBe("合计：X 每高 1 个百分点");
-    expect(row.cells).toEqual(["-0.55 个百分点（两年累计）", "-0.70 个百分点（两年累计）"]);
+    expect(row.cells).toEqual(["-0.55 个百分点（当期＋滞后合计）", "-0.70 个百分点（当期＋滞后合计）"]);
     // A tight interval would give 3 decimals on its own (-0.554); in the row it takes the first column's 2.
     const tight = response(NO_RATE, { teaching_tariff_exposure: -0.3322, teaching_tariff_exposure_lag1: -0.2222 });
     tight.result.cumulative = { ...coef("cumulative", -0.5544), se: 0.0027, ci_low: -0.5598, ci_high: -0.549 };
@@ -236,16 +236,16 @@ describe("tables", () => {
       { name: "c", spec: { ...DEFAULT, x_lags: [0, 1, 2] }, snapshot: snapshotOf(lag2) },
     ], "trade")!;
     // -0.5504 and -0.5544 would both read -0.55: one more decimal for every column, so the two differ.
-    expect(mixed.cells).toEqual(["-0.550 个百分点（两年累计）", "-0.554 个百分点（两年累计）", "-0.461 个百分点（仅当期 X）", "-0.540 个百分点（三年累计）"]);
+    expect(mixed.cells).toEqual(["-0.550 个百分点（当期＋滞后合计）", "-0.554 个百分点（当期＋滞后合计）", "-0.461 个百分点（仅当期 X）", "-0.540 个百分点（当期至滞后二期合计）"]);
     // Readings that already differ keep the first column's decimals.
     expect(perPointRow([columns[0], { name: "b", spec: { ...DEFAULT, x_lags: [0] }, snapshot: snapshotOf(xOnly) }], "trade")!.cells)
-      .toEqual(["-0.55 个百分点（两年累计）", "-0.46 个百分点（仅当期 X）"]);
-    // L1.X dropped from a two-term model: no sum, so the remaining X term is not printed as 两年累计.
+      .toEqual(["-0.55 个百分点（当期＋滞后合计）", "-0.46 个百分点（仅当期 X）"]);
+    // L1.X dropped from a two-term model: no sum, so the remaining X term is not printed as 当期＋滞后合计.
     const dropped = response(NO_RATE, { teaching_tariff_exposure: -0.46 }, {
       cumulative: null, omitted: [{ name: "teaching_tariff_exposure_lag1", reason: "collinear", by: null }],
     });
     expect(perPointRow([columns[0], { name: "d", spec: NO_RATE, snapshot: snapshotOf(dropped) }], "trade")!.cells)
-      .toEqual(["-0.55 个百分点（两年累计）", ""]);
+      .toEqual(["-0.55 个百分点（当期＋滞后合计）", ""]);
     // The X-terms sum row: a one-term model shows that term (not "—" above a number); the dropped one stays empty.
     const sums = coefficientRows([
       columns[0],
@@ -298,7 +298,7 @@ describe("tables", () => {
     // Plain numbers on a labelled row: a spreadsheet reads "(0.0330)" as a negative number.
     expect(lines[2]).toBe("标准误,0.0330,0.0461");
     expect(lines).toContain("国家×年份 FE,否,否");
-    expect(lines).toContain("合计：X 每高 1 个百分点,-0.55 个百分点（两年累计）,-0.70 个百分点（两年累计）");
+    expect(lines).toContain("合计：X 每高 1 个百分点,-0.55 个百分点（当期＋滞后合计）,-0.70 个百分点（当期＋滞后合计）");
     expect(lines).toContain("F（自由度）,\"2,076.70（3, 74）\",\"462.88（2, 74）\"");
     expect(lines.at(-2)).toBe("设定,X + L1.X；汇率变动、GDP 对数、贸易开放度；国家×行业 + 年份 FE；显式加入同期汇率；实际省略情况见结果,X + L1.X；GDP 对数、贸易开放度；国家×行业 + 年份 FE；未加入同期汇率控制项");
     expect(options.footnote).toContain("括号内为按国家聚类的标准误");
@@ -403,7 +403,7 @@ describe("the workbench", () => {
     await act(async () => { fireEvent.change(select, { target: { value: "GVCPs" } }); });
     await screen.findByText("回归结果表（因变量：GVC 位置指数）");
     expect(designNote()).toContain("没有单一的课程设定值");
-    expect(designNote()).not.toContain("每个 Y 的两年累计关联有一个设定值");
+    expect(designNote()).not.toContain("每个 Y 的当期＋滞后合计关联有一个设定值");
     for (const name of [/^去掉汇率变动/, /^固定效应改为国家/]) {
       const question = screen.getByRole("button", { name }).textContent ?? "";
       expect(question).toContain("同一 Y 的默认模型");
@@ -871,7 +871,7 @@ describe("the open workbench", () => {
       .toEqual(options.presets.map((item) => [item.label, item.question]));
     expect(document.querySelector(".reg-custom-form-details")!.hasAttribute("open")).toBe(false);
     expect(tableHeaders()).toEqual(["变量", "默认模型"]);
-    expect(document.querySelector(".reg-custom-point-row")?.textContent).toBe("合计：X 每高 1 个百分点-0.55 个百分点（两年累计）");
+    expect(document.querySelector(".reg-custom-point-row")?.textContent).toBe("合计：X 每高 1 个百分点-0.55 个百分点（当期＋滞后合计）");
     expect(statusBar()).toBe("下面是“外国增加值项占比”的默认模型。点一个预设实验，或改设定后计算，旁边会多出一列用来比较。");
     expect(screen.getByText("算出一个模型后，可以把它记入报告附录，和默认模型并列（每步最多一个）。")).toBeTruthy();
   });

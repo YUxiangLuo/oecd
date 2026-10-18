@@ -73,8 +73,8 @@ describe("automatic material status line", () => {
     expect(html).toContain('class="material-card material-card--recorded"');
     expect(html).toContain('<span class="material-chip material-chip--recorded">已记录</span>');
     expect(html).not.toContain("报告材料 · 自动记录");
-    expect(html).toContain('<p class="material-card-summary" role="status">2020 年外国增加值项占比：CHN 中国 11.730%</p>');
-    expect(html).toContain("记录上方所选国家同一年的外国增加值项占比（国家整体），随你的选择自动记录，无需另外保存。");
+    expect(html).toContain('<p class="material-card-summary" role="status">2020 年外国增加值项占比（国家整体）：CHN 中国 11.730%</p>');
+    expect(html).toContain("记录上方所选国家同一年的外国增加值项占比（国家整体），随国家或年份的选择自动记录，无需另外保存。");
     expect(html).not.toContain("material-card-action");
     expect(html).not.toContain("对比国家");
     expect(html).not.toContain("<select");
@@ -139,7 +139,7 @@ describe("recording under the report lock", () => {
       expect("material_chosen" in open.saves[0] && open.saves[0].material_chosen === undefined).toBe(true);
       expect(open.saves[0].compared).toEqual(["CHN"]);
       // The sentence shown on the card travels with the record so step 15 repeats the same words.
-      expect(open.saves[0].material_label).toBe("2020 年 FVA_share：CHN 中国 11.730%");
+      expect(open.saves[0].material_label).toBe("2020 年 FVA_share（国家整体）：CHN 中国 11.730%");
       cleanup();
 
       const locked = await run(true);
@@ -149,7 +149,7 @@ describe("recording under the report lock", () => {
       expect(locked.saves).toHaveLength(1);
       expect(locked.saves[0].material_chosen).toBe(true);
       expect(locked.saves[0].compared).toEqual(["CHN"]);
-      expect(locked.saves[0].material_label).toBe("2020 年 FVA_share：CHN 中国 11.730%");
+      expect(locked.saves[0].material_label).toBe("2020 年 FVA_share（国家整体）：CHN 中国 11.730%");
     } finally {
       cleanup();
       rows.mockRestore();

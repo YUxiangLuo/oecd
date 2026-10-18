@@ -50,8 +50,8 @@ export function recordedShockMaterialLabel(data: Record<string, unknown> | undef
   });
 }
 
-/** Steps 11–14: "默认模型：外国增加值项占比两年累计 −0.55 个百分点（95% 区间 −0.57 至 −0.54）". */
+/** Steps 11–14: "默认模型：外国增加值项占比当期＋滞后合计 −0.55 个百分点（95% 区间 −0.57 至 −0.54）". */
 export function regressionMaterialLabel(parts: { depvar: string; reading: string | null; interval?: string | null }): string {
   if (!parts.reading) return `默认模型：${parts.depvar}（已计算，无法可靠推断）`;
-  return `默认模型：${parts.depvar}两年累计 ${parts.reading}${parts.interval ? `（95% 区间 ${parts.interval}）` : ""}`;
+  return `默认模型：${parts.depvar}当期＋滞后合计 ${parts.reading}${parts.interval ? `（95% 区间 ${parts.interval}）` : ""}`;
 }

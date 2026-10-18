@@ -34,7 +34,7 @@ _KIND_DIMENSIONS = {
     "share": "份额（×100 = 百分点）",
     "length": "长度单位（1 个长度单位约等于平均多经过 1 个生产环节）；另附标准差换算（1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化）",
     "position": f"{RATIO_UNIT_WORDS}（前向 GVC 段长度 ÷ 后向 GVC 段长度，以 1 为分界）；另附标准差换算（1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化）",
-    "network": "中心性原始单位（课程生成的分数，高低顺序参照真实网络指标，不是步骤 5、9 的百万美元）；另附标准差换算（1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化）",
+    "network": "模拟分数单位（课程生成的分数，高低顺序参照真实网络指标，不是步骤 5、9 的百万美元）；另附标准差换算（1 个标准差约等于这个 Y 平常上下波动的典型幅度，已扣除各国家×行业自身水平和各年共同变化）",
 }
 _STUDENT_METRIC_LABELS = {
     **{key: value["label"] for key, value in cast(dict[str, dict[str, Any]], INDICATOR_SCHEMA["fields"]).items()},
@@ -322,8 +322,8 @@ def estimate_digits(kind: str, value: float, bounds: tuple[float, float] | None)
 # The unit as named beside a chart or a bar, and as a counted quantity (frontend ``unitName`` / ``countUnit``): the
 # position index is a ratio, "比值，无单位" as step 13 names it (frontend ``POSITION_UNIT_WORDS``), so its amounts
 # are bare numbers ("约低 0.0021").
-UNIT_NAMES = {"share": "百分点", "length": "长度单位", "position": RATIO_UNIT_WORDS, "network": "中心性原始单位"}
-COUNT_UNITS = {"share": "个百分点", "length": "个长度单位", "position": "", "network": "个中心性原始单位"}
+UNIT_NAMES = {"share": "百分点", "length": "长度单位", "position": RATIO_UNIT_WORDS, "network": "模拟分数单位"}
+COUNT_UNITS = {"share": "个百分点", "length": "个长度单位", "position": "", "network": "个模拟分数单位"}
 
 
 def with_count_unit(amount: str, kind: str) -> str:
@@ -454,7 +454,7 @@ def _natural_effect(
         else None
     )
     # An association (after each unit's own mean and each year's common change), as on the step pages.
-    effect_label = "关税暴露 X 每高 1 个百分点，Y 两年累计平均相差"
+    effect_label = "关税暴露 当期＋滞后合计（X 每高 1 个百分点）"
     kind = _depvar_kind(outcome, design)
     if kind == "share":
         share_digits = estimate_digits(kind, effect * 100, (ci[0], ci[1]) if ci else None)
@@ -560,9 +560,9 @@ def _association(outcome: str, design: dict[str, Any] | None, coefficient: dict[
     word = less if negative else more
     # The v11 default model controls for all three generated confounders; the number is the two-year sum.
     return (
-        f"扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动、GDP 对数和贸易开放度后，关税暴露 X 越高，"
-        f"{_y_label(outcome, design)}两年累计平均越{word}"
-        f"（X 每高 1 个百分点，两年累计约{word} {_effect_size(outcome, design, coefficient)}）。"
+        "扣掉各国家×行业自身的平均水平和每年的共同变化、并控制同期的汇率变动、GDP 对数和贸易开放度后，"
+        f"若关税暴露 X 持续高 1 个百分点，从第二年起，{_y_label(outcome, design)}"
+        f"平均{word} {_effect_size(outcome, design, coefficient)}（当期＋滞后合计的条件关联）。"
     )
 
 

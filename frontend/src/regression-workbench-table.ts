@@ -230,12 +230,12 @@ export function comparisonAxisTitle(positionY: boolean): string {
   return `X 每高 1 个百分点，Y 平均相差多少（按各模型的 X 各项合计；${positionY ? "期数和单位见行下" : "期数见行下，单位见条末"}）`;
 }
 
-/** What a column's X-terms sum covers: "两年累计" for X + L1.X, "仅当期 X" for X alone (its coefficient is not the
- *  default's 当年 term, so not "当年"), "三年累计" with L2.X; other
+/** What a column's X-terms sum covers: "当期＋滞后合计" for X + L1.X, "仅当期 X" for X alone (its coefficient is not the
+ *  default's 当年 term, so not "当年"), "当期至滞后二期合计" with L2.X; other
  *  sets name their terms ("仅 L1.X", "X + L2.X 之和"), so one coefficient is never called a sum. */
 export function xSpanLabel(spec: Pick<ModelSpec, "x_lags">): string {
   const lags = [...spec.x_lags].sort((a, b) => a - b);
-  const named = ({ "0": "仅当期 X", "0,1": "两年累计", "0,1,2": "三年累计" } as Record<string, string>)[lags.join(",")];
+  const named = ({ "0": "仅当期 X", "0,1": "当期＋滞后合计", "0,1,2": "当期至滞后二期合计" } as Record<string, string>)[lags.join(",")];
   if (named) return named;
   const terms = lags.map((lag) => (lag === 0 ? "X" : `L${lag}.X`));
   return terms.length === 1 ? `仅 ${terms[0]}` : `${terms.join(" + ")} 之和`;
@@ -278,7 +278,7 @@ export function xSum(snapshot: CustomResultSnapshot, spec: Pick<ModelSpec, "x_la
 
 /**
  * "合计：X 每高 1 个百分点": each column's X-terms sum read per percentage point, all at the first column's decimals
- * so the row compares like with like, each saying which years it covers ("（两年累计）", "（仅当期 X）").
+ * so the row compares like with like, each saying which years it covers ("（当期＋滞后合计）", "（仅当期 X）").
  */
 /**
  * The decimals every column's X-terms sum is read at: the first column's, plus one (at most two) while two different
@@ -398,7 +398,7 @@ export function designValueRow(columns: TableColumn[], outcome: RegressionOutcom
     cells: columns.map(({ spec, snapshot }) => {
       const sum = xSum(snapshot, spec);
       if (!sum) return "";
-      if (!coversDesignSpan(spec)) return `${target}（两年累计）；本列跨度不同，不计偏差`;
+      if (!coversDesignSpan(spec)) return `${target}（当期＋滞后合计）；本列跨度不同，不计偏差`;
       const kind = snapshot.depvar_kind;
       const deviation = designDeviation(shownCoefficient(sum.coef, kind, digits), shownCoefficient(design, kind, digits));
       return `${target}；${designDeviationText(deviation)}`;
@@ -475,7 +475,7 @@ export function chartModelLabel(name: string): string {
 export const experimentLabel = shownModelLabel;
 
 function csvField(value: string): string {
-  // The table's cells ("+0.55 个百分点（两年累计）", "-0.3298***") are never formulas, so they keep their sign and
+  // The table's cells ("+0.55 个百分点（当期＋滞后合计）", "-0.3298***") are never formulas, so they keep their sign and
   // get no visible quote; no cell holds text a student typed.
   return /[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }

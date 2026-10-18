@@ -78,10 +78,10 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     shortMetric: "加权总度",
     family: "网络",
     measure: "网络中的流量规模变了吗？",
-    unit: "中心性原始单位（另附标准差换算）",
+    unit: "模拟分数单位（另附标准差换算）",
     priorStep: 5,
     priorLabel: "全球生产网络指标",
-    definition: "加权总度：一个国家×行业在全球投入产出网络中买入与卖出的流量之和（见步骤 5）。本步的 Y 是课程生成的分数（高低顺序参照真实网络指标），页面上记作“中心性原始单位”，没有实际单位、也不是金额，只看正负和相差几个标准差（1 个标准差约等于这个 Y 平常上下波动的典型幅度）。条形图里另有加权入度（买入）、加权出度（卖出）、介数（处在其他行业之间最短供货路线上的程度）和接近中心性（离其他行业有多近）。",
+    definition: "真实网络中的加权总度是一个国家×行业买入与卖出的流量之和（见步骤 5）。本步的 Y 是教学模拟分数，高低顺序参照真实网络指标；单位为“模拟分数单位”，与步骤 5、9 的百万美元不同。读方向和相差几个标准差（1 个标准差约等于这个 Y 平常上下波动的典型幅度）。条形图里另有加权入度（买入）、加权出度（卖出）、介数（处在其他行业之间最短供货路线上的程度）和接近中心性（离其他行业有多近）。",
     dontClaim: "不要写成连接已经减少或脱钩，也不要将其视为关税的“总影响”。",
   },
 };
@@ -141,22 +141,22 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
   },
   weighted_indegree: {
     shortMetric: "加权入度",
-    unit: "中心性原始单位（另附标准差换算）",
+    unit: "模拟分数单位（另附标准差换算）",
     dontClaim: "不要写成买入已经减少或脱钩，也不要将其视为关税的“总影响”。",
   },
   weighted_outdegree: {
     shortMetric: "加权出度",
-    unit: "中心性原始单位（另附标准差换算）",
+    unit: "模拟分数单位（另附标准差换算）",
     dontClaim: "不要写成卖出已经减少或脱钩，也不要将其视为关税的“总影响”。",
   },
   betweenesscentrality: {
     shortMetric: "介数",
-    unit: "中心性原始单位（另附标准差换算）",
+    unit: "模拟分数单位（另附标准差换算）",
     dontClaim: "不要挑数值最大的结果当作关税的“总影响”，也不要写成已经脱钩。",
   },
   closnesscentrality: {
     shortMetric: "接近中心性",
-    unit: "中心性原始单位（另附标准差换算）",
+    unit: "模拟分数单位（另附标准差换算）",
     dontClaim: "不要挑数值最大的结果当作关税的“总影响”，也不要写成网络位置已经边缘化。",
   },
 };
@@ -195,7 +195,7 @@ export const REGRESSION_FAMILIES = (["trade", "production", "length", "network"]
 
 export function lessonQuestion(outcome: RegressionOutcome, baseline?: string | null): string {
   const lesson = lessonFor(outcome, baseline);
-  return `关税暴露（X）每高 1 个百分点，${lesson.shortMetric}（Y）两年累计平均相差多少？`;
+  return `关税暴露（X）持续高 1 个百分点时，从第二年起，${lesson.shortMetric}（Y）平均相差多少？`;
 }
 
 /** The direction column of the four-step summary, in the result card's words. */

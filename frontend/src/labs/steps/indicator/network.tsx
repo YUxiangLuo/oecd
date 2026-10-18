@@ -46,6 +46,7 @@ export function NetworkIndicatorStep({ meta, step: _step, state }: { meta: Meta;
         <span className="icio-kicker">02 / 动手查看 · OECD ICIO 网络</span>
         <h2>行业节点的中心性</h2>
         <p>选择一个国家，在该国全部行业中切换“按加权总度从高到低 / 按介数从高到低”：两种排序一致吗？国家选“全部”时只按默认顺序列出，不是全球排名。时间趋势与国家比较在步骤 9。</p>
+        <p className="muted" role="note">本表的行业指标仅供查看，流量只算中间品。报告材料记录国家整体的加权总度（出口＋进口），包括中间品和最终品、不含国内流量，两者不能直接比较。</p>
         <IndicatorTable
           meta={meta} groupKey="network" schema={schema.data} schemaStatus={schema.status} state={state}
           year={controls.year} country={controls.country} page={controls.page} interacted={controls.interacted}
@@ -54,7 +55,7 @@ export function NetworkIndicatorStep({ meta, step: _step, state }: { meta: Meta;
         />
         <AutoMaterialStatus state={state} schema={schema.data} {...auto} where="上方表格所选国家"
           lead={controls.country === "" && auto.country ? `表格显示全部国家；报告材料记录最近选的国家 ${countryLabel(auto.country)}。` : undefined}
-          note="报告记录的是国家整体的加权总度：该国全部出口 + 进口，中间品和最终品都算在内（不含国内流量）。上表的行业数值只算中间品流量，两者不能直接比较。" />
+          note="国家整体的出口＋进口包括中间品和最终品，不含国内流量。" />
       </section>
     </div>
   );

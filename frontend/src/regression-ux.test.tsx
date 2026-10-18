@@ -117,7 +117,8 @@ describe("simple regression workbench", () => {
       const dom = new DOMParser().parseFromString(html, "text/html");
       expect(dom.querySelectorAll(".reg-run-card > button")).toHaveLength(1);
       expect(dom.querySelector(".reg-run-card h3")?.textContent).toContain("关税暴露（X）");
-      expect(dom.body.textContent).not.toContain("模拟");
+      if (outcome === "network") expect(dom.body.textContent).toContain("教学模拟分数");
+      else expect(dom.body.textContent).not.toContain("模拟");
       expect(dom.body.textContent).not.toContain("teaching_tariff_exposure");
       expect(html).not.toMatch(/本步重点|方法与步骤 11 相同|结果指标 Y/);
       expect(dom.querySelectorAll("select, details, table")).toHaveLength(0);
@@ -154,7 +155,7 @@ describe("simple regression workbench", () => {
     expect((saves[0].run as { design: { baseline: string } }).design.baseline).toBe("FVA_share");
     // The run travels with its one-sentence label, which step 15 repeats; nothing else is saved.
     expect(saves[0]).toEqual({ run: expect.anything(), material_label: expect.any(String) });
-    expect(saves[0].material_label).toMatch(/^默认模型：外国增加值项占比两年累计 /);
+    expect(saves[0].material_label).toMatch(/^默认模型：外国增加值项占比当期＋滞后合计 /);
     // The shared card sits after the result and the optional change-the-model fold, before the quiz, saying what 计算
     // saved; with no model experiment put into the report it names none.
     const material = document.getElementById("step-material-action")!;
@@ -174,7 +175,7 @@ describe("simple regression workbench", () => {
     const card = document.querySelector(".verdict-card")!;
     expect(card.firstElementChild?.textContent).toBe(GENERATED_Y_DISCLOSURE);
     expect(card.textContent?.split(GENERATED_DATA_NOTE)).toHaveLength(1);
-    expect(screen.getByRole("group", { name: /X 每高 1 个百分点，Y 两年累计平均相差（个百分点）/ })).toBeTruthy();
+    expect(screen.getByRole("group", { name: /当期＋滞后合计（X 每高 1 个百分点；Y 单位：个百分点）/ })).toBeTruthy();
     // Two sections: the data, then the default model (said above its run button); the change-the-model card is a
     // folded details after them.
     expect([...document.querySelectorAll(".reg-workbench > section > .reg-section-step")].map((node) => node.textContent))
@@ -255,9 +256,9 @@ describe("simple regression workbench", () => {
     const model = await screen.findByRole("group", { name: "本步计算的公式" });
     const section = model.closest("section")!;
     expect(section.querySelector(".reg-section-step")?.textContent).toBe("默认模型");
-    expect(section.querySelector(".model-eq-terms")?.textContent).toContain("两者之和是两年累计关联");
-    expect(section.querySelector(".model-eq-terms")?.textContent).toContain("X 仅当期提高后恢复时的两期关联之和");
-    expect(section.querySelector(".model-eq-terms")?.textContent).toContain("X 持续提高时第二期的关联");
+    expect(section.querySelector(".model-eq-terms")?.textContent).toContain("当期＋滞后合计 = β₁ + β₂");
+    expect(section.querySelector(".model-eq-terms")?.textContent).toContain("若只提高一年后恢复，则这两个系数分别对应第一年和第二年");
+    expect(section.querySelector(".model-eq-terms")?.textContent).toContain("第一年只计 β₁，第二年起同时计 β₁ 和 β₂");
     expect(section.querySelector(".model-eq-terms")?.textContent).toContain("不是因果效应");
     expect(section.querySelector(".model-eq-terms")?.textContent).toContain("γ·汇率变动");
     // The model comes before its run button, and nothing of the change-the-model section shows before a result.
@@ -384,7 +385,7 @@ describe("simple regression workbench", () => {
       estimate("3b_FGY_GVC_C_share", "后向复杂 GVC 生产份额", 0.00752, -0.0112, 0.0262),
     ];
     const { rows, unitTitle } = familyBarRows("production", items, "3b_VA_GVC_C_share");
-    expect(unitTitle).toBe("X 每高 1 个百分点，Y 两年累计平均相差（个百分点）");
+    expect(unitTitle).toBe("当期＋滞后合计（X 每高 1 个百分点；Y 单位：个百分点）");
     const weak = rows.find((row) => row.key === "3b_FGY_GVC_C_share")!;
     expect([weak.uncertain, weak.valueLabel, weak.intervalLabel]).toEqual([true, "+0.008", "[-0.011, +0.026] 个百分点"]);
     expect(barPreviewText(weak, "复杂 GVC 生产份额")).toContain("固定课堂弱效应示例经过筛选");
@@ -424,7 +425,7 @@ describe("simple regression workbench", () => {
       estimate("PLv_GVC", "前向 GVC 段长度", -1.8143, -1.9, -1.7, { kind: "length", default: true, depvar_within_std: 0.4 }),
       estimate("GVCPs", "GVC 位置指数", -0.0768, -0.09, -0.06, { kind: "position", depvar_within_std: 0.05 }),
     ], "PLv_GVC");
-    expect(length.unitTitle).toBe("X 每高 1 个百分点，Y 两年累计平均相差（个标准差）");
+    expect(length.unitTitle).toBe("当期＋滞后合计（X 每高 1 个百分点；Y 单位：个标准差）");
     expect(length.rows.map((row) => [row.sublabel, row.valueLabel])).toEqual([
       // Each bar in its own headline's digits.
       ["长度单位", "-0.0181（-0.045 个标准差）"],
@@ -475,12 +476,12 @@ describe("simple regression workbench", () => {
   test("converts the estimate to the example's X in each step's own units", () => {
     expect(exampleEffect("trade", -0.55, 9.32)).toBe("5.13 个百分点");
     expect(exampleEffect("length", -0.018, 9.32)).toBe("0.168 个长度单位");
-    expect(exampleEffect("network", -40, 9.32)).toBe("373 个中心性原始单位");
-    expect(exampleEffect("network", -20, 9.32)).toBe("186 个中心性原始单位");
+    expect(exampleEffect("network", -40, 9.32)).toBe("373 个模拟分数单位");
+    expect(exampleEffect("network", -20, 9.32)).toBe("186 个模拟分数单位");
     // A closeness change below the shown precision says so instead of printing "-0.00000".
-    expect(exampleEffect("network", -0.0049, 0.00039)).toBe("不到 0.00001 个中心性原始单位");
-    expect(exampleEffect("network", -0.005, 16.93)).toBe("0.0847 个中心性原始单位");
-    expect(exampleEffect("network", -0.6, 10)).toBe("6.00 个中心性原始单位");
+    expect(exampleEffect("network", -0.0049, 0.00039)).toBe("不到 0.00001 个模拟分数单位");
+    expect(exampleEffect("network", -0.005, 16.93)).toBe("0.0847 个模拟分数单位");
+    expect(exampleEffect("network", -0.6, 10)).toBe("6.00 个模拟分数单位");
     // Closeness gaps (~0.005) need decimals; a fixed 0 printed "低 0" and "估计的差距 −0".
     expect(networkDigits(0.0049)).toBe(5);
     expect(networkDigits(0.012)).toBe(4);
@@ -508,14 +509,14 @@ describe("simple regression workbench", () => {
   });
 
   test("network conversions group thousands, as the report does", () => {
-    expect(exampleEffect("network", -40, 34.55)).toBe("1,382 个中心性原始单位");
+    expect(exampleEffect("network", -40, 34.55)).toBe("1,382 个模拟分数单位");
     expect(groupedFixed(-1382.4, 0)).toBe("-1,382");
     expect(groupedFixed(12.345, 2)).toBe("12.35");
     // Rounds to zero: no negative zero.
     expect(groupedFixed(-0.0004, 2)).toBe("0.00");
   });
 
-  test("the course model's headline is the cumulative relation, split into the tariff's year and the next", () => {
+  test("a sustained X increment uses the current coefficient in year one and the sum from year two", () => {
     const run = FVA();
     const twoYear = {
       ...run,
@@ -529,14 +530,19 @@ describe("simple regression workbench", () => {
         cumulative: { ...run.result.coefs[0], name: "cumulative", coef: -0.55, ci_low: -0.57, ci_high: -0.53 },
       },
     };
-    expect(lagSplit("trade", twoYear as never)).toContain("其中当年 -0.33 个百分点，次年 -0.22 个百分点");
-    expect(lagSplit("trade", twoYear as never)).toContain("共同条件斜率，不是所有国家×行业的等权平均");
-    expect(lagSplit("trade", twoYear as never)).toContain("不是两个年份的 Y 变化相加");
-    expect(lagSplit("trade", twoYear as never)).toContain("不代表因果效应");
+    expect(lagSplit("trade", twoYear as never)).toContain("当期 X 项：-0.33 个百分点；上一年 X 项（L1.X）：-0.22 个百分点");
     expect(lagSplit("trade", run as never)).toBeNull();
     render(<RegressionResultCard outcome="trade" response={{ ...twoYear, benchmark } as never} />);
-    expect(screen.getByRole("heading", { level: 3 }).textContent).toContain("两年累计平均低 0.55 个百分点");
-    expect(document.querySelector(".reg-lag-split")?.textContent).toContain("其中当年 -0.33 个百分点");
+    expect(screen.getByRole("heading", { level: 3 }).textContent).toContain("持续高 1 个百分点时，从第二年起，外国增加值项占比平均低 0.55 个百分点");
+    expect(document.querySelector(".reg-lag-split")?.textContent).toContain("当期 X 项：-0.33 个百分点");
+    const timeline = document.querySelector(".reg-lag-timing")!;
+    expect([...timeline.querySelectorAll("li")].map((item) => item.textContent)).toEqual([
+      "第一年：只有当期 X 项，Y 相差 -0.33 个百分点。",
+      "第二年及以后：当期 X 项＋上一年 X 项，Y 相差 -0.55 个百分点。",
+    ]);
+    expect(timeline.textContent).toContain("共同条件斜率，不是所有国家×行业的等权平均");
+    expect(timeline.textContent).toContain("不是两个年份的 Y 变化相加");
+    expect(timeline.textContent).toContain("不代表因果效应");
     cleanup();
     // The parts take the headline's decimals: a sum read to 3 decimals splits to 3 decimals, not 2.
     const small = {
@@ -551,10 +557,11 @@ describe("simple regression workbench", () => {
         cumulative: { ...twoYear.result.cumulative, coef: 0.0743, ci_low: 0.061, ci_high: 0.0876 },
       },
     };
-    expect(lagSplit("trade", small as never)).toContain("其中当年 +0.041 个百分点，次年 +0.033 个百分点");
-    // "两年累计" is said for X + L1.X only: a sum of other terms is not over the tariff's year and the next.
+    expect(lagSplit("trade", small as never)).toContain("当期 X 项：+0.041 个百分点；上一年 X 项（L1.X）：+0.033 个百分点");
+    // "当期＋滞后合计" is said for X + L1.X only: a sum of other terms is not over the tariff's year and the next.
     render(<RegressionResultCard outcome="trade" response={{ ...twoYear, design: { ...twoYear.design, spec: { x_lags: [0, 2], controls: [], fixed_effects: ["year"] } }, benchmark } as never} />);
-    expect(screen.getByRole("heading", { level: 3 }).textContent).not.toContain("两年累计");
+    expect(screen.getByRole("heading", { level: 3 }).textContent).not.toContain("当期＋滞后合计");
+    expect(document.querySelector(".reg-lag-timing")).toBeNull();
   });
 
   test("step 14 says weighted degree is in + out once all three are in the family", () => {

@@ -6,6 +6,8 @@ import {
   depvarKind,
   SD_DEFINITION,
   shownPerPoint,
+  lagSplitParts,
+  teachingEffect,
   standardizedDigits,
   standardizedEffect,
 } from "../regression-verdict";
@@ -44,14 +46,14 @@ export function RegressionResultCard({ outcome, response, examples = [], example
   // The headline keeps the short form; what a standard deviation is follows it on its own line.
   const unsignedEffect = verdict.effectBrief.replace(/^[+−-]/, "");
   const standardized = verdict.effect !== verdict.effectBrief;
-  // The course model has X and L1.X: the headline is their sum, the relation over the tariff's year and the next.
-  // Said only for that model (a sum of other X terms, or no sum at all, is not "两年累计").
+  // With X and L1.X, a sustained increment enters both terms from its second year onward.
   const lags = response.design.spec?.x_lags;
   const twoYears = Boolean(response.result.cumulative) && (lags == null || (lags.length === 2 && lags.includes(0) && lags.includes(1)));
   const plainResult = directional
-    ? `${twoYears ? "两年累计" : ""}平均${verdict.state === "negative" ? words.lower : words.higher} ${unsignedEffect}`
-    : `${twoYears ? "两年累计" : ""}平均相差 ${verdict.effectBrief}，但高低方向不确定`;
+    ? `平均${verdict.state === "negative" ? words.lower : words.higher} ${unsignedEffect}`
+    : `平均相差 ${verdict.effectBrief}，但高低方向不确定`;
   const split = twoYears ? lagSplit(outcome, response) : null;
+  const parts = split && !suppressed ? lagSplitParts(outcome, response) : null;
   // "外国增加值项占比平均低", but "GVC 位置指数 平均…" keeps a space after a Latin name.
   const metricGap = /[A-Za-z]$/.test(lesson.shortMetric) ? " " : "";
   const badgeColor = BADGE_COLORS[verdict.state];
@@ -60,7 +62,7 @@ export function RegressionResultCard({ outcome, response, examples = [], example
       <p className="reg-generated-disclosure" role="note">{GENERATED_Y_DISCLOSURE}</p>
       <h3 id="reg-result-title" tabIndex={-1} className="reg-plain-verdict">
         {verdict.coefficient
-          ? <span className="reg-headline-main">关税暴露 X 每高 1 个百分点，{lesson.shortMetric}{metricGap}<b>{plainResult}</b></span>
+          ? <span className="reg-headline-main">关税暴露 X {twoYears ? "持续高 1 个百分点时，从第二年起，" : "每高 1 个百分点，"}{lesson.shortMetric}{kind === "network" ? "（教学模拟分数）" : metricGap}<b>{plainResult}</b></span>
           : "没算出 X 的估计值"}
       </h3>
       {verdict.coefficient && (
@@ -73,6 +75,14 @@ export function RegressionResultCard({ outcome, response, examples = [], example
         </p>
       )}
       {verdict.coefficient && split && <p className="reg-lag-split">{split}</p>}
+      {parts && verdict.coefficient && <div className="reg-lag-timing">
+        <p>假设 X 从某年起持续高 1 个百分点，其他模型项保持相同：</p>
+        <ul>
+          <li><b>第一年</b>：只有当期 X 项，Y 相差 {parts[0]}。</li>
+          <li><b>第二年及以后</b>：当期 X 项＋上一年 X 项，Y 相差 {teachingEffect(outcome, verdict.coefficient.coef, response.design, verdict.coefficient.ci_low != null && verdict.coefficient.ci_high != null ? [verdict.coefficient.ci_low, verdict.coefficient.ci_high] : null)}。</li>
+        </ul>
+        <p className="muted">合计的是系数，不是两个年份的 Y 变化相加。“平均”指控制其他变量和固定效应后的共同条件斜率，不是所有国家×行业的等权平均，也不代表因果效应。</p>
+      </div>}
       {standardized && <p className="muted reg-sd-note">{SD_DEFINITION}。</p>}
       {/* A share Y reads in points here, but step 15 sets the four steps side by side in standard deviations: the
           same size is given once, so the number there can be found here. */}
@@ -109,7 +119,7 @@ export function RegressionResultCard({ outcome, response, examples = [], example
                 // "与 X 相关的差异约为 -12.83 个百分点（Y 偏低）"; below the shown precision it reads "不到 0.01 个百分点".
                 // With an interval that includes 0 the sign is not settled, so 偏低/偏高 is left out and the open
                 // direction is said once, after the last conversion.
-                return <>{example.label}：X = {exampleXText(example)} 个百分点 → {twoYears ? "两年累计" : ""}与 X 相关的差异{tiny ? "" : "约"} <b>{tiny ? effect : `${lower ? "-" : "+"}${effect}`}</b>{directional ? `（Y 偏${lower ? words.lower : words.higher}）` : ""}{verdict.state === "insufficient" && example === lastConverted ? "，但区间包含 0，高低方向并不确定" : ""}</>;
+                return <>{example.label}：X = {exampleXText(example)} 个百分点 → {twoYears ? "X 持续保持该数值时，第二年起" : ""}与 X 相关的差异{tiny ? "" : "约"} <b>{tiny ? effect : `${lower ? "-" : "+"}${effect}`}</b>{directional ? `（Y 偏${lower ? words.lower : words.higher}）` : ""}{verdict.state === "insufficient" && example === lastConverted ? "，但区间包含 0，高低方向并不确定" : ""}</>;
               })()
               : example.service
                 ? <>{example.label}：不是货物行业，不加税（τ = 0）{zeroNote}</>

@@ -312,7 +312,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
         <div className="intro-xy-card">
           <b>02 · 用回归把差距量化</b>
           <div className="intro-xy-item"><strong>X</strong><span><b>关税暴露</b><small>解释变量：按它的高低比较各国家×行业</small></span></div>
-          <div className="intro-xy-link" aria-hidden>↓ X 每高 1 个百分点，Y 两年累计平均相差多少？</div>
+          <div className="intro-xy-link" aria-hidden>↓ 当期＋滞后合计（X 每高 1 个百分点）</div>
           <div className="intro-xy-item"><strong>Y</strong><span><b>指标结果</b><small>结果变量：要观察的变量</small></span></div>
         </div>
       </div>

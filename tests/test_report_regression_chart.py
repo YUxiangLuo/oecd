@@ -108,14 +108,14 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
         assert float(native.replace(",", "")) == pytest.approx(float(shown.replace(",", "")), abs=0.51 * 10**-decimals)
         if outcome in ("trade", "production"):
             # Shares: per 1 percentage point of X in percentage points, the table's interval too.
-            assert chart["x_label"].endswith("（个百分点）")
+            assert chart["x_label"].endswith("Y 单位：个百分点）")
             assert bar["value"] == pytest.approx(coefficient["coef"], rel=1e-3)
             printed_low = re.search(r"\[([+-]?[\d.]+), ", table).group(1)
             precision = len(printed_low.split(".")[1]) if "." in printed_low else 0
             assert float(printed_low) == pytest.approx(coefficient["ci_low"], abs=0.51 * 10**-precision)
         else:
             # Mixed units: standard deviations, SD = (β × 0.01) / depvar_within_std, with the native value first.
-            assert chart["x_label"].endswith("（个标准差）")
+            assert chart["x_label"].endswith("Y 单位：个标准差）")
             std = result["depvar_within_std"]
             point = coefficient["coef"] * 0.01 / std
             bounds = (coefficient["ci_low"] * 0.01 / std, coefficient["ci_high"] * 0.01 / std)
@@ -130,7 +130,7 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
             assert float(bar_sd) == pytest.approx(float(sd), abs=0.51 * 10 ** -len(sd.split(".")[1]))
             assert (
                 bar["sub"]
-                == {"length": "长度单位", "position": "比值，无单位", "network": "中心性原始单位"}[
+                == {"length": "长度单位", "position": "比值，无单位", "network": "模拟分数单位"}[
                     design["depvar_kind"]
                 ]
             )
@@ -178,7 +178,7 @@ def test_summary_chart_has_one_standardized_bar_per_saved_run(panel, overview):
     markdown = "\n".join(_evidence_summary(runs, None, None, overview))
     summary = markdown.split("### 四项回归结果汇总", 1)[1].split("### 步骤 11", 1)[0]
     (chart,) = [json.loads(block) for block in CHART.findall(summary)]
-    assert chart["type"] == "diverging-bar" and chart["x_label"].endswith("（个标准差）")
+    assert chart["type"] == "diverging-bar" and chart["x_label"].endswith("Y 单位：个标准差）")
     assert [item["sub"] for item in chart["items"]] == [
         "步骤 11 · 贸易流",
         "步骤 12 · 生产",
@@ -186,7 +186,7 @@ def test_summary_chart_has_one_standardized_bar_per_saved_run(panel, overview):
         "步骤 14 · 网络",
     ]
     assert not any(item.get("saved") for item in chart["items"])
-    units = {"trade": " 个百分点", "production": " 个百分点", "length": " 个长度单位", "network": " 个中心性原始单位"}
+    units = {"trade": " 个百分点", "production": " 个百分点", "length": " 个长度单位", "network": " 个模拟分数单位"}
     for item, run in zip(chart["items"], runs):
         coefficient, std = run["result"]["cumulative"], run["result"]["depvar_within_std"]
         point = coefficient["coef"] * 0.01 / std
@@ -291,7 +291,7 @@ def test_interval_end_never_reads_as_the_estimate():
     result = {"status": "ok", "support": {"status": "ok"}, "depvar_within_std": 0.58, "coefs": [coefficient]}
     _, effect, interval = _natural_effect("length", length, result, coefficient)
     assert effect.startswith("-0.0184 个长度单位") and interval.startswith("[-0.0192, -0.0176] 个长度单位")
-    assert "约短 0.0184 个长度单位" in _association("length", length, coefficient, negative=True)
+    assert "平均短 0.0184 个长度单位" in _association("length", length, coefficient, negative=True)
     (bar,) = json.loads(family_chart(13, "length", length, result, coefficient, None)[1])["items"]
     assert bar["text"].startswith("-0.0184（")
 

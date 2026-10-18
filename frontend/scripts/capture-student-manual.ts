@@ -201,7 +201,7 @@ try {
 
   await open(page, 11, `document.querySelector(".diverging-bars svg") && document.querySelector(".reg-example-effect")`);
   await scrollTo(page, `document.querySelector(".reg-family-bars") ?? document.querySelector(".diverging-bars")`, 12);
-  await save("11-regression-result.png", await page.screenshot(), student.username, "Step 11 after the run: one bar per Y and the two-year headline with its current-year and next-year parts.");
+  await save("11-regression-result.png", await page.screenshot(), student.username, "Step 11 after the run: one bar per Y and the sustained-X headline with current and lagged terms and first/second-year readings.");
 
   // 改模型、对比: open the fold, run the 去掉汇率变动 preset, show its column beside the default model, put it in the report.
   await page.eval(`(() => { const d = document.querySelector(".reg-custom-section"); if (d && !d.open) d.querySelector("summary").click(); return true; })()`);

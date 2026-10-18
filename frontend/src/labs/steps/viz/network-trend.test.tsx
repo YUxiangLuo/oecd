@@ -476,13 +476,19 @@ test("流量与路径 says which industries it leaves out and why", async () => 
   await waitFor(() => expect(screen.getAllByText("另有 2 个行业没有画出：C27、T 加权总度为 0（没有买卖，无法在对数刻度上显示）。")).toHaveLength(2));
 });
 
-test("the carried-country note shows only where the country selects are, not on the global network", () => {
-  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([row(country, year, 10)]));
+test("first visit opens a recordable trend; exploration still hides the carried-country note", async () => {
+  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => ({ ...page([]), rows: [{ ...row(country, year, 10), "weighted degree": 100 + year }] }));
   mockReference();
   const note = "沿用步骤 2 的国家，可以更换。";
-  render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} carriedNote={note} onRecord={() => {}}
+  const save = mock(() => {});
+  render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} carriedNote={note} onRecord={save}
     extraLenses={[{ key: "global-network", label: "全球贸易网络图" }]} renderExtra={() => <div>全球网络</div>} />);
-  // Step 9 opens on the global network, which has no country select: the note would point at nothing.
+  expect(screen.getByRole("button", { name: "历年变化" }).getAttribute("aria-pressed")).toBe("true");
+  expect(screen.getByLabelText("国家 A")).toBeTruthy();
+  expect(screen.getByText(note)).toBeTruthy();
+  fireEvent.click(await recordButton());
+  expect(save).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button", { name: "全球贸易网络图" }));
   expect(screen.getByRole("button", { name: "全球贸易网络图" }).getAttribute("aria-pressed")).toBe("true");
   expect(screen.queryByLabelText("国家 A")).toBeNull();
   expect(screen.queryByText(note)).toBeNull();
@@ -490,6 +496,15 @@ test("the carried-country note shows only where the country selects are, not on 
   expect(screen.getByLabelText("国家 A")).toBeTruthy();
   expect(screen.getByText(note)).toBeTruthy();
   cleanup();
+});
+
+test("an explicitly browsed global network remains the opening view", () => {
+  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([row(country, year, 10)]));
+  render(<NetworkTrend meta={meta} initialCountry="CHN" onRecord={() => {}}
+    initialBrowse={{ countries: ["CHN", "USA"], view: "global-network", industry: "C26", metric: "weighted degree", year: 2020 }}
+    extraLenses={[{ key: "global-network", label: "全球贸易网络图" }]} renderExtra={() => <div>全球网络</div>} />);
+  expect(screen.getByRole("button", { name: "全球贸易网络图" }).getAttribute("aria-pressed")).toBe("true");
+  expect(screen.queryByLabelText("国家 A")).toBeNull();
 });
 
 test("a recorded ranking does not change the trend's industry; a carried pair says where it came from", () => {

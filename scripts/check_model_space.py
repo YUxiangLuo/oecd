@@ -350,7 +350,7 @@ def evaluate(records: list[dict[str, Any]]) -> tuple[list[Check], dict[str, Any]
         "recover_cumulative": Check(
             "正确设定恢复 β",
             "国家×行业 + 年份（或国家×年份）固定效应、三项混杂控制在内（或被国家×年份吸收）、X 含当年与上年："
-            "两年累计的 95% 区间包含预设 β，或与 β 的相对偏差不超过 2.5%（单次抽样下区间极窄时按偏差判断）",
+            "当期＋滞后合计的 95% 区间包含预设 β，或与 β 的相对偏差不超过 2.5%（单次抽样下区间极窄时按偏差判断）",
         ),
         "recover_cumulative_ci": Check(
             "正确设定恢复 β（仅看区间）", "同上，只按 95% 区间是否包含 β 计；未通过的是区间很窄、偏差在 2.5% 以内的设定"
@@ -725,7 +725,7 @@ def _report(args: argparse.Namespace, variant: teaching_variants.Variant | None)
     lines += ["### 补充统计", ""]
     mis = extras["misspecified_specs_whose_interval_still_contains_beta"]
     lines.append(
-        "错误设定（缺单位或年份固定效应，或混杂未控制）下两年累计区间仍包含 β 的比例（“凑巧接近不代表模型对”）："
+        "错误设定（缺单位或年份固定效应，或混杂未控制）下当期＋滞后合计区间仍包含 β 的比例（“凑巧接近不代表模型对”）："
     )
     lines.append("")
     lines.append("| Y | 包含 β | 错误设定数 | 相对偏差范围 |")
@@ -742,7 +742,7 @@ def _report(args: argparse.Namespace, variant: teaching_variants.Variant | None)
         "",
         "## 2. 页面命名的设定逐 Y 对照",
         "",
-        "两年累计（或单项 X）估计；括号内为相对预设 β 的偏差。零效应 Y 与位置指数只列估计值。",
+        "当期＋滞后合计（或单项 X）估计；括号内为相对预设 β 的偏差。零效应 Y 与位置指数只列估计值。",
         "",
     ]
     named = key_specs(records)
@@ -869,9 +869,9 @@ def distinct(args: argparse.Namespace) -> None:
     moves = [move for move in _moves() if by_id.get(spec_id(targets[0][0], targets[0][1], move[2]))]
     thresholds = (0.05, 0.10)
     lines = [
-        f"## 改一处设定，两年累计变多少（{records[0].get('release', '')}）",
+        f"## 改一处设定，当期＋滞后合计变多少（{records[0].get('release', '')}）",
         "",
-        "相对默认模型两年累计的变化（+ 为幅度变大）。“全空间”列：全部设定里与默认模型相差至少 5% / 10% 的比例。",
+        "相对默认模型当期＋滞后合计的变化（+ 为幅度变大）。“全空间”列：全部设定里与默认模型相差至少 5% / 10% 的比例。",
         "",
         "| Y | " + " | ".join(label for _, label, _ in moves) + " | 全空间 ≥5% / ≥10% |",
         "|" + " --- |" * (len(moves) + 2),

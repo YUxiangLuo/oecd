@@ -85,10 +85,10 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   const [industry, setIndustry] = useState([browse?.industry, trendIndustry, "C26", meta.sectors[0]]
     .find((sector) => sector && meta.sectors.includes(sector)) ?? "");
   const [pickedMetric, setMetric] = useState(browse?.metric || (restored[0]?.metric ?? "weighted degree"));
-  // Open the global overview on first visit; preserve saved browsing and material views.
+  // Start with a recordable trend; preserve an explicitly browsed or recorded view.
   const [view, setView] = useState<string>(browse?.view || (restored.length
     ? restored[0].source === "explicit-network-ranking" ? "ranking" : "trend"
-    : extraLenses.some((lens) => lens.key === "global-network") ? "global-network" : "trend"));
+    : "trend"));
   const [countriesChosen, setCountriesChosen] = useState(false);
   // Recorded on request after submission: the confirmation then says to update the report on step 15.
   const [rechosen, setRechosen] = useState(false);

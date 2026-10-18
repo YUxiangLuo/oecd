@@ -51,7 +51,7 @@ _TERM_LABELS = {X_LAG_COLUMNS[lag]: x_term_label(lag) for lag in X_LAG_COLUMNS} 
 }
 _OMITTED_REASONS = {"zero": "样本里全为 0", "collinear": "与其他变量完全共线"}
 # What a column's X-terms sum covers (frontend ``xSpanLabel``).
-_X_SPANS = {(0,): "仅当期 X", (0, 1): "两年累计", (0, 1, 2): "三年累计"}
+_X_SPANS = {(0,): "仅当期 X", (0, 1): "当期＋滞后合计", (0, 1, 2): "当期至滞后二期合计"}
 
 
 def _deviation_text(deviation: float) -> str:
@@ -358,7 +358,7 @@ def _design_value_rows(columns: list[dict[str, Any]]) -> list[str]:
             cells.append("")
             continue
         if not _covers_design_span(column["spec"]):
-            cells.append(f"{target}（两年累计）；本列跨度不同，不计偏差")
+            cells.append(f"{target}（当期＋滞后合计）；本列跨度不同，不计偏差")
             continue
         # Between the numbers as shown (the page's shownCoefficient), so equal readings give equal deviations.
         shown = round(float(total["coef"]) * scale, digits) / scale
@@ -441,7 +441,7 @@ _NATIVE_UNIT_NOTES = {
     "share": "份额转换为百分点",
     "length": "长度单位",
     "position": f"位置指数是{RATIO_UNIT_WORDS}",
-    "network": "中心性原始单位",
+    "network": "模拟分数单位",
 }
 
 

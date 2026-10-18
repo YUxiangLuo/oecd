@@ -6,12 +6,12 @@ from scripts.verify_report_pdf import SUMMARY_COLUMNS, SUMMARY_TITLE, validate_r
 
 
 def test_complete_summary_with_wrapped_headers():
-    text = "四项回归结果汇总\n步骤 指标 X 每高 1 个百分点，Y 两年\n累计平均相差 95%\n区间 方向"
+    text = "四项回归结果汇总\n步骤 指标 当期＋滞后合计（X 每高\n1 个百分点） 95%\n区间 方向"
     validate_report_text(text + "\n11\n12\n13\n14\n步骤 11 · 贸易流详情")
 
 
 def test_missing_interval_header_cannot_borrow_from_details():
-    text = "四项回归结果汇总\n步骤 指标 X 每高 1 个百分点，Y 两年累计平均相差 方向\n步骤 11 · 贸易流详情\n95% 区间"
+    text = "四项回归结果汇总\n步骤 指标 当期＋滞后合计（X 每高 1 个百分点） 方向\n步骤 11 · 贸易流详情\n95% 区间"
     with pytest.raises(ValueError, match="截断列: 95%区间"):
         validate_report_text(text)
 
