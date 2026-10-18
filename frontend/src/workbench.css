@@ -713,7 +713,7 @@ dl.teaching-definitions dd { margin: 0; }
 .reg-custom-report-chip { margin: 0; padding: 7px 10px; border-radius: 7px; background: #eef8f1; color: #1c4d2f; font-size: 12.5px; line-height: 1.6; }
 .reg-custom-report-none { margin: 0; font-size: 12.5px; }
 
-/* v13: the presets in two tiers (必看 / 进阶), the course's design value under the per-point row, and the
+/* v13: the presets in two tiers (基础实验 / 进阶), the course's design value under the per-point row, and the
    decomposition sentence under the three-group chart. */
 .reg-preset-tier + .reg-preset-tier { margin-top: 10px; }
 .reg-preset-tier-title { margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: .04em; color: #5f6677; text-transform: none; }

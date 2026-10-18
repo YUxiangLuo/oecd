@@ -167,7 +167,7 @@ describe("tables", () => {
     expect(summary.map((item) => item.key)).toEqual(expect.arrayContaining(["f_p", "root_mse"]));
   });
 
-  test("the presets are offered in two tiers, 必看 before 进阶, with the design-value note (v13)", () => {
+  test("the presets are offered in two tiers, 基础实验 before 进阶, with the design-value note (v13)", () => {
     expect(options.presets.map((item) => item.tier)).toEqual(["core", "core", "core", "advanced", "advanced", "advanced", "advanced"]);
     expect(options.presets.map((item) => item.label)).toEqual([
       "去掉汇率变动", "去掉 GDP 对数", "去掉贸易开放度", "只放当期 X（去掉 L1.X）", "去掉年份固定效应", "固定效应改为国家 + 行业 + 年份", "加上人口增长率和 FDI 净流入占比",

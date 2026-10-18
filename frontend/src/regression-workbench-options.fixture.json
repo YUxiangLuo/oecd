@@ -28,7 +28,7 @@
     {
       "key": "no_exchange_rate",
       "tier": "core",
-      "tier_label": "必看",
+      "tier_label": "基础实验",
       "label": "去掉汇率变动",
       "question": "删除控制项并不删除数据中的汇率变化：X 各项合计、区间和样本有没有变化？",
       "spec": {
@@ -55,7 +55,7 @@
     {
       "key": "no_gdp",
       "tier": "core",
-      "tier_label": "必看",
+      "tier_label": "基础实验",
       "label": "去掉 GDP 对数",
       "question": "与默认模型的差异，和去掉汇率控制项时方向相同吗？",
       "spec": {
@@ -82,7 +82,7 @@
     {
       "key": "no_openness",
       "tier": "core",
-      "tier_label": "必看",
+      "tier_label": "基础实验",
       "label": "去掉贸易开放度",
       "question": "X 各项合计和区间如何变化？",
       "spec": {

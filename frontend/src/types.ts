@@ -991,7 +991,7 @@ export interface WorkbenchOptions {
   fixed_effects: { key: string; label: string; description: string; includes: string[] }[];
   no_fixed_effects_note: string;
   /** The preset experiments, in page order: each changes one thing of the default model and asks a question;
-   *  the "core" tier (必看) comes first, then "advanced" (进阶). */
+   *  the "core" tier (基础实验) comes first, then "advanced" (进阶). */
   presets: { key: string; tier: "core" | "advanced"; tier_label: string; label: string; question: string; spec: ModelSpec }[];
   /** How a model that matches no preset is named ("自定义设定"), on the page and in the report. */
   custom_label: string;

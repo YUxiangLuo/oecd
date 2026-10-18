@@ -74,7 +74,7 @@ def test_options_list_every_choice_in_page_order_with_the_default_and_the_limits
         ("advanced", "固定效应改为国家 + 行业 + 年份"),
         ("advanced", "加上人口增长率和 FDI 净流入占比"),
     ]
-    assert {item["tier_label"] for item in presets} == {"必看", "进阶"}
+    assert {item["tier_label"] for item in presets} == {"基础实验", "进阶"}
     # L2.X is named, not explained: its answer (no two-year-later link) is for the student to find.
     assert options["x_lags"][2]["description"] == "滞后 2 期：两年前的 X"
     assert "吸收不等于没有控制" in effects["country_year"]["description"]

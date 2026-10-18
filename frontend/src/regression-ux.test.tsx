@@ -290,7 +290,7 @@ describe("simple regression workbench", () => {
     expect(scroll).toHaveBeenCalledTimes(2);
     // Two ways to change the model: the presets (their tiers one level below), then the custom form.
     expect(screen.getByRole("heading", { level: 4, name: /^方式一：点一个预设实验/ }).className).toBe("reg-custom-way");
-    expect(screen.getByRole("heading", { level: 5, name: "必看" }).className).toBe("reg-preset-tier-title");
+    expect(screen.getByRole("heading", { level: 5, name: "基础实验" }).className).toBe("reg-preset-tier-title");
     expect(screen.getByRole("heading", { level: 5, name: "进阶" }).className).toBe("reg-preset-tier-title");
     expect(workbench.querySelector(".reg-custom-form-details > summary")?.textContent).toMatch(/^方式二：自己改设定/);
     // The single-model table (the Stata/Excel-like one the course asked for) is open from the start.

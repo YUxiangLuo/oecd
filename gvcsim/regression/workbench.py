@@ -69,13 +69,13 @@ def _without(controls: tuple[tuple[str, int], ...], *names: str) -> tuple[tuple[
 
 
 # The preset experiments, in page order, each changing one thing of the default model. The first tier is the three
-# "必看" ones (a generator covariate left out: the point estimate moves away from the course's design value on v13 data, about
+# "基础实验" ones (a generator covariate left out: the point estimate moves away from the course's design value on v13 data, about
 # 10–15% without the exchange rate, 6–11% without GDP, 4–9% without openness, where some intervals still contain it;
 # docs/regression-model-space-check-2026-10-14.md); the second tier is "进阶". Each is a contrast the course data were built to show, and the question is asked,
 # not answered. Their labels name the experiment in the report. Two changes the page also offers leave the estimate
 # about unchanged by design: country × year effects, explained in the custom form, and L2.X, left for the student to
 # find (its description names the term only).
-PRESET_TIERS = {"core": "必看", "advanced": "进阶"}
+PRESET_TIERS = {"core": "基础实验", "advanced": "进阶"}
 PRESETS: tuple[tuple[str, str, str, str, ModelSpec], ...] = (
     (
         "no_exchange_rate",
