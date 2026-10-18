@@ -202,14 +202,15 @@ describe("Steps 6-9 chart semantic data equivalents", () => {
         sortKey="total"
         sortLabel="排序总量"
         sortFormat="amount"
+        normalizationKey="total"
         valueFormat="amount"
       />,
     );
     expect(html).toContain("查看排序总量构成图表数据表");
-    expect(html).toContain("<th scope=\"col\">国内段</th>");
-    expect(html).toContain("<th scope=\"col\">外国段</th>");
-    expect(html).toContain("<th scope=\"col\">排序总量</th>");
-    expect(html).toContain('<th scope="row">AAA</th><td>4</td><td>-1</td><td>9</td>');
+    expect(html).toContain("<th scope=\"col\">国内段（%）</th>");
+    expect(html).toContain("<th scope=\"col\">外国段（%）</th>");
+    expect(html).toContain("<th scope=\"col\">排序总量（百万美元）</th>");
+    expect(html).toContain('<th scope="row">AAA</th><td>44.444%</td><td>4</td><td>-11.111%</td><td>-1</td><td>9</td>');
     expect(html).toContain("composition-chart-track");
   });
 
@@ -294,13 +295,14 @@ describe("Steps 6-9 chart semantic data equivalents", () => {
 describe("chart tooltips", () => {
   test("a value keeps its unit on one line: 百万美元 is not split across lines", () => {
     const view = render(<CompositionBar
-      rows={[{ country: "MEX", a: 274951, total: 410393 }]}
-      segments={[{ key: "a", name: "国内增加值出口" }]} sortKey="total" valueFormat="amount" sortFormat="amount"
+      rows={[{ country: "MEX", a: 274951, total: 1099804 }]}
+      segments={[{ key: "a", name: "国内增加值出口" }]} sortKey="total" normalizationKey="total" valueFormat="amount" sortFormat="amount"
     />);
     try {
       fireEvent.mouseMove(view.container.querySelector(".composition-chart-row")!, { clientX: 10, clientY: 10 });
-      const values = [...view.container.querySelectorAll("b")].filter((node) => node.textContent?.endsWith("百万美元"));
+      const values = [...view.container.querySelectorAll("b")].filter((node) => node.textContent?.includes("百万美元"));
       expect(values.length).toBeGreaterThan(0);
+      expect(values[0].textContent).toBe("25.000%（274,951 百万美元）");
       for (const value of values) expect(value.style.whiteSpace).toBe("nowrap");
     } finally {
       cleanup();

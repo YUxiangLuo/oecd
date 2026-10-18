@@ -3,7 +3,6 @@
  *
  * 记录视角:历年变化与行业排名,以全部经济体同一行业为参照,再与对比国家比较;学生在图下点按钮把当前图表记为报告材料。
  * 探索视角(同一视角栏,不记录材料):
- *   流量与路径  一国各行业的加权总度(对数)×介数散点
  *   买入与卖出  一国各行业的加权入度与出度蝴蝶图
  *   贸易伙伴    国家级贸易网络读成自我中心图、伙伴榜、区域流向矩阵与伙伴集中度
  *   全球贸易网络图  国家间贸易流的有向网络，按预设地理区域摆放
@@ -61,14 +60,17 @@ function TradeNetworkOverview({ meta, year, onYear }: {
       what={<>节点是经济体，箭头从出口方指向进口方，表示跨国的中间品和最终品贸易（不含国内）。边越粗，贸易流量越大；节点大小默认表示 GVC 生产份额，可切换指标。</>}
       read={<>悬停国家查看贸易伙伴，点击节点进入大图，查看主要流入、流出伙伴。节点按预设地理区域摆放，不是算法聚类结果。</>}
       find={<>比较中国、美国、德国的主要贸易联系，观察区域内和区域间的流向。</>}
-      note="本图展示全球经济体，没有可记录的读数条目。数据包含完整跨国贸易边，默认按阈值筛选显示；调整显示比例不改变伙伴详情的贸易额或完整网络上的中心性。国家级贸易图不能直接解释国家×行业的中心性。"
+      note="本图与贸易伙伴视角均展示具名经济体之间的贸易，不含 ROW（世界其他地区余项）。默认按阈值筛选显示；调整显示比例不改变伙伴详情的贸易额或完整网络上的中心性。节点指标仍按完整数据计算。本图没有可记录的读数条目，不能直接解释国家×行业的中心性。"
     >
       <div className="controls" style={{ marginBottom: 12 }}>
         <YearSelect years={meta.years} year={year} onChange={onYear} />
       </div>
       {query.status !== "success" ? (
         <AsyncStateMessage status={query.status} error={query.error} loadingLabel={`加载 ${year} 年贸易网络中…`} onRetry={query.retry} />
-      ) : query.data ? <NetworkViz data={query.data} /> : <p className="muted">该年份暂无网络数据。</p>}
+      ) : query.data ? <NetworkViz data={{
+        nodes: query.data.nodes.filter((node) => node.country !== "ROW"),
+        edges: query.data.edges.filter((edge) => edge.source !== "ROW" && edge.target !== "ROW"),
+      }} /> : <p className="muted">该年份暂无网络数据。</p>}
     </ChartStory>
   );
 }

@@ -96,6 +96,19 @@ export function IndicatorExplorer({
   const years = [...meta.years].sort((a, b) => a - b);
   const countries = meta.countries.filter((country) => country !== "ROW");
   const release = currentReleaseId(meta);
+  // View bar: the step's theme first, then its supported comparison views.
+  const themeLens = topic.composition
+    ? { key: "composition" as const, label: topic.themeLabel }
+    : { key: "directions" as const, label: topic.themeLabel };
+  const lenses: { key: IndicatorView; label: string }[] = [
+    themeLens,
+    { key: "trend", label: "历年变化" },
+    { key: "comparison", label: "国家对比" },
+    ...(topic.key === "length" ? [{ key: "segments" as const, label: "段长度对照" }] : []),
+    ...(topic.key !== "length" ? [{ key: "positioning" as const, label: "定位图" }] : []),
+    ...(topic.key === "production" ? [{ key: "structure" as const, label: "行业结构" }] : []),
+    { key: "industry", label: "行业排名" },
+  ];
   const saved = (state.data?.observations ?? []).filter(
     (item) =>
       item.source?.startsWith("explicit-indicator-") &&
@@ -121,7 +134,13 @@ export function IndicatorExplorer({
     if (browse) return browse;
     return hasSaved && data?.indicator_selection ? normalizeSelection(data.indicator_selection) : null;
   };
-  const [selection, setSelection] = useState<IndicatorSelection>(() => restoredSelection(state.data, saved.length > 0) ?? defaults);
+  const [requestedSelection, setSelection] = useState<IndicatorSelection>(() => restoredSelection(state.data, saved.length > 0) ?? defaults);
+  // Only a view offered by this topic may drive the controls, chart and recorded material.
+  const selection = lenses.some((lens) => lens.key === requestedSelection.view)
+    || (requestedSelection.view === "evolution" && Boolean(topic.composition))
+    || (requestedSelection.view === "positioning" && topic.key === "length")
+    ? requestedSelection
+    : { ...requestedSelection, view: defaults.view };
   const touched = useRef(false);
   const hydrated = useRef(Boolean(state.data));
   useEffect(() => {
@@ -161,7 +180,7 @@ export function IndicatorExplorer({
   const rangeRef = useRef<HTMLSelectElement>(null);
   const metricRef = useRef<HTMLSelectElement>(null);
   const yearRef = useRef<HTMLSelectElement>(null);
-  // Picking an industry in 行业排名/行业结构 unmounts the clicked row; focus moves to the scope line instead.
+  // Picking an industry in 行业排名 unmounts the clicked row; focus moves to the scope line instead.
   const scopeRef = useRef<HTMLDivElement>(null);
   const [focusScope, setFocusScope] = useState(false);
   useEffect(() => {
@@ -487,7 +506,7 @@ export function IndicatorExplorer({
               : missingCountries.length
                 ? `${joinCountries(missingCountries)}在${timeView ? "所选年份范围" : ` ${year} 年`}${industry ? `（${sectorLabel(industry)}）` : ""}缺少数据（缺少的数据留空，不当作 0）；请${missingFix.join("、").replace(/、([^、]+)$/, "或$1")}。`
                 : `所选国家没有同一${timeView ? "组年份" : "年份"}的数据，无法并列比较；请${timeView ? "调整年份范围" : "换一个年份"}或换国家。`;
-  const indicatorName = composition ? `${topic.themeLabel}${side === "alternate" ? " · 后向" : ""}` : view === "directions" ? "前后向 GVC 段长度与位置" : view === "positioning" ? `定位图（横轴 ${label(axes.x)} · 纵轴 ${label(axes.y)}）` : view === "structure" ? (topic.key === "production" ? "四类生产活动 · 行业" : "前向与后向 GVC 段长度 · 行业") : view === "segments" ? "前后向三段长度" : label(metric);
+  const indicatorName = composition ? `${topic.themeLabel}${side === "alternate" ? " · 后向" : ""}` : view === "directions" ? "前后向 GVC 段长度与位置" : view === "positioning" ? `定位图（横轴 ${label(axes.x)} · 纵轴 ${label(axes.y)}）` : view === "structure" ? "四类生产活动 · 行业" : view === "segments" ? "前后向三段长度" : label(metric);
   const matches =
     canSave &&
     materialKey(saved) === materialKey(pending) &&
@@ -500,7 +519,7 @@ export function IndicatorExplorer({
   const [rechosen, setRechosen] = useState(false);
   // Recorded on the student's request only (the button under the chart): the report calls it 学生选定.
   const materialLabel = () => vizMaterialLabel({
-    view: `${lenses.find((lens) => lens.key === (composition ? "composition" : view))?.label ?? ""}${composition && side === "alternate" ? " · 后向" : ""}`,
+    view: `${topic.key === "length" && view === "positioning" ? "前后向位置 · 全球参照" : lenses.find((lens) => lens.key === (composition ? "composition" : view))?.label ?? ""}${composition && side === "alternate" ? " · 后向" : ""}`,
     // A composition chart is named by its lens already; its readings are the parts and the total.
     metric: composition ? "各分项与总量" : indicatorName,
     countries: selected,
@@ -516,21 +535,6 @@ export function IndicatorExplorer({
     material_chosen: true,
     material_label: materialLabel(),
   });
-  // View bar: the step's theme first (default entry), then the two views every step must offer.
-  const themeLens = topic.composition
-    ? { key: "composition" as const, label: topic.themeLabel }
-    : { key: "directions" as const, label: topic.themeLabel };
-  const lenses: { key: IndicatorView; label: string }[] = [
-    themeLens,
-    { key: "trend", label: "历年变化" },
-    { key: "comparison", label: "国家对比" },
-    ...(topic.key === "length" ? [{ key: "segments" as const, label: "段长度对照" }] : []),
-    { key: "positioning", label: "定位图" },
-    // The recorded industry view is 行业排名 on every step (step 6 draws it as a dot plot, steps 7–8 as paired
-    // bars); steps 7–8 add an exploration-only 行业结构 view.
-    ...(topic.key === "trade" ? [] : [{ key: "structure" as const, label: "行业结构" }]),
-    { key: "industry", label: "行业排名" },
-  ];
   const themeActive = composition || view === "directions";
   const chartKey = [view, industry, metric, axes.key, side, start, end, year, limit, trail, amountMode, selected.join(",")].join("|");
   // Notes for values that cannot be computed (zero exports, no GVC production), shown under the trend,
@@ -666,7 +670,7 @@ export function IndicatorExplorer({
         }),
       }))
     : [];
-  // 行业结构: one economy's industries at the chosen year (steps 7–8, exploration only).
+  // Industry rows for step 7's 行业结构 and the negative-value-added disclosure.
   const structureRows = (country: string) => rows.filter((row) => row.country === country && row.year === year && row.industry != null);
   // 行业结构 bars sort by the focus part's share when the topic derives it, else by the part itself.
   // 行业结构 always reads the forward composition its text describes; the 前向/后向 switch is only shown in the
@@ -674,6 +678,13 @@ export function IndicatorExplorer({
   const structureComposition = topic.composition;
   const structureFocus = structureComposition?.focus ?? structureComposition?.segments.at(-1)?.key ?? "";
   const structureSortKey = field(`${structureFocus}_share`) ? `${structureFocus}_share` : structureFocus;
+  const structureOrder = structureComposition ? structureRows(first)
+    .filter((row) => finiteValue(row[structureSortKey]) && finiteValue(row[structureComposition.total]) && (row[structureComposition.total] as number) > 0
+      && structureComposition.segments.every((segment) => finiteValue(row[segment.key])))
+    .sort((a, b) => (b[structureSortKey] as number) - (a[structureSortKey] as number) || String(a.industry).localeCompare(String(b.industry)))
+    .slice(0, limit).map((row) => String(row.industry)) : [];
+  const alignedStructure = (country: string) => structureOrder.map((sector) =>
+    structureRows(country).find((row) => row.industry === sector) ?? { country, industry: sector });
   // 行业结构 bars leave out industries whose shares cannot be drawn (the same rule as CompositionBar): say how many
   // and why, so MLT's H51 (negative value added) or LUX's idle industries do not vanish silently.
   const structureHiddenNote = (country: string): string | null => {
@@ -687,7 +698,7 @@ export function IndicatorExplorer({
       { text: `${label(total)}为 0，份额无法计算（不是缺少数据）`, rows: hidden.filter((row) => row[total] === 0) },
       { text: "缺少数据", rows: hidden.filter((row) => !finiteValue(row[total]) || (row[total] as number) > 0) },
     ].filter((group) => group.rows.length);
-    return `另有 ${hidden.length} 个行业没有画出：${groups.map((group) => `${group.rows.map((row) => String(row.industry)).join("、")} ${group.text}`).join("；")}。`;
+    return `该国有 ${hidden.length} 个行业无法绘制份额（比较时保留对应空行）：${groups.map((group) => `${group.rows.map((row) => String(row.industry)).join("、")} ${group.text}`).join("；")}。`;
   };
   // Value added below zero (ITA C19 and several H51 in 2020) is real: whichever view reads it says once why, and why
   // its shares are left out (四类生产活动 right under the line naming it, the other views under the chart).
@@ -786,15 +797,21 @@ export function IndicatorExplorer({
       </div>
       <LensNav
         lenses={lenses}
-        active={composition ? "composition" : view}
-        onPick={(next) => select({ view: next === "composition" && composition ? view : next })}
+        active={composition ? "composition" : topic.key === "length" && view === "positioning" ? "directions" : view}
+        onPick={(next) => select({ view: (next === "composition" && composition) || (next === "directions" && view === "positioning") ? view : next })}
       />
+      {topic.key === "length" && (view === "directions" || view === "positioning") && <div className="controls viz-modes">
+        <div className="seg" role="group" aria-label="前后向位置参照范围">
+          <button type="button" className={view === "directions" ? "on" : undefined} aria-pressed={view === "directions"} onClick={() => select({ view: "directions" })}>所选国家轨迹</button>
+          <button type="button" className={view === "positioning" ? "on" : undefined} aria-pressed={view === "positioning"} onClick={() => select({ view: "positioning" })}>全球参照</button>
+        </div>
+      </div>}
       {themeActive && <p className="muted lens-hint">{side === "alternate"
         ? "后向：同样分为四类生产活动，从最终品端回溯；先看复杂 GVC 的占比，再比较与对比国家差异最大的类别。"
         : topic.themeHint}</p>}
       {view === "positioning" && <p className="muted lens-hint">定位图：每个点是一个经济体{industry ? `（${sectorLabel(industry)}）` : ""}，横轴、纵轴各是一项指标，所选国家高亮；{industry ? "轨迹只在“国家整体”下提供" : `可勾选显示 ${years[0]}→${years.at(-1)} 的轨迹`}。这张图没有可记录的读数条目。</p>}
       {view === "segments" && <p className="muted lens-hint">段长度对照：每行一段（纯国内、传统贸易、GVC），前向点和后向点用线相连，便于比较哪一段、哪个方向更长；选了多个国家时每国一张。三段长度不能相加。</p>}
-      {view === "structure" && <p className="muted lens-hint">{topic.key === "production" ? "行业结构：所选国家每个行业的四类生产活动份额，按复杂 GVC 生产份额排序；选了多个国家时每国一张。这张图没有可记录的读数条目。" : "行业结构：所选国家每个行业的前向与后向 GVC 段长度，等长线（前向 = 后向）上方更偏上游；选了多个国家时每国一张。这张图没有可记录的读数条目。"}</p>}
+      {view === "structure" && <p className="muted lens-hint">行业结构：各国共用国家 A 的行业顺序，默认比较前 10 个行业的四类生产活动份额，可切换全部行业。每国一张，相同行业在同一行；没有可记录的读数条目。</p>}
       <div className="controls">
         {view !== "industry" && view !== "structure" && (
           <LabeledControl label="比较范围">
@@ -943,7 +960,7 @@ export function IndicatorExplorer({
             )}
           </LabeledControl>
         )}
-        {view === "industry" && (
+        {(view === "industry" || view === "structure") && (
           <LabeledControl label="显示行业">
             {(id) => (
               <select
@@ -975,7 +992,7 @@ export function IndicatorExplorer({
           )) : joinCountries(selected), onJump: jump(entityRef) },
           {
             label: "范围",
-            value: view === "industry" ? "所选国家各行业" : view === "structure" ? "所选国家全部行业" : industry ? sectorLabel(industry) : "国家整体",
+            value: view === "industry" ? "所选国家各行业" : view === "structure" ? (limit === 10 ? "国家 A 排名前 10 的行业" : "国家 A 的全部有效行业") : industry ? sectorLabel(industry) : "国家整体",
             onJump: view === "industry" || view === "structure" ? undefined : jump(rangeRef),
           },
           { label: "年份", value: timeView && start !== end ? `${start}–${end}` : String(timeView ? start : year), onJump: jump(yearRef) },
@@ -1213,44 +1230,27 @@ export function IndicatorExplorer({
               } })} />
             </>
           )}
-          {view === "structure" && (
+          {view === "structure" && structureComposition && (
             <>
-            {topic.key !== "production" && selected.length > 1 && <p className="muted">每个国家的散点按本国行业取坐标范围：点的位置只在同一国家内比较，跨国比较请看数值。</p>}
-            {topic.key === "production" && <p className="muted">条形右侧的数字是{label(structureSortKey)}（{unit(structureSortKey) === "%" ? "%" : unit(structureSortKey)}），行业按它从高到低排列。</p>}
-            {/* The length scatter is 660 wide: two columns shrank its text to ~7px, so it stacks. */}
+            <p className="muted">行业统一按 {countryLabel(first)} 的{label(structureSortKey)}从高到低排列；右侧数字是该国的{label(structureSortKey)}（{unit(structureSortKey)}）。悬停可看每一分项的百分比与金额。</p>
             {/* Composition facets need room for labels, bars and values; narrow pairs and 3+ countries stack. */}
-            <div className={`comparison-facets${topic.key !== "production" || selected.length > 2 ? " comparison-facets--stacked" : " comparison-facets--roomy"}`}>
+            <div className={`comparison-facets${selected.length > 2 ? " comparison-facets--stacked" : " comparison-facets--roomy"}`}>
               {selected.map((country) => (
                 <section key={country} className="comparison-facet">
                   <h4>{countryLabel(country)} · {year} · 行业结构</h4>
-                  {topic.key === "production" && structureComposition ? (
-                    <>
-                    <CompositionBar
-                      dataLabel={`${countryLabel(country)} 行业结构`}
-                      rows={structureRows(country)}
-                      segments={structureComposition.segments}
-                      normalizationKey={structureComposition.total}
-                      sortKey={structureSortKey}
-                      sortLabel={label(structureSortKey)}
-                      sortFormat={unit(structureSortKey) === "%" ? "pct" : "amount"}
-                      valueFormat="amount"
-                    />
-                    {structureHiddenNote(country) && <p className="muted">{structureHiddenNote(country)}</p>}
-                    </>
-                  ) : (
-                    <QuadrantScatter
-                      dataLabel={`${countryLabel(country)} 行业结构`}
-                      rows={finiteBy(structureRows(country), topic.axes.x, topic.axes.y)}
-                      xKey={topic.axes.x}
-                      yKey={topic.axes.y}
-                      xLabel={label(topic.axes.x)}
-                      yLabel={label(topic.axes.y)}
-                      xFormat={formatOf(topic.axes.x)}
-                      yFormat={formatOf(topic.axes.y)}
-                      equalityLine={topic.axes.equality}
-                      quadrantLabels={topic.axes.labels}
-                    />
-                  )}
+                  <CompositionBar
+                    dataLabel={`${countryLabel(country)} 行业结构`}
+                    rows={alignedStructure(country)}
+                    segments={structureComposition.segments}
+                    normalizationKey={structureComposition.total}
+                    sortKey={structureSortKey}
+                    sortDirection="input"
+                    keepEmptyRows
+                    sortLabel={label(structureSortKey)}
+                    sortFormat={unit(structureSortKey) === "%" ? "pct" : "amount"}
+                    valueFormat="amount"
+                  />
+                  {structureHiddenNote(country) && <p className="muted">{structureHiddenNote(country)}</p>}
                 </section>
               ))}
             </div>
@@ -1262,23 +1262,14 @@ export function IndicatorExplorer({
                 {cjkSpace("行业按国家 A 的", label(metric))}从高到低排列，对比国家的同一行业放在同一行。点击行业名，可看它的历年变化。
               </p>
               <ScrollableRegion className="bounded-data-table industry-ranking-box" label="行业排名">
-                {topic.key === "trade" && unit(metric) !== "百万美元" ? (
                   <IndustryDotPlot
                     countries={selected}
                     unit={unit(metric)}
                     label={label(metric)}
-                    nationals={nationals}
+                    nationals={unit(metric) === "百万美元" ? [] : nationals}
                     groups={rankGroups}
                     onPick={pickIndustry}
                   />
-                ) : (
-                  <IndicatorPairBars
-                    countries={selected}
-                    unit={unit(metric)}
-                    groups={rankGroups}
-                    onPick={pickIndustry}
-                  />
-                )}
               </ScrollableRegion>
               {rankHiddenNote && <p className="muted">{rankHiddenNote}</p>}
               {rankGaps.length > 0 && rankComplete.length > 0 && (

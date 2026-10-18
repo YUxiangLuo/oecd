@@ -62,7 +62,7 @@ export type IndicatorView =
   | "evolution"
   | "directions"
   | "industry"
-  /** 行业结构 (steps 7–8): one economy's industries, exploration only. */
+  /** 行业结构 (step 7): one economy's industry compositions, exploration only. */
   | "structure"
   /** 段长度对照 (step 8): forward vs backward length per segment, one year, recorded. */
   | "segments";

@@ -51,7 +51,7 @@ test("step 9 records the main comparison only when asked; the exploration views 
   // The global overview leads; the remaining views retain their order.
   const bar = screen.getByRole("group", { name: "图表视角" });
   expect(within(bar).getAllByRole("button").map((button) => button.textContent)).toEqual([
-    "全球贸易网络图", "历年变化", "行业排名", "流量与路径", "买入与卖出", "贸易伙伴",
+    "全球贸易网络图", "历年变化", "行业排名", "买入与卖出", "贸易伙伴",
   ]);
   expect(screen.queryByRole("group", { name: "补充图表" })).toBeNull();
   // The full-indicator table folds into 行业排名.
@@ -76,8 +76,7 @@ test("step 9 records the main comparison only when asked; the exploration views 
   expect(card.textContent).not.toContain("暂不能记录");
   expect(card.querySelector(".material-chip")!.textContent).toBe("已记录");
   expect(screen.getAllByRole("region", { name: /行业买入与卖出/ })).toHaveLength(2);
-  fireEvent.click(within(bar).getByRole("button", { name: "流量与路径" }));
-  expect(screen.getAllByText(/行业的流量与路径/)).toHaveLength(2);
+  expect(within(bar).queryByRole("button", { name: "流量与路径" })).toBeNull();
   const beforeNetwork = save.mock.calls.length;
   fireEvent.click(within(bar).getByRole("button", { name: "全球贸易网络图" }));
   expect(await screen.findByText("贸易网络当前没有可显示的数据。")).toBeTruthy();
@@ -93,7 +92,7 @@ test("step 9 records the main comparison only when asked; the exploration views 
   expect(document.body.textContent).not.toContain("自动记录");
 });
 
-test("browsing across all six views of step 9 records nothing: material is made only by its button", async () => {
+test("browsing across all five views of step 9 records nothing: material is made only by its button", async () => {
   mockApis();
   const data: VizStepState = { chart: "heat", year: 2020, compared: ["CHN", "USA"] };
   const save = mock((_patch: Partial<VizStepState>) => {});
@@ -101,7 +100,7 @@ test("browsing across all six views of step 9 records nothing: material is made 
   render(<NetworkVizStep meta={meta} step={step} state={{ data, save, saveView, syncing: false, syncError: null, syncNow: () => {}, complete: false }} />);
   await screen.findByRole("img");
   const bar = screen.getByRole("group", { name: "图表视角" });
-  for (const name of ["历年变化", "行业排名", "流量与路径", "买入与卖出", "贸易伙伴", "全球贸易网络图"]) {
+  for (const name of ["历年变化", "行业排名", "买入与卖出", "贸易伙伴", "全球贸易网络图"]) {
     fireEvent.click(within(bar).getByRole("button", { name }));
     expect(within(bar).getByRole("button", { name }).getAttribute("aria-pressed")).toBe("true");
   }

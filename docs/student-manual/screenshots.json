@@ -3,15 +3,15 @@
   "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
   "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
   "simulation_contract": "step10-tariff-teaching-v13",
-  "code_state": "Mixed capture batches: top-level baseline/release/source hash identify the retained 2026-10-17 batch; each of the five refreshed entries records its 2026-10-18 code state and release.",
+  "code_state": "Mixed capture batches: top-level baseline/release/source hash identify the retained 2026-10-17 batch; refreshed entries record their own 2026-10-18 code state and release.",
   "viewport": {
     "width": 1280,
     "height": 960
   },
   "code_sources_hash_rule": "SHA-256 of sorted sha256sum output for frontend/src and gvcsim .ts/.tsx/.css/.py files (Linux checkout).",
   "code_sources_sha256": "a2bc41dfcbe7f22e0ac864d0302d893bc0d20a94f5c41d1953838eb9b7dc0aa2",
-  "source": "Manual 2.32: five figures (14–18) refreshed with agent-browser in independent local classroom oecd_student_deep_20261018t070619z_test, API :8000 and Vite :5173. Test accounts completed browser actions and regenerated the report. The remaining 15 figures retain the 2.31 capture described by their per-image entries. No production classroom data or real student accounts were modified.",
-  "provenance_scope": "Manual 2.32: five figures (14–18) refreshed on 2026-10-18 in an independent local test classroom; the other 15 figures retain their 2026-10-17 provenance. See each screenshot entry for release, code state and hash.",
+  "source": "Manual 2.34: figure 12 refreshed with agent-browser in local demo classroom oecd_student_deep_20261018t070619z_test (API :8000, Vite :5173). Five figures (14–18) retain the 2.32 refresh; the other 14 retain their 2.31 capture. Each entry records its own provenance.",
+  "provenance_scope": "Mixed capture batches; per-image entries are authoritative for release, code state, account and hash.",
   "capture_script_sha256": "bc5b6bed00e24a22e4abc56778b33251531e534d8909c520e679476e317bc008",
   "screenshots": [
     {
@@ -300,27 +300,32 @@
       ]
     },
     {
-      "captured_on": "2026-10-17",
-      "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
-      "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
+      "captured_on": "2026-10-18",
+      "baseline_commit": "5d07e21e3107b931a0880c73b3a70bfe034ebbd9",
+      "data_release": "4421c9966d4d45a98a7a941b63587f08",
       "simulation_contract": "step10-tariff-teaching-v13",
-      "code_state": "Business code at 93a29f7195ab0e0130828f54d840ad4333dd198c; documentation and screenshot tooling refreshed in the working tree.",
+      "code_state": "Working tree based on 5d07e21e3107b931a0880c73b3a70bfe034ebbd9; visualization review fixes applied, uncommitted.",
       "file": "screenshots/09-network.png",
       "width": 1280,
       "height": 960,
-      "sha256": "130cb7fa41cc52e97a6add2c073a6d98e31c8d81403b040ff6ff91a6449a2cb5",
-      "capture_url": "http://127.0.0.1:5244",
-      "capture_tool": "agent-browser-over-cdp",
-      "journey": "api-seeded-then-browser",
-      "account": "manual-student-v231",
-      "capture_note": "Step 9 two-country industry comparison.",
+      "sha256": "b1e1a8e6a052ce5a647376beb430869cf8e2f6aeab6925098bd427339f67705b",
+      "capture_url": "http://127.0.0.1:5173",
+      "capture_tool": "agent-browser",
+      "journey": "browser-test-classroom",
+      "account": "student08",
+      "capture_note": "Step 9 industry trend after removing the flow-versus-path scatter entry; demo account, CHN and USA, C26 betweenness, 2016–2020.",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed indicators",
+          "name": "OECD ICIO 2023 observed indicators in an isolated local test classroom",
           "production_data": true,
-          "release_id": "88063fb4cbf24ce2b4657d6f3c679a66"
+          "release_id": "4421c9966d4d45a98a7a941b63587f08"
+        },
+        {
+          "name": "Local demo student account; no real classroom records",
+          "production_data": false
         }
-      ]
+      ],
+      "code_sources_sha256": "5b346f4836ac012c8c6347a1587cf25f60fdbf52607b6f9983b0020477597e54"
     },
     {
       "captured_on": "2026-10-17",

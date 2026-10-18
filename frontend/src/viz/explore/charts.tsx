@@ -494,12 +494,14 @@ export function sortCompositionRows(
   return [...rows].sort((first, second) => sign * (num(first[sortKey]) - num(second[sortKey])));
 }
 
-export function CompositionBar({ rows, segments, sortKey, sortDirection = "descending", sortLabel, sortFormat, normalize = true, normalizationKey, valueFormat = "pct", highlight, dataLabel }: {
+export function CompositionBar({ rows, segments, sortKey, sortDirection = "descending", sortLabel, sortFormat, normalize = true, normalizationKey, valueFormat = "pct", highlight, dataLabel, keepEmptyRows = false }: {
   rows: Row[]; segments: readonly CompositionSegment[]; sortKey?: string;
   sortDirection?: CompositionSortDirection; sortLabel?: string; sortFormat?: string;
   normalize?: boolean; normalizationKey?: string; valueFormat?: string; highlight?: Set<string>;
   /** Names the data table when one page draws several of these (one per country), so their names differ. */
   dataLabel?: string;
+  /** Keep aligned industry rows when a compared economy has no drawable composition. */
+  keepEmptyRows?: boolean;
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
   const skey = sortKey ?? segments[segments.length - 1]?.key ?? "";
@@ -507,16 +509,27 @@ export function CompositionBar({ rows, segments, sortKey, sortDirection = "desce
   const total = (r: Row) => segments.reduce((s, seg) => s + num(r[seg.key]), 0);
   // Shares need a positive total; amounts are drawn whatever the total's sign (negative parts left of zero).
   const eligible = rows.filter((row) => finite(row[skey]) && (!normalizationKey || (finite(row[normalizationKey]) && (!normalize || num(row[normalizationKey]) > 0))) && segments.every((segment) => finite(row[segment.key])));
-  const data = sortCompositionRows(eligible, skey, sortDirection);
-  const domain = signedDomain(data.map((row) => segments.map((segment) => num(row[segment.key]))), normalize, normalizationKey ? data.map((row) => num(row[normalizationKey])) : undefined);
-  const hasNegative = data.some((row) => segments.some((segment) => num(row[segment.key]) < 0));
+  const data = sortCompositionRows(keepEmptyRows ? rows : eligible, skey, sortDirection);
+  const valid = new Set(eligible);
+  const domain = signedDomain(eligible.map((row) => segments.map((segment) => num(row[segment.key]))), normalize, normalizationKey ? eligible.map((row) => num(row[normalizationKey])) : undefined);
+  const hasNegative = eligible.some((row) => segments.some((segment) => num(row[segment.key]) < 0));
   // Amounts carry their unit in the readout (shares already end in "%").
   const withUnit = (text: string, format?: string) => (format === "amount" ? `${text} 百万美元` : text);
+  const unitLabel = (format?: string) => format === "amount" ? "（百万美元）" : format === "pct" ? "（%）" : "";
+  const rawReading = (row: Row, key: string, format?: string) => finite(row[key]) ? fmtVal(row[key], format) : "缺少数据";
+  const shareReading = (row: Row, key: string) => {
+    if (!finite(row[key]) || (normalizationKey && !finite(row[normalizationKey]))) return "缺少数据";
+    const denominator = normalizationKey ? num(row[normalizationKey]) : total(row);
+    return denominator > 0 ? fmtVal(num(row[key]) / denominator, "pct") : "无法计算";
+  };
+  const partReading = (row: Row, key: string) => normalize
+    ? `${shareReading(row, key)}${valueFormat === "amount" && finite(row[key]) ? `（${withUnit(rawReading(row, key, valueFormat), valueFormat)}）` : ""}`
+    : withUnit(rawReading(row, key, valueFormat), valueFormat);
   const tipLines = (r: Row): [string, string][] => [
     ["", rowLabel(r)],
-    ...segments.map((s) => [s.name, withUnit(fmtVal(num(r[s.key]), valueFormat), valueFormat)] as [string, string]),
+    ...segments.map((s) => [s.name, partReading(r, s.key)] as [string, string]),
     // 排序指标若不在分段里(如按总出口/总量排序),额外单列,用它自己的格式
-    ...(sortLabel && !segKeys.has(skey) ? [[sortLabel, withUnit(fmtVal(num(r[skey]), sortFormat), sortFormat)] as [string, string]] : []),
+    ...(sortLabel && !segKeys.has(skey) ? [[sortLabel, withUnit(rawReading(r, skey, sortFormat), sortFormat)] as [string, string]] : []),
   ];
   return (
     <div ref={wrapRef} style={cardStyle}>
@@ -537,7 +550,7 @@ export function CompositionBar({ rows, segments, sortKey, sortDirection = "desce
                 color: hi ? "#4b47e0" : "#5a6070" }}>{display}</span>
               <div className="composition-chart-track" style={{ position: "relative", height: 17, background: "#f2f3f7", borderRadius: 5, overflow: "hidden" }}>
                 {domain.negative > 0 && <span aria-hidden style={{ position: "absolute", zIndex: 3, top: 0, bottom: 0, left: `${layout.zeroPct}%`, borderLeft: "1.5px solid #4b5263" }} />}
-                {segments.map((s, i) => {
+                {valid.has(r) && segments.map((s, i) => {
                   const segment = layout.segments[i];
                   return <span key={s.key} style={{
                     position: "absolute", top: 0, bottom: 0, left: `${segment.leftPct}%`,
@@ -548,7 +561,8 @@ export function CompositionBar({ rows, segments, sortKey, sortDirection = "desce
               </div>
               <span className="composition-chart-value">
                 {/* 归一化条右侧显示排序指标值(用其自身格式);绝对条显示分段总量(用分段格式) */}
-                {normalize ? fmtVal(num(r[skey]), sortFormat ?? valueFormat) : fmtVal(total(r), valueFormat)}
+                {!valid.has(r) ? (normalizationKey && finite(r[normalizationKey]) && num(r[normalizationKey]) <= 0 ? "无法计算" : "缺少数据")
+                  : normalize ? fmtVal(num(r[skey]), sortFormat ?? valueFormat) : fmtVal(total(r), valueFormat)}
               </span>
             </div>
           );
@@ -559,13 +573,19 @@ export function CompositionBar({ rows, segments, sortKey, sortDirection = "desce
         label={`${dataLabel ? `${dataLabel} · ` : ""}${sortLabel ?? "分段"}构成`}
         columns={[
           { key: "entity", label: "对象" },
-          ...segments.map((segment) => ({ key: segment.key, label: segment.name })),
-          ...(sortLabel && !segKeys.has(skey) ? [{ key: "sort", label: sortLabel }] : []),
+          ...segments.flatMap((segment) => [
+            { key: segment.key, label: `${segment.name}${unitLabel(normalize ? "pct" : valueFormat)}` },
+            ...(normalize && valueFormat === "amount" ? [{ key: `${segment.key}-amount`, label: `${segment.name}（百万美元）` }] : []),
+          ]),
+          ...(sortLabel && !segKeys.has(skey) ? [{ key: "sort", label: `${sortLabel}${unitLabel(sortFormat)}` }] : []),
         ]}
         rows={data.map((row) => ({
           entity: rowLabel(row),
-          ...Object.fromEntries(segments.map((segment) => [segment.key, fmtVal(num(row[segment.key]), valueFormat)])),
-          ...(sortLabel && !segKeys.has(skey) ? { sort: fmtVal(num(row[skey]), sortFormat) } : {}),
+          ...Object.fromEntries(segments.flatMap((segment) => [
+            [segment.key, normalize ? shareReading(row, segment.key) : rawReading(row, segment.key, valueFormat)],
+            ...(normalize && valueFormat === "amount" ? [[`${segment.key}-amount`, rawReading(row, segment.key, valueFormat)]] : []),
+          ])),
+          ...(sortLabel && !segKeys.has(skey) ? { sort: rawReading(row, skey, sortFormat) } : {}),
         }))}
       />
       {Tip}

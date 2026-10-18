@@ -38,6 +38,11 @@ describe("network fullscreen activation", () => {
       expect(within(table).getAllByRole("row").slice(1).map((row) => row.textContent)).toEqual([
         "USA 美国10012 †112", "IND 印度8 †4 †12",
       ]);
+      // A layout change can put a different node under the pointer when the dialog opens.
+      // The selected country's links must still agree with its detail panel.
+      fireEvent.mouseEnter(within(dialog).getByRole("button", { name: /^IND 印度，/ }), { clientX: 42, clientY: 20 });
+      expect(within(dialog).getByRole("button", { name: /^CHN 中国，/ }).getAttribute("aria-pressed")).toBe("true");
+      expect(within(dialog).getByRole("button", { name: /^USA 美国，/ }).getAttribute("opacity")).toBe("1");
       fireEvent.change(within(dialog).getByRole("slider"), { target: { value: "0" } });
       expect(within(table).getAllByRole("row").slice(1).map((row) => row.textContent)).toEqual([
         "USA 美国10012112", "IND 印度8412",

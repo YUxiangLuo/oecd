@@ -3,22 +3,32 @@ import { partnerConcentration, partnerYears, regionMatrix, TradePartners } from 
 import { createElement } from "react";
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { api } from "../../../api";
+import { CAT } from "../../../viz/shared";
 
 test("partner diagram describes directional stroke widths in both its visible key and accessible label", async () => {
   const original = api.network;
   api.network = async () => ({ nodes: [], edges });
   try {
-    const view = render(createElement(TradePartners, { meta: { years: [2020], countries: ["CHN"], sectors: [] }, countries: ["CHN"], year: 2020, onYear: () => {} }));
+    const view = render(createElement(TradePartners, { meta: { years: [2020], countries: ["CHN", "DEU"], sectors: [] }, countries: ["CHN", "DEU"], year: 2020, onYear: () => {} }));
     await waitFor(() => expect(view.container.querySelector(".ego-network-key")?.textContent).toContain("线宽 = 各方向流量"));
-    const diagram = view.getByRole("img", { name: /贸易伙伴的关系图/ });
+    const diagram = view.getByRole("img", { name: /^CHN.*贸易伙伴的关系图/ });
     expect(diagram.getAttribute("aria-label")).toContain("线宽表示各方向流量");
-    const strokes = diagram.querySelector('[data-partner="USA"]')!.querySelectorAll("line");
-    expect(Number(strokes[0].getAttribute("stroke-width"))).toBe(10);
-    expect(Number(strokes[1].getAttribute("stroke-width"))).toBeCloseTo(4.6);
+    const arrows = diagram.querySelector('[data-partner="USA"]')!.querySelectorAll("polygon");
+    const shaftWidth = (arrow: Element) => {
+      const points = arrow.getAttribute("points")!.split(" ").map((pair) => pair.split(",").map(Number));
+      const start = points.filter(([x]) => x === 0).map(([, y]) => y);
+      return Math.max(...start) - Math.min(...start);
+    };
+    expect(shaftWidth(arrows[0])).toBe(10);
+    expect(shaftWidth(arrows[1])).toBeCloseTo(4.6);
     const oneWay = diagram.querySelector('[data-partner="JPN"]')!;
-    expect(oneWay.querySelectorAll("line[marker-end]")).toHaveLength(1);
-    expect(oneWay.querySelector("line")?.getAttribute("marker-end")).toBe("url(#ego-out-CHN)");
+    expect(oneWay.querySelectorAll("polygon")).toHaveLength(1);
+    expect(oneWay.querySelector("polygon")?.getAttribute("fill")).toBe(CAT[0]);
     expect(oneWay.getAttribute("aria-label")).toContain("流入 0");
+    // Germany's smaller flow must use China's scale, rather than filling its own panel.
+    const germany = view.getByRole("region", { name: "DEU 德国 伙伴榜（单位：百万美元）" });
+    const france = [...germany.querySelectorAll(".butterfly-row")].find((row) => row.getAttribute("aria-label")?.includes("FRA 法国"))!;
+    expect((france.querySelector(".right i") as HTMLElement).style.width).toBe("10%");
   } finally {
     cleanup();
     api.network = original;

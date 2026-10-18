@@ -327,7 +327,7 @@ test("the material card says whether the chart on screen is the recorded one, an
   expect(screen.getByRole("button", { name: RECORD_CHART_ACTION })).toBeTruthy();
   expect(save).toHaveBeenCalledTimes(1);
   // An exploration view has no readings to record; the card still says another chart is recorded.
-  fireEvent.click(screen.getByRole("button", { name: "流量与路径" }));
+  fireEvent.click(screen.getByRole("button", { name: "买入与卖出" }));
   expect(materialHow()!.textContent).toBe("已记录的是另一张图；当前图表没有可记录的读数。");
   expect(materialChip().textContent).toBe("已记录");
   expect(materialSummary().textContent).toBe("CHN 中国 与 USA 美国 · 加权总度 · 2018–2020 年 · C26 计算机电子光学（6 条读数）");
@@ -432,16 +432,14 @@ test("step 9 keeps the countries, view and industry of an exploration view after
   mockReference();
   const browsed: unknown[] = [];
   const first = render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={() => {}} onBrowse={(value) => browsed.push(value)} />);
-  fireEvent.click(screen.getByRole("button", { name: "流量与路径" }));
-  // The hint names betweenness as the y axis does: only links, not amounts (round 5).
-  expect(document.querySelector(".lens-hint")!.textContent).toContain("纵轴是介数（只看连接、不看金额：");
-  expect(document.querySelector(".lens-hint")!.textContent).toContain("横轴是加权总度（买卖总金额，百万美元，对数刻度）");
+  fireEvent.click(screen.getByRole("button", { name: "买入与卖出" }));
+  expect(document.querySelector(".lens-hint")!.textContent).toContain("左边是加权入度（买入），右边是加权出度（卖出）");
   fireEvent.change(screen.getByLabelText("国家 A"), { target: { value: "DEU" } });
-  await waitFor(() => expect(browsed.at(-1)).toMatchObject({ countries: ["DEU", "USA"], view: "topology", industry: "C26" }));
+  await waitFor(() => expect(browsed.at(-1)).toMatchObject({ countries: ["DEU", "USA"], view: "flows", industry: "C26" }));
   first.unmount();
   render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={() => {}} initialBrowse={{ ...(browsed.at(-1) as { countries: string[]; view: string; industry: string; metric: string; year: number }), industry: "C27" }} />);
   expect((screen.getByLabelText("国家 A") as HTMLSelectElement).value).toBe("DEU");
-  expect(screen.getByRole("button", { name: "流量与路径" }).getAttribute("aria-pressed")).toBe("true");
+  expect(screen.getByRole("button", { name: "买入与卖出" }).getAttribute("aria-pressed")).toBe("true");
   fireEvent.click(screen.getByRole("button", { name: "历年变化" }));
   expect((screen.getByLabelText("行业") as HTMLSelectElement).value).toBe("C27");
 });
@@ -462,18 +460,6 @@ test("undefined path metrics: no long note under the chart; the readings mark th
   const rows = [...table.querySelectorAll("tbody tr")].map((row) => [...row.querySelectorAll("td")].map((cell) => cell.textContent));
   expect(rows.find((cells) => cells[0] === "2018")?.slice(1)).toEqual(["无连接，无法定义", "无连接，无法定义", "无连接，无法定义"]);
   expect(rows.find((cells) => cells[0] === "2016")?.[3]).not.toBe("无连接，无法定义");
-});
-
-test("流量与路径 says which industries it leaves out and why", async () => {
-  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([
-    { country, year, industry: "C26", "weighted degree": 120, betweenesscentrality: 3 },
-    { country, year, industry: "C27", "weighted degree": 0, betweenesscentrality: 0 },
-    { country, year, industry: "T", "weighted degree": 0, betweenesscentrality: 0 },
-  ] as never));
-  mockReference();
-  render(<NetworkTrend meta={{ ...meta, sectors: ["C26", "C27", "T"] }} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={() => {}} />);
-  fireEvent.click(screen.getByRole("button", { name: "流量与路径" }));
-  await waitFor(() => expect(screen.getAllByText("另有 2 个行业没有画出：C27、T 加权总度为 0（没有买卖，无法在对数刻度上显示）。")).toHaveLength(2));
 });
 
 test("first visit opens a recordable trend; exploration still hides the carried-country note", async () => {

@@ -3,6 +3,8 @@ import { countryLabel } from "../../../viz";
 import { useHoverTip, type TipLine } from "../../../viz/hover";
 import { CAT, CAT_TEXT } from "../../../viz/shared";
 import { niceDomain } from "../../../viz/nice-ticks";
+import { useMeasuredWidth } from "../../../table-aids";
+import { unitText } from "../../../format";
 import { finiteValue } from "./indicator-model";
 import { indicatorNumber, indicatorTick } from "./indicator-charts";
 import type { Row } from "./scaffold";
@@ -232,28 +234,38 @@ export function IndustryDotPlot({ groups, countries, unit, nationals = [], label
 }) {
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
   const [hovered, setHovered] = useState<string | null>(null);
+  const [axisRef, axisWidth] = useMeasuredWidth<HTMLDivElement>();
   const values = [...groups.flatMap((group) => group.values), ...nationals].filter(finiteValue);
   if (!values.length) return <p role="status">显示的行业没有有效读数，请更换指标或国家。</p>;
   const zeroBased = unit === "%" || unit === "百万美元";
   const axis = niceDomain(zeroBased ? Math.min(0, ...values) : Math.min(...values), zeroBased ? Math.max(0, ...values) : Math.max(...values));
   const px = (value: number) => ((value - axis.lo) / (axis.hi - axis.lo || 1)) * 100;
+  // Reserve space for full amount labels at the axis's 10.5px font size. The plot
+  // keeps its domain on resize; only the labelled ticks and grid lines thin out.
+  const tickGap = Math.max(...axis.ticks.map((tick) => indicatorTick(tick, unit, axis.ticks).length)) * 6.5 + 12;
+  const tickStride = Math.max(1, Math.ceil(tickGap * (axis.ticks.length - 1) / (axisWidth || 208)));
+  const zeroIndex = Math.max(0, axis.ticks.indexOf(0));
+  const ticks = axis.ticks.filter((_, index) => (index - zeroIndex) % tickStride === 0);
   const reading = (group: typeof groups[number], index: number) =>
     group.values[index] === null && group.reasons?.[index] ? group.reasons[index]! : indicatorNumber(group.values[index], unit);
+  const readingWithUnit = (group: typeof groups[number], index: number) =>
+    finiteValue(group.values[index]) && unit !== "%" ? `${reading(group, index)} ${unitText(unit)}` : reading(group, index);
   const linesFor = (group: typeof groups[number]): TipLine[] => [
     ["", group.label],
-    ...group.values.map((_, index): TipLine => [countryLabel(countries[index]), reading(group, index), CAT[index]]),
+    ...group.values.map((_, index): TipLine => [countryLabel(countries[index]), readingWithUnit(group, index), CAT[index]]),
   ];
   return (
     // The value column fits every compared economy's reading (five did not fit the fixed 110px column).
-    <div ref={wrapRef} className="hover-wrap dot-plot" role="region" aria-label={`${label}行业点图`} style={{ "--dot-values": `${Math.max(110, countries.length * 62)}px` } as CSSProperties}>
+    <div ref={wrapRef} className="hover-wrap dot-plot" role="region" aria-label={`${label}行业点图（单位：${unitText(unit)}）`} style={{ "--dot-values": `${Math.max(110, countries.length * (unit === "百万美元" ? 84 : 62))}px`, minWidth: 390 + countries.length * (unit === "百万美元" ? 84 : 62) } as CSSProperties}>
       <div className="dot-plot-legend" aria-hidden="true">
         {countries.map((country, index) => (
           <span key={country}><i className="dot" style={{ background: CAT[index] }} />{countryLabel(country)}</span>
         ))}
+        <span>单位：{unitText(unit)}</span>
         {nationals.some(finiteValue) && <span><i className="bar" />竖线：各国的国家整体值（颜色同点）</span>}
       </div>
-      <div className="dot-plot-axis" aria-hidden="true">
-        {axis.ticks.map((tick) => <span key={tick} style={{ left: `${px(tick)}%` }}>{indicatorTick(tick, unit, axis.ticks)}</span>)}
+      <div ref={axisRef} className="dot-plot-axis" aria-hidden="true">
+        {ticks.map((tick) => <span key={tick} style={{ left: `${px(tick)}%` }}>{indicatorTick(tick, unit, axis.ticks)}</span>)}
       </div>
       {groups.map((group) => (
         <div
@@ -263,7 +275,7 @@ export function IndustryDotPlot({ groups, countries, unit, nationals = [], label
           // One Tab stop per row: the industry button when the row can be picked, the row itself otherwise.
           tabIndex={onPick ? -1 : 0}
           role="group"
-          aria-label={`${group.label}：${group.values.map((_, index) => `${countryLabel(countries[index])} ${reading(group, index)}`).join("，")}`}
+          aria-label={`${group.label}：${group.values.map((_, index) => `${countryLabel(countries[index])} ${readingWithUnit(group, index)}`).join("，")}`}
           onMouseMove={(event) => { setHovered(group.key); show(event, linesFor(group)); }}
           onMouseLeave={() => { setHovered(null); hide(); }}
           onFocus={(event) => { setHovered(group.key); showFor(event.currentTarget, linesFor(group)); }}
@@ -273,7 +285,7 @@ export function IndustryDotPlot({ groups, countries, unit, nationals = [], label
             ? <button type="button" className="dot-plot-label" onClick={() => onPick(group.key)} aria-label={`查看 ${group.label} 的历年变化`}>{group.label} →</button>
             : <span className="dot-plot-label">{group.label}</span>}
           <div className="dot-plot-track">
-            {axis.ticks.map((tick) => <i key={tick} className="tick" style={{ left: `${px(tick)}%`, borderLeftColor: tick === 0 ? "#4b5263" : "#e2e5ee" }} />)}
+            {ticks.map((tick) => <i key={tick} className="tick" style={{ left: `${px(tick)}%`, borderLeftColor: tick === 0 ? "#4b5263" : "#e2e5ee" }} />)}
             {nationals.map((value, index) => finiteValue(value) && (
               <i key={`national-${countries[index]}`} className="national" style={{ left: `${px(value)}%`, borderLeftColor: CAT[index] }} />
             ))}
@@ -366,12 +378,14 @@ export function Dumbbell({ rows, leftLabel, rightLabel, unit, title, domain }: {
 
 /* ----------------------------------------------------------------- butterfly */
 
-export function Butterfly({ rows, leftLabel, rightLabel, unit, title, onPick }: {
+export function Butterfly({ rows, leftLabel, rightLabel, unit, title, scaleMax, onPick }: {
   rows: { key: string; label: string; left: number | null; right: number | null }[];
   leftLabel: string;
   rightLabel: string;
   unit: string;
   title: string;
+  /** Shared maximum for equally sized comparison panels. */
+  scaleMax?: number;
   onPick?: (key: string) => void;
 }) {
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
@@ -394,7 +408,7 @@ export function Butterfly({ rows, leftLabel, rightLabel, unit, title, onPick }: 
     setActiveIndex(next);
     rowRefs.current[next]?.focus();
   };
-  const max = Math.max(...values.map(Math.abs)) || 1;
+  const max = Math.max(scaleMax ?? 0, ...values.map(Math.abs)) || 1;
   const width = (value: number | null) => (finiteValue(value) ? (Math.abs(value) / max) * 100 : 0);
   const reading = (value: number | null) => indicatorNumber(value, unit);
   // The readout names the unit; the row values beside the bars stay bare numbers.

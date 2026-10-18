@@ -460,7 +460,7 @@ describe("indicator explorer with report material recorded on request", () => {
     const view = setup(LengthVizStep);
     await view.findByRole("button", { name: "前后向位置" });
     expect(within(view.getByRole("group", { name: "图表视角" })).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "前后向位置", "历年变化", "国家对比", "段长度对照", "定位图", "行业结构", "行业排名",
+      "前后向位置", "历年变化", "国家对比", "段长度对照", "行业排名",
     ]);
     fireEvent.click(view.getByRole("button", { name: "段长度对照" }));
     await record(view);
@@ -482,6 +482,18 @@ describe("indicator explorer with report material recorded on request", () => {
     expect(cards).toContain("与对比国家 USA 美国");
     // At country level 纯国内 and 传统贸易 read the same forward and backward: the page says why (round 21).
     expect(view.container.textContent).toContain("国家整体上，纯国内段与传统贸易段的前向长度和后向长度总是相等，这是恒等关系，不是数据错误");
+    view.accept();
+    fireEvent.click(view.getByRole("button", { name: "前后向位置" }));
+    await record(view);
+    expect(view.saves.at(-1)?.indicator_selection?.view).toBe("directions");
+    view.accept();
+    fireEvent.click(view.getByRole("button", { name: "全球参照" }));
+    await view.findByLabelText("定位读数");
+    expect(view.getByRole("button", { name: "前后向位置" }).getAttribute("aria-pressed")).toBe("true");
+    expect(view.queryByRole("button", { name: RECORD_CHART_ACTION })).toBeNull();
+    expect(view.saves).toHaveLength(2);
+    fireEvent.click(view.getByRole("button", { name: "所选国家轨迹" }));
+    expect((await view.findByRole("button", { name: RECORDED_CHART_LABEL }) as HTMLButtonElement).disabled).toBe(true);
     rows.mockRestore();
     schema.mockRestore();
   });
@@ -800,7 +812,7 @@ describe("行业排名 with an industry that exports nothing (round 12)", () => 
   test("the O row reads 无法计算, and the complete rows are still recorded", async () => {
     const { view, restore } = await open(["A", "O"]);
     try {
-      const plot = await view.findByRole("region", { name: "国内增加值出口占比行业点图" });
+      const plot = await view.findByRole("region", { name: "国内增加值出口占比行业点图（单位：%）" });
       await waitFor(() => expect(plot.textContent).toContain("无法计算"));
       expect(plot.textContent).not.toContain("缺失");
       expect(view.getByText(/O 公共管理与国防：USA 美国该行业总出口为 0，国内增加值出口占比无法计算（不是缺少数据）。这些行业照常显示，但不记入报告材料/)).toBeTruthy();
@@ -822,7 +834,7 @@ describe("行业排名 with an industry that exports nothing (round 12)", () => 
     // CHN plays LUX / CHN: its O exports are 0, so O cannot be placed in A's order.
     const { view, restore } = await open(["A", "O"], (country, industry) => country === "CHN" && industry === "O");
     try {
-      const plot = await view.findByRole("region", { name: "国内增加值出口占比行业点图" });
+      const plot = await view.findByRole("region", { name: "国内增加值出口占比行业点图（单位：%）" });
       await waitFor(() => expect(plot.textContent).toContain("A →"));
       expect(plot.textContent).not.toContain("O ");
       expect(view.getByText("另有 1 个行业没有画出：国家 A（CHN 中国）在这个行业没有读数，无法排序。O 总出口为 0，国内增加值出口占比无法计算（不是缺少数据）。")).toBeTruthy();
@@ -832,7 +844,7 @@ describe("行业排名 with an industry that exports nothing (round 12)", () => 
   test("more than three unrecorded rows: the note names three, the full list opens below it (round 13)", async () => {
     const { view, restore } = await open(["A", "B", "C", "D", "E"], (country, industry) => country === "USA" && industry !== "A");
     try {
-      await view.findByRole("region", { name: "国内增加值出口占比行业点图" });
+      await view.findByRole("region", { name: "国内增加值出口占比行业点图（单位：%）" });
       await waitFor(() => expect(view.getByText(/等 4 个行业。这些行业照常显示/)).toBeTruthy());
       const list = view.getByText("查看全部 4 个行业").closest("details")!;
       expect(list.querySelectorAll("li")).toHaveLength(4);
@@ -857,6 +869,31 @@ describe("行业排名 with an industry that exports nothing (round 12)", () => 
   });
 });
 
+test("step 7 aligns industry compositions by country A and keeps undefined comparison rows", async () => {
+  const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
+  const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+  const perCountry = spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => {
+    const values = country === "CHN" ? [["A", 100, 40], ["B09", 100, 10]] : [["B09", 100, 80], ["A", 0, 0]];
+    const data = values.map(([industry, total, complex]) => ({ country, year, industry: String(industry), SVA: Number(total),
+      "1_VA_D": Number(total) - Number(complex), "2_VA_RT": 0, "3a_VA_GVC_S": 0, "3b_VA_GVC_C": Number(complex) }));
+    return { rows: data, total: data.length, page: 1, page_size: 200 };
+  });
+  try {
+    const view = setup(ProductionVizStep);
+    fireEvent.click(view.getByRole("button", { name: "行业结构" }));
+    await waitFor(() => expect(view.container.querySelectorAll(".composition-chart-row")).toHaveLength(4));
+    const panels = [...view.container.querySelectorAll(".comparison-facet")];
+    const labels = (panel: Element) => [...panel.querySelectorAll(".composition-chart-label")].map((node) => node.textContent);
+    expect(labels(panels[0])).toEqual(labels(panels[1]));
+    expect(labels(panels[0])[0]).toBe("A");
+    const usa = [...panels[1].querySelectorAll(".composition-chart-row")];
+    expect(usa[0].textContent).toContain("无法计算");
+    expect(usa[0].querySelectorAll(".composition-chart-track span")).toHaveLength(0);
+    expect(usa[1].textContent).toContain("80.000%");
+    expect(view.saves).toHaveLength(0);
+  } finally { rows.mockRestore(); perCountry.mockRestore(); schema.mockRestore(); }
+});
+
 test("step 7 行业结构 says how many industries it leaves out and why (round 12)", async () => {
   const part = { "1_VA_D": 4, "2_VA_RT": 2, "3a_VA_GVC_S": 1, "3b_VA_GVC_C": 3 };
   const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year).map((row) => ({ ...row, SVA: 10, ...part })));
@@ -874,7 +911,7 @@ test("step 7 行业结构 says how many industries it leaves out and why (round 
     const view = setup(ProductionVizStep);
     await view.findByRole("button", { name: "四类生产活动" });
     fireEvent.click(view.getByRole("button", { name: "行业结构" }));
-    await waitFor(() => expect(view.getAllByText("另有 2 个行业没有画出：H51 总增加值为负，本页面不展示比重（不是缺少数据）；B09 总增加值为 0，份额无法计算（不是缺少数据）。")).toHaveLength(2));
+    await waitFor(() => expect(view.getAllByText("该国有 2 个行业无法绘制份额（比较时保留对应空行）：H51 总增加值为负，本页面不展示比重（不是缺少数据）；B09 总增加值为 0，份额无法计算（不是缺少数据）。")).toHaveLength(2));
     // Why value added is negative is said once under the two countries' charts (round 6).
     expect(view.getAllByText(NEGATIVE_VALUE_ADDED_NOTE)).toHaveLength(1);
   } finally { rows.mockRestore(); perCountry.mockRestore(); schema.mockRestore(); }
@@ -978,7 +1015,8 @@ describe("undefined lengths and medians that say nothing (round 11)", () => {
       expect(view.getByText(/核对当前图表读数 · 0 条/).textContent).toContain("无法计算的读数留空");
 
       // 定位图 of the same industry: no economy has a point, the cards say why, and no median is named.
-      fireEvent.click(view.getByRole("button", { name: "定位图" }));
+      fireEvent.click(view.getByRole("button", { name: "前后向位置" }));
+      fireEvent.click(view.getByRole("button", { name: "全球参照" }));
       const cards = await view.findByLabelText("定位读数");
       await waitFor(() => expect(cards.textContent).toContain("该行业没有 GVC 生产（GVC 增加值为 0），前向 GVC 段长度无法计算（不是缺少数据）"));
       expect(cards.textContent).toContain("没有后向 GVC 生产（最终品中的 GVC 增加值为 0），后向 GVC 段长度无法计算");
@@ -1018,7 +1056,8 @@ describe("undefined lengths and medians that say nothing (round 11)", () => {
     try {
       const view = setup(LengthVizStep);
       await view.findByRole("button", { name: "前后向位置" });
-      fireEvent.click(view.getByRole("button", { name: "定位图" }));
+      fireEvent.click(view.getByRole("button", { name: "前后向位置" }));
+      fireEvent.click(view.getByRole("button", { name: "全球参照" }));
       await view.findByLabelText("定位读数");
       fireEvent.change(view.getByLabelText("比较范围"), { target: { value: "A" } });
       await waitFor(() => expect(view.getByLabelText("定位读数").textContent).toContain("该行业没有后向 GVC 生产（最终品中的 GVC 增加值为 0），后向 GVC 段长度无法计算（不是缺少数据）"));
@@ -1085,7 +1124,8 @@ describe("undefined lengths and medians that say nothing (round 11)", () => {
     try {
       const view = setup(LengthVizStep);
       await view.findByRole("button", { name: "前后向位置" });
-      fireEvent.click(view.getByRole("button", { name: "定位图" }));
+      fireEvent.click(view.getByRole("button", { name: "前后向位置" }));
+      fireEvent.click(view.getByRole("button", { name: "全球参照" }));
       await view.findByLabelText("定位读数");
       // At country scope the two economies are too few for a median.
       expect(view.getByLabelText("定位读数").textContent).toContain("图上只有 2 个经济体，不比较中位数");

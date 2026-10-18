@@ -12,7 +12,6 @@ import { AsyncStateMessage, useAsync } from "../../shared";
 import { currentReleaseId, LensNav, Year2020Note, type NetworkBrowse, type Row, type VizObservation } from "./scaffold";
 import { IndicatorTrendChart, indicatorNumber } from "./indicator-charts";
 import { AddCountryControl, MaxCountriesNote } from "./add-country";
-import { QuadrantScatter } from "../../../viz";
 import { Butterfly } from "./theme-charts";
 import { COMPARISON_LETTERS, DEFAULT_MARK, defaultComparison, defaultEntities, defaultMarkFor, MAX_ENTITIES, pickFirst, type YearDistribution } from "./indicator-model";
 import { ScopeCard } from "./scope-card";
@@ -86,9 +85,17 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     .find((sector) => sector && meta.sectors.includes(sector)) ?? "");
   const [pickedMetric, setMetric] = useState(browse?.metric || (restored[0]?.metric ?? "weighted degree"));
   // Start with a recordable trend; preserve an explicitly browsed or recorded view.
-  const [view, setView] = useState<string>(browse?.view || (restored.length
+  const lenses = [
+    ...extraLenses.filter((lens) => lens.key === "global-network"),
+    { key: "trend", label: "历年变化" },
+    { key: "ranking", label: "行业排名" },
+    { key: "flows", label: "买入与卖出" },
+    ...extraLenses.filter((lens) => lens.key !== "global-network"),
+  ];
+  const [pickedView, setView] = useState<string>(browse?.view || (restored.length
     ? restored[0].source === "explicit-network-ranking" ? "ranking" : "trend"
     : "trend"));
+  const view = lenses.some((lens) => lens.key === pickedView) ? pickedView : "trend";
   const [countriesChosen, setCountriesChosen] = useState(false);
   // Recorded on request after submission: the confirmation then says to update the report on step 15.
   const [rechosen, setRechosen] = useState(false);
@@ -159,6 +166,12 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   const activeReference = view === "trend" ? trendReference : rankingReference;
   // Exploration views: one economy's industries at the ranking year.
   const industriesOf = (country: string) => (query.data ?? []).filter((row) => row.country === country && row.year === year && row.industry != null);
+  const flowRows = selected.map((country) => industriesOf(country)
+    .filter((row) => typeof row["weighted degree"] === "number")
+    .sort((a, b) => (b["weighted degree"] as number) - (a["weighted degree"] as number))
+    .slice(0, flowsLimit));
+  const flowScaleMax = Math.max(1, ...flowRows.flatMap((rows) => rows.flatMap((row) =>
+    [row["weighted indegree"], row["weighted outdegree"]].filter((value): value is number => typeof value === "number" && Number.isFinite(value)).map(Math.abs))));
   const industryReference = new Map(
     rankingReference.status === "success"
       ? (rankingReference.data ?? []).map((row) => [row.industry, { median: row.median, n: row.n, ranks: row.ranks, ties: row.ties, noOutput: row.no_output }] as const)
@@ -191,20 +204,6 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   // blocked note names them instead of saying "有的年份".
   const undefinedThroughout = [...new Set(undefinedPoints.map((point) => point.country))]
     .filter((country) => undefinedPoints.filter((point) => point.country === country).length === years.length);
-  // 流量与路径 reads 加权总度 on a log scale: an industry with no trade (0) or no reading cannot be placed. Say how
-  // many and why, as step 7's 行业结构 does.
-  const topologyHiddenNote = (country: string): string | null => {
-    const hidden = industriesOf(country).filter((row) => !(typeof row["weighted degree"] === "number" && row["weighted degree"] > 0
-      && typeof row[HEAT_EVIDENCE_METRIC] === "number" && Number.isFinite(row[HEAT_EVIDENCE_METRIC])));
-    if (!hidden.length) return null;
-    const zero = hidden.filter((row) => row["weighted degree"] === 0).map((row) => String(row.industry));
-    const missing = hidden.filter((row) => row["weighted degree"] !== 0).map((row) => String(row.industry));
-    const clauses = [
-      ...(zero.length ? [`${zero.join("、")} 加权总度为 0（没有买卖，无法在对数刻度上显示）`] : []),
-      ...(missing.length ? [`${missing.join("、")} 缺少数据`] : []),
-    ];
-    return `另有 ${hidden.length} 个行业没有画出：${clauses.join("；")}。`;
-  };
   const pendingObservations: VizObservation[] = readings.map((point) => ({
       entity: `${point.country}·${point.industry}`, country: point.country, industry: point.industry,
       year: point.year, value: point.value!, metric, unit,
@@ -266,20 +265,12 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     </div>}
     {/* Start with the global overview, followed by comparisons and other exploration views. */}
     <LensNav
-      lenses={[
-        ...extraLenses.filter((lens) => lens.key === "global-network"),
-        { key: "trend", label: "历年变化" },
-        { key: "ranking", label: "行业排名" },
-        { key: "topology", label: "流量与路径" },
-        { key: "flows", label: "买入与卖出" },
-        ...extraLenses.filter((lens) => lens.key !== "global-network"),
-      ]}
+      lenses={lenses}
       active={view}
       onPick={setView}
     />
-    {view === "topology" && <p className="muted lens-hint">流量与路径：每个点是一个行业。横轴是加权总度（买卖总金额，百万美元，对数刻度），纵轴是介数（只看连接、不看金额：经过它的最短路线所占比例，对所有节点对求和）。两种排序是否一致？选了多个国家时每国一张。这张图没有可记录的读数条目。</p>}
     {view === "flows" && <p className="muted lens-hint">买入与卖出：每行一个行业，左边是加权入度（买入），右边是加权出度（卖出），按加权总度排序；左边条长的行业主要是买方，右边条长的主要是卖方。这张图没有可记录的读数条目。</p>}
-    {(view === "topology" || view === "flows") && <div className="controls">
+    {view === "flows" && <div className="controls">
       <LabeledControl label="年份">{(id) => <select id={id} value={year} onChange={(event) => setYear(Number(event.target.value))}>{years.map((value) => <option key={value} value={value}>{value}</option>)}</select>}</LabeledControl>
       {view === "flows" && <LabeledControl label="显示行业">{(id) => <select id={id} value={flowsLimit} onChange={(event) => setFlowsLimit(Number(event.target.value))}><option value={15}>前 15 个</option><option value={200}>全部行业</option></select>}</LabeledControl>}
     </div>}
@@ -305,7 +296,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       ] : [
         { label: "所选国家", value: view === "global-network" ? "全球经济体" : joinCountries(selected) },
         { label: "年份", value: String(year) },
-        { label: "视角", value: view === "topology" ? "流量与路径" : view === "flows" ? "买入与卖出" : extraLenses.find((lens) => lens.key === view)?.label ?? view },
+        { label: "视角", value: lenses.find((lens) => lens.key === view)?.label ?? view },
         { label: "材料", value: "这张图没有可记录的读数条目" },
       ]}
     />
@@ -318,47 +309,20 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       />
       <p className="muted">全球中位数{view === "trend" ? "、区间" : ""}和排名暂未显示；当前国家的有效读数仍可查看{canRecord ? "和记录" : ""}。</p>
     </div>}
-    {!recordable && view !== "topology" && view !== "flows" ? renderExtra?.(view, selected, year, setYear) : query.status !== "success" ? <AsyncStateMessage status={query.status} error={query.error} loadingLabel="正在加载历年行业指标…" onRetry={query.retry} /> : view === "topology" ? (
-      // One scatter per row: in two columns the 660-wide chart shrank its axis text to about 7px.
+    {!recordable && view !== "flows" ? renderExtra?.(view, selected, year, setYear) : query.status !== "success" ? <AsyncStateMessage status={query.status} error={query.error} loadingLabel="正在加载历年行业指标…" onRetry={query.retry} /> : view === "flows" ? (
       <Fragment key={chartKey}>
-      {selected.length > 1 && <p className="muted">每个国家的散点按本国行业取坐标范围：点的位置只在同一国家内比较，跨国比较请看数值。</p>}
-      <div className="comparison-facets comparison-facets--stacked">
-        {selected.map((country) => (
-          <section key={country} className="comparison-facet">
-            <h4>{countryLabel(country)} · {year} · 行业的流量与路径</h4>
-            <QuadrantScatter
-              rows={industriesOf(country)}
-              xKey="weighted degree"
-              yKey={HEAT_EVIDENCE_METRIC}
-              xLabel="加权总度（百万美元，对数）"
-              yLabel="介数（只看连接、不看金额）"
-              xFormat="amount"
-              yFormat="number"
-              xScale="log"
-              quadrantLabels={["流量大 · 经过的路线多", "流量小 · 经过的路线多", "流量小 · 经过的路线少", "流量大 · 经过的路线少"]}
-              dataLabel={`${countryLabel(country)} 流量与路径`}
-            />
-            {topologyHiddenNote(country) && <p className="muted">{topologyHiddenNote(country)}</p>}
-          </section>
-        ))}
-      </div>
-      </Fragment>
-    ) : view === "flows" ? (
-      <Fragment key={chartKey}>
-      {selected.length > 1 && <p className="muted">每个国家的条长按本国最大的行业缩放：条长只在同一国家内比较，跨国比较请看数值。</p>}
+      {selected.length > 1 && <p className="muted">所选国家共用金额刻度，相同条长表示相同的买入或卖出金额。</p>}
       {/* The butterfly needs about 440px for readable bars: two panels share a row only when each gets that. */}
       <div className={`comparison-facets ${selected.length > 2 ? "comparison-facets--stacked" : "comparison-facets--roomy"}`}>
-        {selected.map((country) => {
-          const rows = industriesOf(country)
-            .filter((row) => typeof row["weighted degree"] === "number")
-            .sort((a, b) => (b["weighted degree"] as number) - (a["weighted degree"] as number))
-            .slice(0, flowsLimit);
+        {selected.map((country, index) => {
+          const rows = flowRows[index];
           return (
             <section key={country} className="comparison-facet">
               <h4>{countryLabel(country)} · {year} · 买入与卖出</h4>
               <Butterfly
                 title={`${countryLabel(country)} 行业买入与卖出`}
                 unit="百万美元"
+                scaleMax={flowScaleMax}
                 leftLabel="加权入度（买入）"
                 rightLabel="加权出度（卖出）"
                 rows={rows.map((row) => ({

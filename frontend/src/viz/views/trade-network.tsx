@@ -269,6 +269,7 @@ export function NetworkViz({
   const returnFocusCountryRef = useRef<string | null>(null);
   const returnFocusRef = useRef<HTMLElement | SVGElement | null>(null);
   const dialogInitialFocusRef = useRef<HTMLElement | SVGElement | null>(null);
+  const openingPointer = useRef<{ clientX: number; clientY: number } | null>(null);
 
   const model = useMemo(() => {
     const W = 1000, H = 560, cx = W / 2, cy = H / 2;
@@ -336,7 +337,9 @@ export function NetworkViz({
   byRegion.forEach((list) =>
     [...list].sort((a, b) => (flowSum[b] ?? 0) - (flowSum[a] ?? 0)).slice(0, 2)
       .forEach((country) => topLabeled.add(country)));
-  const focus = hovered ?? selected;
+  // A selected node owns both the highlighted links and the detail panel. Opening
+  // the dialog may move another node under the pointer; that must not change focus.
+  const focus = selected ?? hovered;
   const adj = focus ? new Set([focus, ...(neighbors[focus] ?? []).map((neighbor) => neighbor.c)]) : null;
   if (data.nodes.length === 0 && data.edges.length === 0) {
     return (
@@ -382,11 +385,12 @@ export function NetworkViz({
     setHovered(null);
     setExpanded(false);
   };
-  const activateNode = (country: string) => {
+  const activateNode = (country: string, pointer?: { clientX: number; clientY: number }) => {
     setKeyboardFocus(country);
     hide();
     setHovered(null);
     if (!expanded) {
+      openingPointer.current = pointer ? { clientX: pointer.clientX, clientY: pointer.clientY } : null;
       setPlaceholderHeight(wrapRef.current?.getBoundingClientRect().height ?? null);
       returnFocusCountryRef.current = country;
       returnFocusRef.current = nodeRefs.current[country] ?? null;
@@ -544,7 +548,7 @@ export function NetworkViz({
                 style={{ cursor: "pointer" }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  activateNode(c);
+                  activateNode(c, e);
                 }}
                 onFocus={() => {
                   setKeyboardFocus(c);
@@ -569,10 +573,17 @@ export function NetworkViz({
                   nodeRefs.current[next]?.focus();
                 }}
                 onMouseEnter={(e) => {
+                  if (openingPointer.current?.clientX === e.clientX && openingPointer.current.clientY === e.clientY) return;
+                  openingPointer.current = null;
                   setHovered(c);
                   show(e, tooltipLines(c));
                 }}
-                onMouseMove={(e) => hovered === c && show(e, tooltipLines(c))}
+                onMouseMove={(e) => {
+                  if (openingPointer.current?.clientX === e.clientX && openingPointer.current.clientY === e.clientY) return;
+                  openingPointer.current = null;
+                  setHovered(c);
+                  show(e, tooltipLines(c));
+                }}
                 onMouseLeave={() => { setHovered(null); hide(); }}>
                 <circle
                   className="network-node-hit"

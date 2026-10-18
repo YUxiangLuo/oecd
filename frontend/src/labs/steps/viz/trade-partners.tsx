@@ -52,6 +52,19 @@ export function regionMatrix(edges: NetworkData["edges"]): number[][] {
   return matrix;
 }
 
+function FlowArrow({ x1, y1, x2, y2, width, color }: { x1: number; y1: number; x2: number; y2: number; width: number; color: string }) {
+  const length = Math.hypot(x2 - x1, y2 - y1);
+  const headStart = length - Math.max(10, width * 1.2);
+  const halfHead = Math.max(4, width / 2 + 2);
+  // One filled outline: a thick shaft cannot protrude through a separate marker,
+  // and the head and shaft have the same opacity without a darker overlap.
+  return <polygon
+    points={`0,${-width / 2} ${headStart},${-width / 2} ${headStart},${-halfHead} ${length},0 ${headStart},${halfHead} ${headStart},${width / 2} 0,${width / 2}`}
+    transform={`translate(${x1} ${y1}) rotate(${Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI})`}
+    fill={color} fillOpacity={0.8}
+  />;
+}
+
 function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: string; partners: NetworkPartner[]; colorIndex: number; scaleMax: number }) {
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
   // One Tab stop for the whole diagram (roving tabindex): the arrow keys move between partners.
@@ -85,19 +98,13 @@ function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: stri
       <p className="ego-network-key">线宽 = 各方向流量；蓝箭头 = {countryLabel(country)} 卖出，绿箭头 = {countryLabel(country)} 买入；伙伴按地理区域分组</p>
       {/* Capped so a stacked (full-width) panel does not blow the 11-unit node labels up to page-heading size. */}
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${countryLabel(country)}与前 ${top.length} 个贸易伙伴的关系图；线宽表示各方向流量，箭头指向买方`} style={{ width: "100%", maxWidth: 560, margin: "0 auto", display: "block" }}>
-        <defs>
-          <marker id={`ego-out-${country}`} markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" viewBox="0 0 10 8">
-            <path d="M0,0 L10,4 L0,8 z" fill={CAT[0]} />
-          </marker>
-          <marker id={`ego-in-${country}`} markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" viewBox="0 0 10 8">
-            <path d="M0,0 L10,4 L0,8 z" fill={CAT[1]} />
-          </marker>
-        </defs>
         {top.map((partner, index) => {
           const angle = -Math.PI / 2 + (index / top.length) * Math.PI * 2;
           const x = cx + Math.cos(angle) * R, y = cy + Math.sin(angle) * R;
-          // Two offset strokes: outflow from the centre, inflow towards it.
-          const nx = -Math.sin(angle) * 5, ny = Math.cos(angle) * 5;
+          const outWidth = width(partner.outflow), inWidth = width(partner.inflow);
+          // Keep each arrowhead clear of the reverse flow, even for two thick arrows.
+          const offset = Math.max(5, (outWidth + inWidth) / 4 + 2);
+          const nx = -Math.sin(angle) * offset, ny = Math.cos(angle) * offset;
           const trim = 24;
           const sx = cx + Math.cos(angle) * trim, sy = cy + Math.sin(angle) * trim;
           const ex = x - Math.cos(angle) * trim, ey = y - Math.sin(angle) * trim;
@@ -112,8 +119,8 @@ function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: stri
               onFocus={(event) => { setActiveIndex(index); showFor(event.currentTarget, linesFor(partner)); }}
               onBlur={hide}
               style={{ cursor: "pointer" }}>
-              {partner.outflow > 0 && <line x1={sx + nx} y1={sy + ny} x2={ex + nx} y2={ey + ny} stroke={CAT[0]} strokeWidth={width(partner.outflow)} strokeOpacity={0.8} markerEnd={`url(#ego-out-${country})`} />}
-              {partner.inflow > 0 && <line x1={ex - nx} y1={ey - ny} x2={sx - nx} y2={sy - ny} stroke={CAT[1]} strokeWidth={width(partner.inflow)} strokeOpacity={0.8} markerEnd={`url(#ego-in-${country})`} />}
+              {partner.outflow > 0 && <FlowArrow x1={sx + nx} y1={sy + ny} x2={ex + nx} y2={ey + ny} color={CAT[0]} width={outWidth} />}
+              {partner.inflow > 0 && <FlowArrow x1={ex - nx} y1={ey - ny} x2={sx - nx} y2={sy - ny} color={CAT[1]} width={inWidth} />}
               <circle cx={x} cy={y} r={17} fill="#fff" stroke={REGION_COLORS[REGION_OF[partner.c] ?? 5]} strokeWidth={2} />
               <text x={x} y={y + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#1b1f2b">{partner.c}</text>
             </g>
@@ -134,10 +141,21 @@ function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: stri
 }
 
 function RegionMatrix({ matrix, year }: { matrix: number[][]; year: number }) {
+  const [mode, setMode] = useState<"amount" | "share">("amount");
   const max = Math.max(1, ...matrix.flat());
   return (
+    <>
+    <div className="controls">
+      <LabeledControl label="区域矩阵读数">{(id) => <select id={id} value={mode} onChange={(event) => setMode(event.target.value as typeof mode)}>
+        <option value="amount">贸易金额</option>
+        <option value="share">占卖方区域流出的比重</option>
+      </select>}</LabeledControl>
+    </div>
+    <p className="muted">{mode === "amount"
+      ? "底色越深，金额越大；使用平方根色阶增强小额贸易的颜色差异，单元格显示实际金额。"
+      : "每行合计为 100%，表示该卖方区域的贸易流向；底色由浅到深表示 0%–100%，悬停可查金额。"}</p>
     <table className="region-matrix data-table" aria-describedby="region-matrix-note">
-      <caption style={{ textAlign: "left", padding: "6px 0", color: "#3a4050" }}>{year} 年区域间贸易流（每行是卖方区域，每列是买方区域；百万美元，不含“世界其他地区”）</caption>
+      <caption style={{ textAlign: "left", padding: "6px 0", color: "#3a4050" }}>{year} 年区域间贸易流（每行是卖方区域，每列是买方区域；{mode === "amount" ? "百万美元" : "%"}，不含“世界其他地区”）</caption>
       <thead>
         <tr><th scope="col">卖方 ＼ 买方</th>{REGIONS.map((region) => <th key={region} scope="col">{region}</th>)}</tr>
       </thead>
@@ -146,11 +164,14 @@ function RegionMatrix({ matrix, year }: { matrix: number[][]; year: number }) {
           <tr key={REGIONS[i]}>
             <th scope="row">{REGIONS[i]}</th>
             {row.map((value, j) => {
-              const index = Math.max(0, Math.min(SEQ.length - 1, Math.floor((value / max) * SEQ.length)));
+              const total = row.reduce((sum, cell) => sum + cell, 0);
+              const share = total > 0 ? value / total : null;
+              const intensity = mode === "amount" ? Math.sqrt(value / max) : share ?? 0;
+              const index = Math.max(0, Math.min(SEQ.length - 1, Math.ceil(intensity * (SEQ.length - 1))));
               return (
                 <td key={REGIONS[j]} style={{ background: SEQ[index], color: index >= 4 ? "#fff" : "#1b1f2b", textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: i === j ? 700 : 400 }}
-                  title={`${REGIONS[i]} → ${REGIONS[j]}：${amount(value)}`}>
-                  {amount(value)}
+                  title={`${REGIONS[i]} → ${REGIONS[j]}：${amount(value)} 百万美元；占该卖方区域流出 ${share === null ? "无法计算" : formatMetric(share, "pct")}`}>
+                  {mode === "amount" ? amount(value) : share === null ? "—" : formatMetric(share, "pct")}
                 </td>
               );
             })}
@@ -158,6 +179,7 @@ function RegionMatrix({ matrix, year }: { matrix: number[][]; year: number }) {
         ))}
       </tbody>
     </table>
+    </>
   );
 }
 
@@ -178,6 +200,7 @@ export function TradePartners({ meta, countries, year, onYear }: {
   }
   const current = query.data.find((item) => item.year === year) ?? query.data[query.data.length - 1];
   const scaleMax = Math.max(1, ...countries.flatMap((country) => (current.partners[country] ?? []).slice(0, TOP_PARTNERS).flatMap((partner) => [partner.inflow, partner.outflow])));
+  const listScaleMax = Math.max(1, ...countries.flatMap((country) => (current.partners[country] ?? []).slice(0, limit).flatMap((partner) => [partner.inflow, partner.outflow])));
   const concentrationRows: Row[] = countries.flatMap((country) =>
     query.data!.map((item) => ({ country, year: item.year, concentration: partnerConcentration(item.partners[country]) })),
   );
@@ -202,7 +225,9 @@ export function TradePartners({ meta, countries, year, onYear }: {
       </div>
       <p className="muted" id="region-matrix-note">
         几乎每两个国家之间都有贸易，所以“介数”这类只看连接的指标在国家层面几乎没有区分度（国家层介数均为 0）；本步的网络指标改在“国家×行业”层面计算。这里只看：主要伙伴、买卖方向、各区域之间的流向。
+        本视角与全球贸易网络图均只比较具名经济体，排除 ROW（世界其他地区余项）；伙伴集中度的分母也不含 ROW。
       </p>
+      {countries.length > 1 && <p className="muted">所选国家的伙伴榜共用金额刻度，相同条长表示相同金额；关系图的箭头粗细也使用共同尺度。</p>}
       <div className={`comparison-facets ${countries.length > 2 ? "comparison-facets--stacked" : "comparison-facets--roomy"}`}>
         {countries.map((country, index) => {
           const partners = current.partners[country] ?? [];
@@ -215,6 +240,7 @@ export function TradePartners({ meta, countries, year, onYear }: {
                 key={`${current.year}:${limit}`}
                 title={`${countryLabel(country)} 伙伴榜`}
                 unit="百万美元"
+                scaleMax={listScaleMax}
                 leftLabel="进口（从该伙伴买入）"
                 rightLabel="出口（卖给该伙伴）"
                 rows={partners.slice(0, limit).map((partner) => ({ key: partner.c, label: countryLabel(partner.c), left: partner.inflow, right: partner.outflow }))}
@@ -223,7 +249,7 @@ export function TradePartners({ meta, countries, year, onYear }: {
           );
         })}
       </div>
-      <h4>伙伴集中度 · 前 5 个伙伴占该国全部双向流量的比重</h4>
+      <h4>伙伴集中度 · 前 5 个伙伴占该国与具名经济体双向流量的比重（不含 ROW）</h4>
       <IndicatorTrendChart
         rows={concentrationRows}
         countries={countries}
