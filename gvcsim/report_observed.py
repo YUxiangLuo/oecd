@@ -610,6 +610,14 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
         if not complete or not observations:
             continue
         lines.extend((f"### 步骤 {step} · {_STEP_TITLES[step]}", ""))
+        composition = composition_set(step, (str(item["metric"]) for item in observations))
+        if composition and composition[1] == "FGY":
+            lines.extend(
+                (
+                    "> 后向构成的分母 FGY 是最终品内含的全球增加值，不含产品税减补贴 TLS，不是最终品总值；与前向的总增加值分母不同，前后向份额不能直接比较。",
+                    "",
+                )
+            )
         charts = _observed_charts(data, step, observations)
         if len(charts) > 1:
             selection = data.get("indicator_selection")

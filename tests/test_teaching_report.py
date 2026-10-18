@@ -967,7 +967,9 @@ def test_step_seven_accepts_the_backward_composition_set():
     ]
     assert not any(item["step"] == 7 for item in check_material_gate(session))
     section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 7", 1)[1]
-    assert "最终品生产构成" in section
+    assert "最终品内含全球增加值构成" in section
+    assert "占最终品内含全球增加值的百分比（%）" in section
+    assert "不含产品税减补贴 TLS，不是最终品总值" in section
     # Mixing the two sides is not a composition the page can draw.
     data["observations"][0]["metric"] = "1_VA_D"
     assert any(item["step"] == 7 for item in check_material_gate(session))

@@ -88,7 +88,7 @@ _COMPOSITION_SETS: dict[int, tuple[tuple[tuple[str, ...], str], ...]] = {
         (("1_FGY_D", "2_FGY_RT", "3a_FGY_GVC_S", "3b_FGY_GVC_C"), "FGY"),
     ),
 }
-_COMPOSITION_TOTAL_SHORT = {"gross_exports": "总出口", "SVA": "总增加值", "FGY": "最终品生产"}
+_COMPOSITION_TOTAL_SHORT = {"gross_exports": "总出口", "SVA": "总增加值", "FGY": "最终品内含全球增加值"}
 
 
 def composition_set(step: int, metrics: Iterable[str]) -> tuple[tuple[str, ...], str] | None:

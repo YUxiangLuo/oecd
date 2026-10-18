@@ -303,7 +303,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
     14: [
         _question(
             "s14-metric-v9",
-            "步骤 14 默认的 Y——加权总度——表示什么？",
+            "真实生产网络中的“加权总度”（见步骤 5）表示什么？",
             [
                 _option("a", "节点买入和卖出的流量之和"),
                 _option("b", "有多少条最短路线经过这个节点"),

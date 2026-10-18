@@ -244,7 +244,7 @@ export function segmentCards({ rows, countries, year, industry, segments, reason
     {
       eyebrow: `${scopeLabel(first, industry)} · ${year} · 最长的一段`,
       big: `${longest.segment.label} · ${longestSide}`,
-      small: `${textNumber(longestSide === "前向" ? longest.forward : longest.backward, unit)}；三段长度不能相加，总长度是三段按增加值份额加权的平均`,
+      small: `${textNumber(longestSide === "前向" ? longest.forward : longest.backward, unit)}；三段长度不能相加；前向按各段占总增加值（SVA）的份额加权，后向按各段占最终品内含全球增加值（FGY）的份额加权`,
     },
     {
       eyebrow: `${scopeLabel(first, industry)} · ${gvc.segment.label} · 前向对后向`,
