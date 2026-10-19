@@ -354,10 +354,10 @@ export function StudentWorkspace({
             <SyncProblemBanner problem={syncProblem} />
             {session.localViewWarning && <p className="tipbox" role="status">{session.localViewWarning}</p>}
             <StepLinkNotice text={stepNotice} onDismiss={onDismissStepNotice} />
-            {user.initial_password && <div className="tipbox student-first-step" role="note">
+            {user.initial_password && <section className="tipbox student-first-step" aria-label="初始密码提示">
               <span>{STUDENT_INITIAL_PASSWORD_HINT}</span>
               <button type="button" className="secondary" onClick={onRequestPasswordChange}>立即修改密码</button>
-            </div>}
+            </section>}
             <StepHeader
               step={step}
               previous={prevStep}

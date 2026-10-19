@@ -539,6 +539,38 @@ describe("semantic decomposition and path tables", () => {
 });
 
 describe("Step 5 teaching network accessibility", () => {
+  test("keeps directed arrow tips outside scaled nodes in every metric and selection", () => {
+    const view = render(<NetworkCentralityDemo />);
+    const number = (element: Element, name: string) => Number(element.getAttribute(name));
+    try {
+      for (const metric of ["度", "介数", "接近中心性"]) {
+        fireEvent.click(view.getByRole("button", { name: `查看${metric}的算法` }));
+        for (const node of ["USA", "MEX", "DEU", "CHN", "JPN", "KOR", "VNM"]) {
+          fireEvent.click(view.getByRole("button", { name: new RegExp(`（${node}）`) }));
+          const circles = Array.from(view.container.querySelectorAll(".net-demo-node circle"));
+          const nearest = (x: number, y: number) => circles.reduce((a, b) =>
+            Math.hypot(x - number(a, "cx"), y - number(a, "cy"))
+              < Math.hypot(x - number(b, "cx"), y - number(b, "cy")) ? a : b);
+          const marker = view.container.querySelector("marker")!;
+          for (const line of view.container.querySelectorAll(".net-demo-svg line")) {
+            const source = nearest(number(line, "x1"), number(line, "y1"));
+            const target = nearest(number(line, "x2"), number(line, "y2"));
+            const start = Math.hypot(number(line, "x1") - number(source, "cx"), number(line, "y1") - number(source, "cy"));
+            const end = Math.hypot(number(line, "x2") - number(target, "cx"), number(line, "y2") - number(target, "cy"));
+            // The triangle's tip is x=8; its extension depends on the rendered marker and edge width.
+            const tip = end - (8 - number(marker, "refX")) * number(line, "stroke-width");
+            expect(start).toBeGreaterThan(number(source, "r") + number(source, "stroke-width") / 2);
+            expect(tip).toBeGreaterThan(number(target, "r") + number(target, "stroke-width") / 2);
+            expect(start - number(source, "r")).toBeLessThan(8);
+            expect(tip - number(target, "r")).toBeLessThan(8);
+          }
+        }
+      }
+    } finally {
+      cleanup();
+    }
+  });
+
   test("distinguishes unreachable closeness from genuine zero betweenness", () => {
     const view = render(<NetworkCentralityDemo />);
     try {

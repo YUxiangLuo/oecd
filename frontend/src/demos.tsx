@@ -1329,6 +1329,7 @@ export function NetworkCentralityDemo() {
   const reachablePaths = distancePaths.filter((item) => Number.isFinite(item.distance));
   const distanceSum = reachablePaths.reduce((sum, item) => sum + item.distance, 0);
   const visualMax = Math.max(...NET_NODES.map((node) => networkDemoMetricValue(node.id, mode, C)), 1e-9);
+  const nodeRadius = (nodeId: string) => 18 + (networkDemoMetricValue(nodeId, mode, C) / visualMax) * 20;
   const selectedValue = networkDemoMetricValue(sel, mode, C);
   const selectedEdges = teachingNetworkEdgesForNode(sel);
 
@@ -1366,7 +1367,7 @@ export function NetworkCentralityDemo() {
           aria-describedby={instructionId}
         >
           <defs>
-            <marker id="net-demo-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+            <marker id="net-demo-arrow" markerWidth="8" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
               <path d="M0,0 L0,6 L8,3 z" fill="context-stroke" />
             </marker>
           </defs>
@@ -1377,11 +1378,14 @@ export function NetworkCentralityDemo() {
             const length = Math.hypot(nb.x - na.x, nb.y - na.y) || 1;
             const ux = (nb.x - na.x) / length;
             const uy = (nb.y - na.y) / length;
+            // Anchor the marker at its tip and leave room outside each node's current radius and border.
+            const startOffset = nodeRadius(a) + 4;
+            const endOffset = nodeRadius(b) + 4;
             return (
               <line
                 key={ekey(a, b)}
-                x1={na.x + ux * 28} y1={na.y + uy * 28}
-                x2={nb.x - ux * 32} y2={nb.y - uy * 32}
+                x1={na.x + ux * startOffset} y1={na.y + uy * startOffset}
+                x2={nb.x - ux * endOffset} y2={nb.y - uy * endOffset}
                 stroke={active ? "#4b47e0" : "#d8dbe6"}
                 strokeWidth={active ? 3.5 : 1.5}
                 markerEnd="url(#net-demo-arrow)"
@@ -1393,7 +1397,7 @@ export function NetworkCentralityDemo() {
             const isNeighbor = mode === "degree" && neighbors.has(n.id);
             const onPath = mode !== "degree" && (mode === "closeness" || pathNodes.includes(n.id));
             const val = networkDemoMetricValue(n.id, mode, C);
-            const r = 18 + (val / visualMax) * 20;
+            const r = nodeRadius(n.id);
             const accessibleName = networkDemoNodeAccessibleName(n, mode, val, isSel);
             return (
               <g
