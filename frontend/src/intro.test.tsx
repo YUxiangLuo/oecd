@@ -47,13 +47,13 @@ test("navigation focuses each heading, respects bounds and preserves button key 
   fireEvent.keyDown(document.activeElement!, { key: "ArrowLeft" });
   expect(document.activeElement?.tagName).toBe("H1");
   fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
-  expect(document.activeElement?.textContent).toBe("投入产出数据与全球价值链指标");
+  expect(document.activeElement?.textContent).toBe("从投入产出联系到价值链指标");
   fireEvent.keyDown(view.getByRole("button", { name: /下一页/ }), { key: "ArrowRight" });
-  expect(document.activeElement?.textContent).toBe("投入产出数据与全球价值链指标");
+  expect(document.activeElement?.textContent).toBe("从投入产出联系到价值链指标");
   for (let i = 0; i < 5; i++) fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
-  expect(document.activeElement?.textContent).toBe("实验流程与报告要求");
+  expect(document.activeElement?.textContent).toBe("实验流程与报告成果");
   fireEvent.keyDown(document.activeElement!, { key: "ArrowLeft" });
-  expect(document.activeElement?.textContent).toBe("回归模型设定与估计结果比较");
+  expect(document.activeElement?.textContent).toBe("从图表比较到回归分析");
 });
 
 test("skip and Escape close without changing the current experiment step", () => {
@@ -84,14 +84,4 @@ test("synthetic data, ROW and actual course metadata remain explicit", () => {
   next(view);
   expect(view.getByRole("heading", { name: "模拟投入产出数据（教学用）" })).toBeTruthy();
   expect(view.getByRole("dialog").textContent).not.toMatch(/真实投入产出数据|投入产出数据来自 OECD/);
-});
-
-test("hypothetical exposure arithmetic separates current and lagged X without inventing Y", () => {
-  const view = open(); next(view); next(view);
-  expect(view.getByLabelText(/百分之二十.*百分之二十五.*五个百分点/)).toBeTruthy();
-  const rows = [...view.getByRole("table").querySelectorAll("tbody tr")].map(row => [...row.querySelectorAll("td")].map(cell => Number(cell.textContent)));
-  expect(rows).toEqual([[0, 0], [20 / 100 * 25, 0], [20 / 100 * 25, 20 / 100 * 25]]);
-  expect(view.getByText(/回归样本为符合条件的完整国家 × 行业面板/)).toBeTruthy();
-  expect(view.getByText(/示意数值用于说明指标构造与滞后关系/)).toBeTruthy();
-  expect(view.queryByRole("img", { name: /趋势/ })).toBeNull();
 });

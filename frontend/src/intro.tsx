@@ -8,19 +8,19 @@ import { PRODUCT_SUMMARY } from "./product-copy";
 import type { AuthUser, Meta, StepsResponse } from "./types";
 import "./intro.css";
 
-const SCENE_NAMES = ["研究目标", "数据与指标", "关税暴露", "回归建模", "实验流程"];
+const SCENE_NAMES = ["认识实验", "数据与指标", "贸易政策情景", "分析方法", "实验流程与成果"];
 const STAGE_OUTPUTS: Record<number, string> = {
-  1: "识别中间投入、最终需求及跨国、跨行业投入产出关系。",
-  2: "计算并解释贸易、生产、长度与网络指标。",
-  3: "比较经济体与行业的指标差异，记录图表及观察范围。",
-  4: "掌握关税暴露的构造方法，完成回归估计与模型比较。",
-  5: "整理分析证据，说明研究结论与局限，提交实验报告。",
+  1: "读取中间投入、最终需求与账户数据。",
+  2: "测算并解释四类全球价值链指标。",
+  3: "比较国家、行业与年份差异，记录选定图表。",
+  4: "完成默认模型估计，可进一步开展自主模型比较。",
+  5: "汇总图表与模型结果，撰写分析并提交报告。",
 };
 const DIMENSIONS = [
-  ["贸易", "总出口价值分解", "将总出口分解为国内增加值、国外增加值与重复计算等组成部分。"],
-  ["生产", "跨境生产分工", "区分国内生产、传统贸易以及简单和复杂全球价值链生产活动。"],
-  ["长度", "生产长度与价值链位置", "比较前向、后向生产长度与全球价值链位置指数。"],
-  ["网络", "生产网络结构", "刻画贸易伙伴、增加值联系与经济体的网络中心性。"],
+  ["贸易", "出口的价值来源", "区分出口中的国内增加值、国外增加值及重复计算部分。"],
+  ["生产", "跨境生产的分工方式", "区分国内生产、传统贸易，以及简单和复杂全球价值链生产活动。"],
+  ["长度", "生产链条的长度与位置", "衡量生产过程的平均阶段数，比较前后向长度与价值链位置。"],
+  ["网络", "经济体之间的生产联系", "识别主要贸易伙伴，比较经济体在生产网络中的位置。"],
 ];
 
 export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: {
@@ -73,59 +73,64 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       <p className="intro-eyebrow">全球价值链与贸易政策实验</p>
       <h1 id={titleId} className="intro-title">供应链仿真系统</h1>
       <p className="intro-lede">{PRODUCT_SUMMARY}</p>
-      <div className="intro-questions">
-        <article><span>研究对象</span><h3>跨国生产联系</h3><p>依据投入产出关系，识别出口增加值来源与跨境生产分工。</p></article>
-        <article><span>指标比较</span><h3>全球价值链结构</h3><p>比较经济体与行业在贸易构成、生产分工、链条长度和网络位置上的差异。</p></article>
-        <article><span>模型分析</span><h3>关税暴露与指标关联</h3><p>估计关税暴露与各类指标的条件关联，分析结果对模型设定的敏感性。</p></article>
+      <div className="intro-cards">
+        <article><span>研究对象</span><h3>跨国生产分工</h3><p>识别投入来源、产品去向与经济体之间的生产联系。</p></article>
+        <article><span>分析内容</span><h3>结构差异与政策情景</h3><p>比较全球价值链指标，并在模拟贸易政策情景下开展分析。</p></article>
+        <article><span>实验成果</span><h3>有证据支持的研究结论</h3><p>结合图表与模型结果，说明结论的依据、适用范围与研究局限。</p></article>
       </div>
       <div className="intro-coverage"><b>{datasetName}</b><span>{coverage}</span></div>
     </section>,
     <section key={1} className="intro-scene">
-      <h2 id={titleId} className="intro-title">投入产出数据与全球价值链指标</h2>
-      <p className="intro-lede">跨国投入产出表记录各经济体、各行业之间的中间投入，以及产品和服务的最终使用。相关指标用于描述全球价值链的构成、分工方式与结构变化。</p>
+      <h2 id={titleId} className="intro-title">从投入产出联系到价值链指标</h2>
+      <p className="intro-lede">一个行业的产出可以作为其他行业的投入，也可以用于消费、投资等最终用途。跨国投入产出表记录这些联系，为分析不同经济体与行业之间的生产分工提供依据。</p>
+      <figure className="intro-production">
+        <figcaption>投入产出联系示意 · 生产环节可分布于不同经济体</figcaption>
+        <ol className="intro-flow">
+          <li><h3>投入来源</h3><p>原材料、零部件与生产性服务</p></li>
+          <li><h3>生产过程</h3><p>行业之间的加工与中间投入联系</p></li>
+          <li><h3>最终使用</h3><p>居民消费、政府消费与投资等</p></li>
+        </ol>
+      </figure>
       <div className="intro-dimensions">{DIMENSIONS.map(([name, title, detail]) => <article key={name}><span>{name}</span><h3>{title}</h3><p>{detail}</p></article>)}</div>
-      <div className="intro-sources">
-        <article><span className="intro-label">指标测算 · 步骤 1–9</span><h3>{datasetName}</h3><p>根据投入产出数据计算四类指标，比较经济体、行业与年份间的差异。</p><small>{coverage}</small></article>
-        <article><span className="intro-label">计量分析 · 步骤 10–14</span><h3>教学模拟数据</h3><p>模拟税率路径与被解释变量 Y 按课程设定生成。投入产出数据用于构造对美出口权重并校准模拟量级；多数控制变量为模拟数据，具体来源见建模页面。</p><small>用于模型设定、估计比较与经济含义分析；估计结果不代表现实关税政策的因果效应。</small></article>
-      </div>
+      <div className="intro-dataset"><span className="intro-label">数据浏览与指标比较 · 步骤 1–9</span><h3>{datasetName}</h3><p>{coverage}</p></div>
     </section>,
     <section key={2} className="intro-scene">
-      <p className="intro-eyebrow">示意算例</p><h2 id={titleId} className="intro-title">关税暴露指标的构造与时间结构</h2>
-      <p className="intro-lede">关税暴露 X 由首年对美出口份额 w 与当年模拟税率 τ 的乘积构造，即 X = w × τ。税率相同时，初始出口份额差异形成不同的关税暴露水平。</p>
-      <div className="intro-equation" aria-label="假设首年对美出口份额为百分之二十，模拟关税税率为百分之二十五，关税暴露为五个百分点">
-        <div><strong>20<span>%</span></strong><span>首年对美出口份额 w</span></div><b aria-hidden="true">×</b>
-        <div><strong>25<span>%</span></strong><span>模拟关税税率 τ</span></div><b aria-hidden="true">=</b>
-        <div className="intro-equation-result"><strong>5<span> 个百分点</span></strong><span>关税暴露 X</span></div>
-      </div>
-      <div className="intro-timing">
-        <div><h3>当期变量与滞后变量</h3><p>当期 X 表示本年度关税暴露，滞后一期 L1_X 表示上一年度关税暴露。示意算例假定加税前税率为 0，加税后维持不变。</p></div>
-        <table><caption>示意暴露路径 · 单位：百分点</caption><thead><tr><th scope="col">时间</th><th scope="col">当期 X</th><th scope="col">滞后一期 L1_X</th></tr></thead><tbody><tr><th scope="row">加税前</th><td>0</td><td>0</td></tr><tr><th scope="row">加税当年</th><td>5</td><td>0</td></tr><tr><th scope="row">加税次年</th><td>5</td><td>5</td></tr></tbody></table>
-      </div>
-      <p className="intro-note">示意数值用于说明指标构造与滞后关系。国家与行业选择仅用于案例展示；回归样本为符合条件的完整国家 × 行业面板。案例结果由估计系数与对应暴露差异换算。</p>
+      <h2 id={titleId} className="intro-title">贸易政策变化与价值链研究</h2>
+      <p className="intro-lede">前述指标描述全球价值链的结构。进口关税是进口环节对商品征收的税收，其变化可能影响跨境采购与生产分工。实验进一步引入模拟加征关税的情景，考察贸易政策变化与这些指标的关系。</p>
+      <div className="intro-scenario"><span className="intro-label">课程设定的政策情景</span><h3>美国对部分经济体加征进口关税</h3><p>各经济体与行业的对美出口占比不同，因此同一加征税率所涉及的贸易比重也不同。</p></div>
+      <figure className="intro-policy-comparison">
+        <figcaption>示意比较 · 两类出口行业面对相同的模拟加征税率</figcaption>
+        <div className="intro-comparison">
+          <article><span>对美出口占比较高</span><h3>涉及的出口比重较大</h3></article>
+          <article><span>对美出口占比较低</span><h3>涉及的出口比重较小</h3></article>
+        </div>
+      </figure>
+      <p className="intro-note">后续实验将对美出口占比与模拟加征税率结合，构造“关税暴露”指标，概括各经济体与行业面对该政策情景的程度。具体计算方法在步骤 10 中说明。</p>
+      <p className="intro-data-note"><strong>教学模拟数据</strong>关税情景与回归使用的指标按课程设定生成；投入产出数据为贸易联系与指标量级提供参考。</p>
     </section>,
     <section key={3} className="intro-scene">
-      <h2 id={titleId} className="intro-title">回归模型设定与估计结果比较</h2>
-      <p className="intro-lede">贸易、生产、长度与网络分别对应四个回归步骤。以默认模型为基准，通过调整被解释变量、控制变量、固定效应和滞后结构，考察估计结果的差异。</p>
-      <div className="intro-model-parts">
-        <article><span>被解释变量 Y</span><h3>指标选择与计量单位</h3><p>从当前维度的可用指标中选择 Y，并核对其计量单位。</p></article>
-        <article><span>控制变量</span><h3>协变量选择</h3><p>选择控制变量及其当期或滞后形式。</p></article>
-        <article><span>固定效应</span><h3>异质性与共同冲击</h3><p>设定经济体、行业、年份及其组合的固定效应。</p></article>
-        <article><span>解释变量 X</span><h3>分布滞后结构</h3><p>选择当期、滞后一期或滞后二期暴露项及其组合。</p></article>
+      <h2 id={titleId} className="intro-title">从图表比较到回归分析</h2>
+      <p className="intro-lede">图表能够呈现指标的变化，但加税前后的差异还可能与汇率、经济规模等因素有关。回归分析在同时考虑多种因素的条件下，估计关税暴露与价值链指标之间的统计关联。</p>
+      <ol className="intro-flow">
+        <li><h3>图表观察</h3><p>比较不同经济体、行业与年份的指标走势，描述变化方向与幅度。</p></li>
+        <li><h3>回归估计</h3><p>纳入汇率、经济规模和贸易开放度等因素，分析关税暴露与价值链指标的关系。</p></li>
+        <li><h3>模型比较</h3><p>调整纳入的因素及其时间关系，考察结果对模型设定的敏感性。</p></li>
+      </ol>
+      <div className="intro-cards">
+        <article><span>结果读数</span><h3>关联方向与变化幅度</h3><p>结合指标单位，解释模型估计的方向和量级。</p></article>
+        <article><span>结果评估</span><h3>不确定性与样本范围</h3><p>关注估计区间与有效样本，避免仅凭单个数值作出判断。</p></article>
+        <article><span>结论解释</span><h3>适用条件与研究局限</h3><p>说明结论依赖的数据与模型条件，并比较不同设定下的结果。</p></article>
       </div>
-      <div className="intro-sources">
-        <article><span className="intro-label">默认模型</span><h3>双向固定效应基准模型</h3><p>纳入当期 X 与滞后一期 L1_X，控制汇率变动、GDP 对数和贸易开放度，并加入国家 × 行业固定效应与年份固定效应。</p></article>
-        <article><span className="intro-label">结果解释</span><h3>点估计、区间估计与有效样本</h3><p>结合系数方向与量级、95% 置信区间和有效样本量解释结果。置信区间包含 0 或无法可靠推断的情形应一并报告。</p></article>
-      </div>
-      <p className="intro-note">四项默认模型结果自动纳入报告。自主模型须通过“记入报告”操作纳入，每个回归步骤限一项。模型比较需区分 Y 的计量单位、X 的时间跨度与有效样本。</p>
+      <p className="intro-note">贸易、生产、长度与网络各设一个回归步骤。模型使用符合条件的完整国家 × 行业样本，所选案例用于辅助解释。教学模拟的估计结果不直接等同于现实关税政策的因果效应。</p>
     </section>,
     <section key={4} className="intro-scene">
-      <h2 id={titleId} className="intro-title">实验流程与报告要求</h2>
-      <p className="intro-lede">实验依次完成数据读取、指标测算、图表比较与回归建模，并在报告中阐述研究问题、实验证据、研究局限与后续方向。</p>
+      <h2 id={titleId} className="intro-title">实验流程与报告成果</h2>
+      <p className="intro-lede">按照数据读取、指标测算、图表比较和模型分析的顺序完成实验。各阶段的记录汇集为实验报告，报告提交后由教师评阅。</p>
       {stages.length ? <ol className="intro-route">{stages.map(st => <li key={st.n}><h3>{st.name}</h3>{st.steps.length > 0 && <small>步骤 {st.steps[0].n}{st.steps.length > 1 ? `–${st.steps.at(-1)!.n}` : ""}</small>}<p>{STAGE_OUTPUTS[st.n]}</p></li>)}</ol> : <p role="status">当前课程暂无实验路线信息。</p>}
       <div className="intro-completion">
-        <article><h3>理解测验</h3><p>完成各步骤理解测验并达到通过要求。</p></article>
-        <article><h3>实验材料</h3><p>步骤 1–5 与 10 自动记录材料；步骤 6–9 需记录图表；步骤 11–14 需完成默认模型估计。</p></article>
-        <article><h3>分析与提交</h3><p>步骤 15 撰写三项分析并提交报告，由教师评阅。草稿生成和 PDF 导出不替代正式提交。</p></article>
+        <article><h3>理解与记录</h3><p>完成各步骤理解测验并达到通过要求。数据与指标步骤自动记录材料，图表比较步骤需记录选定图表。</p></article>
+        <article><h3>分析与提交</h3><p>完成四项默认回归，撰写研究问题、结果解释、研究局限与后续方向。自主模型可选择记入报告。</p></article>
+        <article><h3>评阅与留存</h3><p>教师评阅后可查看评分与评语，并导出 PDF 留存。草稿生成和 PDF 导出不替代正式提交。</p></article>
       </div>
       <p className="intro-note">当前账号：{user.name || user.username}（{user.role === "teacher" ? "教师" : "学生"}）。关闭导览后返回当前实验步骤；可通过顶部“系统介绍”再次查看。</p>
     </section>,
