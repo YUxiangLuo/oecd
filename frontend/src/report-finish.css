@@ -23,22 +23,62 @@
 .report-submit-panel button { margin-right: 10px; }
 /* The amber note on a graded report sits right above the action buttons: keep a gap between them. */
 .report-submit-panel .reg-rerun-warning { margin-bottom: 12px; }
-.report-outro .intro-title { font-size: 40px; letter-spacing: 1px; margin: 18px 0; }
-.outro-receipt { display: grid; gap: 10px; padding: 20px; margin: 22px 0; border: 1px solid #625a96; border-radius: 12px; background: #ffffff08; }
-.outro-receipt b { color: #90e0bd; font-size: 18px; }
-/* The light comment box keeps its own label style, not the receipt's large green status line. */
-.outro-receipt .report-feedback b { color: inherit; font-size: inherit; }
-.outro-receipt span, .outro-receipt small { color: #c5cee5; }
-.outro-receipt p { margin: 0; white-space: pre-wrap; }
-.outro-receipt-caveat { display: grid; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid #625a96; }
+/* Personal review: one scrollable page, with a persistent action footer. */
+.outro-page { width: min(1120px, 100%); margin: 0 auto; }
+.report-outro .intro-title { font-size: 36px; }
+.outro-receipt { display: grid; gap: 14px; padding: 20px 24px; margin: 22px 0 28px; border: 1px solid #625a96; border-radius: 12px; background: #ffffff05; }
+.outro-receipt b { color: #91dbc6; font-size: 18px; }
+.outro-receipt-status { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.outro-receipt span, .outro-receipt small { color: #bfc8dd; font-size: 12px; line-height: 1.8; }
+.outro-receipt p { margin: 0; white-space: pre-wrap; font-size: 13px; line-height: 1.8; }
+.outro-receipt-caveat { display: grid; gap: 6px; padding-bottom: 14px; border-bottom: 1px solid #625a96; }
 .outro-receipt-caveat b { color: #ffd38a; }
-.outro-journey { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; text-align: left; }
-.outro-journey article { padding: 18px; border: 1px solid #ffffff24; border-radius: 12px; }
-.outro-journey span { display: block; color: #b5a3ed; font-size: 12px; margin-bottom: 10px; }
-.outro-journey p { color: #bdc6dc; font-size: 13px; line-height: 1.8; }
-.outro-export { border: 1px solid #8d83bb; border-radius: 10px; background: transparent; color: #eef1fb; padding: 14px 24px; cursor: pointer; }
+.outro-feedback { padding-top: 14px; border-top: 1px solid #b7bfe526; }
+.outro-feedback b { display: block; font-size: 13px; color: #c9c2ff; margin-bottom: 6px; }
+.outro-section { margin: 30px 0; }
+.outro-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; margin-bottom: 14px; }
+.outro-section-heading h2 { margin: 0; font-size: 20px; font-weight: 600; }
+.outro-section-heading > span { color: #b6c1d8; font-size: 12px; }
+.outro-section h3 { margin: 8px 0 12px; font-size: 15px; line-height: 1.7; }
+.outro-prose { white-space: pre-wrap; overflow-wrap: anywhere; color: #d7ddef; font-size: 14px; line-height: 1.9; padding: 20px 24px; border-left: 2px solid #7367cf; background: #ffffff04; margin: 0; }
+.outro-step-link { padding: 4px 0; border: none; background: none; color: #b6adff; font: inherit; font-size: 12px; cursor: pointer; text-align: left; }
+.outro-step-link:hover { color: #d5ceff; text-decoration: underline; }
+.outro-evidence { border-top: 1px solid #b7bfe526; }
+.outro-evidence article { display: grid; grid-template-columns: 180px 1fr; gap: 28px; padding: 18px 0; border-bottom: 1px solid #b7bfe526; }
+.outro-evidence article h3 { margin: 6px 0; }
+.outro-step { color: #ada7e9; font-size: 12px; }
+.outro-evidence p { color: #e0e5f3; font-size: 13px; margin: 0 0 8px; line-height: 1.8; }
+.outro-evidence ul { margin: 0; padding-left: 18px; color: #bfc8dd; font-size: 12px; line-height: 1.8; }
+.outro-evidence .outro-industries { color: #aeb8d0; font-size: 12px; margin: 10px 0 0; }
+.outro-section-note, .outro-empty { color: #b6c1d8; font-size: 13px; line-height: 1.8; margin: 0 0 16px; }
+.outro-results { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.outro-results > article { display: flex; flex-direction: column; padding: 18px; border: 1px solid #b0afe635; border-radius: 12px; background: #ffffff04; }
+.outro-results h3 { min-height: 50px; }
+.outro-results .outro-estimate { flex: 1; }
+.outro-estimate-span { margin: 0 0 10px; color: #bfc8dd; font-size: 12px; }
+.outro-value { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.outro-value strong { color: #f0efff; font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.outro-value span { color: #c4cce0; font-size: 12px; }
+.outro-interval { color: #c4cce0; font-size: 12px; line-height: 1.7; font-variant-numeric: tabular-nums; margin: 10px 0; }
+.outro-inference { color: #91dbc6; font-size: 12px; line-height: 1.8; margin: 10px 0; }
+.outro-estimate[data-inference="uncertain"] .outro-inference, .outro-estimate[data-inference="unavailable"] .outro-inference { color: #edc997; }
+.outro-estimate small { display: block; color: #aeb8d0; font-size: 11px; margin: 12px 0; line-height: 1.8; }
+.outro-models { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.outro-models > article { border: 1px solid #b0afe635; border-radius: 12px; padding: 20px; }
+.outro-models .outro-section-heading { margin-bottom: 4px; }
+.outro-models h3 { margin: 0; }
+.outro-model-name { font-size: 13px; color: #c9c2ff; margin: 12px 0 6px; }
+.outro-specification { font-size: 12px; color: #bfc8dd; line-height: 1.8; margin: 0 0 16px; }
+.outro-model-comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; border-top: 1px solid #b7bfe526; }
+.outro-model-comparison h4 { font-size: 12px; color: #d7ddef; margin: 16px 0; font-weight: 500; }
+.outro-model-comparison .outro-value strong { font-size: 24px; }
+.outro-footer { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 40px; border-top: 1px solid #b7bfe526; background: #0b0e21; }
+.outro-footer > div:last-child { display: flex; gap: 14px; }
+.outro-footer span { color: #bfc8dd; font-size: 12px; }
+.outro-footer small { display: block; color: #edc997; font-size: 12px; margin-top: 6px; }
+.outro-export { border: 1px solid #8d83bb; background: transparent; color: #eef1fb; }
 .outro-export:disabled { opacity: .5; cursor: not-allowed; }
-.report-outro .intro-cta-row { gap: 14px; }
+@media (max-width: 1100px) { .outro-results { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 /* The grade printed above an exported graded report (the status card is not printed). */
 .report-print-grade { display: none; }
 @media print {

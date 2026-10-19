@@ -51,7 +51,7 @@ const REFLECTION_FIELDS: {
     experimentStarter: "；模型实验“……”的 X 各项合计为……，与默认模型相比……",
     min: 40,
   },
-  { key: "limitations", label: "局限与反思", prompt: "真实指标比较和模拟回归各有哪些限制？模拟结果不能当作真实政策效应；选例子换算也不是对该国家行业单独估计。控制变量、固定效应、滞后期及样本变化会怎样影响结论？下一步需要什么真实数据或检验？", starter: "句式参考：课程模拟回归展示 X 与 Y 的关联，不能推出真实政策效应；换一种固定效应或去掉……后结论会……；真实指标比较只覆盖……；若要进一步验证，需要……。", min: 30 },
+  { key: "limitations", label: "研究局限与后续方向", prompt: "真实指标比较和模拟回归各有哪些限制？模拟结果不能当作真实政策效应；选例子换算也不是对该国家行业单独估计。控制变量、固定效应、滞后期及样本变化会怎样影响结论？下一步需要什么真实数据或检验？", starter: "句式参考：课程模拟回归展示 X 与 Y 的关联，不能推出真实政策效应；换一种固定效应或去掉……后结论会……；真实指标比较只覆盖……；若要进一步验证，需要……。", min: 30 },
 ];
 
 
@@ -608,6 +608,21 @@ export function ReportLab({
           const card = statusCardRef.current;
           revealWithOffset(card);
           card?.focus({ preventScroll: true });
+        });
+      }} onViewReport={() => {
+        setOutro(null);
+        requestAnimationFrame(() => {
+          revealWithOffset(previewRef.current);
+          previewRef.current?.focus({ preventScroll: true });
+        });
+      }} onReturnStep={(step) => {
+        setOutro(null);
+        requestAnimationFrame(() => {
+          if (step === 15) {
+            const actions = document.getElementById("report-submit-actions");
+            revealWithOffset(actions);
+            actions?.focus({ preventScroll: true });
+          } else activateReportMaterialDestination(step, onNavigateStep);
         });
       }} onExport={() => { setOutro(null); void printReport(); }} />}
     </div>

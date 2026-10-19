@@ -329,7 +329,7 @@ test.each(["submit", "generate-submit"] as const)("a delayed learning read canno
   const report: ClassroomReport = {
     state: "pending", markdown: "submitted", score: null, feedback: "", graded_by: null,
     generated_at: NEWER, updated_at: NEWER, submitted_at: NEWER, graded_at: null,
-    provenance: { session_version: "test", generated_at: NEWER, years: [2020], session_fingerprint: "test", runs: [], custom_results: [] },
+    provenance: { session_version: "test", generated_at: NEWER, years: [2020], session_fingerprint: "test", runs: [], custom_results: [], review: { research_question: "", evidence_interpretation: "", limitations: "", evidence: [], results: [], custom_models: [] } },
   };
   spyOn(api.classroom, "generateReport").mockResolvedValue({ ...initial, report: { ...report, state: "draft", submitted_at: null }, report_current: true });
   spyOn(api.classroom, "submitReport").mockResolvedValue({ ...initial, report, report_current: true, completion: { completed: [15], completed_count: 1, total: 15, steps: [] } });
@@ -354,7 +354,7 @@ test("a generated report for another saved session is not accepted as current", 
   const report: ClassroomReport = {
     state: "draft", markdown: "generated from the earlier record", score: null, feedback: "", graded_by: null,
     generated_at: NEWER, updated_at: NEWER, submitted_at: null, graded_at: null,
-    provenance: { session_version: "test", generated_at: NEWER, years: [2020], session_fingerprint: "test", runs: [], custom_results: [] },
+    provenance: { session_version: "test", generated_at: NEWER, years: [2020], session_fingerprint: "test", runs: [], custom_results: [], review: { research_question: "", evidence_interpretation: "", limitations: "", evidence: [], results: [], custom_models: [] } },
   };
   const generated = { ...initial, report, report_current: true };
   spyOn(api.classroom, "generateReport").mockResolvedValue(generated);
@@ -380,7 +380,7 @@ function reportResponse(state: ClassroomReport["state"], stamp = NEWER): ReportM
       feedback: state === "graded" ? "证据链完整" : "", graded_by: state === "graded" ? "teacher" : null,
       generated_at: stamp, updated_at: stamp, submitted_at: state === "draft" ? null : stamp,
       graded_at: state === "graded" ? stamp : null,
-      provenance: { session_version: "test", generated_at: stamp, years: [2020], session_fingerprint: "test", runs: [], custom_results: [] } },
+      provenance: { session_version: "test", generated_at: stamp, years: [2020], session_fingerprint: "test", runs: [], custom_results: [], review: { research_question: "", evidence_interpretation: "", limitations: "", evidence: [], results: [], custom_models: [] } } },
   };
 }
 

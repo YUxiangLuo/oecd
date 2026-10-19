@@ -3,14 +3,14 @@
   "baseline_commit": "93a29f7195ab0e0130828f54d840ad4333dd198c",
   "data_release": "88063fb4cbf24ce2b4657d6f3c679a66",
   "simulation_contract": "step10-tariff-teaching-v13",
-  "code_state": "Mixed capture batches: top-level baseline/release/source hash identify the retained 2026-10-17 batch; refreshed entries record their own 2026-10-18 code state and release.",
+  "code_state": "Mixed capture batches: top-level provenance identifies the retained 2026-10-17 batch; refreshed entries record their own 2026-10-18 or 2026-10-19 code state and release.",
   "viewport": {
     "width": 1280,
     "height": 960
   },
   "code_sources_hash_rule": "SHA-256 of sorted sha256sum output for frontend/src and gvcsim .ts/.tsx/.css/.py files (Linux checkout).",
   "code_sources_sha256": "a2bc41dfcbe7f22e0ac864d0302d893bc0d20a94f5c41d1953838eb9b7dc0aa2",
-  "source": "Manual 2.34: figure 12 refreshed with agent-browser in local demo classroom oecd_student_deep_20261018t070619z_test (API :8000, Vite :5173). Five figures (14–18) retain the 2.32 refresh; the other 14 retain their 2.31 capture. Each entry records its own provenance.",
+  "source": "Manual 2.35: figure 17 refreshed with agent-browser on 2026-10-19 in the local demo build using a dedicated temporary account and public-API learning records. Other figures retain their documented capture batches; per-image entries are authoritative.",
   "provenance_scope": "Mixed capture batches; per-image entries are authoritative for release, code state, account and hash.",
   "capture_script_sha256": "bc5b6bed00e24a22e4abc56778b33251531e534d8909c520e679476e317bc008",
   "screenshots": [
@@ -398,27 +398,28 @@
       "code_sources_sha256": "2775f8c77ed6b8a3efcfbc9b1e647fa59e28da978be90b9fcf28413106ac2829"
     },
     {
-      "captured_on": "2026-10-18",
-      "baseline_commit": "b0b55fd9adeee3eeab5b094ad21bb597138e2b01",
+      "captured_on": "2026-10-19",
+      "baseline_commit": "cf4f29b6fd8894ceb0d033d1165af647192f6c20",
       "data_release": "4421c9966d4d45a98a7a941b63587f08",
       "simulation_contract": "step10-tariff-teaching-v13",
-      "code_state": "Working tree based on b0b55fd9adeee3eeab5b094ad21bb597138e2b01; novice-review fixes applied, before commit.",
+      "code_state": "Working tree with intro/outro reconstruction and report-analysis wording changes, before commit.",
       "file": "screenshots/15-writing.png",
       "width": 1280,
       "height": 960,
-      "sha256": "dbae17eb0f30601a9309456c594dfe1beb223fbe0bc7d27e00af0de4bcbc99e0",
-      "capture_url": "http://127.0.0.1:5173",
+      "sha256": "b510f8629bcfb3040745220a40219c943f1ebfbcdd3681f617ad6dca6a98f3a2",
+      "capture_url": "http://127.0.0.1:5173/?step=15",
       "capture_tool": "agent-browser",
-      "journey": "browser-test-classroom",
-      "account": "novice-20261018-0801",
-      "capture_note": "Analysis prompts and test-student prose using current coefficient and simulated-score terminology.",
+      "journey": "local-demo-test-account",
+      "account": "intro-review-f81761",
+      "capture_note": "Figure 17: current report-writing fields in a local demo build. Learning records were seeded through the public API; the screenshot shows a dedicated test account before generating its report.",
       "data_sources": [
         {
           "name": "Independent local test classroom; OECD ICIO indicators and course-generated tariff/regression data.",
           "production_data": false
         }
       ],
-      "code_sources_sha256": "2775f8c77ed6b8a3efcfbc9b1e647fa59e28da978be90b9fcf28413106ac2829"
+      "code_sources_sha256": "96d3ef7be474a05f8b25481e60fabba168503afb41092669be3a67247bfa2d9f",
+      "capture_script_sha256": "f2bb5b37d3f448395cd96f3703e9456253e0383553d458740b945a7ce4158ead"
     },
     {
       "captured_on": "2026-10-18",
@@ -510,5 +511,5 @@
       ]
     }
   ],
-  "last_updated_on": "2026-10-18"
+  "last_updated_on": "2026-10-19"
 }

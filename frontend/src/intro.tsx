@@ -1,70 +1,27 @@
-/**
- * 登录后的沉浸式系统介绍(5 幕,可跳过、可在顶栏重看):
- *   1 开场:闭环管线动画 + 真实规模计数(经济体/行业/年份)
- *   2 数据底座：两张可独立展开的数据卡（真实数据 / 教学设定）
- *   3 十五步旅程：五阶段可点击展开（内容来自 /api/steps 真实元数据）
- *   4 证据预演：两国五年趋势 → X/Y → 四项结果
- *   5 就绪:说明当前身份与完成规则，关闭介绍后返回实验台
- * 覆盖范围与目录来自课程元数据；趋势图仅为界面示意，不生成估计数值。
- */
+/** Display-only course orientation. All teaching content is visible without opening controls. */
 import { useEffect, useLayoutEffect, useId, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useDialogFocus } from "./a11y";
 import { LogoMark } from "./brand";
 import { icioDatasetName } from "./dataset-label";
-import { PRODUCT_SUMMARY } from "./login";
+import { PRODUCT_SUMMARY, PRODUCT_TITLE } from "./product-copy";
 import type { AuthUser, Meta, StepsResponse } from "./types";
+import "./intro.css";
 
-const SCENE_NAMES = ["认识实验", "数据与设定", "实验路线", "分析示例", "完成规则"];
-const N_SCENES = SCENE_NAMES.length;
+const SCENE_NAMES = ["研究目标", "数据与指标", "关税暴露", "回归建模", "实验流程"];
 const STAGE_OUTPUTS: Record<number, string> = {
-  1: "认识投入产出表，读懂一格数据的含义。",
-  2: "了解指标怎样由投入产出表算出，并拆解一个国家的读数。",
-  3: "看指标的历年变化和在全部经济体中的位置，再与对比国家比较，形成图表证据。",
-  4: "认识关税暴露 X，用全部样本对四个结果指标 Y 运行回归。",
-  5: "整合材料，写出你的分析并提交报告。",
+  1: "识别中间投入、最终需求及跨国、跨行业投入产出关系。",
+  2: "计算并解释贸易、生产、长度与网络指标。",
+  3: "比较经济体与行业的指标差异，记录图表及观察范围。",
+  4: "掌握关税暴露的构造方法，完成回归估计与模型比较。",
+  5: "整理分析证据，说明研究结论与局限，提交实验报告。",
 };
-
-/** 数据卡左上角的小图标(内联 SVG,替代 emoji) */
-function CardIcon({ kind }: { kind: "icio" | "shock" }) {
-  return (
-    <span className="intro-card-icon" aria-hidden>
-      {kind === "icio" ? (
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7">
-          <circle cx="12" cy="12" r="9" />
-          <ellipse cx="12" cy="12" rx="4.2" ry="9" />
-          <path d="M3.6 9h16.8M3.6 15h16.8" />
-        </svg>
-      ) : (
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-          <path d="M13.2 2.5 5 13.4h5.1L9.6 21.5l8.4-11.3h-5.3l0.5-7.7z" />
-        </svg>
-      )}
-    </span>
-  );
-}
-
-function NavIcon({ kind }: { kind: "prev" | "next" | "start" | "skip" }) {
-  if (kind === "skip") {
-    return (
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-        <path d="M6 6l12 12M18 6 6 18" />
-      </svg>
-    );
-  }
-  if (kind === "start") {
-    return (
-      <svg viewBox="0 0 24 24" width="19" height="19" fill="currentColor">
-        <path d="M8 5.4v13.2c0 .7.8 1.1 1.4.7l9.4-6.6c.5-.4.5-1.1 0-1.5L9.4 4.7C8.8 4.3 8 4.7 8 5.4z" />
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      {kind === "prev" ? <path d="M15 18l-6-6 6-6" /> : <path d="M9 6l6 6-6 6" />}
-    </svg>
-  );
-}
+const DIMENSIONS = [
+  ["贸易", "总出口价值分解", "将总出口分解为国内增加值、国外增加值与重复计算等组成部分。"],
+  ["生产", "跨境生产分工", "区分国内生产、传统贸易以及简单和复杂全球价值链生产活动。"],
+  ["长度", "生产长度与价值链位置", "比较前向、后向生产长度与全球价值链位置指数。"],
+  ["网络", "生产网络结构", "刻画贸易伙伴、增加值联系与经济体的网络中心性。"],
+];
 
 export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: {
   user: AuthUser;
@@ -74,324 +31,112 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
   returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const titleId = useId();
-  const icioPanelId = useId();
-  const shockPanelId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const skipRef = useRef<HTMLButtonElement>(null);
   const [scene, setScene] = useState(0);
-  const [openCards, setOpenCards] = useState({ icio: false, shock: false });
-  const [stage, setStage] = useState(1);
-  useDialogFocus({
-    containerRef: dialogRef,
-    initialFocusRef: skipRef,
-    returnFocusRef,
-    onClose: () => onDone(),
-  });
-
+  useDialogFocus({ containerRef: dialogRef, initialFocusRef: skipRef, returnFocusRef, onClose: () => onDone() });
   useLayoutEffect(() => {
-    // A scene can remove the focused next button. Announce the new heading
-    // through focus without turning the whole dialog into a live region.
-    const container = dialogRef.current;
-    const heading = container?.querySelector<HTMLElement>(".intro-scene h1, .intro-scene h2");
+    const heading = dialogRef.current?.querySelector<HTMLElement>(".intro-scene h1, .intro-scene h2");
     if (heading) {
       heading.tabIndex = -1;
       heading.focus({ preventScroll: true });
-      container?.scrollTo({ top: 0 });
+      contentRef.current?.scrollTo({ top: 0 });
     }
   }, [scene]);
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const target = e.target;
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-      if (!(target instanceof Element) || !dialogRef.current?.contains(target)) return;
-      // Local controls retain their keyboard semantics, including nested SVGs.
-      if (target.closest("button, input, textarea, select, summary, a, [contenteditable]:not([contenteditable='false']), [role='tab'], [role='radio']")) return;
+      if (!(e.target instanceof Element) || !dialogRef.current?.contains(e.target)) return;
+      if (e.target.closest("button, input, textarea, select, a, [contenteditable]:not([contenteditable='false'])")) return;
       if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
         e.preventDefault();
-        setScene((s) => Math.max(0, Math.min(N_SCENES - 1, s + (e.key === "ArrowRight" ? 1 : -1))));
+        setScene(s => Math.max(0, Math.min(SCENE_NAMES.length - 1, s + (e.key === "ArrowRight" ? 1 : -1))));
       }
     };
-    const container = dialogRef.current;
-    container?.addEventListener("keydown", onKey);
-    return () => container?.removeEventListener("keydown", onKey);
+    const dialog = dialogRef.current;
+    dialog?.addEventListener("keydown", onKey);
+    return () => dialog?.removeEventListener("keydown", onKey);
   }, []);
 
   const years = meta?.years ?? [];
-  const yearSpan = years.length ? `${years[0]}–${years.at(-1)}` : "—";
-  const nodes = meta ? meta.countries.length * meta.sectors.length : null;
+  const yearSpan = years.length ? (years.length === 1 ? String(years[0]) : `${years[0]}–${years.at(-1)}`) : "年份待确认";
   const hasRestOfWorld = meta?.countries.includes("ROW") ?? false;
-  const namedEconomies = meta ? meta.countries.length - Number(hasRestOfWorld) : null;
-  const regionCoverage = meta
-    ? `${namedEconomies} 个经济体${hasRestOfWorld ? " + 世界其他地区" : ""}`
-    : "覆盖范围暂不可用";
+  const coverage = meta ? `${meta.countries.length - Number(hasRestOfWorld)} 个经济体${hasRestOfWorld ? " + 世界其他地区" : ""} · ${meta.sectors.length} 个行业 · ${yearSpan}` : "课程数据范围暂不可用。";
   const datasetName = icioDatasetName(meta);
-
-  const stages = useMemo(() => {
-    return Object.entries(stepsData.stages).map(([n, name]) => ({
-      n: Number(n), name, steps: stepsData.steps.filter((s) => s.stage === Number(n)),
-    }));
-  }, [stepsData]);
-  const selectedStage = stages.find((s) => s.n === stage) ?? stages[0];
-  const previewYears = years.length >= 5 ? years.slice(0, 5).map(String) : ["第 1 年", "第 2 年", "第 3 年", "第 4 年", "第 5 年"];
-
-  const roleName = user.role === "teacher" ? "教师" : "学生";
+  const stages = useMemo(() => Object.entries(stepsData.stages).map(([n, name]) => ({
+    n: Number(n), name, steps: stepsData.steps.filter(s => s.stage === Number(n)),
+  })), [stepsData]);
 
   const scenes = [
-    /* ---- 1 开场 ---- */
-    <div key={0} className="intro-scene">
-      <div className="intro-logo"><LogoMark size={76} /></div>
-      <h1 className="intro-title">供应链仿真系统</h1>
-      <div className="intro-kicker">GVC SIMULATION LAB</div>
-      <p className="intro-lede">
-        从全球生产联系，理解价值链变化。{PRODUCT_SUMMARY}
-      </p>
-      <p className="intro-boundary">{datasetName}</p>
-      <div className="intro-pipeline">
-        {/* 五阶段名称与 /api/steps、侧栏保持一致:学生接触到的旅程只有一套说法。 */}
-        {stages.map((st, i) => (
-          <span key={st.n} style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <span className="intro-chip" style={{ animationDelay: `${0.3 + i * 0.35}s` }}>
-              <span className="intro-chip-num">{st.n}</span>{st.name}
-            </span>
-            {i < stages.length - 1 && <span className="intro-arrow" style={{ animationDelay: `${0.45 + i * 0.35}s` }}>→</span>}
-          </span>
-        ))}
+    <section key={0} className="intro-scene">
+      <p className="intro-eyebrow">全球价值链与贸易政策实验</p>
+      <h1 id={titleId} className="intro-title">{PRODUCT_TITLE[0]}<br />{PRODUCT_TITLE[1]}</h1>
+      <p className="intro-lede">{PRODUCT_SUMMARY}</p>
+      <div className="intro-questions">
+        <article><span>01 · 研究对象</span><h3>跨国生产联系</h3><p>依据投入产出关系，识别出口增加值来源与跨境生产分工。</p></article>
+        <article><span>02 · 指标比较</span><h3>全球价值链结构</h3><p>比较经济体与行业在贸易构成、生产分工、链条长度和网络位置上的差异。</p></article>
+        <article><span>03 · 模型分析</span><h3>关税暴露与指标关联</h3><p>估计关税暴露与各类指标的条件关联，分析结果对模型设定的敏感性。</p></article>
       </div>
-      <div className="intro-stats">
-        {/* 课程范围是数据事实，必须从首帧就显示最终值。数字滚动会在截图或
-            快速阅读时制造“58 / 34 / 12”一类并不存在的中间口径。 */}
-        <div><div className="intro-stat-v">{namedEconomies ?? "—"}</div><div className="intro-stat-l">{hasRestOfWorld ? "经济体 + 世界其他地区" : "经济体"}</div></div>
-        <div><div className="intro-stat-v">{meta?.sectors.length ?? "—"}</div><div className="intro-stat-l">行业</div></div>
-        <div><div className="intro-stat-v">{yearSpan}</div><div className="intro-stat-l">当前课程数据范围</div></div>
+      <div className="intro-coverage"><b>{datasetName}</b><span>{coverage}</span></div>
+    </section>,
+    <section key={1} className="intro-scene">
+      <p className="intro-eyebrow">数据与指标</p><h2 id={titleId} className="intro-title">投入产出数据与全球价值链指标</h2>
+      <p className="intro-lede">跨国投入产出表记录各经济体、各行业之间的中间投入，以及产品和服务的最终使用。相关指标用于描述全球价值链的构成、分工方式与结构变化。</p>
+      <div className="intro-dimensions">{DIMENSIONS.map(([name, title, detail]) => <article key={name}><span>{name}</span><h3>{title}</h3><p>{detail}</p></article>)}</div>
+      <div className="intro-sources">
+        <article><span className="intro-label">指标测算 · 步骤 1–9</span><h3>{datasetName}</h3><p>根据投入产出数据计算四类指标，比较经济体、行业与年份间的差异。</p><small>{coverage}</small></article>
+        <article><span className="intro-label">计量分析 · 步骤 10–14</span><h3>教学模拟数据</h3><p>模拟税率路径与被解释变量 Y 按课程设定生成。投入产出数据用于构造对美出口权重并校准模拟量级；多数控制变量为模拟数据，具体来源见建模页面。</p><small>用于模型设定、估计比较与经济含义分析；估计结果不代表现实关税政策的因果效应。</small></article>
       </div>
-    </div>,
-
-    /* ---- 2 数据来源 ---- */
-    <div key={1} className="intro-scene">
-      <div className="intro-scene-kicker">数据来源</div>
-      <h2 className="intro-h2">数据来源与教学设定</h2>
-      <p className="intro-lede">投入产出表用于讲解指标概念；回归练习使用课程的关税数据。</p>
-      <div className="intro-cards">
-        <div
-          className={`intro-card${openCards.icio ? " open" : ""}`}
-        >
-          <button
-            type="button"
-            className="intro-card-toggle-button"
-            aria-expanded={openCards.icio}
-            aria-controls={icioPanelId}
-            onClick={() => setOpenCards((cards) => ({ ...cards, icio: !cards.icio }))}
-          >
-          <span className="intro-card-head">
-            <CardIcon kind="icio" />
-            <span>
-              <span className="intro-card-title">{datasetName}</span>
-              <span className="intro-card-sub">数据结构与覆盖范围</span>
-            </span>
-            <span className="intro-card-toggle" aria-hidden>{openCards.icio ? "−" : "+"}</span>
-          </span>
-          </button>
-          <ul className="intro-card-facts">
-            <li>描述经济体与行业间的供货联系。</li>
-            <li>据此计算出口构成、生产分工、链条长度与网络位置。</li>
-          </ul>
-          {openCards.icio && (
-            <div className="intro-card-body" id={icioPanelId}>
-              {meta && nodes !== null ? (
-                <>
-                  <div>{regionCoverage} × {meta.sectors.length} 行业节点，{yearSpan} 逐年</div>
-                  <div>中间品方阵约 {nodes.toLocaleString()} × {nodes.toLocaleString()}（国家×行业）</div>
-                </>
-              ) : <p role="status">课程数据范围暂不可用。</p>}
-              <div>原始宽表还包含最终需求列与增加值、税收等账户行。</div>
-              <div>结合增加值、税收和最终需求数据，用里昂惕夫逆矩阵追踪增加值的去向。</div>
-            </div>
-          )}
-        </div>
-        <div
-          className={`intro-card${openCards.shock ? " open" : ""}`}
-        >
-          <button
-            type="button"
-            className="intro-card-toggle-button"
-            aria-expanded={openCards.shock}
-            aria-controls={shockPanelId}
-            onClick={() => setOpenCards((cards) => ({ ...cards, shock: !cards.shock }))}
-          >
-          <span className="intro-card-head">
-            <CardIcon kind="shock" />
-            <span>
-              <span className="intro-card-title">关税数据</span>
-              <span className="intro-card-sub">课程的关税实验数据</span>
-            </span>
-            <span className="intro-card-toggle" aria-hidden>{openCards.shock ? "−" : "+"}</span>
-          </span>
-          </button>
-          <ul className="intro-card-facts">
-            <li>X 由首年对美出口份额和加征税率算出。</li>
-            <li>课程模拟情景（不是真实政策）：美国分两批加税，第一批 2018 年起、第二批 2019 年起，税率都是 25%，此前为 0。</li>
-            <li>Y 是贸易流、生产、长度、网络四类结果指标。</li>
-          </ul>
-          {openCards.shock && (
-            <div className="intro-card-body" id={shockPanelId}>
-              <p>关税暴露 X 等于首年对美出口份额 w 乘以加征税率 τ；美国分两批加税（2018、2019 年起），未被加税国家的 X 始终为 0。步骤 11–14 用同一个 X 对四个结果指标 Y 做回归。</p>
-            </div>
-          )}
-        </div>
+    </section>,
+    <section key={2} className="intro-scene">
+      <p className="intro-eyebrow">关税暴露 · 示意算例</p><h2 id={titleId} className="intro-title">关税暴露指标的构造与时间结构</h2>
+      <p className="intro-lede">关税暴露 X 由首年对美出口份额 w 与当年模拟税率 τ 的乘积构造，即 X = w × τ。税率相同时，初始出口份额差异形成不同的关税暴露水平。</p>
+      <div className="intro-equation" aria-label="假设首年对美出口份额为百分之二十，模拟关税税率为百分之二十五，关税暴露为五个百分点">
+        <div><strong>20<span>%</span></strong><span>首年对美出口份额 w</span></div><b aria-hidden="true">×</b>
+        <div><strong>25<span>%</span></strong><span>模拟关税税率 τ</span></div><b aria-hidden="true">=</b>
+        <div className="intro-equation-result"><strong>5<span> 个百分点</span></strong><span>关税暴露 X</span></div>
       </div>
-    </div>,
-
-    /* ---- 3 十五步旅程 ---- */
-    <div key={2} className="intro-scene">
-      <div className="intro-scene-kicker">实验路线</div>
-      <h2 className="intro-h2">{stages.length === 0 ? "实验路线" : stages.length === 5 && stepsData.steps.length === 15 ? "五个阶段，十五步" : `${stages.length} 个阶段，${stepsData.steps.length} 步`}</h2>
-      <p className="intro-lede">点击任一阶段，可查看该阶段的任务和需留下的报告材料。这里只是预览，不会跳转步骤。</p>
-      {stages.length === 0 && <p role="status">当前课程暂无实验路线信息。</p>}
-      <div className="intro-stage-tabs">
-        {stages.map((st) => (
-          <button
-            key={st.n} className={`intro-stage-tab${selectedStage?.n === st.n ? " on" : ""}`}
-            type="button"
-            aria-pressed={selectedStage?.n === st.n}
-            onClick={() => setStage(st.n)}
-          >
-            {st.n}. {st.name}
-          </button>
-        ))}
+      <div className="intro-timing">
+        <div><h3>当期变量与滞后变量</h3><p>当期 X 表示本年度关税暴露，滞后一期 L1_X 表示上一年度关税暴露。示意算例假定加税前税率为 0，加税后维持不变。</p></div>
+        <table><caption>示意暴露路径 · 单位：百分点</caption><thead><tr><th scope="col">时间</th><th scope="col">当期 X</th><th scope="col">滞后一期 L1_X</th></tr></thead><tbody><tr><th scope="row">加税前</th><td>0</td><td>0</td></tr><tr><th scope="row">加税当年</th><td>5</td><td>0</td></tr><tr><th scope="row">加税次年</th><td>5</td><td>5</td></tr></tbody></table>
       </div>
-      {selectedStage && STAGE_OUTPUTS[selectedStage.n] && <p className="intro-stage-output"><b>本阶段任务：</b>{STAGE_OUTPUTS[selectedStage.n]}</p>}
-      <div className="intro-steps">
-        {(selectedStage?.steps ?? []).map((s) => (
-          <div key={s.n} className="intro-step-row">
-            <span className="intro-step-num">{String(s.n).padStart(2, "0")}</span>
-            <span className="intro-step-title">{s.title}</span>
-          </div>
-        ))}
+      <p className="intro-note">示意数值用于说明指标构造与滞后关系。国家与行业选择仅用于案例展示；回归样本为符合条件的完整国家 × 行业面板。案例结果由估计系数与对应暴露差异换算。</p>
+    </section>,
+    <section key={3} className="intro-scene">
+      <p className="intro-eyebrow">回归设计与建模</p><h2 id={titleId} className="intro-title">回归模型设定与估计结果比较</h2>
+      <p className="intro-lede">贸易、生产、长度与网络分别对应四个回归步骤。以默认模型为基准，通过调整被解释变量、控制变量、固定效应和滞后结构，考察估计结果的差异。</p>
+      <div className="intro-model-parts">
+        <article><span>被解释变量 Y</span><h3>指标选择与计量单位</h3><p>从当前维度的可用指标中选择 Y，并核对其计量单位。</p></article>
+        <article><span>控制变量</span><h3>协变量选择</h3><p>选择控制变量及其当期或滞后形式。</p></article>
+        <article><span>固定效应</span><h3>异质性与共同冲击</h3><p>设定经济体、行业、年份及其组合的固定效应。</p></article>
+        <article><span>解释变量 X</span><h3>分布滞后结构</h3><p>选择当期、滞后一期或滞后二期暴露项及其组合。</p></article>
       </div>
-      {selectedStage && selectedStage.steps.length > 0 && (
-        <details key={selectedStage.n} className="intro-details intro-route-details">
-          <summary>查看本阶段完整教学目标</summary>
-          <ol>
-            {selectedStage.steps.map((s) => (
-              <li key={s.n}><b>{s.n}. {s.title}</b><p className="intro-step-goal">{s.goal}</p></li>
-            ))}
-          </ol>
-        </details>
-      )}
-    </div>,
-
-    /* ---- 4 分析示例 ---- */
-    <div key={3} className="intro-scene">
-      <div className="intro-scene-kicker">分析示例</div>
-      <h2 className="intro-h2">先看加税前后的差距，再用回归量化</h2>
-      <p className="intro-lede">在步骤 10 选一个例子：它是被加税的国家之一，可再加一个未被加税的对照国家。回归用的是整个样本，不按例子挑选，结果会换算到你的例子上。</p>
-      <div className="intro-preview-selection" role="group" aria-label="分析对象示意">
-        <span><small>国家 A</small>在步骤 10 选择</span>
-        <span><small>国家 B</small>在步骤 10 选择</span>
-        <span><small>行业</small>在步骤 10 选择</span>
+      <div className="intro-sources">
+        <article><span className="intro-label">默认模型</span><h3>双向固定效应基准模型</h3><p>纳入当期 X 与滞后一期 L1_X，控制汇率变动、GDP 对数和贸易开放度，并加入国家 × 行业固定效应与年份固定效应。</p></article>
+        <article><span className="intro-label">结果解释</span><h3>点估计、区间估计与有效样本</h3><p>结合系数方向与量级、95% 置信区间和有效样本量解释结果。置信区间包含 0 或无法可靠推断的情形应一并报告。</p></article>
       </div>
-      <div className="intro-evidence-preview">
-        <div className="intro-trend-card">
-          <div className="intro-preview-heading"><b>01 · 你的例子：X 只在加税后出现</b><span><span className="intro-legend-item"><i className="country-a" />国家 A（被加税）</span> <span className="intro-legend-item"><i className="country-b" />国家 B（未被加税）</span></span></div>
-          <svg viewBox="0 0 520 180" role="img" aria-label="国家 A 与国家 B 的五年关税暴露 X 趋势界面示意，线条不代表实际读数">
-            <path className="grid" d="M42 30H500M42 75H500M42 120H500" />
-            <path className="country-a" d="M50 120L270 120L270 40L490 40" />
-            <path className="country-b" d="M50 120L160 120L270 120L380 120L490 120" />
-            <text x="42" y="18">X 示意强弱</text>
-            <text x="28" y="124">0</text>
-            {[50, 160, 270, 380, 490].map((x, index) => (
-              <g key={x}>
-                <circle className="country-a" cx={x} cy={[120, 120, 40, 40, 40][index]} r="4" />
-                <circle className="country-b" cx={x} cy={120} r="4" />
-                <text x={x} y="158" textAnchor="middle">{previewYears[index]}</text>
-              </g>
-            ))}
-          </svg>
-        </div>
-        <div className="intro-xy-card">
-          <b>02 · 用回归把差距量化</b>
-          <div className="intro-xy-item"><strong>X</strong><span><b>关税暴露</b><small>解释变量：按它的高低比较各国家×行业</small></span></div>
-          <div className="intro-xy-link" aria-hidden>↓ 当期＋滞后合计（X 每高 1 个百分点）</div>
-          <div className="intro-xy-item"><strong>Y</strong><span><b>指标结果</b><small>结果变量：要观察的变量</small></span></div>
-        </div>
+      <p className="intro-note">四项默认模型结果自动纳入报告。自主模型须通过“记入报告”操作纳入，每个回归步骤限一项。模型比较需区分 Y 的计量单位、X 的时间跨度与有效样本。</p>
+    </section>,
+    <section key={4} className="intro-scene">
+      <p className="intro-eyebrow">实验流程与成果</p><h2 id={titleId} className="intro-title">实验流程与报告要求</h2>
+      <p className="intro-lede">实验依次完成数据读取、指标测算、图表比较与回归建模，并在报告中阐述研究问题、实验证据、研究局限与后续方向。</p>
+      {stages.length ? <ol className="intro-route">{stages.map(st => <li key={st.n}><span className="intro-route-number">{String(st.n).padStart(2, "0")}</span><h3>{st.name}</h3>{st.steps.length > 0 && <small>步骤 {st.steps[0].n}{st.steps.length > 1 ? `–${st.steps.at(-1)!.n}` : ""}</small>}<p>{STAGE_OUTPUTS[st.n]}</p></li>)}</ol> : <p role="status">当前课程暂无实验路线信息。</p>}
+      <div className="intro-completion">
+        <article><h3>理解测验</h3><p>完成各步骤理解测验并达到通过要求。</p></article>
+        <article><h3>实验材料</h3><p>步骤 1–5 与 10 自动记录材料；步骤 6–9 需记录图表；步骤 11–14 需完成默认模型估计。</p></article>
+        <article><h3>分析与提交</h3><p>步骤 15 撰写三项分析并提交报告，由教师评阅。草稿生成和 PDF 导出不替代正式提交。</p></article>
       </div>
-      <div className="intro-four-results" role="group" aria-label="四项结果都要汇总">
-        <b>03 · 四步各估一项，报告中汇总</b>
-        <span>贸易流</span><span>生产</span><span>长度</span><span>网络</span>
-      </div>
-      <p className="intro-note intro-preview-note">图示：国家 A 被加税，前两年 X 为零、之后为正；国家 B 未被加税，X 始终为零。线条不是实际读数。方向不确定或没算出估计值，也要如实报告。</p>
-    </div>,
-
-    /* ---- 5 就绪 ---- */
-    <div key={4} className="intro-scene">
-      <div className="intro-check" aria-hidden>
-        <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4.5 12.5 10 18 19.5 6.5" />
-        </svg>
-      </div>
-      <h2 className="intro-h2">实验台已就绪</h2>
-      <p className="intro-lede">
-        当前身份：<b>{roleName}</b>。按实验台中的任务提示操作并回答理解题，报告材料由系统自动记录，最后由你写出自己的分析。
-      </p>
-      {/* 进入前讲清完成规则，避免把浏览位置误认为学习进度。 */}
-      <div className="intro-ready-rules">
-        <div><b>完成进度</b><p>答对本步理解题后，步骤显示 ✓；报告材料还没齐全时 ✓ 是橙色的。步骤 15 要提交报告后才显示 ✓。只浏览不算完成。</p></div>
-        <div><b>报告材料</b><p>步骤 1–5、10 打开页面即自动记录；步骤 6–9 在图下点“记为本步报告材料”；步骤 11–14 点“计算…回归”按钮后自动保存；步骤 15 写三段分析。每步顶部会显示报告材料是否齐全（保存成功后更新）。</p></div>
-        <div><b>报告提交</b><p>只生成草稿不算提交。核对后提交给老师，页面显示“等待教师评阅”即表示提交成功。</p></div>
-      </div>
-      <div className="intro-cta-row">
-        <button type="button" className="intro-cta" onClick={() => onDone()}>开始实验</button>
-      </div>
-      <p className="intro-note">关闭介绍不会改变当前步骤。随时可点顶栏“系统介绍”再看一遍。</p>
-    </div>,
+      <p className="intro-note">当前账号：{user.name || user.username}（{user.role === "teacher" ? "教师" : "学生"}）。关闭导览后返回当前实验步骤；可通过顶部“系统介绍”再次查看。</p>
+    </section>,
   ];
-
-  return createPortal(
-    <div
-      ref={dialogRef}
-      className="intro-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
-      tabIndex={-1}
-    >
-      <h2 id={titleId} className="sr-only">系统介绍</h2>
-      <button ref={skipRef} className="intro-skip" aria-label="跳过介绍" title="跳过介绍" onClick={() => onDone()}>
-        <NavIcon kind="skip" />
-      </button>
-      <div className="intro-scene-shell">
-        <button
-          className="intro-side-nav intro-side-nav-prev" aria-label="上一页" title="上一页" disabled={scene === 0}
-          onClick={() => setScene(scene - 1)}
-        >
-          <NavIcon kind="prev" />
-        </button>
-        {scenes[scene]}
-        {scene < N_SCENES - 1 ? (
-          <button
-            className="intro-side-nav intro-side-nav-next" aria-label="下一页" title="下一页"
-            onClick={() => setScene(scene + 1)}
-          >
-            <NavIcon kind="next" />
-          </button>
-        ) : <span aria-hidden="true" />}
-      </div>
-      <div className="intro-footer">
-        <div className="intro-page-label">介绍 {scene + 1} / {N_SCENES} · {SCENE_NAMES[scene]}</div>
-        <div className="intro-nav" role="group" aria-label="选择介绍页面">
-          <div className="intro-dots">
-            {Array.from({ length: N_SCENES }, (_, i) => (
-              <button
-                key={i} aria-label={`介绍页 ${i + 1}`} title={SCENE_NAMES[i]}
-                aria-current={i === scene ? "page" : undefined}
-                className={`intro-dot${i === scene ? " on" : ""}`} onClick={() => setScene(i)}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>,
-    document.body,
-  );
+  return createPortal(<div ref={dialogRef} className="intro-overlay" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+    <header className="intro-header"><div className="intro-brand"><LogoMark size={32} /><span>供应链仿真系统</span></div><span className="intro-header-label">实验导览</span><button ref={skipRef} type="button" className="intro-skip" aria-label="跳过介绍" onClick={() => onDone()}>跳过介绍 <span aria-hidden="true">×</span></button></header>
+    <div ref={contentRef} className="intro-content">{scenes[scene]}</div>
+    <footer className="intro-footer">
+      <button type="button" className="intro-nav" disabled={scene === 0} onClick={() => setScene(s => s - 1)}>← 上一页</button>
+      <div className="intro-progress"><span>介绍 {scene + 1} / {SCENE_NAMES.length} · {SCENE_NAMES[scene]}</span><div aria-hidden="true">{SCENE_NAMES.map((name, i) => <i key={name} className={i === scene ? "on" : ""} />)}</div></div>
+      {scene === SCENE_NAMES.length - 1 ? <button type="button" className="intro-cta" onClick={() => onDone()}>进入实验 →</button> : <button type="button" className="intro-cta" onClick={() => setScene(s => s + 1)}>下一页 →</button>}
+    </footer>
+  </div>, document.body);
 }

@@ -417,7 +417,7 @@ button.footer-next:hover { text-decoration: underline; }
      fixed layers they would not move with the sideways scroll, leaving their right side out of reach. The page
      itself never scrolls vertically (the layout scrolls inside), so absolute layers still cover the window.
      `body` outranks the layers' own rules, some of which load after this file (teacher.css's .modal-scrim). */
-  body :is(.intro-overlay, .intro-skip, .intro-footer, .modal-scrim, .network-fullscreen-scrim),
+  body :is(.intro-overlay, .modal-scrim, .network-fullscreen-scrim),
   body .fullscreen-panel.fullscreen-panel--expanded { position: absolute; }
 }
 /* An info toast explains why nothing happened; it must not read as a success. */

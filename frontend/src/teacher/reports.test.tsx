@@ -26,7 +26,7 @@ const report: TeacherReport = {
     years: [2020],
     session_fingerprint: "fingerprint",
     runs: [],
-    custom_results: [],
+    custom_results: [], review: { research_question: "", evidence_interpretation: "", limitations: "", evidence: [], results: [], custom_models: [] },
   },
   state: "graded",
   score: 90,

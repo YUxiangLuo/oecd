@@ -1586,6 +1586,13 @@ def test_report_renders_authoritative_result_fixture_without_calling_estimator(t
     assert report.provenance["course_release"] == config.COURSE_RELEASE
     assert report.provenance["runs"][0]["step"] == 11
     assert report.provenance["runs"][0]["result"]["cumulative"]["coef"] == 1.2
+    review = report.provenance["review"]
+    assert [item["step"] for item in review["results"]] == [11, 12, 13, 14]
+    assert review["results"][0]["value"] == 1.2
+    assert review["results"][0]["value_text"] == "+1.20"
+    assert review["results"][0]["unit"] == "百分点"
+    assert review["research_question"] in report.markdown
+    assert all(title in report.markdown for item in review["evidence"] for title in item["chart_titles"])
     assert "1.2" in report.markdown and "未缓存的重新计算，不采用浏览器保存的数字" in report.markdown
     assert "[0.5721, 1.8279]" in report.markdown
     assert "| X 各项合计 | +1.20 个百分点 | 1.2000 | [0.5721, 1.8279] | 0.3000 | 4.00 | 0.0008 |" in report.markdown

@@ -8,13 +8,12 @@
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, isApiErrorStatus } from "./api";
 import { LogoMark } from "./brand";
+import { PRODUCT_SUMMARY, PRODUCT_TITLE } from "./product-copy";
 import type { LoginResponse } from "./types";
 import { userFacingRequestError } from "./user-facing-error";
 
 export const LOGIN_FLOW = ["数据接入", "指标计算", "图表比较", "关税回归", "实验报告"];
 export const LOGIN_DATA_LABEL = "登录后可查看数据来源与年份";
-/** One product summary, shared by the login page and the intro. */
-export const PRODUCT_SUMMARY = "用投入产出数据计算价值链指标、比较经济体，再用关税数据做回归，最后完成实验报告。";
 
 export const DEMO_STUDENT_COUNT = 50;
 const SEEN_DEMO_STUDENTS_KEY = "gvcsim_seen_demo_students";
@@ -362,9 +361,9 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
 
         <div className="login-hero">
           <h1>
-            从投入产出数据出发，
+            {PRODUCT_TITLE[0]}
             <br />
-            亲手分析全球价值链变化。
+            {PRODUCT_TITLE[1]}
           </h1>
           <p className="login-desc">
             {PRODUCT_SUMMARY}

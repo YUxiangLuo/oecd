@@ -318,7 +318,7 @@ def check_material_gate(session: dict[str, Any]) -> list[dict[str, Any]]:
     for key, label in (
         ("research_question", "研究问题"),
         ("evidence_interpretation", "结果解释"),
-        ("limitations", "局限与反思"),
+        ("limitations", "研究局限与后续方向"),
     ):
         minimum = _REFLECTION_MIN_LENGTHS[key]
         value = reflection.get(key)

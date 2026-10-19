@@ -599,6 +599,38 @@ export interface ReportGateItem {
   quiz_only?: boolean;
 }
 
+/** A frozen report estimate per one percentage point of X, in the named Y unit. */
+export interface ReportReviewEstimate {
+  step: number;
+  outcome: string;
+  y_label: string;
+  unit: string;
+  x_span: string;
+  value: number | null;
+  interval: [number, number] | null;
+  value_text: string;
+  interval_text: string;
+  inference: "positive" | "negative" | "uncertain" | "unavailable";
+  inference_note: string;
+  n_obs: number | null;
+  years: number[];
+}
+
+export interface ReportReview {
+  research_question: string;
+  evidence_interpretation: string;
+  limitations: string;
+  evidence: {
+    step: number; title: string; chart_titles: string[]; countries: string[];
+    industry_scope: string; industries: string[]; years: number[];
+  }[];
+  results: ReportReviewEstimate[];
+  custom_models: {
+    step: number; name: string; specification: string;
+    reference: ReportReviewEstimate; result: ReportReviewEstimate;
+  }[];
+}
+
 /** 服务端生成的实验报告:正文与溯源由服务端从会话快照产出；客户端只保存学生原创文字和实验操作。 */
 export interface ClassroomReport {
   markdown: string;
@@ -614,6 +646,8 @@ export interface ClassroomReport {
     runs: ReportRun[];
     /** The model experiments the report printed (one a step at most). */
     custom_results: ReportedCustomResult[];
+    /** Produced alongside the markdown from the same canonical values, never from later workspace edits. */
+    review: ReportReview;
   };
   state: "draft" | "pending" | "graded";
   score: number | null;

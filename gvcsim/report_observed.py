@@ -62,7 +62,7 @@ def _reflection_section(session: dict[str, Any]) -> list[str]:
         "",
         _reflection_value(reflection.get("evidence_interpretation")),
         "",
-        "### 我的局限与反思",
+        "### 研究局限与后续方向",
         "",
         _reflection_value(reflection.get("limitations")),
         "",
@@ -591,14 +591,9 @@ def _observed_charts(data: dict[str, Any], step: int, observations: list[dict[st
     ]
 
 
-def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
-    """Place saved observed comparisons before simulated regression evidence."""
-    lines = [
-        "## 真实指标比较",
-        "",
-        "> 图表使用步骤 6–9 保存的读数（各国按同一方法计算）；国家整体的图表另画出全部经济体的中位数，步骤 9 的行业图表另画出全部经济体同一行业的中位数，用于定位。完整数值见“保存的实验快照”。",
-        "",
-    ]
+def _observed_materials(session: dict[str, Any]) -> list[dict[str, Any]]:
+    """Resolve the saved charts once for both the report body and its frozen review."""
+    materials = []
     for step in range(6, 10):
         data = _step_data(session, step)
         observations = (
@@ -609,6 +604,27 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
         complete = _indicator_material_complete(data, step) if step in (6, 7, 8) else _network_material_complete(data)
         if not complete or not observations:
             continue
+        materials.append(
+            {
+                "step": step,
+                "data": data,
+                "observations": observations,
+                "charts": _observed_charts(data, step, observations),
+            }
+        )
+    return materials
+
+
+def _observed_evidence_section(session: dict[str, Any], materials: list[dict[str, Any]] | None = None) -> list[str]:
+    """Place saved observed comparisons before simulated regression evidence."""
+    lines = [
+        "## 真实指标比较",
+        "",
+        "> 图表使用步骤 6–9 保存的读数（各国按同一方法计算）；国家整体的图表另画出全部经济体的中位数，步骤 9 的行业图表另画出全部经济体同一行业的中位数，用于定位。完整数值见“保存的实验快照”。",
+        "",
+    ]
+    for material in _observed_materials(session) if materials is None else materials:
+        step, data, observations = material["step"], material["data"], material["observations"]
         lines.extend((f"### 步骤 {step} · {_STEP_TITLES[step]}", ""))
         composition = composition_set(step, (str(item["metric"]) for item in observations))
         if composition and composition[1] == "FGY":
@@ -618,7 +634,7 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
                     "",
                 )
             )
-        charts = _observed_charts(data, step, observations)
+        charts = material["charts"]
         if len(charts) > 1:
             selection = data.get("indicator_selection")
             view = selection.get("view") if isinstance(selection, dict) else None

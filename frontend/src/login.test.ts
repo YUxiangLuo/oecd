@@ -11,7 +11,7 @@ describe("login course map", () => {
   test("does not claim an unverified source or coverage before login", () => {
     expect(LOGIN_DATA_LABEL).toBe("登录后可查看数据来源与年份");
     const html = renderToStaticMarkup(createElement(LoginPage, { onLogin: () => {} }));
-    expect(html).toContain("从投入产出数据出发");
+    expect(html).toContain("全球价值链结构分析");
     expect(html).not.toContain("真实指标");
     expect(html).not.toContain("76 个具名经济体");
     expect(html).not.toContain("OECD ICIO 2023 版");

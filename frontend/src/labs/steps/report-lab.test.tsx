@@ -25,7 +25,7 @@ function report(state: ClassroomReport["state"]): ClassroomReport {
     submitted_at: state === "draft" ? null : "2026-08-13T00:01:00Z",
     graded_at: state === "graded" ? "2026-08-13T00:02:00Z" : null,
     provenance: { release_id: "a".repeat(32), session_version: "experiment-session-simple-v4",
-      generated_at: "2026-08-13T00:00:00Z", years: [2020], session_fingerprint: "fingerprint", runs: [], custom_results: [] },
+      generated_at: "2026-08-13T00:00:00Z", years: [2020], session_fingerprint: "fingerprint", runs: [], custom_results: [], review: { research_question: "", evidence_interpretation: "", limitations: "", evidence: [], results: [], custom_models: [] } },
   };
 }
 const actions = (): ReportActions => ({ reportOperation: null,
@@ -100,7 +100,7 @@ test.each(["generate", "generate-submit", "submit"] as const)("%s delegates the 
     expect(screen.getByRole("status").textContent).toContain("报告草稿已生成，请预览后提交");
   } else {
     const dialog = screen.getByRole("dialog", { name: "报告已提交" });
-    for (const text of ["提交成功 · 等待教师评阅", "计算并理解指标", "看变化与全球位置", "汇总四项回归结果"]) expect(within(dialog).getByText(text)).toBeTruthy();
+    for (const text of ["已提交 · 等待教师评阅", "研究问题", "图表材料与观察范围", "四项默认模型估计结果"]) expect(within(dialog).getByText(text)).toBeTruthy();
     expect(within(dialog).queryByText("比较与验证")).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
   }
@@ -190,7 +190,7 @@ test("graded export refreshes its version, refuses removed grades and keeps loca
   expect(refresh).toHaveBeenCalledTimes(1);
   expect(print).not.toHaveBeenCalled();
   expect(screen.getByRole("alert").textContent).toBe(gradedExportRefusal(latest));
-  expect((screen.getByRole("textbox", { name: "局限与反思" }) as HTMLTextAreaElement).value).toBe("我的局限");
+  expect((screen.getByRole("textbox", { name: "研究局限与后续方向" }) as HTMLTextAreaElement).value).toBe("我的局限");
 });
 
 test.each(["current", "offline"])("graded PDF carries score, feedback and report title (%s)", async (mode) => {
@@ -345,9 +345,9 @@ test("reflection editing preserves text, counts code points, clips only insertio
     return <ReportLab {...p} state={{ ...p.state, data, save: (patch) => setData((old) => ({ ...old, ...patch })) }} />;
   }
   render(<Harness />);
-  fireEvent.change(screen.getByRole("textbox", { name: "局限与反思" }), { target: { value: `${base}👨‍👩‍👧` } });
+  fireEvent.change(screen.getByRole("textbox", { name: "研究局限与后续方向" }), { target: { value: `${base}👨‍👩‍👧` } });
   expect(screen.getByText(/这个表情按实际字符计算占多个字，剩余字数不够/)).toBeTruthy();
-  expect((screen.getByRole("textbox", { name: "局限与反思" }) as HTMLTextAreaElement).value).toBe(base);
+  expect((screen.getByRole("textbox", { name: "研究局限与后续方向" }) as HTMLTextAreaElement).value).toBe(base);
   fireEvent.change(screen.getByRole("textbox", { name: "研究问题" }), { target: { value: "# **原样文字**" } });
   expect(screen.queryByText(/这个表情按实际字符计算占多个字/)).toBeNull();
   expect((screen.getByRole("textbox", { name: "研究问题" }) as HTMLTextAreaElement).value).toBe("# **原样文字**");
@@ -420,26 +420,26 @@ test("receipt distinguishes outdated content from busy export and keeps pending 
   const p = { report: report("pending"), onClose: () => {}, onExport: () => {} };
   const view = render(<ReportOutro {...p} exportDisabled />);
   const disabled = () => (screen.getByRole("button", { name: "导出 PDF 留存" }) as HTMLButtonElement).disabled;
-  expect(screen.queryByText(/后续修改尚未纳入/)).toBeNull(); expect(disabled()).toBe(true);
+  expect(screen.queryByText(/当前实验记录包含尚未纳入报告的修改/)).toBeNull(); expect(disabled()).toBe(true);
   view.rerender(<ReportOutro {...p} reportOutdated />);
   const receipt = screen.getByRole("region", { name: "报告提交回执" });
   expect(receipt.firstElementChild?.textContent).toStartWith("报告需更新");
-  expect(receipt.textContent).not.toContain("提交成功");
-  expect(screen.queryByText(/清除当前评分/)).toBeNull(); expect(disabled()).toBe(true);
-  expect(screen.getByText("已提交的版本 · 等待教师评阅")).toBeTruthy();
+  expect(receipt.textContent).not.toContain("已提交 · 等待教师评阅");
+  expect(screen.queryByText(/清除评分与评语/)).toBeNull(); expect(disabled()).toBe(true);
+  expect(screen.getByText("已提交版本 · 等待教师评阅")).toBeTruthy();
   view.rerender(<ReportOutro {...p} />);
-  expect(screen.getByText(/你可以离开页面/)).toBeTruthy(); expect(disabled()).toBe(false);
+  expect(screen.getByText(/报告已保存/)).toBeTruthy(); expect(disabled()).toBe(false);
   view.rerender(<ReportOutro {...p} report={report("graded")} />);
-  expect(screen.queryByText(/查看报告与老师的评阅/)).toBeNull();
-  expect(screen.getByText("报告与评阅已保存在服务器上，可随时回到步骤 15 查看。")).toBeTruthy();
-  expect(screen.getByText(/^评阅时间：/)).toBeTruthy();
+  expect(screen.queryByText(/等待教师评阅/)).toBeNull();
+  expect(screen.getByText("报告已保存，可在步骤 15 查看报告及评阅结果。")).toBeTruthy();
+  expect(screen.getByText(/评阅时间：2026-08-13 00:02/)).toBeTruthy();
   view.unmount();
   const lab = props();
   render(<ReportLab {...lab} report={report("graded")} sessionUnsynced />);
   fireEvent.click(screen.getByRole("button", { name: "查看提交回执与实验总结" }));
   const dialog = screen.getByRole("dialog", { name: "报告已评阅" });
-  expect(within(dialog).getByRole("region", { name: "教师评语" }).textContent).toBe("教师评语：证据链完整");
-  expect(within(dialog).getByText(/重新生成会清除当前评分与评语/)).toBeTruthy();
+  expect(within(dialog).getByRole("region", { name: "教师评语" }).textContent).toBe("教师评语证据链完整");
+  expect(within(dialog).getByText(/重新生成将替换已评阅报告、清除评分与评语/)).toBeTruthy();
   expect((within(dialog).getByRole("button", { name: "导出 PDF 留存" }) as HTMLButtonElement).disabled).toBe(false);
   expect(lab.reportActions.runReport).not.toHaveBeenCalled();
 });
@@ -499,7 +499,7 @@ test("clipped paste keeps the ending and caret, exposes the warning accessibly t
     return <ReportLab {...p} state={{ ...p.state, data, save: (patch) => setData((old) => ({ ...old, ...patch })) }} />;
   }
   render(<Harness />);
-  const field = screen.getByRole("textbox", { name: "局限与反思" }) as HTMLTextAreaElement;
+  const field = screen.getByRole("textbox", { name: "研究局限与后续方向" }) as HTMLTextAreaElement;
   fireEvent.change(field, { target: { value: "粘贴".repeat(9) + original } });
   expect(field.value).toBe("粘" + original); expect(field.value.endsWith(ending)).toBe(true); expect(field.selectionStart).toBe(1);
   expect(screen.getByText(/刚粘贴或输入的文字有一部分没有保留，原有文字没有改动/)).toBeTruthy();

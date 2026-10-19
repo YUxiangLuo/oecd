@@ -27,6 +27,11 @@ bun run frontend/scripts/export-student-manual.ts
 
 截图脚本把每张图的尺寸与 SHA-256 写到 `dogfood-output/student-manual/capture.json`，据此更新 `screenshots.json`。
 
+## 2.35（2026-10-19，报告分析用词）
+
+- 报告第三段分析统一命名为“研究局限与后续方向”，与填写区、提交提示、报告正文和实验总结保持一致。
+- 使用独立测试账号和 agent-browser 重拍图 17，更新逐图来源与指纹；核对 A4 版心后重新导出 28 页 PDF。
+
 ## 2.34（2026-10-18，步骤 6–9 图表复核修复）
 
 - 移除步骤 9“流量与路径”；步骤 8 将全球参照并入“前后向位置”，保留原报告记录规则。

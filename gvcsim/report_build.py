@@ -34,6 +34,7 @@ from gvcsim.report_common import ReportGateError, TeachingReport, _safe
 from gvcsim.report_gate import _step_data, check_gate
 from gvcsim.report_observed import (
     _observed_evidence_section,
+    _observed_materials,
     _quiz_sections,
     _reflection_section,
     _viewed_shock_event_sources,
@@ -46,6 +47,7 @@ from gvcsim.report_render import (
     _run_sections,
 )
 from gvcsim.report_saved_run import server_runs
+from gvcsim.report_review import build_review
 from gvcsim.report_workbench import custom_model_sections, recompute, reported_models
 
 
@@ -228,6 +230,8 @@ def build(session: dict[str, Any], student: str, *, quiz_bank: dict[str, Any] | 
             [{"step": 0, "title": "回归暂时不可用", "missing": ["服务器暂时无法计算报告中的回归，请稍后重试。"]}]
         ) from error
     custom_models = reported_models(session)
+    custom_tables = recompute(custom_models, panel, release)
+    observed_materials = _observed_materials(session)
     raw_data_sources = metadata.get("data_sources")
     data_sources: dict[str, Any] = raw_data_sources if isinstance(raw_data_sources, dict) else {}
     raw_qc_metadata = metadata.get("qc")
@@ -265,8 +269,9 @@ def build(session: dict[str, Any], student: str, *, quiz_bank: dict[str, Any] | 
             }
             for run in runs
         ],
-        # The workbench models the report prints (自己设计模型, marked 放入报告); their numbers are recomputed below.
+        # Specs of the explicitly recorded workbench models; custom_tables supplies their canonical numbers.
         "custom_results": custom_models,
+        "review": build_review(session, runs, observed_materials, custom_tables),
         "algorithm": "WWZ/TLS and WWYZ observed indicators; separate seeded tariff simulation; entity/year fixed effects with country-clustered standard errors",
         "simulation_contract": metadata.get("simulation_contract"),
         "network_algorithm": metadata["network_algorithm"],
@@ -305,7 +310,7 @@ def build(session: dict[str, Any], student: str, *, quiz_bank: dict[str, Any] | 
         "估计值和区间描述的是 X 与 Y 的关联；四个 Y 单位不同，原始数值不能直接比较；汇总图将其统一换算为标准差后并列展示。",
         "",
         *_reflection_section(session),
-        *_observed_evidence_section(session),
+        *_observed_evidence_section(session, observed_materials),
         *_evidence_summary(
             runs,
             metadata["simulation_contract"]["source_filter_disclosure"],
@@ -316,7 +321,7 @@ def build(session: dict[str, Any], student: str, *, quiz_bank: dict[str, Any] | 
         *_quiz_sections(session, quiz_bank),
         *_experiment_sections(session, scenario),
         *_run_sections(runs),
-        *custom_model_sections(recompute(custom_models, panel, release)),
+        *custom_model_sections(custom_tables),
         *_qc_disclosure_section(qc_summary, integrity_metadata),
         "## 数据与方法说明",
         "",

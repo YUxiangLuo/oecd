@@ -18,7 +18,7 @@ const report: TeacherReport = {
   submitted_at: "2026-10-15T00:01:00Z", graded_at: null,
   provenance: {
     release_id: "a".repeat(32), session_version: "experiment-session-simple-v4",
-    generated_at: "2026-10-15T00:00:00Z", years: [2020], session_fingerprint: "fp", runs: [], custom_results: [],
+    generated_at: "2026-10-15T00:00:00Z", years: [2020], session_fingerprint: "fp", runs: [], custom_results: [], review: { research_question: "", evidence_interpretation: "", limitations: "", evidence: [], results: [], custom_models: [] },
   },
 };
 const nextReport = { ...report, account_id: 8, username: "student02", display_name: "第二位学生" };
