@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { useDialogFocus } from "./a11y";
 import { LogoMark } from "./brand";
 import { icioDatasetName } from "./dataset-label";
-import { PRODUCT_SUMMARY, PRODUCT_TITLE } from "./product-copy";
+import { PRODUCT_SUMMARY } from "./product-copy";
 import type { AuthUser, Meta, StepsResponse } from "./types";
 import "./intro.css";
 
@@ -71,17 +71,17 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
   const scenes = [
     <section key={0} className="intro-scene">
       <p className="intro-eyebrow">全球价值链与贸易政策实验</p>
-      <h1 id={titleId} className="intro-title">{PRODUCT_TITLE[0]}<br />{PRODUCT_TITLE[1]}</h1>
+      <h1 id={titleId} className="intro-title">供应链仿真系统</h1>
       <p className="intro-lede">{PRODUCT_SUMMARY}</p>
       <div className="intro-questions">
-        <article><span>01 · 研究对象</span><h3>跨国生产联系</h3><p>依据投入产出关系，识别出口增加值来源与跨境生产分工。</p></article>
-        <article><span>02 · 指标比较</span><h3>全球价值链结构</h3><p>比较经济体与行业在贸易构成、生产分工、链条长度和网络位置上的差异。</p></article>
-        <article><span>03 · 模型分析</span><h3>关税暴露与指标关联</h3><p>估计关税暴露与各类指标的条件关联，分析结果对模型设定的敏感性。</p></article>
+        <article><span>研究对象</span><h3>跨国生产联系</h3><p>依据投入产出关系，识别出口增加值来源与跨境生产分工。</p></article>
+        <article><span>指标比较</span><h3>全球价值链结构</h3><p>比较经济体与行业在贸易构成、生产分工、链条长度和网络位置上的差异。</p></article>
+        <article><span>模型分析</span><h3>关税暴露与指标关联</h3><p>估计关税暴露与各类指标的条件关联，分析结果对模型设定的敏感性。</p></article>
       </div>
       <div className="intro-coverage"><b>{datasetName}</b><span>{coverage}</span></div>
     </section>,
     <section key={1} className="intro-scene">
-      <p className="intro-eyebrow">数据与指标</p><h2 id={titleId} className="intro-title">投入产出数据与全球价值链指标</h2>
+      <h2 id={titleId} className="intro-title">投入产出数据与全球价值链指标</h2>
       <p className="intro-lede">跨国投入产出表记录各经济体、各行业之间的中间投入，以及产品和服务的最终使用。相关指标用于描述全球价值链的构成、分工方式与结构变化。</p>
       <div className="intro-dimensions">{DIMENSIONS.map(([name, title, detail]) => <article key={name}><span>{name}</span><h3>{title}</h3><p>{detail}</p></article>)}</div>
       <div className="intro-sources">
@@ -90,7 +90,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       </div>
     </section>,
     <section key={2} className="intro-scene">
-      <p className="intro-eyebrow">关税暴露 · 示意算例</p><h2 id={titleId} className="intro-title">关税暴露指标的构造与时间结构</h2>
+      <p className="intro-eyebrow">示意算例</p><h2 id={titleId} className="intro-title">关税暴露指标的构造与时间结构</h2>
       <p className="intro-lede">关税暴露 X 由首年对美出口份额 w 与当年模拟税率 τ 的乘积构造，即 X = w × τ。税率相同时，初始出口份额差异形成不同的关税暴露水平。</p>
       <div className="intro-equation" aria-label="假设首年对美出口份额为百分之二十，模拟关税税率为百分之二十五，关税暴露为五个百分点">
         <div><strong>20<span>%</span></strong><span>首年对美出口份额 w</span></div><b aria-hidden="true">×</b>
@@ -104,7 +104,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       <p className="intro-note">示意数值用于说明指标构造与滞后关系。国家与行业选择仅用于案例展示；回归样本为符合条件的完整国家 × 行业面板。案例结果由估计系数与对应暴露差异换算。</p>
     </section>,
     <section key={3} className="intro-scene">
-      <p className="intro-eyebrow">回归设计与建模</p><h2 id={titleId} className="intro-title">回归模型设定与估计结果比较</h2>
+      <h2 id={titleId} className="intro-title">回归模型设定与估计结果比较</h2>
       <p className="intro-lede">贸易、生产、长度与网络分别对应四个回归步骤。以默认模型为基准，通过调整被解释变量、控制变量、固定效应和滞后结构，考察估计结果的差异。</p>
       <div className="intro-model-parts">
         <article><span>被解释变量 Y</span><h3>指标选择与计量单位</h3><p>从当前维度的可用指标中选择 Y，并核对其计量单位。</p></article>
@@ -119,9 +119,9 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       <p className="intro-note">四项默认模型结果自动纳入报告。自主模型须通过“记入报告”操作纳入，每个回归步骤限一项。模型比较需区分 Y 的计量单位、X 的时间跨度与有效样本。</p>
     </section>,
     <section key={4} className="intro-scene">
-      <p className="intro-eyebrow">实验流程与成果</p><h2 id={titleId} className="intro-title">实验流程与报告要求</h2>
+      <h2 id={titleId} className="intro-title">实验流程与报告要求</h2>
       <p className="intro-lede">实验依次完成数据读取、指标测算、图表比较与回归建模，并在报告中阐述研究问题、实验证据、研究局限与后续方向。</p>
-      {stages.length ? <ol className="intro-route">{stages.map(st => <li key={st.n}><span className="intro-route-number">{String(st.n).padStart(2, "0")}</span><h3>{st.name}</h3>{st.steps.length > 0 && <small>步骤 {st.steps[0].n}{st.steps.length > 1 ? `–${st.steps.at(-1)!.n}` : ""}</small>}<p>{STAGE_OUTPUTS[st.n]}</p></li>)}</ol> : <p role="status">当前课程暂无实验路线信息。</p>}
+      {stages.length ? <ol className="intro-route">{stages.map(st => <li key={st.n}><h3>{st.name}</h3>{st.steps.length > 0 && <small>步骤 {st.steps[0].n}{st.steps.length > 1 ? `–${st.steps.at(-1)!.n}` : ""}</small>}<p>{STAGE_OUTPUTS[st.n]}</p></li>)}</ol> : <p role="status">当前课程暂无实验路线信息。</p>}
       <div className="intro-completion">
         <article><h3>理解测验</h3><p>完成各步骤理解测验并达到通过要求。</p></article>
         <article><h3>实验材料</h3><p>步骤 1–5 与 10 自动记录材料；步骤 6–9 需记录图表；步骤 11–14 需完成默认模型估计。</p></article>
