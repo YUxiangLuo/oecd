@@ -279,7 +279,7 @@ def main():
         teacher.button("提交评阅")
         teacher.run("wait", "--text", f"已保存对 {username} 的评阅")
         # The student's still-open pending view must not erase the teacher's new grade.
-        student.button("查看已提交报告")
+        student.button("查看完整报告")
         student.button("重新生成并提交")
         # The page refuses with the reason it found (the teacher's new grade) and shows the latest state.
         student.run("wait", "--text", "老师刚刚评阅了这份报告")
